@@ -1,0 +1,202 @@
+<script lang="ts">
+	import { PART_STATUSES, type PartDef } from '#lib/domain/types.ts';
+	import { fmt, plateOf } from '#lib/domain/index.ts';
+	import { setPartStatus, updatePart, logRun, deleteRun } from '#lib/client/api.ts';
+	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
+	import Swatch from './Swatch.svelte';
+	import RunTable from './RunTable.svelte';
+	import RunForm, { type RunFormValues } from './RunForm.svelte';
+
+	let { part }: { part: PartDef } = $props();
+
+	const ctx = getBuildCtx();
+	let open = $state(false);
+	let copied = $state('Copy');
+
+	const st = $derived(ctx.view.state[part.slug]);
+	const fil = $derived(ctx.filament(part.role));
+	const plate = $derived(plateOf(ctx.view, part.slug));
+	const doneComps = $derived(part.components.filter((_, i) => st?.comps[i]).length);
+	const log = $derived(
+		ctx.view.runs.filter((r) => r.partSlug === part.slug && r.plateNumber === null)
+	);
+	const pages = $derived(
+		part.guideRefs.map((g) => ({
+			...g,
+			title: ctx.view.guidePages.find((p) => p.page === g.page)?.title ?? ''
+		}))
+	);
+
+	async function copy() {
+		try {
+			await navigator.clipboard.writeText(part.sourceFile);
+			copied = 'Copied';
+		} catch {
+			copied = 'Select and copy';
+		}
+		setTimeout(() => (copied = 'Copy'), 1500);
+	}
+
+	function addLog(v: RunFormValues) {
+		return ctx.act(() =>
+			logRun(ctx.id, {
+				plateNumber: null,
+				partSlug: part.slug,
+				partSlugs: null,
+				date: v.date,
+				result: v.result,
+				grams: v.grams,
+				hours: v.hours,
+				printer: null,
+				note: v.note
+			})
+		);
+	}
+</script>
+
+<div class="row" data-s={st?.status} data-id={part.slug}>
+	<div class="row-main">
+		<div>
+			<div class="pname">
+				<button
+					class="pbtn"
+					type="button"
+					title="Open in the build guide"
+					onclick={() => ctx.openGuide(part.slug)}>{part.name}</button
+				>
+			</div>
+			<div class="psub">
+				<span>
+					{#if fil}<Swatch hex={fil.hex} tpu={fil.tpu} size="mini" />{/if}
+					{filLabel(fil, part.role)}
+				</span>
+				<span class="num">{part.bomGrams ? `~${fmt(part.bomGrams)} g` : 'weight n/a'}</span>
+				{#if st?.printedOn}<span>printed {st.printedOn}</span>{/if}
+			</div>
+		</div>
+		<div class="settings">
+			{#if plate}<span class="set plate" title="Plate in the print profile"
+					>Plate {plate.number}</span
+				>{/if}
+			{#if part.qty}<span class="set">×{part.qty}</span>{/if}
+			{#if part.walls != null}<span class="set">{part.walls} walls</span>{/if}
+			{#if part.infill}<span class="set">{part.infill}</span>{/if}
+			{#if part.supports}<span class="set"
+					>{part.supports === 'Yes' ? 'supports' : 'no supports'}</span
+				>{/if}
+			{#if part.brim}<span class="set hot">{part.brim} brim</span>{/if}
+			{#if part.components.length}
+				<span class="set" class:hot={doneComps < part.components.length}
+					>{doneComps}/{part.components.length} pieces</span
+				>
+			{/if}
+		</div>
+		<div class="seg" role="group" aria-label="Status for {part.name}">
+			{#each PART_STATUSES as s (s)}
+				<button
+					type="button"
+					data-v={s}
+					aria-pressed={st?.status === s}
+					disabled={!ctx.canEdit}
+					onclick={() => st?.status !== s && ctx.act(() => setPartStatus(ctx.id, part.slug, s))}
+					>{s}</button
+				>
+			{/each}
+		</div>
+		<button
+			class="more"
+			type="button"
+			aria-expanded={open}
+			aria-label="Details for {part.name}"
+			onclick={() => (open = !open)}>{open ? '−' : '+'}</button
+		>
+	</div>
+	{#if open}
+		<div class="detail">
+			<div>
+				<h3>File</h3>
+				<div class="file">
+					<code>{part.sourceFile}</code>
+					{#if part.sourceFile.includes('.')}
+						<button class="btn sm" type="button" onclick={copy}>{copied}</button>
+					{/if}
+				</div>
+				{#if part.notes.length}
+					<h3 style="margin-top:12px">Notes</h3>
+					<ul class="notes">
+						{#each part.notes as n (n)}<li>{n}</li>{/each}
+					</ul>
+				{/if}
+				{#if part.components.length}
+					<h3 style="margin-top:12px">Pieces</h3>
+					<div class="comps">
+						{#each part.components as c, i (i)}
+							<label>
+								<input
+									type="checkbox"
+									checked={!!st?.comps[i]}
+									disabled={!ctx.canEdit}
+									onchange={(e) => {
+										const on = e.currentTarget.checked;
+										ctx.act(() =>
+											updatePart(ctx.id, part.slug, { comps: { ...st?.comps, [i]: on } })
+										);
+									}}
+								/>
+								<span
+									>{c.name}
+									<small>{c.settings}{c.file ? ` · ${c.file}` : ''}</small></span
+								>
+							</label>
+						{/each}
+					</div>
+				{/if}
+				{#if pages.length}
+					<h3 style="margin-top:12px">Guide</h3>
+					<div class="chips">
+						{#each pages as g (g.page)}
+							<button
+								class="chip"
+								type="button"
+								title={g.text}
+								onclick={() => ctx.openGuide(part.slug)}
+								>p{g.page}{g.title ? ` · ${g.title.replace(/:.*/, '')}` : ''}</button
+							>
+						{/each}
+					</div>
+				{/if}
+				<h3 style="margin-top:12px">Assigned to</h3>
+				<select
+					aria-label="Assigned to"
+					disabled={!ctx.canEdit}
+					value={st?.assigneeUserId ?? ''}
+					onchange={(e) => {
+						const v = e.currentTarget.value || null;
+						ctx.act(() => updatePart(ctx.id, part.slug, { assigneeUserId: v }));
+					}}
+				>
+					<option value="">Nobody</option>
+					{#each ctx.view.members as m (m.userId)}<option value={m.userId}>{m.name}</option>{/each}
+				</select>
+			</div>
+			<div>
+				<h3>Print log</h3>
+				{#if log.length}
+					<RunTable
+						runs={log}
+						canEdit={ctx.canEdit}
+						ondelete={(r) => ctx.act(() => deleteRun(ctx.id, r.id))}
+					/>
+				{:else}
+					<div class="empty">
+						No prints logged yet. Logging a success marks the part printed; a failure flags it for
+						reprint.
+					</div>
+				{/if}
+				{#if ctx.canEdit}
+					<RunForm idPrefix="pl-{part.slug}" onsubmit={addLog} />
+				{/if}
+			</div>
+		</div>
+	{/if}
+</div>

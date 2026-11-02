@@ -20,12 +20,17 @@
 			error = res.error.message ?? 'Sign in failed';
 			return;
 		}
+		// Read the target before invalidating: the reload re-runs this page's load, which
+		// redirects (signed in) and replaces `data`, so reading it afterwards gave undefined.
+		const dest = data.redirectTo ?? resolve('/(app)');
 		await invalidateAll();
-		await goto(resolve('/'));
+		// redirectTo is validated server-side (same-origin relative path only)
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		await goto(dest);
 	}
 
 	async function sso() {
-		await authClient.signIn.social({ provider: 'oidc', callbackURL: '/' });
+		await authClient.signIn.social({ provider: 'oidc', callbackURL: data.redirectTo ?? '/' });
 	}
 </script>
 
@@ -53,6 +58,12 @@
 		{#if data.sso}
 			<button class="btn" onclick={sso}>Sign in with {data.sso.providerName}</button>
 		{/if}
-		<p class="muted">No account? <a href={resolve('/signup')}>Create one</a></p>
+		<p class="muted">
+			No account? <a
+				href={resolve(
+					data.redirectTo ? `/signup?redirect=${encodeURIComponent(data.redirectTo)}` : '/signup'
+				)}>Create one</a
+			>
+		</p>
 	</div>
 </div>

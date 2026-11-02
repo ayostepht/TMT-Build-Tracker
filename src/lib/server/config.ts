@@ -7,8 +7,24 @@ export function databaseUrl(): string {
 	return env.DATABASE_URL || (isProd ? '/data/tmt.db' : './data/tmt.db');
 }
 
-export function baseUrl(): string {
-	return env.BETTER_AUTH_URL || env.ORIGIN || 'http://localhost:5173';
+/**
+ * Public URL of the app (`PUBLIC_URL`, or the older `BETTER_AUTH_URL` / `ORIGIN`),
+ * normalised to an origin with no trailing slash. Returns null when unset, in
+ * which case the origin is taken from each request (see scripts/proxy-origin.mjs).
+ */
+export function publicUrl(): string | null {
+	const raw = (env.PUBLIC_URL || env.BETTER_AUTH_URL || env.ORIGIN || '').trim();
+	if (!raw) return null;
+	let url: URL;
+	try {
+		url = new URL(raw);
+	} catch {
+		throw new Error(`PUBLIC_URL is not a valid URL: ${raw}`);
+	}
+	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+		throw new Error(`PUBLIC_URL must start with http:// or https://: ${raw}`);
+	}
+	return url.origin;
 }
 
 export function authSecret(): string {

@@ -1,0 +1,100 @@
+import type { BuildPhase, BuildView, PartStatus, PrintRunInput } from '#lib/domain/types.ts';
+
+async function call<T = Record<string, never>>(
+	method: string,
+	url: string,
+	body?: unknown
+): Promise<T> {
+	const res = await fetch(url, {
+		method,
+		headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+		body: body === undefined ? undefined : JSON.stringify(body)
+	});
+	let data: { error?: string } & Record<string, unknown> = {};
+	try {
+		data = await res.json();
+	} catch {
+		/* non-JSON error body */
+	}
+	if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+	return data as T;
+}
+
+const b = (id: string) => `/api/builds/${encodeURIComponent(id)}`;
+
+export interface NewBuildInput {
+	organizationId: string;
+	templateId: string;
+	designId?: string | null;
+	name: string;
+	recipient?: string | null;
+	hospital?: string | null;
+	deliveryDate?: string | null;
+}
+export const createBuild = (input: NewBuildInput) =>
+	call<{ id: string }>('POST', '/api/builds', input).then((r) => r.id);
+
+export const updateBuild = (
+	id: string,
+	patch: {
+		name?: string;
+		recipient?: string | null;
+		hospital?: string | null;
+		deliveryDate?: string | null;
+		phase?: BuildPhase;
+	}
+) => call('PATCH', b(id), patch);
+export const deleteBuild = (id: string) => call('DELETE', b(id));
+
+export const setPartStatus = (id: string, slug: string, status: PartStatus) =>
+	call('POST', `${b(id)}/parts/${encodeURIComponent(slug)}/status`, { status });
+export const updatePart = (
+	id: string,
+	slug: string,
+	patch: { comps?: Record<string, boolean>; assigneeUserId?: string | null }
+) => call('PATCH', `${b(id)}/parts/${encodeURIComponent(slug)}`, patch);
+
+export const startPrinting = (id: string, slugs: string[]) =>
+	call('POST', `${b(id)}/printing`, { action: 'start', slugs });
+export const stopPrinting = (id: string, slugs: string[]) =>
+	call('POST', `${b(id)}/printing`, { action: 'stop', slugs });
+export const setPrintStart = (id: string, slugs: string[], when: Date | string) =>
+	call('POST', `${b(id)}/printing`, {
+		action: 'setStart',
+		slugs,
+		when: typeof when === 'string' ? when : when.toISOString()
+	});
+export const setRunEstimate = (id: string, slugs: string[], seconds: number | null) =>
+	call('POST', `${b(id)}/printing`, { action: 'setEstimate', slugs, seconds });
+
+export const logRun = (id: string, input: PrintRunInput) =>
+	call<{ id: string }>('POST', `${b(id)}/runs`, input).then((r) => r.id);
+export const deleteRun = (id: string, runId: string) =>
+	call('DELETE', `${b(id)}/runs/${encodeURIComponent(runId)}`);
+
+/** In `slicerByPart`, a null value clears that part's entry. */
+export const updatePlate = (
+	id: string,
+	number: number,
+	patch: { slicerGrams?: number | null; slicerByPart?: Record<string, number | null> }
+) => call('PATCH', `${b(id)}/plates/${number}`, patch);
+
+export const updateFilament = (
+	id: string,
+	role: string,
+	patch: { spools?: number; name?: string; hex?: string; material?: string }
+) => call('PATCH', `${b(id)}/filaments/${encodeURIComponent(role)}`, patch);
+
+/** Generic printing action (start | stop | setStart | setEstimate). `seconds` undefined/null clears the estimate. */
+export const printing = (
+	id: string,
+	body: {
+		action: 'start' | 'stop' | 'setStart' | 'setEstimate';
+		slugs: string[];
+		when?: string;
+		seconds?: number | null;
+	}
+) => call('POST', `${b(id)}/printing`, body);
+
+/** Fresh BuildView from the server. */
+export const getView = (id: string) => call<BuildView>('GET', `${b(id)}/view`);

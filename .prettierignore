@@ -12,3 +12,7 @@ bun.lockb
 # Instruction files (hand-wrapped)
 CLAUDE.md
 CLAUDE.local.md
+
+# Playwright output
+/test-results/
+/playwright-report/

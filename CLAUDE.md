@@ -44,6 +44,17 @@ SvelteKit 3 specifics that trip people up:
   `signIn.social({ provider: 'oidc' })`; redirect URI
   `<BETTER_AUTH_URL>/api/auth/callback/oidc`.
 - Migrations load from `./drizzle`, so the server must start from the app root.
+- Origins: adapter-node v6 ignores `ORIGIN` and assumes https without a
+  protocol header. `scripts/proxy-origin.mjs` is preloaded (`node --import`,
+  used by `npm start`, the Dockerfile and Playwright) and normalises
+  `X-Forwarded-Proto/Host`. `PUBLIC_URL` set → that origin is forced and
+  Better Auth uses it as `baseURL` (needed for OIDC); unset → request's own
+  origin, http by default, cookies never Secure. Config: `publicUrl()` in
+  `src/lib/server/config.ts`.
+- `src/hooks.server.ts` adds `x-forwarded-for` from `getClientAddress()` so
+  Better Auth rate limits per client. Known gap: without a proxy a client can
+  send its own `X-Forwarded-For` and dodge the limit (fix: trust it only from
+  configured proxies).
 
 ## Layout
 
@@ -55,11 +66,32 @@ SvelteKit 3 specifics that trip people up:
 - `src/lib/server/startup.ts`: migrate + seed on server start (`init` hook)
 - `src/lib/server/seed/`: template seed data (`types.ts` is the contract,
   `tmt.ts` the MakeGood kit, `index.ts` the list); see its README
-- `src/lib/domain/`: pure, framework-free logic (filament accounting, status
-  rules, 3MF parsing). Unit-test it here; keep it free of DB and Svelte imports
-- `src/routes/`: UI and `api/` endpoints; `/api/health` for the Docker healthcheck
+- `src/lib/domain/`: pure, framework-free logic. `types.ts` is the shared
+  contract (`BuildView`, `PartState`, `PrintRun`, `PartPatch`; change it
+  deliberately, it binds server, domain and UI). `accounting.ts` (units,
+  filament and time stats), `actions.ts` (status/run/printing rules that
+  return `PartPatch[]`), `now.ts`, `grouping.ts`, `format.ts`; `fixtures.ts`
+  builds a test `BuildView` from the seed. Keep it free of DB, Svelte and Node imports
+- `src/lib/server/access.ts`: `ApiError`, `requireMember/Editor/Owner`,
+  `buildAccess` (non-member → 404, viewer write → 403)
+- `src/lib/server/builds/`: `view.ts` (`loadBuildView`), `create.ts`
+  (`createBuild` snapshots the design), `actions.ts` (every mutation goes
+  through `mutateBuild`: access check → domain function → patches + activity
+  row in one transaction → SSE emit)
+- `src/lib/server/events.ts`: in-process pub/sub per build (single container;
+  SSE at `/api/builds/[id]/events`), `src/lib/server/teams.ts`: chapter
+  helpers (writes go through Better Auth `auth.api`)
+- `src/lib/client/`: browser `api.ts` (typed fetch helpers that throw the
+  server's message) and `live.ts` (`subscribeBuild` EventSource with reconnect)
+- `src/lib/components/`: UI components; `build-context.svelte.ts` holds the
+  live view and `act()` (mutate, then re-fetch the view)
+- `src/routes/(app)/`: signed-in area (layout guard → `/login` or
+  `/onboarding`); `builds/[id]/` tabs as nested routes (overview, parts,
+  plates, design, assembly, handoff, settings); `teams/[slug]`,
+  `onboarding`; `src/routes/invite/[id]` sits outside the group
+- `src/routes/api/`: JSON endpoints; `/api/health` for the Docker healthcheck
 - `drizzle/`: committed SQL migrations
-- `.github/workflows/`: CI (check + lint + test) and multi-arch image to GHCR
+- `.github/workflows/`: CI (check + lint + test, e2e in parallel) and multi-arch image to GHCR
 
 ## Conventions
 
@@ -69,7 +101,13 @@ SvelteKit 3 specifics that trip people up:
   status from their phone at the printer.
 - Permissions are checked on the server for every mutation (team role:
   owner / editor / viewer). UI hiding is not access control.
-- Every build mutation writes an `activity` row and emits an SSE event.
+- Every build mutation writes an `activity` row and emits an SSE event; add
+  new mutations to `src/lib/server/builds/actions.ts` via `mutateBuild` and
+  give new activity kinds a sentence in the activity formatter.
+- State rules live in `src/lib/domain/actions.ts` only; the server persists
+  the returned patches and never re-implements them.
+- Route ids include the `(app)` group: `resolve('/(app)/builds/[id]')`.
+- No email sending yet: invitations produce a copyable `/invite/[id]` link.
 - Schema change → edit `schema.ts`, `npm run db:generate`, commit the new
   migration with the code that uses it.
 - Keep secrets (printer access codes, OIDC secrets) out of logs and API
@@ -82,6 +120,7 @@ npm run dev          # dev server
 npm run check        # svelte-check / types
 npm run lint
 npm test             # vitest
+npm run test:e2e     # playwright (see README for running it in the playwright image)
 npm run build
 docker build -t tmt-build-tracker:dev .
 ```
@@ -93,7 +132,7 @@ an empty data directory.
 ## Roadmap
 
 Milestones (each shippable): 1 scaffold (done) · 2 multi-build port of the prototype
-with tabs, teams and live updates · 3 import from the original prototype · 4
+with tabs, teams and live updates (done) · 3 import from the original prototype · 4
 live color prototyper + shareable designs · 5 3MF upload → plates · 6
 assembly + handoff · 7 Spoolman + printer adapters (Moonraker, OctoPrint,
 Bambu LAN) · 8 release (Unraid template, Community Apps). Update this line as

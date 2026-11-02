@@ -36,3 +36,8 @@ uploads/
 
 # Local notes
 CLAUDE.local.md
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

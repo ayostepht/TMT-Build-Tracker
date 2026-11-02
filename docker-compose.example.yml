@@ -8,9 +8,10 @@ services:
     volumes:
       - ./data:/data
     environment:
-      # Public URL users reach the app at (no trailing slash).
-      ORIGIN: https://tmt.example.com
-      BETTER_AUTH_URL: https://tmt.example.com
+      # Optional. Public URL users reach the app at (no trailing slash). Leave unset
+      # to accept whichever address the request arrives on (http://<lan-ip>:3000 or
+      # an https proxy that sends X-Forwarded-Proto). Set it when serving over https.
+      # PUBLIC_URL: https://tmt.example.com
       # Generate with: openssl rand -base64 32
       BETTER_AUTH_SECRET: change-me
       # Optional OIDC single sign-on (all three required to enable)

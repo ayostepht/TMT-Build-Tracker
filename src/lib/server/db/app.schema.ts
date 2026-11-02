@@ -197,6 +197,7 @@ export const buildParts = sqliteTable(
 		status: text('status').notNull().default('To print'),
 		startedAt: integer('started_at', { mode: 'timestamp_ms' }),
 		printedOn: text('printed_on'),
+		runEstSeconds: integer('run_est_seconds'),
 		comps: text('comps', { mode: 'json' })
 			.$type<Record<string, boolean>>()
 			.notNull()
@@ -239,6 +240,7 @@ export const printRuns = sqliteTable(
 		buildId: buildId(),
 		plateNumber: integer('plate_number'),
 		partSlug: text('part_slug'),
+		partSlugs: text('part_slugs', { mode: 'json' }).$type<string[]>(),
 		date: text('date').notNull(),
 		result: text('result').notNull(),
 		grams: real('grams'),

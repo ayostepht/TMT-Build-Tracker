@@ -5,6 +5,8 @@
 		"types": ["$app/types", "node"]
 	},
 	"include": [
+		"e2e",
+		"playwright.config.ts",
 		"src",
 		"vite.config.ts",
 		"prettier.config.js",
