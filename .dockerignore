@@ -1,0 +1,16 @@
+node_modules
+.svelte-kit
+build
+data
+uploads
+.git
+.github
+.env
+.env.*
+!.env.example
+*.db
+*.3mf
+*.glb
+*.step
+Dockerfile
+docker-compose*.yml

@@ -1,0 +1,269 @@
+import { sql } from 'drizzle-orm';
+import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { organization, user } from './auth.schema';
+
+const id = () =>
+	text('id')
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID());
+const createdAt = () =>
+	integer('created_at', { mode: 'timestamp_ms' })
+		.notNull()
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`);
+
+// ---- Templates (printable kits). Data only: no vendor models, images or files.
+
+export const templates = sqliteTable('templates', {
+	id: id(),
+	slug: text('slug').notNull().unique(),
+	name: text('name').notNull(),
+	version: text('version').notNull(),
+	description: text('description').notNull().default(''),
+	sourceUrl: text('source_url'),
+	globalSettings: text('global_settings').notNull().default(''),
+	sections: text('sections', { mode: 'json' })
+		.$type<string[]>()
+		.notNull()
+		.default(sql`'[]'`),
+	createdAt: createdAt()
+});
+
+const templateId = () =>
+	text('template_id')
+		.notNull()
+		.references(() => templates.id, { onDelete: 'cascade' });
+
+export const templateFilamentRoles = sqliteTable(
+	'template_filament_roles',
+	{
+		templateId: templateId(),
+		key: text('key').notNull(),
+		name: text('name').notNull(),
+		material: text('material').notNull(),
+		hex: text('hex').notNull(),
+		tpu: integer('tpu', { mode: 'boolean' }).notNull().default(false),
+		recommendedSpools: integer('recommended_spools').notNull().default(1)
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.key] })]
+);
+
+export const templateParts = sqliteTable(
+	'template_parts',
+	{
+		templateId: templateId(),
+		slug: text('slug').notNull(),
+		name: text('name').notNull(),
+		section: text('section').notNull(),
+		defaultRole: text('default_role').notNull(),
+		bomGrams: real('bom_grams'),
+		qty: integer('qty'),
+		walls: integer('walls'),
+		infill: text('infill').notNull().default(''),
+		supports: text('supports').notNull().default(''),
+		brim: text('brim'),
+		sourceFile: text('source_file').notNull().default(''),
+		notes: text('notes', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		components: text('components', { mode: 'json' })
+			.$type<{ name: string; file?: string; settings: string }[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		allowedMaterials: text('allowed_materials', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		symmetryGroup: text('symmetry_group'),
+		guideRefs: text('guide_refs', { mode: 'json' })
+			.$type<{ page: number; text: string }[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		sort: integer('sort').notNull().default(0)
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.slug] })]
+);
+
+export const templatePlates = sqliteTable(
+	'template_plates',
+	{
+		templateId: templateId(),
+		number: integer('number').notNull(),
+		name: text('name').notNull(),
+		estSeconds: integer('est_seconds'),
+		runs: integer('runs').notNull().default(1),
+		runNote: text('run_note'),
+		perPartRuns: integer('per_part_runs', { mode: 'boolean' }).notNull().default(false),
+		parts: text('parts', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`)
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.number] })]
+);
+
+export const templateGuidePages = sqliteTable(
+	'template_guide_pages',
+	{
+		templateId: templateId(),
+		page: integer('page').notNull(),
+		title: text('title').notNull(),
+		sort: integer('sort').notNull().default(0)
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.page] })]
+);
+
+export const templateHardware = sqliteTable(
+	'template_hardware',
+	{
+		templateId: templateId(),
+		name: text('name').notNull(),
+		qty: integer('qty'),
+		note: text('note')
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.name] })]
+);
+
+// ---- Color designs
+
+export const colorDesigns = sqliteTable('color_designs', {
+	id: id(),
+	templateId: templateId(),
+	slug: text('slug').notNull().unique(),
+	name: text('name').notNull(),
+	authorUserId: text('author_user_id').references(() => user.id, { onDelete: 'set null' }),
+	roles: text('roles', { mode: 'json' })
+		.$type<{ key: string; name: string; material: string; hex: string }[]>()
+		.notNull()
+		.default(sql`'[]'`),
+	partRoles: text('part_roles', { mode: 'json' })
+		.$type<Record<string, string>>()
+		.notNull()
+		.default(sql`'{}'`),
+	isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(false),
+	createdAt: createdAt()
+});
+
+// ---- Builds
+
+export const builds = sqliteTable(
+	'builds',
+	{
+		id: id(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		templateId: text('template_id')
+			.notNull()
+			.references(() => templates.id),
+		name: text('name').notNull(),
+		recipient: text('recipient'),
+		hospital: text('hospital'),
+		phase: text('phase').notNull().default('design'),
+		deliveryDate: text('delivery_date'),
+		design: text('design', { mode: 'json' }).$type<Record<string, unknown>>(),
+		createdBy: text('created_by')
+			.notNull()
+			.references(() => user.id),
+		createdAt: createdAt()
+	},
+	(t) => [index('builds_org_idx').on(t.organizationId)]
+);
+
+const buildId = () =>
+	text('build_id')
+		.notNull()
+		.references(() => builds.id, { onDelete: 'cascade' });
+
+export const buildFilaments = sqliteTable(
+	'build_filaments',
+	{
+		buildId: buildId(),
+		roleKey: text('role_key').notNull(),
+		name: text('name').notNull(),
+		material: text('material').notNull(),
+		hex: text('hex').notNull(),
+		spools: integer('spools').notNull().default(0),
+		spoolmanSpoolId: integer('spoolman_spool_id')
+	},
+	(t) => [primaryKey({ columns: [t.buildId, t.roleKey] })]
+);
+
+export const buildParts = sqliteTable(
+	'build_parts',
+	{
+		buildId: buildId(),
+		partSlug: text('part_slug').notNull(),
+		status: text('status').notNull().default('To print'),
+		startedAt: integer('started_at', { mode: 'timestamp_ms' }),
+		printedOn: text('printed_on'),
+		comps: text('comps', { mode: 'json' })
+			.$type<Record<string, boolean>>()
+			.notNull()
+			.default(sql`'{}'`),
+		assigneeUserId: text('assignee_user_id').references(() => user.id, { onDelete: 'set null' }),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+	},
+	(t) => [primaryKey({ columns: [t.buildId, t.partSlug] })]
+);
+
+export const buildPlates = sqliteTable(
+	'build_plates',
+	{
+		buildId: buildId(),
+		number: integer('number').notNull(),
+		name: text('name').notNull(),
+		estSeconds: integer('est_seconds'),
+		runs: integer('runs').notNull().default(1),
+		perPartRuns: integer('per_part_runs', { mode: 'boolean' }).notNull().default(false),
+		parts: text('parts', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		slicerGrams: real('slicer_grams'),
+		slicerByPart: text('slicer_by_part', { mode: 'json' })
+			.$type<Record<string, number>>()
+			.notNull()
+			.default(sql`'{}'`),
+		thumbnailPath: text('thumbnail_path')
+	},
+	(t) => [primaryKey({ columns: [t.buildId, t.number] })]
+);
+
+export const printRuns = sqliteTable(
+	'print_runs',
+	{
+		id: id(),
+		buildId: buildId(),
+		plateNumber: integer('plate_number'),
+		partSlug: text('part_slug'),
+		date: text('date').notNull(),
+		result: text('result').notNull(),
+		grams: real('grams'),
+		hours: real('hours'),
+		printer: text('printer'),
+		userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+		note: text('note').notNull().default('')
+	},
+	(t) => [index('print_runs_build_idx').on(t.buildId)]
+);
+
+export const activity = sqliteTable(
+	'activity',
+	{
+		id: id(),
+		buildId: buildId(),
+		userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+		kind: text('kind').notNull(),
+		payload: text('payload', { mode: 'json' })
+			.$type<Record<string, unknown>>()
+			.notNull()
+			.default(sql`'{}'`),
+		at: integer('at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+	},
+	(t) => [index('activity_build_idx').on(t.buildId, t.at)]
+);

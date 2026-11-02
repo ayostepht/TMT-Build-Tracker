@@ -1,0 +1,21 @@
+# Seed templates
+
+Each file here describes one printable kit as a `TemplateSeed` (see `types.ts`). `index.ts` exports `templateSeeds`, the list the app loads into the database on first run.
+
+## Format
+
+- **Template**: `slug`, `name`, `version`, `description`, optional `sourceUrl`, `globalSettings` (printer-wide slicer notes), and ordered `sections` used to group parts.
+- **filamentRoles**: generic roles (for example `primary`, `accent`, `soft`, `tire`) with a default hex, material, TPU flag and recommended spool count. Roles are not tied to a brand or color.
+- **parts**: one per printable item. `slug` is the stable id; `defaultRole` points at a filament role; `allowedMaterials` limits what can be chosen; `symmetryGroup` links left/right pairs; `components` lists sub-pieces of a multi-file part; `guideRefs` point at `guidePages`.
+- **plates**: print plates in profile order. `parts` lists slugs, `runs` is how many times the plate is printed, and `perPartRuns` means each part on the plate is its own unit printed `runs` times.
+- **guidePages**: page number, title and display order (`sort`).
+- **hardware**: purchased or non-printed items. `qty` is only set when the source states it.
+- **designs**: named color schemes. Each maps every part slug to a role key and gives the role a brand-specific name, material and hex.
+
+## Adding a kit
+
+1. Copy `tmt.ts` to `<kit>.ts` and export a `TemplateSeed` with a unique `slug`.
+2. Define roles, parts, plates, guide pages, hardware and at least one design.
+3. Import it in `index.ts` and add it to `templateSeeds`.
+
+Every part slug must appear on exactly one plate, every `defaultRole` and design `partRoles` key must exist, and every `guideRefs.page` must be in `guidePages`.
