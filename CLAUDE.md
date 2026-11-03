@@ -85,8 +85,17 @@ SvelteKit 3 specifics that trip people up:
   server's message) and `live.ts` (`subscribeBuild` EventSource with reconnect)
 - `src/lib/components/`: UI components; `build-context.svelte.ts` holds the
   live view and `act()` (mutate, then re-fetch the view)
-- `src/routes/(app)/`: signed-in area (layout guard → `/login` or
-  `/onboarding`); `builds/[id]/` tabs as nested routes (overview, parts,
+- Workspaces: every user has a personal workspace (Better Auth organization
+  with metadata `{ personal: true, userId }`, shown as "My builds", created on
+  sign-up and lazily for legacy users in `src/lib/server/teams.ts`). Chapters
+  are ordinary organizations and optional; personal workspaces can't take
+  invitations; builds move personal → chapter via `POST /api/builds/[id]/move`
+- `src/lib/server/filaments/`: bundled SpoolmanDB catalog (`catalog.json`,
+  MIT, attribution in `THIRD_PARTY.md`; refresh with `npm run
+  filaments:update`), served by `/api/filaments*`; browser-safe helpers in
+  `src/lib/filament-catalog.ts`; UI `FilamentPicker.svelte`
+- `src/routes/(app)/`: signed-in area (layout guard → `/login`; `/` →
+  active workspace); `builds/[id]/` tabs as nested routes (overview, parts,
   plates, design, assembly, handoff, settings); `teams/[slug]`,
   `onboarding`; `src/routes/invite/[id]` sits outside the group
 - `src/routes/api/`: JSON endpoints; `/api/health` for the Docker healthcheck

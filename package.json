@@ -16,6 +16,7 @@
 		"test": "npm run test:unit -- --run",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
+		"filaments:update": "node scripts/update-filaments.mjs",
 		"db:push": "drizzle-kit push",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",

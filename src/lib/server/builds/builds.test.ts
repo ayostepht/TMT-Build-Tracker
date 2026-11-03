@@ -16,7 +16,14 @@ import {
 import { onBuildEvents } from './test-helpers';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
-import { addRun, deleteBuild, printingAction, setPartStatus, updateBuild } from './actions';
+import {
+	addRun,
+	deleteBuild,
+	printingAction,
+	setPartStatus,
+	undoRun,
+	updateBuild
+} from './actions';
 import { createBuild } from './create';
 import { loadBuildView } from './view';
 
@@ -183,5 +190,45 @@ describe('mutations', () => {
 		);
 		deleteBuild(db, id, 'owner');
 		expect(loadBuildView(db, id, 'owner')).toBeNull();
+	});
+});
+
+describe('undoRun', () => {
+	it('deletes the run and restores the snapshot, only for parts the run touches', () => {
+		const id = mk();
+		const view0 = loadBuildView(db, id, 'owner')!;
+		const slug = view0.parts[0].slug;
+		const other = view0.parts.find((p) => p.slug !== slug)!.slug;
+		printingAction(db, id, 'owner', { action: 'start', slugs: [slug] });
+		const before = loadBuildView(db, id, 'owner')!.state[slug];
+		const snap = {
+			slug,
+			status: before.status,
+			startedAt: before.startedAt,
+			printedOn: before.printedOn,
+			runEstSeconds: before.runEstSeconds,
+			comps: before.comps
+		};
+		const runId = addRun(db, id, 'owner', {
+			plateNumber: null,
+			partSlug: slug,
+			date: '2026-01-01',
+			result: 'Success',
+			grams: 10,
+			hours: 1,
+			note: ''
+		});
+		expect(loadBuildView(db, id, 'owner')!.state[slug].status).toBe('Printed');
+
+		expect(() => undoRun(db, id, 'owner', runId, { parts: [{ ...snap, slug: other }] })).toThrow(
+			ApiError
+		);
+		expect(() => undoRun(db, id, 'viewer', runId, { parts: [snap] })).toThrow(ApiError);
+		undoRun(db, id, 'owner', runId, { parts: [snap] });
+		const after = loadBuildView(db, id, 'owner')!;
+		expect(after.runs).toHaveLength(0);
+		expect(after.state[slug].status).toBe('Printing');
+		expect(after.state[slug].startedAt).toBe(before.startedAt);
+		expect(after.activity[0].kind).toBe('run.undo');
 	});
 });

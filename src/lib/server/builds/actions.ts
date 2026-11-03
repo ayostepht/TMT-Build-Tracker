@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import {
 	applyRun,
+	runTargets,
 	setPrintStart,
 	setRunEstimate,
 	setStatus,
@@ -16,10 +17,19 @@ import {
 	type PartStatus,
 	type PrintRunInput
 } from '#lib/domain/types.ts';
-import { ApiError, buildAccess, requireOwner } from '../access';
+import { ApiError, buildAccess, requireEditor, requireOwner } from '../access';
 import type { Db } from '../db';
-import { activity, buildFilaments, buildPlates, builds, printRuns, user } from '../db/schema';
+import {
+	activity,
+	buildFilaments,
+	buildPlates,
+	builds,
+	organization,
+	printRuns,
+	user
+} from '../db/schema';
 import { emitBuildEvent } from '../events';
+import { isPersonalOrg } from '../teams';
 import { applyPatches, loadBuildView } from './view';
 
 interface Outcome {
@@ -371,4 +381,118 @@ export function updateFilament(
 		const onlySpools = Object.keys(set).length === 1 && 'spools' in set;
 		return { kind: onlySpools ? 'filament.spools' : 'filament.update', payload: { role, ...set } };
 	});
+}
+
+/**
+ * Undo a just-logged run: delete it and put the targeted parts back to the state the client
+ * saw before logging. Only parts that run affects may be restored.
+ */
+export function undoRun(
+	db: Db,
+	buildId: string,
+	userId: string,
+	runId: string,
+	body: unknown
+): void {
+	if (!isObj(body) || !Array.isArray(body.parts)) bad('parts must be an array');
+	const rawParts = body.parts as unknown[];
+	if (rawParts.length > 100) bad('Too many parts');
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		const r = tx
+			.select()
+			.from(printRuns)
+			.where(and(eq(printRuns.id, runId), eq(printRuns.buildId, buildId)))
+			.get();
+		if (!r) throw new ApiError(404, 'Run not found');
+		const allowed = runTargets(view, {
+			plateNumber: r.plateNumber,
+			partSlug: r.partSlug,
+			partSlugs: r.partSlugs,
+			date: r.date,
+			result: r.result as PrintRunInput['result'],
+			grams: r.grams,
+			hours: r.hours,
+			printer: r.printer,
+			note: r.note
+		});
+		const patches: PartPatch[] = [];
+		for (const raw of rawParts) {
+			if (!isObj(raw) || typeof raw.slug !== 'string') bad('Invalid part snapshot');
+			const slug = raw.slug;
+			if (!allowed.includes(slug) || !view.state[slug]) bad('Part is not affected by this run');
+			if (!(PART_STATUSES as readonly unknown[]).includes(raw.status)) bad('Invalid status');
+			const startedAt = raw.startedAt ?? null;
+			if (
+				startedAt !== null &&
+				(typeof startedAt !== 'string' || Number.isNaN(Date.parse(startedAt)))
+			)
+				bad('Invalid startedAt');
+			const printedOn = raw.printedOn ?? null;
+			if (printedOn !== null) dateStr(printedOn, 'printedOn');
+			const runEstSeconds = optNum(raw.runEstSeconds, 'runEstSeconds') ?? null;
+			if (!isObj(raw.comps)) bad('comps must be an object');
+			const comps: Record<string, boolean> = {};
+			for (const [k, v] of Object.entries(raw.comps)) {
+				if (typeof v !== 'boolean') bad('comps values must be booleans');
+				comps[k] = v;
+			}
+			patches.push({
+				slug,
+				status: raw.status as PartStatus,
+				startedAt: startedAt as string | null,
+				printedOn: printedOn as string | null,
+				runEstSeconds,
+				comps
+			});
+		}
+		tx.delete(printRuns).where(eq(printRuns.id, runId)).run();
+		return {
+			kind: 'run.undo',
+			payload: {
+				runId,
+				plateNumber: r.plateNumber,
+				partSlug: r.partSlug,
+				partSlugs: r.partSlugs,
+				result: r.result
+			},
+			patches
+		};
+	});
+}
+
+/**
+ * Move a build from the owner's personal workspace into a chapter. Owner of the
+ * source (the personal workspace) and editor or owner of the target chapter.
+ */
+export function moveBuild(db: Db, buildId: string, userId: string, body: unknown): void {
+	if (!isObj(body) || typeof body.organizationId !== 'string' || !body.organizationId)
+		bad('organizationId is required');
+	const targetId = body.organizationId as string;
+	const access = buildAccess(db, buildId, userId);
+	if (!access) throw new ApiError(404, 'Not found');
+	requireOwner(db, access.organizationId, userId);
+	requireEditor(db, targetId, userId);
+	if (targetId === access.organizationId) bad('The build is already there');
+	if (!isPersonalOrg(db, access.organizationId))
+		bad('Only builds in My builds can be moved to a chapter');
+	if (isPersonalOrg(db, targetId)) bad('Pick a chapter to move the build to');
+	const now = new Date();
+	const target = db
+		.select({ name: organization.name })
+		.from(organization)
+		.where(eq(organization.id, targetId))
+		.get();
+	db.transaction((tx) => {
+		tx.update(builds).set({ organizationId: targetId }).where(eq(builds.id, buildId)).run();
+		tx.insert(activity)
+			.values({
+				buildId,
+				userId,
+				kind: 'build.move',
+				payload: { from: access.organizationId, to: targetId, toName: target?.name ?? null },
+				at: now
+			})
+			.run();
+	});
+	publish(db, buildId, userId, 'build.move', now);
 }

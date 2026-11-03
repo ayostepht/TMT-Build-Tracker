@@ -16,3 +16,6 @@ CLAUDE.local.md
 # Playwright output
 /test-results/
 /playwright-report/
+
+# Generated data
+src/lib/server/filaments/catalog.json

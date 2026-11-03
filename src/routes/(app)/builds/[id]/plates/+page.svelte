@@ -1,15 +1,25 @@
 <script lang="ts">
 	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
-	import { printing, logRun, deleteRun, updatePlate } from '#lib/client/api.ts';
+	import { printing, deleteRun, updatePlate } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from '#lib/components/build-context.svelte.ts';
 	import type { Plate } from '#lib/domain/types.ts';
 	import RoleChip from '#lib/components/RoleChip.svelte';
 	import RunTable from '#lib/components/RunTable.svelte';
-	import RunForm, { type RunFormValues } from '#lib/components/RunForm.svelte';
+	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
 
 	const ctx = getBuildCtx();
 	let logOpen = $state<Record<number, boolean>>({});
+	const startedOf = (pl: Plate) =>
+		pl.parts
+			.map((s) => (ctx.view.state[s]?.status === 'Printing' ? ctx.view.state[s].startedAt : null))
+			.filter((s): s is string => !!s)
+			.sort()[0] ?? null;
+	// Slugs a plate log covers: what is on the printer when something is, else the whole plate.
+	const loggable = (pl: Plate) => {
+		const on = pl.parts.filter((s) => status(s) === 'Printing');
+		return on.length ? on : pl.parts;
+	};
 
 	const partOf = (slug: string) => ctx.view.parts.find((p) => p.slug === slug);
 	const roleOf = (slug: string) => partOf(slug)?.role ?? '';
@@ -33,23 +43,6 @@
 	}
 	function start(slugs: string[]) {
 		return ctx.act(() => printing(ctx.id, { action: 'start', slugs }));
-	}
-	async function addLog(pl: Plate, v: RunFormValues) {
-		const ok = await ctx.act(() =>
-			logRun(ctx.id, {
-				plateNumber: pl.number,
-				partSlug: pl.perPartRuns ? v.partSlug : null,
-				partSlugs: null,
-				date: v.date,
-				result: v.result,
-				grams: v.grams,
-				hours: v.hours,
-				printer: null,
-				note: v.note
-			})
-		);
-		if (ok) logOpen[pl.number] = false;
-		return ok;
 	}
 </script>
 
@@ -127,43 +120,31 @@
 					{/if}
 				{/if}
 				<button
-					class="btn sm"
-					class:primary={!logOpen[pl.number]}
+					class="btn sm primary"
 					type="button"
 					style="margin-left:auto"
-					aria-expanded={!!logOpen[pl.number]}
-					onclick={() => (logOpen[pl.number] = !logOpen[pl.number])}
-					>{logOpen[pl.number] ? 'Close' : 'Log plate print'}</button
+					onclick={() => (logOpen[pl.number] = true)}>Log a print…</button
 				>
+				<LogRunSheet
+					bind:open={() => !!logOpen[pl.number], (v) => (logOpen[pl.number] = v)}
+					plateNumber={pl.number}
+					slugs={loggable(pl)}
+					startedAt={startedOf(pl)}
+					title="Log print: plate {pl.number}"
+				/>
 			</div>
 		{/if}
 
-		{#if runs.length || logOpen[pl.number]}
+		{#if runs.length}
 			<div class="plate-log">
-				{#if runs.length}
-					<RunTable
-						{runs}
-						canEdit={ctx.canEdit}
-						colorOf={pl.perPartRuns
-							? (r) => (r.partSlug ? filLabel(ctx.filament(roleOf(r.partSlug))) : '')
-							: undefined}
-						ondelete={(r) => ctx.act(() => deleteRun(ctx.id, r.id))}
-					/>
-				{/if}
-				{#if logOpen[pl.number] && ctx.canEdit}
-					<RunForm
-						idPrefix="plate-{pl.number}"
-						gramsLabel="plate grams"
-						submitLabel="Log plate"
-						parts={pl.perPartRuns
-							? pl.parts.map((s) => ({
-									slug: s,
-									label: `${partOf(s)?.name} (${filLabel(ctx.filament(roleOf(s)))})`
-								}))
-							: undefined}
-						onsubmit={(v) => addLog(pl, v)}
-					/>
-				{/if}
+				<RunTable
+					{runs}
+					canEdit={ctx.canEdit}
+					colorOf={pl.perPartRuns
+						? (r) => (r.partSlug ? filLabel(ctx.filament(roleOf(r.partSlug))) : '')
+						: undefined}
+					ondelete={(r) => ctx.act(() => deleteRun(ctx.id, r.id))}
+				/>
 			</div>
 		{/if}
 	</section>

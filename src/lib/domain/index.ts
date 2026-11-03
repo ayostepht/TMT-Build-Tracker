@@ -6,3 +6,4 @@ export * from './now.ts';
 export * from './grouping.ts';
 export * from './labels.ts';
 export * from './activity.ts';
+export * from './logrun.ts';

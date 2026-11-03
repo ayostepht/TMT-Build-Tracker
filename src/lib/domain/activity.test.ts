@@ -48,6 +48,8 @@ describe('describeActivity', () => {
 			'Steph renamed it to "Mia" and moved it to the printing phase'
 		);
 		expect(say('build.update', {})).toBe('Steph edited the build details');
+		expect(say('build.move', { toName: 'Chapter A' })).toBe('Steph moved this build to Chapter A');
+		expect(say('build.move', {})).toBe('Steph moved this build to a chapter');
 	});
 	it('part status and update use part names, not slugs', () => {
 		const s = say('part.status', { slug: part.slug, from: 'To print', to: 'Printing' });
@@ -82,6 +84,11 @@ describe('describeActivity', () => {
 		);
 		expect(say('run.delete', { plateNumber: 3, result: 'Failed' })).toBe(
 			'Steph deleted a failed print of plate 3 from the log'
+		);
+	});
+	it('undo', () => {
+		expect(say('run.undo', { plateNumber: 3, result: 'Failed' })).toBe(
+			'Steph undid a failed print of plate 3'
 		);
 	});
 	it('plates', () => {

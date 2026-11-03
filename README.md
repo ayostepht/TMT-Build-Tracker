@@ -79,3 +79,7 @@ Stack: SvelteKit (Svelte 5), SQLite via better-sqlite3 and Drizzle, Better Auth 
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+### Filament data
+
+Filament data from [SpoolmanDB](https://github.com/Donkie/SpoolmanDB), MIT licensed (see [THIRD_PARTY.md](THIRD_PARTY.md)). Refresh it with `npm run filaments:update` and commit the regenerated `src/lib/server/filaments/catalog.json`.

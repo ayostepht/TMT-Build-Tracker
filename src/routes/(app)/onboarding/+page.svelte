@@ -7,10 +7,11 @@
 </script>
 
 <section class="stack">
-	<div class="kicker">Welcome</div>
-	<h1>Join or start a chapter</h1>
+	<div class="kicker">Chapters</div>
+	<h1>Build with others</h1>
 	<p class="muted">
-		A chapter is your team of makers. Builds, progress and filament live inside a chapter.
+		A chapter is a team of makers who share builds, progress and filament. Your own builds stay in
+		My builds until you move them to a chapter.
 	</p>
 
 	{#if data.invitations.length}
@@ -31,4 +32,6 @@
 		<label class="field">Chapter name<input name="name" required maxlength="80" /></label>
 		<button class="btn primary">Create chapter</button>
 	</form>
+
+	<p><a href={resolve('/(app)')}>Back to my builds</a></p>
 </section>

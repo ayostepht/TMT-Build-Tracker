@@ -21,10 +21,13 @@ export async function signUp(page: Page, name: string, email: string, redirect?:
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel(/^Password/).fill(PASSWORD);
 	await page.getByRole('button', { name: 'Create account' }).click();
+	// Without an invite redirect a new account lands on its personal workspace, not onboarding.
+	if (!redirect) await expect(page).toHaveURL(/\/teams\//);
 }
 
+/** Creates a chapter from the create-a-chapter page (reached from the account menu). */
 export async function createChapter(page: Page, name: string) {
-	await expect(page).toHaveURL(/\/onboarding/);
+	if (!/\/onboarding/.test(page.url())) await page.goto('/onboarding');
 	await settled(page);
 	await page.getByLabel('Chapter name').fill(name);
 	await page.getByRole('button', { name: 'Create chapter' }).click();

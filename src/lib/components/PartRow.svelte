@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { PART_STATUSES, type PartDef } from '#lib/domain/types.ts';
 	import { fmt, plateOf } from '#lib/domain/index.ts';
-	import { setPartStatus, updatePart, logRun, deleteRun } from '#lib/client/api.ts';
+	import { setPartStatus, updatePart, deleteRun } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
 	import RunTable from './RunTable.svelte';
-	import RunForm, { type RunFormValues } from './RunForm.svelte';
+	import LogRunSheet from './LogRunSheet.svelte';
 
 	let { part }: { part: PartDef } = $props();
 
@@ -37,21 +37,7 @@
 		setTimeout(() => (copied = 'Copy'), 1500);
 	}
 
-	function addLog(v: RunFormValues) {
-		return ctx.act(() =>
-			logRun(ctx.id, {
-				plateNumber: null,
-				partSlug: part.slug,
-				partSlugs: null,
-				date: v.date,
-				result: v.result,
-				grams: v.grams,
-				hours: v.hours,
-				printer: null,
-				note: v.note
-			})
-		);
-	}
+	let logOpen = $state(false);
 </script>
 
 <div class="row" data-s={st?.status} data-id={part.slug}>
@@ -194,7 +180,14 @@
 					</div>
 				{/if}
 				{#if ctx.canEdit}
-					<RunForm idPrefix="pl-{part.slug}" onsubmit={addLog} />
+					<button class="btn sm" type="button" onclick={() => (logOpen = true)}>Log a print…</button
+					>
+					<LogRunSheet
+						bind:open={logOpen}
+						slugs={[part.slug]}
+						startedAt={st?.status === 'Printing' ? st.startedAt : null}
+						title="Log print: {part.name}"
+					/>
 				{/if}
 			</div>
 		</div>

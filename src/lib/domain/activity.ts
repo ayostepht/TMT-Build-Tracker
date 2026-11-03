@@ -48,6 +48,10 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 				);
 			return bits.length ? `${who} ${list(bits)}` : `${who} edited the build details`;
 		}
+		case 'build.move':
+			return str(p.toName)
+				? `${who} moved this build to ${str(p.toName)}`
+				: `${who} moved this build to a chapter`;
 		case 'part.status': {
 			const to = str(p.to);
 			return to
@@ -76,7 +80,8 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 				: `${who} set the time estimate for ${parts(p.slugs)} to ${fmtHM(s)}`;
 		}
 		case 'run.add':
-		case 'run.delete': {
+		case 'run.delete':
+		case 'run.undo': {
 			const result = (str(p.result) ?? 'print').toLowerCase();
 			const adj = result === 'success' ? 'successful' : result === 'failed' ? 'failed' : result;
 			const plate = num(p.plateNumber);
@@ -88,6 +93,7 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 						: p.partSlug
 							? part(p.partSlug)
 							: 'a part';
+			if (a.kind === 'run.undo') return `${who} undid a ${adj} print of ${target}`;
 			if (a.kind === 'run.delete') return `${who} deleted a ${adj} print of ${target} from the log`;
 			let grams = num(p.grams);
 			if (grams === null) grams = view.runs.find((r) => r.id === p.runId)?.grams ?? null;

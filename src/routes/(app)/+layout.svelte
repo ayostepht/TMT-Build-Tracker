@@ -12,10 +12,21 @@
 		await goto(resolve('/login'));
 	}
 
+	const showSwitcher = $derived(data.teams.length > 1 || data.invitationCount > 0);
+
 	async function switchTeam(e: Event & { currentTarget: HTMLSelectElement }) {
-		await authClient.organization.setActive({ organizationId: e.currentTarget.value });
+		const value = e.currentTarget.value;
+		if (value === '__create' || value === '__invites') {
+			e.currentTarget.value = data.activeTeamId ?? '';
+			await goto(resolve('/(app)/onboarding'));
+			return;
+		}
+		const team = data.teams.find((t) => t.id === value);
+		if (!team) return;
+		await authClient.organization.setActive({ organizationId: value });
 		await invalidateAll();
-		await goto(resolve('/(app)'));
+		// Go straight to the workspace page rather than via "/", which redirects by session state.
+		await goto(resolve('/(app)/teams/[slug]', { slug: team.slug }));
 	}
 </script>
 
@@ -23,16 +34,23 @@
 	<header class="topbar">
 		<div class="left">
 			<a class="brand" href={resolve('/(app)')}>TMT Build Tracker</a>
-			{#if data.teams?.length}
+			{#if showSwitcher}
 				<label class="chapter">
-					<span class="sr-only">Chapter</span>
-					<select value={data.activeTeamId ?? ''} onchange={switchTeam} aria-label="Chapter">
+					<span class="sr-only">Workspace</span>
+					<select value={data.activeTeamId ?? ''} onchange={switchTeam} aria-label="Workspace">
 						{#each data.teams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+						<option value="__create">Create a chapter…</option>
+						{#if data.invitationCount > 0}
+							<option value="__invites">Invitations ({data.invitationCount})</option>
+						{/if}
 					</select>
 				</label>
 			{/if}
 		</div>
 		<div class="who">
+			{#if !showSwitcher}
+				<a class="muted" href={resolve('/(app)/onboarding')}>Create a chapter</a>
+			{/if}
 			{#if data.user}<span>{data.user.name}</span>{/if}
 			<button class="btn sm" type="button" onclick={signOut}>Sign out</button>
 		</div>

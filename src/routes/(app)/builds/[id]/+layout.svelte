@@ -5,6 +5,7 @@
 	import BuildHeader from '#lib/components/BuildHeader.svelte';
 	import TabBar from '#lib/components/TabBar.svelte';
 	import GuideViewer from '#lib/components/GuideViewer.svelte';
+	import Toast from '#lib/components/Toast.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -60,3 +61,4 @@
 <TabBar id={ctx.id} />
 {@render children()}
 <GuideViewer />
+<Toast />

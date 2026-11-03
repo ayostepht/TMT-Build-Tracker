@@ -1,4 +1,5 @@
 import type { BuildPhase, BuildView, PartStatus, PrintRunInput } from '#lib/domain/types.ts';
+import type { PartSnapshot } from '#lib/domain/logrun.ts';
 
 async function call<T = Record<string, never>>(
 	method: string,
@@ -45,6 +46,8 @@ export const updateBuild = (
 	}
 ) => call('PATCH', b(id), patch);
 export const deleteBuild = (id: string) => call('DELETE', b(id));
+export const moveBuild = (id: string, organizationId: string) =>
+	call('POST', `${b(id)}/move`, { organizationId });
 
 export const setPartStatus = (id: string, slug: string, status: PartStatus) =>
 	call('POST', `${b(id)}/parts/${encodeURIComponent(slug)}/status`, { status });
@@ -98,3 +101,7 @@ export const printing = (
 
 /** Fresh BuildView from the server. */
 export const getView = (id: string) => call<BuildView>('GET', `${b(id)}/view`);
+
+/** Delete a run and restore the affected parts to `parts` (their state before the run was logged). */
+export const undoRun = (id: string, runId: string, parts: PartSnapshot[]) =>
+	call('POST', `${b(id)}/runs/${encodeURIComponent(runId)}/undo`, { parts });

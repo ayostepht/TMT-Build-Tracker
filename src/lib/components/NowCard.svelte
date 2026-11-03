@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { RUN_RESULTS, type RunResult } from '#lib/domain/types.ts';
 	import {
 		fmt,
 		fmtH,
@@ -7,12 +6,12 @@
 		fmtHM,
 		parseDur,
 		toLocalInput,
-		today,
 		type nowPrinting
 	} from '#lib/domain/index.ts';
-	import { printing, logRun, updatePlate } from '#lib/client/api.ts';
-	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
+	import { printing, updatePlate } from '#lib/client/api.ts';
+	import { getBuildCtx } from './build-context.svelte.ts';
 	import RoleChip from './RoleChip.svelte';
+	import LogRunSheet from './LogRunSheet.svelte';
 
 	type Item = ReturnType<typeof nowPrinting>[number];
 	let { item }: { item: Item } = $props();
@@ -21,18 +20,7 @@
 	const slugs = $derived(item.parts.map((p) => p.slug));
 	const plate = $derived(ctx.view.plates.find((p) => p.number === item.plate));
 	const fid = $derived(`now-${item.plate}`);
-
-	// Finish-form state lives here, so refreshes (which keep this component alive via the keyed
-	// each in NowPrinting) never wipe what someone is typing.
-	let fin = $state('');
-	let hours = $state('');
-	let hoursManual = $state(false);
-	let grams = $state('');
-	let gramsManual = $state(false);
-	let result = $state<RunResult>('Success');
-	let note = $state('');
-	let runPart = $state('');
-	let busy = $state(false);
+	let sheetOpen = $state(false);
 
 	const slicerShown = $derived(item.slicerGrams);
 	const bomRun = $derived(
@@ -50,21 +38,6 @@
 			(same ? '' : ' ' + eta.toLocaleDateString([], { weekday: 'short' }))
 		);
 	});
-	const hoursPlaceholder = $derived(
-		item.startedAt ? `Hours (${(elapsedMs / 3600000).toFixed(1)} so far)` : 'Hours'
-	);
-
-	function hoursFrom(finVal: string): string {
-		if (!item.startedAt || !finVal) return '';
-		const h =
-			(Math.min(new Date(finVal).getTime(), Date.now()) - Date.parse(item.startedAt)) / 3600000;
-		return h > 0 ? h.toFixed(1) : '';
-	}
-	function setFin(v: string) {
-		fin = v;
-		if (!hoursManual) hours = hoursFrom(v);
-	}
-
 	function setStart(v: string) {
 		if (!v) return;
 		const when = new Date(v);
@@ -89,36 +62,6 @@
 			ctx.act(() => updatePlate(ctx.id, plate.number, { slicerByPart: by }));
 		} else {
 			ctx.act(() => updatePlate(ctx.id, plate.number, { slicerGrams: v }));
-		}
-	}
-
-	async function submit(e: SubmitEvent) {
-		e.preventDefault();
-		if (!ctx.canEdit || busy || !plate) return;
-		busy = true;
-		const finAt = fin ? new Date(Math.min(new Date(fin).getTime(), Date.now())) : new Date();
-		const h = hours !== '' ? hours : hoursFrom(toLocalInput(finAt));
-		const g = grams !== '' ? grams : slicerShown != null ? String(slicerShown) : '';
-		const picked = plate.perPartRuns ? runPart || slugs[0] : null;
-		const subset = !picked && slugs.length < plate.parts.length ? slugs : null;
-		const ok = await ctx.act(() =>
-			logRun(ctx.id, {
-				plateNumber: plate.number,
-				partSlug: picked,
-				partSlugs: subset,
-				date: toLocalInput(finAt).slice(0, 10) || today(),
-				result,
-				grams: g === '' ? null : Number(g),
-				hours: h === '' ? null : Number(h),
-				printer: null,
-				note: note.trim()
-			})
-		);
-		busy = false;
-		if (ok) {
-			fin = hours = grams = note = '';
-			hoursManual = gramsManual = false;
-			result = 'Success';
 		}
 	}
 </script>
@@ -217,85 +160,40 @@
 		{/if}
 	</div>
 
-	{#if ctx.canEdit}
-		<form class="logform now-form" onsubmit={submit}>
-			<div class="now-step-title span2">2 · Finished</div>
-			<label class="span2 now-fin" for="{fid}-fin"
-				>Finished at
-				<input
-					type="datetime-local"
-					id="{fid}-fin"
-					value={fin}
-					onchange={(e) => setFin(e.currentTarget.value)}
-				/>
-				<button class="btn" type="button" onclick={() => setFin(toLocalInput(new Date()))}
-					>Now</button
-				>
-			</label>
-			<label class="now-lab" for="{fid}-g"
-				>{slicerShown != null ? 'Actual grams (from slicer, edit if different)' : 'Actual grams'}
-				<input
-					type="number"
-					id="{fid}-g"
-					min="0"
-					step="1"
-					placeholder="g"
-					value={gramsManual ? grams : grams !== '' ? grams : (slicerShown ?? '')}
-					oninput={(e) => {
-						grams = e.currentTarget.value;
-						gramsManual = true;
-					}}
-				/>
-			</label>
-			<label class="now-lab" for="{fid}-h"
-				>Hours (fills from start to finish)
-				<input
-					type="number"
-					id="{fid}-h"
-					min="0"
-					step="0.1"
-					placeholder={hoursPlaceholder}
-					value={hours}
-					oninput={(e) => {
-						hours = e.currentTarget.value;
-						hoursManual = !!hours;
-					}}
-				/>
-			</label>
-			<select bind:value={result} aria-label="Result">
-				{#each RUN_RESULTS as r (r)}<option>{r}</option>{/each}
-			</select>
-			{#if plate?.perPartRuns && item.parts.length > 1}
-				<select bind:value={runPart} aria-label="Which color this run was">
-					{#each item.parts as p (p.slug)}
-						<option value={p.slug}>{p.name} ({filLabel(ctx.filament(p.role), p.role)})</option>
-					{/each}
-				</select>
-			{/if}
-			<div class="wide">
-				<input
-					type="text"
-					id="{fid}-n"
-					placeholder="Note (warping, stringing, fit…)"
-					aria-label="Note"
-					bind:value={note}
-				/>
-				<button class="btn primary" type="submit" disabled={busy}>Log print</button>
-			</div>
-		</form>
-	{/if}
 	<div class="now-foot">
 		<span
 			>A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure flags them
 			for reprint.</span
 		>
 		{#if ctx.canEdit}
-			<button
-				class="btn"
-				type="button"
-				onclick={() => ctx.act(() => printing(ctx.id, { action: 'stop', slugs }))}
-				>Take off printer</button
-			>
+			<div class="now-actions">
+				<button class="btn primary" type="button" onclick={() => (sheetOpen = true)}
+					>Finish &amp; log print…</button
+				>
+				<button
+					class="btn"
+					type="button"
+					onclick={() => ctx.act(() => printing(ctx.id, { action: 'stop', slugs }))}
+					>Take off printer</button
+				>
+			</div>
 		{/if}
 	</div>
+	{#if ctx.canEdit}
+		<LogRunSheet
+			bind:open={sheetOpen}
+			plateNumber={item.plate}
+			{slugs}
+			startedAt={item.startedAt}
+			title="Finish & log print"
+		/>
+	{/if}
 </article>
+
+<style>
+	.now-actions {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+</style>

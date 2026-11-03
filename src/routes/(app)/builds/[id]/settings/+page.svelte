@@ -4,7 +4,8 @@
 	import { BUILD_PHASES, type BuildPhase, type FilamentRole } from '#lib/domain/types.ts';
 	import { updateBuild, updateFilament, deleteBuild } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
-	import Swatch from '#lib/components/Swatch.svelte';
+	import FilamentPicker from '#lib/components/FilamentPicker.svelte';
+	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
@@ -78,33 +79,13 @@
 		changes.
 	</p>
 	{#each ctx.view.filaments as f (f.key)}
-		<div class="fil-edit">
-			<Swatch hex={f.hex} tpu={f.tpu} />
-			<label class="field"
-				>Name
-				<input
-					value={f.name}
-					disabled={!ctx.canEdit}
-					onchange={(e) => saveFil(f, { name: e.currentTarget.value.trim() })}
-				/></label
-			>
-			<label class="field"
-				>Material
-				<input
-					value={f.material}
-					disabled={!ctx.canEdit}
-					onchange={(e) => saveFil(f, { material: e.currentTarget.value.trim() })}
-				/></label
-			>
-			<label class="field"
-				>Color
-				<input
-					type="color"
-					value={f.hex}
-					disabled={!ctx.canEdit}
-					onchange={(e) => saveFil(f, { hex: e.currentTarget.value })}
-				/></label
-			>
+		<div class="fil-role" data-role={f.key}>
+			<FilamentPicker
+				value={{ name: f.name, material: f.material, hex: f.hex }}
+				preferMaterial={f.tpu ? 'TPU 95A' : 'PETG'}
+				disabled={!ctx.canEdit}
+				onchange={(v) => saveFil(f, v)}
+			/>
 			<label class="field"
 				>Spools (kg)
 				<input
@@ -119,6 +100,8 @@
 		</div>
 	{/each}
 </section>
+
+<MoveToChapter />
 
 {#if ctx.view.role === 'owner'}
 	<section class="card danger-zone">
@@ -164,3 +147,19 @@
 		{/if}
 	</section>
 {/if}
+
+<style>
+	.fil-role {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 140px;
+		gap: 10px;
+		align-items: end;
+		padding: 12px 0;
+		border-top: 1px solid var(--line);
+	}
+	@media (max-width: 640px) {
+		.fil-role {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

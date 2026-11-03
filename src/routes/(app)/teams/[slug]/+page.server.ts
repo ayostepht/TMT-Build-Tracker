@@ -5,6 +5,7 @@ import { normalizeRole, ApiError } from '#lib/server/access.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { createBuild } from '#lib/server/builds/create.ts';
 import { getDb } from '#lib/server/db/index.ts';
+import { isPersonalMetadata } from '#lib/server/teams.ts';
 import {
 	buildParts,
 	builds,
@@ -70,22 +71,26 @@ export const load: PageServerLoad = async ({ params, locals, request }) => {
 		.orderBy(asc(colorDesigns.name))
 		.all();
 
-	const members = db
-		.select({
-			id: member.id,
-			userId: member.userId,
-			name: user.name,
-			email: user.email,
-			role: member.role
-		})
-		.from(member)
-		.innerJoin(user, eq(user.id, member.userId))
-		.where(eq(member.organizationId, org.id))
-		.all()
-		.map((m) => ({ ...m, role: normalizeRole(m.role) }));
+	const personal = isPersonalMetadata(org.metadata);
+	const members = personal
+		? []
+		: db
+				.select({
+					id: member.id,
+					userId: member.userId,
+					name: user.name,
+					email: user.email,
+					role: member.role
+				})
+				.from(member)
+				.innerJoin(user, eq(user.id, member.userId))
+				.where(eq(member.organizationId, org.id))
+				.all()
+				.map((m) => ({ ...m, role: normalizeRole(m.role) }));
 
-	const invites =
-		role === 'owner'
+	const invites = personal
+		? []
+		: role === 'owner'
 			? db
 					.select({
 						id: invitation.id,
@@ -100,7 +105,7 @@ export const load: PageServerLoad = async ({ params, locals, request }) => {
 			: [];
 
 	return {
-		team: { id: org.id, name: org.name, slug: org.slug },
+		team: { id: org.id, name: personal ? 'My builds' : org.name, slug: org.slug, personal },
 		role,
 		canEdit: role !== 'viewer',
 		builds: buildRows,
@@ -146,6 +151,8 @@ export const actions: Actions = {
 	invite: async ({ request, params, locals }) => {
 		const { org, role } = teamFor(params.slug, locals.user!.id);
 		if (role !== 'owner') return fail(403, { error: 'Only owners can invite' });
+		if (isPersonalMetadata(org.metadata))
+			return fail(400, { error: 'Create a chapter to invite people' });
 		const f = await request.formData();
 		const email = String(f.get('email') ?? '')
 			.trim()
