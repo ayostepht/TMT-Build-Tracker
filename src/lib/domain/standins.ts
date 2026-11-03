@@ -62,15 +62,20 @@ export interface CasterAnchor {
 	wheelW: number;
 	/** Distance the wheel axle trails behind the swivel axis (towards -z). */
 	trail: number;
+	/**
+	 * Swivel axis direction (unit, from the wheel up into the mount) when the mount is tilted.
+	 * `topY` is then the pivot's y and the caster hangs along `-up`; absent means vertical.
+	 */
+	up?: Vec3;
 }
 
 /**
- * Front caster: one under every front-caster-mount instance. The REV C mount is an arch over a
- * small wheel (its box: 37.5 wide, 56.5 tall, 111.8 long). The wheel sits in the arch, its tread
- * 9 mm above the bottom of the mount's legs (the legs reach ~9 mm below the big wheels' ground
- * line in the assembly), the swivel plate just under the arch top.
+ * Front caster: one per front-caster-mount instance. The REV C mount is a thin tilted cap
+ * (about 3 mm thick) with a square pin hole; the caster's swivel plate sits against its
+ * underside with the stem through the hole and the wheel hangs below it along the plate's
+ * normal (`drop` = plate to the wheel's lowest point).
  */
-export const FRONT_CASTER = { wheelR: 21, wheelW: 16, legInset: 9, plateDrop: 4 } as const;
+export const FRONT_CASTER = { wheelR: 21, wheelW: 16, drop: 48 } as const;
 /**
  * Rear caster: one under the rear caster mounts (kit or McMaster, both occupy the same box).
  * From the assembly's McMaster Easy-Roll caster: wheel 98 mm across and 32 wide, swivel plate
@@ -81,17 +86,77 @@ export const REAR_CASTER = { wheelR: 49, wheelW: 32, plateFromRear: 76.4, trail:
 /** Ground line when no wheel is placed (the big tire's lowest point in the assembly). */
 export const DEFAULT_GROUND_Y = -29.8;
 
-export function frontCasterAnchors(mounts: Aabb[]): CasterAnchor[] {
-	return mounts.map((b) => ({
-		kind: 'front',
-		x: (b.min[0] + b.max[0]) / 2,
-		z: (b.min[2] + b.max[2]) / 2,
-		topY: b.max[1] - FRONT_CASTER.plateDrop,
-		groundY: b.min[1] + FRONT_CASTER.legInset,
-		wheelR: FRONT_CASTER.wheelR,
-		wheelW: FRONT_CASTER.wheelW,
-		trail: 0
-	}));
+/** Where a caster attaches to a mount: a point on the mount's underside and that surface's normal. */
+export interface MountFrame {
+	pivot: Vec3;
+	/** Unit normal of the underside, pointing into the mount (away from the wheel). */
+	up: Vec3;
+}
+
+/**
+ * Least-squares plane `y = a + b x + c z` through the mount's underside samples, evaluated at the
+ * pin hole (centroid of the sample points that missed, `holes` as x, z pairs; `fallbackXZ` or the
+ * samples' centroid when there are none). Null when there are too few or degenerate samples.
+ */
+export function fitMountFrame(
+	under: Vec3[],
+	holes: [number, number][],
+	fallbackXZ?: [number, number]
+): MountFrame | null {
+	if (under.length < 6) return null;
+	// Normal equations for [1 x z] * [a b c]^T = y.
+	const m = [
+		[0, 0, 0],
+		[0, 0, 0],
+		[0, 0, 0]
+	];
+	const r = [0, 0, 0];
+	for (const [x, y, z] of under) {
+		const v = [1, x, z];
+		for (let i = 0; i < 3; i++) {
+			for (let j = 0; j < 3; j++) m[i][j] += v[i] * v[j];
+			r[i] += v[i] * y;
+		}
+	}
+	const det3 = (q: number[][]) =>
+		q[0][0] * (q[1][1] * q[2][2] - q[1][2] * q[2][1]) -
+		q[0][1] * (q[1][0] * q[2][2] - q[1][2] * q[2][0]) +
+		q[0][2] * (q[1][0] * q[2][1] - q[1][1] * q[2][0]);
+	const d = det3(m);
+	if (Math.abs(d) < 1e-6) return null;
+	const [a, b, c] = [0, 1, 2].map(
+		(k) => det3(m.map((row, i) => row.map((v, j) => (j === k ? r[i] : v)))) / d
+	);
+	const mean = (xs: number[]) => xs.reduce((t, v) => t + v, 0) / xs.length;
+	const hx = holes.length
+		? mean(holes.map((h) => h[0]))
+		: (fallbackXZ?.[0] ?? mean(under.map((p) => p[0])));
+	const hz = holes.length
+		? mean(holes.map((h) => h[1]))
+		: (fallbackXZ?.[1] ?? mean(under.map((p) => p[2])));
+	const len = Math.hypot(b, 1, c);
+	return { pivot: [hx, a + b * hx + c * hz, hz], up: [-b / len, 1 / len, -c / len] };
+}
+
+export function frontCasterAnchors(
+	mounts: Aabb[],
+	frames: (MountFrame | null | undefined)[] = []
+): CasterAnchor[] {
+	return mounts.map((b, i) => {
+		const f = frames[i];
+		const topY = f ? f.pivot[1] : b.max[1] - 4;
+		return {
+			kind: 'front',
+			x: f ? f.pivot[0] : (b.min[0] + b.max[0]) / 2,
+			z: f ? f.pivot[2] : (b.min[2] + b.max[2]) / 2,
+			topY,
+			groundY: topY - FRONT_CASTER.drop,
+			wheelR: FRONT_CASTER.wheelR,
+			wheelW: FRONT_CASTER.wheelW,
+			trail: 0,
+			...(f ? { up: f.up } : {})
+		};
+	});
 }
 
 export function rearCasterAnchor(mounts: Aabb[], groundY: number): CasterAnchor | null {

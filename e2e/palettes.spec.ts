@@ -56,16 +56,48 @@ test('generate a palette from a base color, preview it and apply it', async ({ p
 
 	await gen.getByRole('button', { name: 'Shuffle' }).click();
 	await expect.poll(async () => (await chosen.allInnerTexts()).join('|')).not.toBe(first.join('|'));
-	const names = await chosen.allInnerTexts();
 
 	await gen.getByRole('button', { name: 'Preview' }).click();
-	await expect(page.getByTestId('preview-banner')).toContainText('Triadic');
+	const banner = page.getByTestId('preview-banner');
+	await expect(banner).toContainText('Triadic');
+	const hexes = () => banner.getAttribute('data-hexes');
+	const triadic = await hexes();
+	expect(triadic).toMatch(/primary:#/);
+
+	// A previewed palette follows its inputs: theme, base color, shuffle.
+	await gen.getByRole('button', { name: 'Monochrome' }).click();
+	await expect(banner).toContainText('Monochrome');
+	await expect.poll(hexes).not.toBe(triadic);
+	const mono = await hexes();
+	await gen.getByRole('button', { name: 'Shuffle' }).click();
+	await expect.poll(hexes).not.toBe(mono);
+	const shuffled = await hexes();
+	await gen.getByRole('button', { name: 'Base #1e88e5' }).click();
+	await expect(banner).toContainText('#1e88e5');
+	await expect.poll(hexes).not.toBe(shuffled);
+	// The preview matches the swatches shown for the current inputs.
+	await expect(banner).toHaveAttribute('data-hexes', /primary:#/);
+	const names = await chosen.allInnerTexts();
+
 	await gen.getByRole('button', { name: 'Apply' }).click();
-	await expect(page.getByText(/^Applied Triadic/)).toBeVisible();
+	await expect(page.getByText(/^Applied Monochrome/)).toBeVisible();
 
 	await page.goto(`/builds/${buildId}`);
 	const filament = page.getByRole('region', { name: 'Filament' });
 	for (const n of names) await expect(filament).toContainText(n);
+});
+
+test('a previewed ready-made palette follows the preferred brand', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'brandfollow');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	const card = page.locator('[data-palette="columbus-blues"]');
+	await card.getByRole('button', { name: 'Preview' }).click();
+	const banner = page.getByTestId('preview-banner');
+	await expect(banner).toContainText('Columbus Blues');
+	const before = await banner.getAttribute('data-hexes');
+	await page.getByLabel('Preferred brand').selectOption('Overture');
+	await expect.poll(() => banner.getAttribute('data-hexes')).not.toBe(before);
 });
 
 test('a relaxed match explains itself under the swatch', async ({ page }) => {

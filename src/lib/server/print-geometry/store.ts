@@ -13,6 +13,7 @@ import type { Db } from '../db';
 import { templatePrintGeometry } from '../db/schema';
 import { SEED_NOTE } from '../seed/run';
 import type { ExtractedPart } from './extract';
+import { computePoses, ORIENT_VERSION } from '#lib/domain/orient.ts';
 import { decodeMesh, encodeMesh, type PrintMesh } from './mesh-format';
 
 export const printDir = (templateId: string) => join(uploadsDir(), 'print', templateId);
@@ -65,7 +66,11 @@ export function storeExtractedParts(
 				const file = meshFile(part.slug, i);
 				writeFileSync(
 					join(printDir(templateId), file),
-					encodeMesh({ positions: p.geometry.positions, indices: p.geometry.indices })
+					encodeMesh({
+						positions: p.geometry.positions,
+						indices: p.geometry.indices,
+						paint: p.geometry.paint
+					})
 				);
 				return {
 					name: p.name,
@@ -76,7 +81,17 @@ export function storeExtractedParts(
 					hull: p.geometry.hull,
 					tris: p.geometry.tris,
 					mesh: file,
-					settings: p.settings
+					settings: p.settings,
+					...(Object.keys(p.partSettings ?? {}).length ? { partSettings: p.partSettings } : {}),
+					...(p.geometry.paint?.length
+						? {
+								paint: {
+									supports: p.geometry.paint.filter((e) => e.kind === 'supports').length,
+									seam: p.geometry.paint.filter((e) => e.kind === 'seam').length
+								}
+							}
+						: {}),
+					orient: computePoses({ positions: p.geometry.positions, indices: p.geometry.indices })
 				};
 			})
 		};
@@ -129,4 +144,46 @@ export function clearImportedGeometry(db: Db, templateId: string): number {
 export function readPieceMesh(templateId: string, meshName: string): PrintMesh {
 	if (!/^[A-Za-z0-9._-]+\.bin$/.test(meshName)) throw new Error('Invalid mesh name');
 	return decodeMesh(readFileSync(join(printDir(templateId), meshName)));
+}
+
+/**
+ * Compute and cache the re-orientation poses of pieces whose geometry was imported before
+ * poses existed (or with an older algorithm version). Reads each mesh once and writes the row
+ * back, so later calls are free. Missing or unreadable meshes are skipped. Returns the number
+ * of pieces computed.
+ */
+export function ensureOrientations(db: Db, templateId: string): number {
+	let n = 0;
+	const rows = db
+		.select()
+		.from(templatePrintGeometry)
+		.where(eq(templatePrintGeometry.templateId, templateId))
+		.all();
+	for (const r of rows) {
+		const fp = r.footprint as unknown as PrintFootprint;
+		if (!fp?.pieces?.length) continue;
+		let changed = false;
+		for (const pc of fp.pieces) {
+			if (!pc.mesh || pc.orient?.v === ORIENT_VERSION) continue;
+			try {
+				const mesh = readPieceMesh(templateId, pc.mesh);
+				pc.orient = computePoses(mesh);
+				changed = true;
+				n++;
+			} catch {
+				// mesh file missing: nothing to compute
+			}
+		}
+		if (changed)
+			db.update(templatePrintGeometry)
+				.set({ footprint: fp as unknown as Record<string, unknown> })
+				.where(
+					and(
+						eq(templatePrintGeometry.templateId, templateId),
+						eq(templatePrintGeometry.slug, r.slug)
+					)
+				)
+				.run();
+	}
+	return n;
 }

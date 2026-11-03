@@ -543,7 +543,7 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 	for (const pl of stored)
 		for (const s of pl.parts) {
 			const fp = footprints.get(s);
-			if (fp) used[s] = fp;
+			if (fp) used[s] = { ...fp, pieces: fp.pieces.map((pc) => ({ ...pc, orient: undefined })) };
 		}
 	return {
 		printer: view.printer,

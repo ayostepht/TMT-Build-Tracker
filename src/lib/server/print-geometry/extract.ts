@@ -24,6 +24,8 @@ export interface ExtractedPiece {
 	onPlate: number;
 	filamentIndex: number | null;
 	settings: Record<string, string>;
+	/** Per-part (volume) metadata of the object, e.g. support settings set on the volume. */
+	partSettings?: Record<string, string>;
 	geometry: Geometry;
 }
 
@@ -121,6 +123,7 @@ export async function extractPartGeometry(
 				onPlate: counts[i],
 				filamentIndex: a.filamentIndex,
 				settings: pickSettings(structure.objects.get(a.objectId)),
+				partSettings: structure.objects.get(a.objectId)?.partSettings ?? {},
 				geometry: geometry.get(a.objectId)!
 			}))
 		});

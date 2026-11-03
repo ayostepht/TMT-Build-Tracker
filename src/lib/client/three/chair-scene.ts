@@ -9,13 +9,16 @@ import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { PartPlacement } from '#lib/domain/types.ts';
 import {
 	aabbUnion,
+	fitMountFrame,
 	frontCasterAnchors,
 	harnessLayout,
 	rearCasterAnchor,
 	DEFAULT_GROUND_Y,
-	type Aabb
+	type Aabb,
+	type MountFrame,
+	type Vec3
 } from '#lib/domain/standins.ts';
-import { PART_CLIPS } from '#lib/domain/part-clips.ts';
+import { keepBodiesIndex, PART_CLIPS } from '#lib/domain/part-clips.ts';
 import { fitDistance, fitDistanceBox } from './fit.ts';
 import { isTap, resolvePick } from './picking.ts';
 import { buildBuckle, buildCaster, buildRibbon } from './standins.ts';
@@ -182,7 +185,6 @@ export class ChairScene {
 			roughness: 0.85,
 			metalness: 0
 		});
-		this.renderer.localClippingEnabled = true;
 
 		this.controls = new libs.OrbitControls(this.camera, canvas);
 		this.controls.enableDamping = true;
@@ -292,6 +294,22 @@ export class ChairScene {
 			list.push({ geometry: mesh.geometry, base: mesh.matrixWorld.clone() });
 			this.prims.set(name, list);
 		});
+		// Loose bodies the placement cannot serve (see part-clips.ts) are dropped whole, never sliced.
+		for (const [slug, clip] of Object.entries(PART_CLIPS)) {
+			for (const prim of this.prims.get(slug) ?? []) {
+				const g = prim.geometry;
+				const pos = g.getAttribute('position');
+				const xyz = new Float32Array(pos.count * 3);
+				for (let i = 0; i < pos.count; i++) xyz.set([pos.getX(i), pos.getY(i), pos.getZ(i)], 3 * i);
+				const keep = keepBodiesIndex(xyz, g.index ? g.index.array : null, prim.base.elements, clip);
+				if (!keep) continue;
+				const filtered = new THREE.BufferGeometry();
+				for (const [name, attr] of Object.entries(g.attributes)) filtered.setAttribute(name, attr);
+				filtered.setIndex(new THREE.BufferAttribute(keep, 1));
+				this.owned.push(filtered);
+				prim.geometry = filtered;
+			}
+		}
 		for (const n of hwNodes) {
 			const m = new THREE.Mesh(n.geometry, this.hwMaterial);
 			m.matrixAutoUpdate = false;
@@ -360,11 +378,6 @@ export class ChairScene {
 				if (m.length !== 16) continue;
 				const place = new THREE.Matrix4().fromArray(m);
 				const material = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 });
-				const clip = PART_CLIPS[p.slug];
-				if (clip)
-					material.clippingPlanes = [
-						new THREE.Plane(new THREE.Vector3(...clip.normal), clip.constant).applyMatrix4(place)
-					];
 				const meshes = prims.map((prim) => {
 					const mesh = new THREE.Mesh(prim.geometry, material);
 					mesh.matrixAutoUpdate = false;
@@ -440,6 +453,39 @@ export class ChairScene {
 		return out;
 	}
 
+	/**
+	 * Where a caster attaches to each visible instance of a mount: the mount is a thin tilted cap
+	 * with a pin hole, so fire rays up at it around its centre, fit the underside plane through
+	 * the first hits and take the rays that pass through as the hole.
+	 */
+	private mountFrames(slug: string): (MountFrame | null)[] {
+		const THREE = this.THREE;
+		if (this.hidden.has(slug)) return [];
+		const rc = new THREE.Raycaster();
+		const up = new THREE.Vector3(0, 1, 0);
+		return (this.instances.get(slug) ?? []).flatMap((inst) => {
+			const box = new THREE.Box3();
+			for (const m of inst.meshes) box.expandByObject(m);
+			if (box.isEmpty()) return [];
+			const cx = (box.min.x + box.max.x) / 2;
+			const cz = (box.min.z + box.max.z) / 2;
+			const sides = inst.meshes.map((m) => (m.material as T.Material).side);
+			inst.meshes.forEach((m) => ((m.material as T.Material).side = THREE.DoubleSide));
+			const under: Vec3[] = [];
+			const holes: [number, number][] = [];
+			for (let dx = -10; dx <= 10; dx += 2) {
+				for (let dz = -18; dz <= 18; dz += 2) {
+					rc.set(new THREE.Vector3(cx + dx, box.min.y - 10, cz + dz), up);
+					const hit = rc.intersectObjects(inst.meshes, false)[0];
+					if (hit) under.push(hit.point.toArray() as Vec3);
+					else holes.push([cx + dx, cz + dz]);
+				}
+			}
+			inst.meshes.forEach((m, i) => ((m.material as T.Material).side = sides[i]));
+			return [fitMountFrame(under, holes, [cx, cz])];
+		});
+	}
+
 	private removeStandins() {
 		for (const key of ['harness', 'buckles']) {
 			const list = this.instances.get(key);
@@ -480,8 +526,9 @@ export class ChairScene {
 			]),
 			ground
 		);
+		const mountBoxes = boxesOf(['front-caster-mount']);
 		const anchors = [
-			...frontCasterAnchors(boxesOf(['front-caster-mount'])),
+			...frontCasterAnchors(mountBoxes, this.mountFrames('front-caster-mount')),
 			...(rear ? [rear] : [])
 		];
 		for (const a of anchors)

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	aabbUnion,
 	DEFAULT_GROUND_Y,
+	fitMountFrame,
 	frontCasterAnchors,
 	FRONT_CASTER,
 	harnessLayout,
@@ -23,9 +24,25 @@ describe('caster anchors', () => {
 		expect(a[0].x).toBeCloseTo(-174.75, 2);
 		expect(a[1].x).toBeCloseTo(174.75, 2);
 		expect(a[0].z).toBeCloseTo(-85.7, 2);
-		expect(a[0].groundY).toBeCloseTo(-39.3 + FRONT_CASTER.legInset, 5);
 		expect(a[0].topY).toBeLessThan(17.2);
+		expect(a[0].topY - a[0].groundY).toBe(FRONT_CASTER.drop);
 		expect(a[0].topY - a[0].groundY).toBeGreaterThan(2 * a[0].wheelR);
+	});
+	it('fits the mount underside plane and hangs the caster from the pin hole', () => {
+		// Underside y = -5 - 1.2 (x - 175), sampled either side of a pin hole at (175, 10).
+		const under: [number, number, number][] = [];
+		for (const dx of [-9, -7, 7, 9, 11])
+			for (const z of [0, 8, 16]) under.push([175 + dx, -5 - 1.2 * dx, z]);
+		const f = fitMountFrame(under, [[175, 10]])!;
+		expect(f.pivot[0]).toBeCloseTo(175, 5);
+		expect(f.pivot[1]).toBeCloseTo(-5, 4);
+		expect(f.pivot[2]).toBeCloseTo(10, 5);
+		expect(Math.hypot(...f.up)).toBeCloseTo(1, 6);
+		expect(f.up[0]).toBeCloseTo(1.2 / Math.hypot(1.2, 1), 6);
+		const [anchor] = frontCasterAnchors([mountL], [f]);
+		expect(anchor.up).toEqual(f.up);
+		expect(anchor.topY).toBeCloseTo(-5, 4);
+		expect(fitMountFrame(under.slice(0, 3), [])).toBeNull();
 	});
 	it('no mounts, no casters', () => {
 		expect(frontCasterAnchors([])).toEqual([]);

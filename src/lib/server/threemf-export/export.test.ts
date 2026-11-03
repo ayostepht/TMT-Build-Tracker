@@ -18,6 +18,7 @@ import { openDb, runMigrations, type Db } from '../db';
 import { member, organization, templates, user } from '../db/schema';
 import type { ExtractedPart } from '../print-geometry/extract';
 import type { PrintMesh } from '../print-geometry/mesh-format';
+import { computePoses } from '#lib/domain/orient.ts';
 import { storeExtractedParts } from '../print-geometry/store';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
@@ -32,6 +33,7 @@ import {
 	previewExport,
 	toWebStream
 } from './index';
+import { checkPlacement } from './check';
 import { itemTransform, writePlainZip, writeThreeMf, type WriterIo } from './writer';
 
 process.env.DATABASE_URL = join(mkdtempSync(join(tmpdir(), 'tmt-exp-')), 'unused.db');
@@ -690,5 +692,151 @@ describe.skipIf(!process.env.TMT_EXPORT_DUMP)('dump synthetic exports', () => {
 			writeFileSync(join(dir, `synthetic-${flavor}.${flavor === 'plain' ? 'zip' : '3mf'}`), bytes);
 			expect(bytes.length).toBeGreaterThan(0);
 		}
+	});
+});
+
+describe('re-oriented parts', () => {
+	const slab = cube(320, 190, 20);
+	const shapes = { 'wing-left': { mesh: slab, copies: 1 } };
+	const fps = footprints(shapes);
+	fps.get('wing-left')!.pieces[0].orient = computePoses(slab);
+	const view = viewFor(['wing-left']);
+
+	it('puts the stood-up item inside the bed, on z = 0, below the build height', async () => {
+		const p = plan({ view, footprints: fps });
+		expect(p.plates).toHaveLength(1);
+		const item = p.plates[0].items[0];
+		expect(item.pose).toBeTruthy();
+		expect(p.warnings.some((w) => w.code === 'oversize' || w.code === 'bed')).toBe(false);
+		const note = p.warnings.find((w) => w.code === 'reoriented')!;
+		expect(note.severity).toBe('info');
+		const { bytes } = await collect(writeThreeMf(p, p.plates, io(shapes)));
+		const z = unzipSync(bytes);
+		const model = text(z, '3D/3dmodel.model');
+		const t = /<item objectid="1" transform="([^"]+)"/.exec(model)![1].split(' ').map(Number);
+		const b = {
+			x0: Infinity,
+			x1: -Infinity,
+			y0: Infinity,
+			y1: -Infinity,
+			z0: Infinity,
+			z1: -Infinity
+		};
+		for (let i = 0; i < slab.positions.length; i += 3) {
+			const [x, y, zz] = [slab.positions[i], slab.positions[i + 1], slab.positions[i + 2]];
+			// row-vector transform: [x y z 1] * M
+			const X = x * t[0] + y * t[3] + zz * t[6] + t[9];
+			const Y = x * t[1] + y * t[4] + zz * t[7] + t[10];
+			const Z = x * t[2] + y * t[5] + zz * t[8] + t[11];
+			b.x0 = Math.min(b.x0, X);
+			b.x1 = Math.max(b.x1, X);
+			b.y0 = Math.min(b.y0, Y);
+			b.y1 = Math.max(b.y1, Y);
+			b.z0 = Math.min(b.z0, Z);
+			b.z1 = Math.max(b.z1, Z);
+		}
+		const e = 0.02;
+		expect(b.z0).toBeGreaterThan(-e);
+		expect(b.z0).toBeLessThan(e);
+		expect(b.z1).toBeCloseTo(190, 0);
+		expect(b.z1).toBeLessThanOrEqual(cc.bedZ);
+		expect(b.x0).toBeGreaterThanOrEqual(-e);
+		expect(b.y0).toBeGreaterThanOrEqual(-e);
+		expect(b.x1).toBeLessThanOrEqual(cc.bedX + e);
+		expect(b.y1).toBeLessThanOrEqual(cc.bedY + e);
+		// the winding stays right-handed: the 3x3 part is a pure rotation
+		const det =
+			t[0] * (t[4] * t[8] - t[5] * t[7]) -
+			t[1] * (t[3] * t[8] - t[5] * t[6]) +
+			t[2] * (t[3] * t[7] - t[4] * t[6]);
+		expect(det).toBeCloseTo(1, 3);
+		// notes name the part and our parser reads the file back
+		const notes = text(z, 'Metadata/tmt_export_notes.txt');
+		expect(notes).toContain('Re-oriented parts');
+		expect(notes).toContain('stands on its edge');
+		const back = await parseThreeMfBytes(bytes);
+		expect(back.plates.length).toBeGreaterThan(0);
+	});
+});
+
+describe('placement guard with an asymmetric tilted part', () => {
+	// right triangle prism 300 x 20: only fits the 256 bed turned across the diagonal; its box
+	// centre is not the mesh origin after the turn
+	const tri: PrintMesh = {
+		positions: new Float32Array([
+			-150, -10, 0, 150, -10, 0, -150, 10, 0, -150, -10, 10, 150, -10, 10, -150, 10, 10
+		]),
+		indices: new Uint32Array([
+			0, 2, 1, 3, 4, 5, 0, 1, 4, 0, 4, 3, 1, 2, 5, 1, 5, 4, 2, 0, 3, 2, 3, 5
+		])
+	};
+	const shapes = { 'wing-left': { mesh: tri, copies: 1 } };
+	const fps = footprints(shapes);
+	fps.get('wing-left')!.pieces[0].hull = [
+		[-150, -10],
+		[150, -10],
+		[-150, 10]
+	];
+	it('keeps the real mesh on the plate (pivot is the box centre, not the mesh origin)', () => {
+		const p = plan({ view: viewFor(['wing-left']), footprints: fps });
+		const item = p.plates[0].items[0];
+		expect(item.rotation % 90).not.toBe(0);
+		const g = checkPlacement(p, (f) => shapes[f.replace(/\.bin$/, '') as 'wing-left'].mesh);
+		expect(g.warnings).toEqual([]);
+		const b = g.placed[0];
+		expect(b.x0).toBeGreaterThanOrEqual(-0.3);
+		expect(b.x1).toBeLessThanOrEqual(256.3);
+		expect(b.y0).toBeGreaterThanOrEqual(-0.3);
+		expect(b.y1).toBeLessThanOrEqual(256.3);
+		expect(b.z0).toBeCloseTo(0, 6);
+	});
+	it('the guard reports an item that leaves the bed', () => {
+		const p = plan({ view: viewFor(['wing-left']), footprints: fps });
+		p.plates[0].items[0].x += 40;
+		const g = checkPlacement(p, (f) => shapes[f.replace(/\.bin$/, '') as 'wing-left'].mesh);
+		expect(g.warnings.some((w) => w.severity === 'error' && /reaches/.test(w.message))).toBe(true);
+	});
+});
+
+describe('painted supports survive the export', () => {
+	it('writes paint_supports / paint_seam on the same triangles, counts match, notes list them', async () => {
+		const mesh: PrintMesh = {
+			...cube(100, 50, 20),
+			paint: [
+				{ kind: 'supports', tri: 3, value: '4C' },
+				{ kind: 'supports', tri: 7, value: '8' },
+				{ kind: 'seam', tri: 7, value: '4' }
+			]
+		};
+		const shapes = { 'wing-left': { mesh, copies: 1 } };
+		const fps = footprints(shapes);
+		fps.get('wing-left')!.pieces[0].partSettings = { support_filament: '2' };
+		const p = plan({ view: viewFor(['wing-left']), footprints: fps });
+		const { bytes } = await collect(writeThreeMf(p, p.plates, io(shapes)));
+		const z = unzipSync(bytes);
+		const model = text(z, '3D/3dmodel.model');
+		const tris = [...model.matchAll(/<triangle [^>]*>/g)].map((m) => m[0]);
+		expect(tris).toHaveLength(12);
+		expect(tris.filter((t) => t.includes('paint_supports=')).length).toBe(2);
+		expect(tris.filter((t) => t.includes('paint_seam=')).length).toBe(1);
+		expect(tris[3]).toContain('paint_supports="4C"');
+		expect(tris[7]).toContain('paint_supports="8"');
+		expect(tris[7]).toContain('paint_seam="4"');
+		expect(text(z, 'Metadata/tmt_export_notes.txt')).toContain('3 painted triangles');
+		expect(text(z, 'Metadata/model_settings.config')).toContain('key="support_filament" value="2"');
+	});
+	it('the plain flavor has no paint attributes', async () => {
+		const mesh: PrintMesh = {
+			...cube(100, 50, 20),
+			paint: [{ kind: 'supports', tri: 3, value: '4C' }]
+		};
+		const shapes = { 'wing-left': { mesh, copies: 1 } };
+		const p = plan({
+			view: viewFor(['wing-left']),
+			footprints: footprints(shapes),
+			flavor: 'plain'
+		});
+		const { bytes } = await collect(writeThreeMf(p, p.plates, io(shapes)));
+		expect(text(unzipSync(bytes), '3D/3dmodel.model')).not.toContain('paint_');
 	});
 });

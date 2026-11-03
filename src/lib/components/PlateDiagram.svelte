@@ -25,8 +25,10 @@
 	const shapes = $derived(
 		plate.items.map((it) => {
 			const piece = footprints[it.slug]?.pieces[it.piece];
-			const hull = piece?.hull?.length
-				? placedHull(piece.hull, it.rotation)
+			// A re-oriented item carries the outline of its own pose
+			const src = it.pose?.hull?.length ? it.pose.hull : piece?.hull;
+			const hull = src?.length
+				? placedHull(src, it.rotation)
 				: ([
 						[-it.w / 2, -it.d / 2],
 						[it.w / 2, -it.d / 2],
@@ -35,7 +37,7 @@
 					] as [number, number][]);
 			// For an oversize part the box can exceed the bed; draw the unrotated footprint box
 			const pts = (
-				plate.oversize && piece
+				plate.oversize && piece && !it.pose
 					? [
 							[-piece.w / 2, -piece.d / 2],
 							[piece.w / 2, -piece.d / 2],
@@ -43,7 +45,10 @@
 							[-piece.w / 2, piece.d / 2]
 						]
 					: hull
-			).map(([x, y]) => `${(it.x + x).toFixed(1)},${(bed.y - (it.y + y)).toFixed(1)}`);
+			).map(
+				([x, y]) =>
+					`${(it.x - (it.ox ?? 0) + x).toFixed(1)},${(bed.y - (it.y - (it.oy ?? 0) + y)).toFixed(1)}`
+			);
 			return { it, points: pts.join(' ') };
 		})
 	);
@@ -88,6 +93,15 @@
 			fill={colorOf(s.it.role)}
 			data-slug={s.it.slug}
 		/>
+		{#if s.it.pose}
+			<g class="badge" data-testid="reoriented-badge" data-slug={s.it.slug}>
+				<title>Re-oriented: {s.it.pose.desc}</title>
+				<rect x={s.it.x - 22} y={bed.y - s.it.y - s.it.d / 2 + 3} width="44" height="11" rx="3" />
+				<text x={s.it.x} y={bed.y - s.it.y - s.it.d / 2 + 11.2} text-anchor="middle"
+					>re-oriented</text
+				>
+			</g>
+		{/if}
 		{#if labelled.has(i) || plate.oversize}
 			<text
 				class="lbl"
@@ -136,6 +150,16 @@
 		stroke-dasharray: 5 3;
 		stroke-width: 1.6;
 		fill-opacity: 0.25;
+	}
+	.badge rect {
+		fill: var(--card);
+		stroke: currentColor;
+		stroke-width: 0.8;
+	}
+	.badge text {
+		fill: currentColor;
+		font-size: 7px;
+		pointer-events: none;
 	}
 	.lbl {
 		fill: currentColor;

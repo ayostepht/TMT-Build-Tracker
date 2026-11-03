@@ -114,7 +114,21 @@ export function itemTransform(it: PlannedItem, ox: number, oy: number): string {
 	const a = (it.rotation * Math.PI) / 180;
 	const c = Math.abs(Math.cos(a)) < 1e-12 ? 0 : Math.cos(a);
 	const s = Math.abs(Math.sin(a)) < 1e-12 ? 0 : Math.sin(a);
-	return [c, s, 0, -s, c, 0, 0, 0, 1, it.x + ox, it.y + oy, 0].map(num).join(' ');
+	if (!it.pose)
+		return [c, s, 0, -s, c, 0, 0, 0, 1, it.x - (it.ox ?? 0) + ox, it.y - (it.oy ?? 0) + oy, 0]
+			.map(num)
+			.join(' ');
+	// Re-oriented item: p' = Rz(rotation) * (M * p + t) + (x, y, 0), as a row-vector matrix
+	const M = it.pose.m;
+	const t = it.pose.t;
+	const Rz = [c, -s, 0, s, c, 0, 0, 0, 1];
+	const A = new Array<number>(9).fill(0);
+	for (let i = 0; i < 3; i++)
+		for (let j = 0; j < 3; j++)
+			for (let k = 0; k < 3; k++) A[i * 3 + j] += Rz[i * 3 + k] * M[k * 3 + j];
+	const bx = c * t[0] - s * t[1] + it.x - (it.ox ?? 0) + ox;
+	const by = s * t[0] + c * t[1] + it.y - (it.oy ?? 0) + oy;
+	return [A[0], A[3], A[6], A[1], A[4], A[7], A[2], A[5], A[8], bx, by, t[2]].map(num).join(' ');
 }
 
 /** One file's view of the plan: renumbered objects and plates, offsets applied or not. */
@@ -158,7 +172,8 @@ async function* writeModel(
 	io: WriterIo,
 	opts: WriteOptions,
 	triCounts: Map<number, number>,
-	project: boolean
+	project: boolean,
+	paintCounts: Map<number, number>
 ) {
 	const e = new Entry(sink, '3D/3dmodel.model', opts.level ?? 3, opts.mtime);
 	const title = esc(`${plan.buildName} - ${plan.printer.name}`);
@@ -203,12 +218,19 @@ async function* writeModel(
 			yield* sink.take();
 		}
 		e.push(enc.encode('    </vertices>\n    <triangles>\n'));
+		// Slicer paint (supports, seam) rides on its triangle; only the project flavors know the attributes.
+		const paint = new Map<number, string>();
+		if (project)
+			for (const e of mesh.paint ?? [])
+				if (e.tri < nt)
+					paint.set(e.tri, (paint.get(e.tri) ?? '') + ` paint_${e.kind}="${esc(e.value)}"`);
+		paintCounts.set(o.id, (mesh.paint ?? []).filter((e) => project && e.tri < nt).length);
 		for (let t0 = 0; t0 < nt; t0 += VERTS) {
 			const parts: string[] = [];
 			const end = Math.min(nt, t0 + VERTS);
 			for (let t = t0; t < end; t++)
 				parts.push(
-					`     <triangle v1="${mesh.indices[t * 3]}" v2="${mesh.indices[t * 3 + 1]}" v3="${mesh.indices[t * 3 + 2]}"/>\n`
+					`     <triangle v1="${mesh.indices[t * 3]}" v2="${mesh.indices[t * 3 + 1]}" v3="${mesh.indices[t * 3 + 2]}"${paint.get(t) ?? ''}/>\n`
 				);
 			e.push(enc.encode(parts.join('')));
 			yield* sink.take();
@@ -233,6 +255,7 @@ const fil = (plan: ExportPlan, o: PlannedObject): PlanFilament =>
 const OWN_KEYS = new Set(['name', 'extruder', 'module', 'face_count']);
 
 function modelSettings(plan: ExportPlan, spec: FileSpec, tris: Map<number, number>): string {
+	const OWN_PART = /^(name|matrix|extruder|source_.*|volume_type|face_count)$/;
 	const out = ['<?xml version="1.0" encoding="UTF-8"?>\n<config>\n'];
 	for (const o of spec.objects) {
 		const ext = o.filamentIndex;
@@ -243,7 +266,14 @@ function modelSettings(plan: ExportPlan, spec: FileSpec, tris: Map<number, numbe
 			if (!OWN_KEYS.has(k) && /^[a-z0-9_]+$/.test(k))
 				out.push(`    <metadata key="${k}" value="${esc(v)}"/>\n`);
 		out.push(
-			`    <part id="${o.id}" subtype="normal_part">\n      <metadata key="name" value="${esc(o.name)}"/>\n      <metadata key="matrix" value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>\n      <metadata key="extruder" value="${ext}"/>\n      <mesh_stat face_count="${tris.get(o.id) ?? 0}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>\n    </part>\n  </object>\n`
+			`    <part id="${o.id}" subtype="normal_part">\n      <metadata key="name" value="${esc(o.name)}"/>\n      <metadata key="matrix" value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>\n      <metadata key="extruder" value="${ext}"/>\n${Object.entries(
+				o.partSettings ?? {}
+			)
+				.filter(([k]) => !OWN_PART.test(k) && /^[a-z0-9_]+$/.test(k))
+				.map(([k, v]) => `      <metadata key="${k}" value="${esc(v)}"/>\n`)
+				.join(
+					''
+				)}      <mesh_stat face_count="${tris.get(o.id) ?? 0}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>\n    </part>\n  </object>\n`
 		);
 	}
 	for (const p of spec.plates) {
@@ -296,7 +326,7 @@ export function projectSettings(plan: ExportPlan): Record<string, unknown> {
 	};
 }
 
-function notes(plan: ExportPlan): string {
+function notes(plan: ExportPlan, paint?: Map<number, number>): string {
 	const lines = [
 		`TMT Build Tracker export: ${plan.buildName}`,
 		`Printer: ${plan.printer.name} (${plan.printer.bedX} x ${plan.printer.bedY} mm, ${plan.printer.mmSlots} filament slot${plan.printer.mmSlots === 1 ? '' : 's'})`,
@@ -315,6 +345,31 @@ function notes(plan: ExportPlan): string {
 	if (plan.warnings.length) {
 		lines.push('', 'Warnings');
 		for (const w of plan.warnings) lines.push(`  - ${w.message}`);
+	}
+	const turned = new Map<string, string>();
+	for (const p of plan.plates)
+		for (const it of p.items) {
+			const o = plan.objects.find((x) => x.id === it.objectId);
+			const key = `${p.index}:${it.objectId}`;
+			if (it.pose && o && !turned.has(key))
+				turned.set(
+					key,
+					`  - ${o.name} (plate ${p.index}): ${it.pose.desc}; resting area about ${Math.round(it.pose.contactArea)} mm2, overhang estimate ${Math.round(it.pose.supportScore)} mm2`
+				);
+		}
+	if (turned.size) {
+		lines.push(
+			'',
+			'Re-oriented parts (did not fit the bed as MakeGood prints them; check supports)',
+			...turned.values()
+		);
+	}
+	if (paint) {
+		const painted = plan.objects.filter((o) => (paint.get(o.id) ?? 0) > 0);
+		if (painted.length) {
+			lines.push('', 'Painted supports and seams from the MakeGood profile (kept as authored)');
+			for (const o of painted) lines.push(`  - ${o.name}: ${paint.get(o.id)} painted triangles`);
+		}
 	}
 	if (plan.missing.length) {
 		lines.push('', 'Left out (no print geometry imported)');
@@ -353,7 +408,8 @@ export async function* writeThreeMf(
 	yield* addText(sink, '[Content_Types].xml', CONTENT_TYPES, level, opts.mtime);
 	yield* addText(sink, '_rels/.rels', RELS, level, opts.mtime);
 	const tris = new Map<number, number>();
-	yield* writeModel(sink, plan, spec, io, opts, tris, project);
+	const paintCounts = new Map<number, number>();
+	yield* writeModel(sink, plan, spec, io, opts, tris, project, paintCounts);
 	if (project) {
 		yield* addText(
 			sink,
@@ -385,7 +441,13 @@ export async function* writeThreeMf(
 			opts.mtime
 		);
 	}
-	yield* addText(sink, 'Metadata/tmt_export_notes.txt', notes(plan), level, opts.mtime);
+	yield* addText(
+		sink,
+		'Metadata/tmt_export_notes.txt',
+		notes(plan, paintCounts),
+		level,
+		opts.mtime
+	);
 	if (!sinkIn) {
 		sink.zip.end();
 		yield* sink.take();

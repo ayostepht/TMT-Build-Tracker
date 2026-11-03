@@ -5,7 +5,7 @@
 </script>
 
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import { updateFilament } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
@@ -107,6 +107,33 @@
 		}
 		return { id, label, slots };
 	}
+
+	// A previewed palette follows its inputs: theme, base color, shuffle, brand (generated) and the
+	// preferred brand (ready-made). The base color is debounced so dragging the picker stays smooth.
+	$effect(() => {
+		const cur = preview;
+		if (!cur) return;
+		let next: PalettePreview | null = null;
+		if (cur.id === 'gen') {
+			if (generated) next = previewOf('gen', `${harmonyLabel} from ${base}`, generated.resolved);
+		} else {
+			const r = resolvedPremade[cur.id];
+			if (r) next = previewOf(cur.id, cur.label, r);
+		}
+		if (
+			!next ||
+			(next.label === cur.label && JSON.stringify(next.slots) === JSON.stringify(cur.slots))
+		)
+			return;
+		const n = next;
+		const timer = setTimeout(
+			() => {
+				if (untrack(() => preview?.id) === n.id) onpreview(n);
+			},
+			cur.id === 'gen' ? 150 : 0
+		);
+		return () => clearTimeout(timer);
+	});
 	const togglePreview = (id: string, label: string, r: ResolvedPalette) =>
 		onpreview(preview?.id === id ? null : previewOf(id, label, r));
 

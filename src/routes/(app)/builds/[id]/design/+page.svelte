@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { filamentStats } from '#lib/domain/index.ts';
 	import { applyPartRole, designColors, hiddenSlugs } from '#lib/domain/design.ts';
@@ -10,6 +11,7 @@
 	import PalettePanel, { type PalettePreview } from '#lib/components/design/PalettePanel.svelte';
 	import PartList from '#lib/components/design/PartList.svelte';
 	import PartSheet from '#lib/components/design/PartSheet.svelte';
+	import ExportDialog from '#lib/components/design/ExportDialog.svelte';
 	import SaveDesign from '#lib/components/design/SaveDesign.svelte';
 	import SlotPanel from '#lib/components/design/SlotPanel.svelte';
 	import SwatchPicker, { type PickedFilament } from '#lib/components/design/SwatchPicker.svelte';
@@ -36,6 +38,7 @@
 	/** slug → role the user just chose, shown at once while the save is in flight. */
 	let pending = $state<Record<string, string>>({});
 	let ready = $state<{ rendered: string[]; unplaced: string[] } | null>(null);
+	let exportOpen = $state(false);
 	let stage = $state<ReturnType<typeof ModelStage>>();
 
 	// The view with the user's not-yet-saved changes applied (part moves, picked filaments,
@@ -149,7 +152,14 @@
 			/>
 		</div>
 		{#if preview}
-			<p class="banner prev" role="status" data-testid="preview-banner">
+			<p
+				class="banner prev"
+				role="status"
+				data-testid="preview-banner"
+				data-hexes={Object.entries(preview.slots)
+					.map(([k, v]) => `${k}:${v.hex}`)
+					.join(',')}
+			>
 				Previewing <b>{preview.label}</b>. Not saved yet.
 				<button type="button" class="btn sm" onclick={() => (preview = null)}>Stop</button>
 			</p>
@@ -259,8 +269,22 @@
 		<SaveDesign
 			snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
 		/>
+
+		<section class="next" aria-label="Next steps">
+			<button
+				type="button"
+				class="btn"
+				data-testid="export-open"
+				onclick={() => (exportOpen = true)}>Export 3MF…</button
+			>
+			<a href={resolve('/(app)/builds/[id]/plates', { id: ctx.id })} data-testid="next-plates"
+				>Next: plates and export →</a
+			>
+		</section>
 	</div>
 </div>
+
+<ExportDialog bind:open={exportOpen} />
 
 {#if picker?.mode === 'edit' && pickerSlot}
 	<SwatchPicker
@@ -304,6 +328,12 @@
 	}
 	.hint {
 		margin: 0;
+	}
+	.next {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px 16px;
+		align-items: center;
 	}
 	h2 {
 		margin: 0;

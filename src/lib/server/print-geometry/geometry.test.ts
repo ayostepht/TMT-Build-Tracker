@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { strToU8 } from 'fflate';
 import { eq } from 'drizzle-orm';
+import { ORIENT_VERSION } from '#lib/domain/orient.ts';
+import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import { loadFootprints } from '../builds/arrange-plan';
 import { openDb, runMigrations, type Db } from '../db';
 import { templatePrintGeometry, templates } from '../db/schema';
@@ -14,7 +16,7 @@ import { extractPartGeometry } from './extract';
 import { importPrintGeometry, listPrintGeometry } from './import';
 import { decodeMesh, encodeMesh } from './mesh-format';
 import { printDir, readPieceMesh } from './store';
-import { normalizeMesh } from './reader';
+import { ModelScanner, normalizeMesh } from './reader';
 import { zipSync } from 'fflate';
 
 process.env.DATABASE_URL = join(mkdtempSync(join(tmpdir(), 'tmt-geo-')), 'unused.db');
@@ -236,6 +238,31 @@ describe('importPrintGeometry', () => {
 		);
 	});
 
+	it('stores re-orientation poses on import and computes them lazily for older rows', async () => {
+		await importPrintGeometry(db, templateId, file(threeMf()), 'profile.3mf');
+		const get = () =>
+			db
+				.select()
+				.from(templatePrintGeometry)
+				.where(eq(templatePrintGeometry.slug, 'wing-left'))
+				.get()!;
+		const fp = get().footprint as unknown as PrintFootprint;
+		expect(fp.pieces[0].orient?.poses.length).toBeGreaterThan(0);
+		// simulate a row imported before poses existed
+		delete fp.pieces[0].orient;
+		db.update(templatePrintGeometry)
+			.set({ footprint: fp as unknown as Record<string, unknown> })
+			.where(eq(templatePrintGeometry.slug, 'wing-left'))
+			.run();
+		expect((get().footprint as unknown as PrintFootprint).pieces[0].orient).toBeUndefined();
+		const got = loadFootprints(db, templateId).get('wing-left')!;
+		expect(got.pieces[0].orient?.poses.length).toBeGreaterThan(0);
+		// cached in the row
+		expect((get().footprint as unknown as PrintFootprint).pieces[0].orient?.v).toBe(ORIENT_VERSION);
+		// seed rows (no mesh) have no poses
+		expect(loadFootprints(db, templateId).get('rims-1-4')?.pieces[0].orient).toBeUndefined();
+	});
+
 	it('reads 3MFs out of a zip', async () => {
 		const zip = zipSync({ 'WING LEFT.3mf': threeMf() });
 		const res = await importPrintGeometry(db, templateId, file(zip), 'bundle.zip');
@@ -246,5 +273,44 @@ describe('importPrintGeometry', () => {
 	it('rejects a zip without a 3MF', async () => {
 		const zip = zipSync({ 'readme.txt': strToU8('hi') });
 		await expect(importPrintGeometry(db, templateId, file(zip), 'x.zip')).rejects.toThrow(/No 3MF/);
+	});
+});
+
+describe('mesh paint (supports, seam)', () => {
+	it('round-trips with a version-2 file and stays backward compatible with version 1', () => {
+		const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
+		const indices = new Uint32Array([0, 2, 1, 0, 1, 3]);
+		const plain = decodeMesh(encodeMesh({ positions, indices }));
+		expect(plain.paint).toBeUndefined();
+		const bytes = encodeMesh({
+			positions,
+			indices,
+			paint: [
+				{ kind: 'supports', tri: 1, value: '4C' },
+				{ kind: 'seam', tri: 0, value: '8' }
+			]
+		});
+		const back = decodeMesh(bytes);
+		expect(back.paint).toEqual([
+			{ kind: 'supports', tri: 1, value: '4C' },
+			{ kind: 'seam', tri: 0, value: '8' }
+		]);
+		expect(Array.from(back.indices)).toEqual([0, 2, 1, 0, 1, 3]);
+	});
+});
+
+describe('ModelScanner paint', () => {
+	it('keeps paint_supports and paint_seam per triangle, in triangle order', () => {
+		const sc = new ModelScanner(true);
+		const xml = `<model><resources><object id="1" type="model"><mesh><vertices>
+<vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/><vertex x="0" y="0" z="1"/></vertices><triangles>
+<triangle v1="0" v2="1" v3="2"/><triangle v1="0" v2="2" v3="3" paint_supports="4C"/><triangle v1="1" v2="2" v3="3" paint_seam="8" paint_supports="0C"/>
+</triangles></mesh></object></resources></model>`;
+		sc.push(new TextEncoder().encode(xml), true);
+		expect(sc.scan.objects.get('1')!.paint).toEqual([
+			{ kind: 'supports', tri: 1, value: '4C' },
+			{ kind: 'seam', tri: 2, value: '8' },
+			{ kind: 'supports', tri: 2, value: '0C' }
+		]);
 	});
 });

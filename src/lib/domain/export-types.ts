@@ -4,7 +4,14 @@ export type Flavor = 'orca' | 'bambu' | 'plain';
 export const FLAVORS: Flavor[] = ['orca', 'bambu', 'plain'];
 
 export type ExportWarningCode =
-	'no-geometry' | 'slots' | 'oversize' | 'bed' | 'arrangement' | 'empty-plate';
+	| 'no-geometry'
+	| 'slots'
+	| 'oversize'
+	| 'bed'
+	| 'arrangement'
+	| 'empty-plate'
+	| 'reoriented'
+	| 'height';
 
 export interface ExportWarning {
 	code: ExportWarningCode;

@@ -18,9 +18,12 @@
  * underfilled plates are merged whenever the printer's multi-material slots allow
  * and the materials are compatible (PETG never shares a plate with TPU).
  */
-import { bounds, rotatePoints, type Pt } from './geom2d.ts';
+import { boxOrients, rotatePoints, type Pt } from './geom2d.ts';
+import { chooseOrientation, describePose, type OrientData, type PrintPose } from './orient.ts';
 import type { PrintFootprint } from './print-footprint.ts';
 import type { BuildPrinter } from './types.ts';
+
+const EPS = 1e-6;
 
 export interface ArrangeRole {
 	key: string;
@@ -59,6 +62,8 @@ export interface ArrangeUnsized {
 export interface ArrangePrinter {
 	bedX: number;
 	bedY: number;
+	/** Build volume height; parts taller than this (minus a small margin) are not re-oriented onto their end. Unknown = no limit. */
+	bedZ?: number;
 	/** Keep-out border around the bed edge. */
 	margin: number;
 	/** Gap between parts. */
@@ -83,6 +88,15 @@ export interface ArrangeInput {
 	options?: ArrangeOptions;
 }
 
+/** The 3D pose of a re-oriented item: stored vertex p -> m*p + t, then rotation about z and move to (x, y). */
+export type ItemPose = Pick<
+	PrintPose,
+	'kind' | 'm' | 't' | 'h' | 'hull' | 'contactArea' | 'supportScore'
+> & {
+	/** "stands on its edge, 248 mm tall" */
+	desc: string;
+};
+
 export interface ArrangedItem {
 	slug: string;
 	/** Index into the part footprint's `pieces`. */
@@ -98,6 +112,11 @@ export interface ArrangedItem {
 	/** Degrees counter-clockwise about z, applied to the mesh before moving it to (x, y). 0 or 90 normally; any angle when the part only fits the bed tilted (hull-based). */
 	rotation: number;
 	role: string;
+	/** Where the turned mesh's box centre lies relative to its origin; the mesh is moved to (x - ox, y - oy). Absent for 0/90 degrees. */
+	ox?: number;
+	oy?: number;
+	/** Set when the part is re-oriented in 3D (it did not fit in its profile orientation). */
+	pose?: ItemPose;
 }
 
 export interface ArrangedPlate {
@@ -118,7 +137,8 @@ export interface ArrangedPlate {
 	bed: { x: number; y: number; margin: number };
 }
 
-export type ArrangeWarningCode = 'oversize' | 'split' | 'unsized' | 'unknown-role' | 'tilted';
+export type ArrangeWarningCode =
+	'oversize' | 'split' | 'unsized' | 'unknown-role' | 'tilted' | 'reoriented';
 export interface ArrangeWarning {
 	code: ArrangeWarningCode;
 	slug: string;
@@ -223,22 +243,45 @@ class MaxRects {
 
 // ---- internals
 
+/** A placement candidate: box after turning by `rot` degrees; `pose` when the part is re-oriented in 3D. */
+interface Orient {
+	w: number;
+	d: number;
+	rot: number;
+	/** Centre of the turned outline relative to the mesh origin (free angles only). */
+	ox?: number;
+	oy?: number;
+	pose?: ItemPose;
+}
+
 interface Item {
 	slug: string;
 	piece: number;
 	copy: number;
 	/** Candidate placements: bounding box after turning by `rot` degrees. First entries are preferred on ties. */
-	orients: { w: number; d: number; rot: number }[];
+	orients: Orient[];
 	/** Unrotated box (for area ordering). */
 	w: number;
 	d: number;
 	role: string;
 	order: number; // index of the part in the input
+	ox?: number;
+	oy?: number;
+	pose?: ItemPose;
 }
 
 interface PlateState {
 	bin: MaxRects;
-	items: (Item & { x: number; y: number; pw: number; pd: number; rot: number })[];
+	items: (Item & {
+		x: number;
+		y: number;
+		pw: number;
+		pd: number;
+		rot: number;
+		ox?: number;
+		oy?: number;
+		pose?: ItemPose;
+	})[];
 	roles: Set<string>;
 	runs: number;
 }
@@ -301,51 +344,48 @@ export function plateTitle(names: string[]): string {
 	return `${labels[0]}, ${labels[1]} + ${labels.length - 2} more`;
 }
 
-const EPS = 1e-6;
-const dedupeAngle = (a: number) => (((Math.round(a * 10) / 10) % 360) + 360) % 360;
+/** Placement candidates for a box (see `boxOrients`). Exported for tests. */
+export const orientsOf = boxOrients;
+
+/** Headroom kept below the build volume when a part is stood up. */
+const HEIGHT_MARGIN = 2;
 
 /**
- * Placement candidates for one piece: the box as printed and turned 90 degrees. When
- * neither fits the empty bed and the piece has an outline, free angles whose rotated
- * bounding box does fit are offered instead (tightest first, at most 6): long thin parts
- * go diagonally. Exported for tests.
+ * Placement candidates for one piece: its profile orientation (0/90 degrees, or tilted in
+ * the plane when only that fits); when none fits and the piece carries orientation data
+ * (imported geometry), the best fitting resting pose instead. Exported for tests.
  */
-export function orientsOf(
-	pc: { w: number; d: number; hull?: Pt[] },
+export function pieceOrients(
+	pc: { w: number; d: number; h?: number; hull?: Pt[]; orient?: OrientData },
 	rotate: boolean,
 	usableX: number,
-	usableY: number
-): { w: number; d: number; rot: number }[] {
-	const base = [{ w: pc.w, d: pc.d, rot: 0 }];
-	if (rotate && Math.abs(pc.w - pc.d) > EPS) base.push({ w: pc.d, d: pc.w, rot: 90 });
+	usableY: number,
+	maxH = Infinity
+): Orient[] {
+	const base: Orient[] = boxOrients(pc, rotate, usableX, usableY);
 	const fits = (o: { w: number; d: number }) => o.w <= usableX + EPS && o.d <= usableY + EPS;
-	if (!rotate || base.some(fits)) return base;
-	const outline: Pt[] = pc.hull?.length
-		? pc.hull
-		: [
-				[-pc.w / 2, -pc.d / 2],
-				[pc.w / 2, -pc.d / 2],
-				[pc.w / 2, pc.d / 2],
-				[-pc.w / 2, pc.d / 2]
-			];
-	const angles = new Set<number>();
-	for (let deg = 0; deg < 180; deg++) angles.add(deg);
-	for (let i = 0; i < outline.length; i++) {
-		const p = outline[i];
-		const q = outline[(i + 1) % outline.length];
-		const deg = (-Math.atan2(q[1] - p[1], q[0] - p[0]) * 180) / Math.PI;
-		angles.add(dedupeAngle(deg) % 180);
-	}
-	const found: { w: number; d: number; rot: number }[] = [];
-	for (const deg of angles) {
-		const b = bounds(rotatePoints(outline, (deg * Math.PI) / 180));
-		const w = Math.round((b.w + 0.05) * 10) / 10;
-		const d = Math.round((b.d + 0.05) * 10) / 10;
-		if (fits({ w, d })) found.push({ w, d, rot: deg });
-		if (fits({ w: d, d: w })) found.push({ w: d, d: w, rot: (deg + 90) % 360 });
-	}
-	found.sort((x, y) => x.w * x.d - y.w * y.d || x.rot - y.rot);
-	return found.slice(0, 6);
+	if (!rotate || !pc.orient?.poses.length || base.some(fits)) return base;
+	const ch = chooseOrientation(
+		{ w: pc.w, d: pc.d, h: pc.h ?? 0, hull: pc.hull },
+		pc.orient.poses,
+		{ usableX, usableY, maxH },
+		true
+	);
+	if (!ch.pose) return base;
+	const pose = ch.pose;
+	const info: ItemPose = {
+		kind: pose.kind,
+		m: pose.m,
+		t: pose.t,
+		h: pose.h,
+		hull: pose.hull,
+		contactArea: pose.contactArea,
+		supportScore: pose.supportScore,
+		desc: describePose(pose, pc.h ?? 0)
+	};
+	return boxOrients(pose, true, usableX, usableY)
+		.filter(fits)
+		.map((o) => ({ ...o, pose: info }));
 }
 
 /** Arrange parts onto plates for a printer. */
@@ -358,6 +398,7 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 	const usableY = Math.max(0, printer.bedY - 2 * margin);
 	const binW = usableX + spacing;
 	const binH = usableY + spacing;
+	const maxH = printer.bedZ ? printer.bedZ - HEIGHT_MARGIN : Infinity;
 	const mergeBelow = input.options?.mergeBelow ?? 0.6;
 	const compat = input.options?.compatible ?? defaultCompatible;
 	const slots = Math.max(1, Math.floor(printer.mmSlots || 1));
@@ -406,7 +447,7 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 					copy: c,
 					w: pc.w,
 					d: pc.d,
-					orients: orientsOf(pc, p.rotate !== false, usableX, usableY),
+					orients: pieceOrients(pc, p.rotate !== false, usableX, usableY, maxH),
 					role: p.role,
 					order: partIndex.get(p.slug)!
 				});
@@ -427,12 +468,21 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 		if (bad || !items.length) {
 			if (bad) {
 				const big = items.reduce((a, b) => (area(b) > area(a) ? b : a));
+				const pc = p.footprint.pieces[bad.piece];
+				const tried = pc?.orient?.poses.length ?? 0;
+				const advice =
+					p.rotate === false
+						? ''
+						: tried
+							? ` Standing or tilting it (${tried + 1} orientations tried) does not fit either.`
+							: ' Importing the print geometry in the kit admin page lets the arranger try standing or tilting it.';
 				warnings.push({
 					code: 'oversize',
 					slug: p.slug,
 					message:
 						`${p.name} ${Math.round(Math.max(big.w, big.d))}×${Math.round(Math.min(big.w, big.d))} mm doesn't fit a ` +
 						`${printer.bedX}×${printer.bedY} mm bed${p.rotate === false ? '' : ' even rotated'}.` +
+						advice +
 						(p.hint ? ` ${p.hint}` : '')
 				});
 				oversizePlates.push({ part: p, items });
@@ -461,7 +511,17 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 			const r = next.bin.insert(it.orients.map((o) => ({ w: o.w + spacing, h: o.d + spacing })));
 			if (!r) return null;
 			const o = it.orients[r.idx];
-			next.items.push({ ...it, x: r.x, y: r.y, pw: o.w, pd: o.d, rot: o.rot });
+			next.items.push({
+				...it,
+				x: r.x,
+				y: r.y,
+				pw: o.w,
+				pd: o.d,
+				rot: o.rot,
+				ox: o.ox,
+				oy: o.oy,
+				pose: o.pose
+			});
 			next.roles.add(it.role);
 		}
 		return next;
@@ -607,7 +667,9 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 				w: round1(i.pw),
 				d: round1(i.pd),
 				rotation: i.rot,
-				role: i.role
+				role: i.role,
+				...(i.ox || i.oy ? { ox: i.ox, oy: i.oy } : {}),
+				...(i.pose ? { pose: i.pose } : {})
 			}));
 		const slugs: string[] = [];
 		for (const i of items) if (!slugs.includes(i.slug)) slugs.push(i.slug);
@@ -694,6 +756,15 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 			code: 'tilted',
 			slug,
 			message: `${partOf.get(slug)?.name ?? slug} only fits when turned ${Math.round(deg)}° on the bed.`
+		});
+	const turned = new Map<string, string>();
+	for (const p of result)
+		for (const i of p.items) if (i.pose && !turned.has(i.slug)) turned.set(i.slug, i.pose.desc);
+	for (const [slug, desc] of turned)
+		warnings.push({
+			code: 'reoriented',
+			slug,
+			message: `${partOf.get(slug)?.name ?? slug} re-oriented to fit ${printer.bedX}×${printer.bedY} (${desc}); check supports in your slicer.`
 		});
 	return { plates: result, warnings };
 }

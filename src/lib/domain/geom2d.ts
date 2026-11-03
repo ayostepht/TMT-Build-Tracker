@@ -159,3 +159,127 @@ export function simplifyHull(hull: readonly Pt[], max = 24): Pt[] {
 }
 
 export const round1 = (n: number) => Math.round(n * 10) / 10;
+
+const EPS = 1e-6;
+const dedupeAngle = (a: number) => (((Math.round(a * 10) / 10) % 360) + 360) % 360;
+/**
+ * Placement candidates for one piece: the box as printed and turned 90 degrees. When
+ * neither fits the empty bed and the piece has an outline, free angles whose rotated
+ * bounding box does fit are offered instead (tightest first, at most 6): long thin parts
+ * go diagonally. Exported for tests.
+ */
+export function boxOrients(
+	pc: { w: number; d: number; hull?: Pt[] },
+	rotate: boolean,
+	usableX: number,
+	usableY: number
+): { w: number; d: number; rot: number; ox?: number; oy?: number }[] {
+	const base: { w: number; d: number; rot: number; ox?: number; oy?: number }[] = [
+		{ w: pc.w, d: pc.d, rot: 0 }
+	];
+	if (rotate && Math.abs(pc.w - pc.d) > EPS) base.push({ w: pc.d, d: pc.w, rot: 90 });
+	const fits = (o: { w: number; d: number }) => o.w <= usableX + EPS && o.d <= usableY + EPS;
+	if (!rotate || base.some(fits)) return base;
+	const outline: Pt[] = pc.hull?.length
+		? pc.hull
+		: [
+				[-pc.w / 2, -pc.d / 2],
+				[pc.w / 2, -pc.d / 2],
+				[pc.w / 2, pc.d / 2],
+				[-pc.w / 2, pc.d / 2]
+			];
+	const angles = new Set<number>();
+	for (let deg = 0; deg < 180; deg++) angles.add(deg);
+	for (let i = 0; i < outline.length; i++) {
+		const p = outline[i];
+		const q = outline[(i + 1) % outline.length];
+		const deg = (-Math.atan2(q[1] - p[1], q[0] - p[0]) * 180) / Math.PI;
+		angles.add(dedupeAngle(deg) % 180);
+	}
+	const found: { w: number; d: number; rot: number; ox?: number; oy?: number }[] = [];
+	for (const deg of angles) {
+		const b = bounds(rotatePoints(outline, (deg * Math.PI) / 180));
+		const w = Math.round((b.w + 0.05) * 10) / 10;
+		const d = Math.round((b.d + 0.05) * 10) / 10;
+		// the rotated outline is not centred on the origin: offset of its box centre, to be removed when placing
+		const cx = Math.round(((b.minX + b.maxX) / 2) * 100) / 100;
+		const cy = Math.round(((b.minY + b.maxY) / 2) * 100) / 100;
+		if (fits({ w, d })) found.push({ w, d, rot: deg, ox: cx, oy: cy });
+		if (fits({ w: d, d: w })) found.push({ w: d, d: w, rot: (deg + 90) % 360, ox: -cy, oy: cx });
+	}
+	found.sort((x, y) => x.w * x.d - y.w * y.d || x.rot - y.rot);
+	return found.slice(0, 6);
+}
+
+/**
+ * Minimum-area bounding rectangle of a convex polygon (counter-clockwise) by rotating
+ * calipers: O(n) after the first edge. Returns the counter-clockwise angle (radians) to
+ * rotate the polygon by so the rectangle is axis aligned with `w >= d`, its size and area.
+ * Ties prefer the smaller turn.
+ */
+export function minAreaRect(hull: readonly Pt[]): {
+	angle: number;
+	w: number;
+	d: number;
+	area: number;
+} {
+	const n = hull.length;
+	if (n < 3) {
+		const b = bounds(hull);
+		return b.d > b.w
+			? { angle: Math.PI / 2, w: b.d, d: b.w, area: b.w * b.d }
+			: { angle: 0, w: b.w, d: b.d, area: b.w * b.d };
+	}
+	const dot = (a: Pt, ux: number, uy: number) => a[0] * ux + a[1] * uy;
+	let best: { angle: number; w: number; d: number; area: number } | null = null;
+	let bestNorm = Infinity;
+	let r = 0;
+	let t = 0;
+	let l = 0;
+	for (let i = 0; i < n; i++) {
+		const p = hull[i];
+		const q = hull[(i + 1) % n];
+		const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+		if (len < 1e-12) continue;
+		const ux = (q[0] - p[0]) / len;
+		const uy = (q[1] - p[1]) / len;
+		const vx = -uy;
+		const vy = ux;
+		if (i === 0 || best === null) {
+			// first usable edge: find the extremes by scanning
+			r = t = l = 0;
+			for (let k = 1; k < n; k++) {
+				if (dot(hull[k], ux, uy) > dot(hull[r], ux, uy)) r = k;
+				if (dot(hull[k], vx, vy) > dot(hull[t], vx, vy)) t = k;
+				if (dot(hull[k], ux, uy) < dot(hull[l], ux, uy)) l = k;
+			}
+		} else {
+			let guard = 0;
+			while (guard++ < n && dot(hull[(r + 1) % n], ux, uy) > dot(hull[r], ux, uy) + 1e-12)
+				r = (r + 1) % n;
+			guard = 0;
+			while (guard++ < n && dot(hull[(t + 1) % n], vx, vy) > dot(hull[t], vx, vy) + 1e-12)
+				t = (t + 1) % n;
+			guard = 0;
+			while (guard++ < n && dot(hull[(l + 1) % n], ux, uy) < dot(hull[l], ux, uy) - 1e-12)
+				l = (l + 1) % n;
+		}
+		const width = dot(hull[r], ux, uy) - dot(hull[l], ux, uy);
+		const height = dot(hull[t], vx, vy) - dot(p, vx, vy);
+		const area = width * height;
+		let angle = -Math.atan2(uy, ux);
+		let w = width;
+		let d = height;
+		if (d > w) {
+			[w, d] = [d, w];
+			angle += Math.PI / 2;
+		}
+		let x = ((angle % Math.PI) + Math.PI) % Math.PI;
+		if (x > Math.PI / 2) x = Math.PI - x;
+		if (!best || area < best.area - 1e-6 || (Math.abs(area - best.area) <= 1e-6 && x < bestNorm)) {
+			best = { angle, w, d, area };
+			bestNorm = x;
+		}
+	}
+	return best ?? { angle: 0, w: 0, d: 0, area: 0 };
+}

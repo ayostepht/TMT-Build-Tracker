@@ -3,7 +3,7 @@
  * slot each one uses, where every copy sits and what could not be exported. Pure (no DB,
  * no files) so the preview endpoint, the writer and the tests share it.
  */
-import type { ArrangedPlate } from '#lib/domain/arrange.ts';
+import type { ArrangedPlate, ItemPose } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { BuildPrinter, BuildView } from '#lib/domain/types.ts';
 import { materialFamily } from '#lib/filament-catalog.ts';
@@ -41,6 +41,8 @@ export interface PlannedObject {
 	meshFile: string;
 	tris: number;
 	settings: Record<string, string>;
+	/** The kit author's per-volume settings (written to the part's metadata). */
+	partSettings: Record<string, string>;
 }
 
 export interface PlannedItem {
@@ -54,6 +56,11 @@ export interface PlannedItem {
 	d: number;
 	/** Degrees counter-clockwise about z. */
 	rotation: number;
+	/** Offset of the turned mesh's box centre from its origin (free angles). */
+	ox?: number;
+	oy?: number;
+	/** 3D re-orientation of the stored mesh (applied before the rotation about z); absent = as stored. */
+	pose?: ItemPose;
 }
 
 export interface PlannedPlate {
@@ -178,7 +185,8 @@ export function buildExportPlan(input: PlanInput): ExportPlan {
 					name: multi ? `${part.name} - ${piece.name}` : part.name,
 					meshFile: piece.mesh,
 					tris: piece.tris ?? 0,
-					settings: piece.settings ?? {}
+					settings: piece.settings ?? {},
+					partSettings: piece.partSettings ?? {}
 				};
 				objects.set(key, obj);
 			}
@@ -192,10 +200,20 @@ export function buildExportPlan(input: PlanInput): ExportPlan {
 				y: it.y,
 				w: it.w,
 				d: it.d,
-				rotation: it.rotation
+				rotation: it.rotation,
+				...(it.ox || it.oy ? { ox: it.ox, oy: it.oy } : {}),
+				...(it.pose ? { pose: it.pose } : {})
 			});
 		}
 		if (!items.length) continue;
+		for (const i of items)
+			if (i.pose && i.pose.h > printer.bedZ + 1e-6)
+				warnings.push({
+					code: 'height',
+					severity: 'error',
+					plate: pl.number,
+					message: `Plate ${pl.number} (${pl.name}): a re-oriented part is ${Math.round(i.pose.h)} mm tall, more than the ${printer.bedZ} mm build height.`
+				});
 		if (pl.oversize)
 			warnings.push({
 				code: 'oversize',
@@ -237,6 +255,22 @@ export function buildExportPlan(input: PlanInput): ExportPlan {
 			oversize: !!pl.oversize
 		});
 	}
+
+	const turned = new Map<string, { desc: string; plate: number }>();
+	for (const pl of plates)
+		for (const it of pl.items) {
+			const o = [...objects.values()].find((x) => x.id === it.objectId);
+			if (it.pose && o && !turned.has(o.slug))
+				turned.set(o.slug, { desc: it.pose.desc, plate: pl.number });
+		}
+	for (const [slug, t] of turned)
+		warnings.push({
+			code: 'reoriented',
+			severity: 'info',
+			slug,
+			plate: t.plate,
+			message: `${partOf.get(slug)?.name ?? slug} is re-oriented to fit the ${printer.bedX} × ${printer.bedY} mm bed (${t.desc}); it does not sit as MakeGood prints it. Check supports in your slicer.`
+		});
 
 	if (missing.size)
 		warnings.push({

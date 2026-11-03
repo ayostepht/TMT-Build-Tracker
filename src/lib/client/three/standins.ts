@@ -13,7 +13,15 @@ export function buildCaster(
 	a: CasterAnchor,
 	mats: { metal: T.Material; tread: T.Material }
 ): T.Group {
-	const g = new THREE.Group();
+	const outer = new THREE.Group();
+	// A tilted mount: build the caster upright about its pivot, then turn +y onto the axis.
+	const g = a.up ? new THREE.Group() : outer;
+	if (a.up) {
+		outer.add(g);
+		outer.position.set(a.x, a.topY, a.z);
+		outer.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...a.up));
+		a = { ...a, x: 0, z: 0, topY: 0, groundY: a.groundY - a.topY };
+	}
 	const cy = a.groundY + a.wheelR;
 	const cz = a.z - a.trail;
 	const add = (geo: T.BufferGeometry, m: T.Material, x: number, y: number, z: number) => {
@@ -74,7 +82,7 @@ export function buildCaster(
 	// Swivel plate under the mount.
 	const plateR = Math.min(Math.max(r * 0.5, 12), 22);
 	add(new THREE.CylinderGeometry(plateR, plateR, 3, 28), mats.metal, a.x, a.topY - 1.5, a.z);
-	return g;
+	return outer;
 }
 
 /**

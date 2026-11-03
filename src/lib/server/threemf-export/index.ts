@@ -22,6 +22,7 @@ import {
 	type Flavor,
 	FLAVORS
 } from './plan';
+import { checkPlacement } from './check';
 import { slug, writePlainZip, writeThreeMf, type WriteOptions } from './writer';
 import type { ArrangedPlate } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
@@ -112,6 +113,10 @@ export function prepareExport(
 				message: 'Some mesh files are missing on disk; re-import the print geometry.'
 			});
 		}
+		// Guard: the real meshes through the exact transforms must stay on the plate.
+		const io = (f: string) => readPieceMesh(view.build.templateId, f);
+		const guard = checkPlacement(plan, io);
+		plan.warnings.push(...guard.warnings);
 		return { plan, view };
 	} catch (e) {
 		if (e instanceof PlanError) throw new ApiError(e.status, e.message);

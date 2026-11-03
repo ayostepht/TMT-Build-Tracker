@@ -13,6 +13,7 @@
 import { Unzip, UnzipInflate, UnzipPassThrough, strFromU8 } from 'fflate';
 import { XMLParser } from 'fast-xml-parser';
 import { decodeEntities } from '#lib/domain/threemf.ts';
+import type { PaintEntry } from './mesh-format';
 import {
 	bounds,
 	convexHull,
@@ -38,6 +39,8 @@ export interface RawObject {
 	/** Inline mesh (plain 3MF): vertex xyz and triangle indices. */
 	positions?: Float64Array;
 	indices?: Uint32Array;
+	/** Per-triangle slicer paint (supports, seam) of the inline mesh, by triangle index. */
+	paint?: PaintEntry[];
 }
 export interface BuildItem {
 	objectId: string;
@@ -81,6 +84,7 @@ class Grow32 {
 
 const TAG = /<(vertex|triangle|component|item|object|\/object)\b([^>]*)>/g;
 const VERTEX = /x="([^"]*)"\s+y="([^"]*)"\s+z="([^"]*)"/;
+const PAINT = /\bpaint_(supports|seam)="([^"]*)"/g;
 const TRI = /v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/;
 
 function attr(s: string, name: string): string | null {
@@ -98,7 +102,13 @@ export class ModelScanner {
 	readonly scan: ModelScan = { objects: new Map(), items: [] };
 	private decoder = new TextDecoder();
 	private tail = '';
-	private cur: { obj: RawObject; v: Grow64; t: Grow32; hasMesh: boolean } | null = null;
+	private cur: {
+		obj: RawObject;
+		v: Grow64;
+		t: Grow32;
+		hasMesh: boolean;
+		paint: PaintEntry[];
+	} | null = null;
 	bytes = 0;
 	constructor(private readonly keepMeshes = true) {}
 
@@ -122,6 +132,7 @@ export class ModelScanner {
 		if (c.hasMesh && this.keepMeshes) {
 			c.obj.positions = c.v.done();
 			c.obj.indices = c.t.done();
+			if (c.paint.length) c.obj.paint = c.paint;
 		}
 		this.scan.objects.set(c.obj.id, c.obj);
 		this.cur = null;
@@ -143,6 +154,17 @@ export class ModelScanner {
 				this.cur.v.push(+a[3]);
 			} else if (kind === 'triangle') {
 				if (!this.cur || !this.keepMeshes) continue;
+				if (rest.includes('paint_')) {
+					PAINT.lastIndex = 0;
+					let pm: RegExpExecArray | null;
+					while ((pm = PAINT.exec(rest)))
+						if (pm[2])
+							this.cur.paint.push({
+								kind: pm[1] as 'supports' | 'seam',
+								tri: this.cur.t.n / 3,
+								value: pm[2]
+							});
+				}
 				const a = TRI.exec(rest);
 				if (a) {
 					this.cur.t.push(+a[1]);
@@ -186,7 +208,8 @@ export class ModelScanner {
 					obj: { id, components: [] },
 					v: new Grow64(),
 					t: new Grow32(),
-					hasMesh: false
+					hasMesh: false,
+					paint: []
 				};
 			} else if (kind === '/object') {
 				if (this.cur) this.closeObject();
@@ -274,6 +297,8 @@ export interface ObjectSettings {
 	name: string;
 	/** Every `<metadata key=... value=...>` of the object (wall_loops, sparse_infill_density, ...). */
 	settings: Record<string, string>;
+	/** Metadata of the object's parts (volumes) that carries slicer settings, merged; bookkeeping keys removed. */
+	partSettings: Record<string, string>;
 	/** Volume subtypes other than a normal part (modifiers, negative parts, supports). */
 	extraSubtypes: string[];
 }
@@ -287,12 +312,22 @@ export function parseModelSettings(bytes: Uint8Array): Map<string, ObjectSetting
 			const k = m['@key'];
 			if (typeof k === 'string') settings[k] = decodeEntities(String(m['@value'] ?? ''));
 		}
+		const partSettings: Record<string, string> = {};
+		for (const p of asArr<XNode>((o.part ?? o.volume) as XNode[]))
+			for (const m of asArr<XNode>(p.metadata as XNode[])) {
+				const k = m['@key'];
+				if (
+					typeof k === 'string' &&
+					!/^(name|matrix|extruder|source_.*|volume_type|face_count)$/.test(k)
+				)
+					partSettings[k] = decodeEntities(String(m['@value'] ?? ''));
+			}
 		const subs = asArr<XNode>((o.part ?? o.volume) as XNode[])
 			.map((p) => String(p['@subtype'] ?? 'normal_part'))
 			.filter((s) => s !== 'normal_part');
 		const name = settings.name ?? `Object ${o['@id']}`;
 		delete settings.name;
-		out.set(String(o['@id']), { name, settings, extraSubtypes: subs });
+		out.set(String(o['@id']), { name, settings, partSettings, extraSubtypes: subs });
 	}
 	return out;
 }
@@ -348,6 +383,8 @@ export interface Geometry {
 	angleDeg: number;
 	hull: Pt[];
 	tris: number;
+	/** Slicer paint per triangle (kept verbatim; triangle order is unchanged). */
+	paint?: PaintEntry[];
 }
 
 const norm = (v: number) => (Math.abs(v) < 1e-12 ? 0 : v);
@@ -371,10 +408,16 @@ const det3 = (t: number[] | null) =>
 function worldMesh(
 	obj: RawObject,
 	item: BuildItem,
-	meshOf: (c: Component) => { positions: Float64Array; indices: Uint32Array } | null
-): { pos: Float64Array; idx: Uint32Array } | null {
-	const parts: { pos: Float64Array; idx: Uint32Array }[] = [];
-	const add = (m: { positions: Float64Array; indices: Uint32Array }, ct: number[] | null) => {
+	meshOf: (
+		c: Component
+	) => { positions: Float64Array; indices: Uint32Array; paint?: PaintEntry[] } | null
+): { pos: Float64Array; idx: Uint32Array; paint: PaintEntry[]; paintDropped: number } | null {
+	const parts: { pos: Float64Array; idx: Uint32Array; paint: PaintEntry[] }[] = [];
+	let paintDropped = 0;
+	const add = (
+		m: { positions: Float64Array; indices: Uint32Array; paint?: PaintEntry[] },
+		ct: number[] | null
+	) => {
 		const pos = new Float64Array(m.positions.length);
 		for (let i = 0; i < m.positions.length; i += 3) {
 			const [x, y, z] = apply(
@@ -390,9 +433,12 @@ function worldMesh(
 		const idx = new Uint32Array(m.indices);
 		if (flip)
 			for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
-		parts.push({ pos, idx });
+		// Paint is tied to each triangle's vertex order; a mirrored mesh would need it mirrored too, so it is dropped.
+		if (flip) paintDropped += m.paint?.length ?? 0;
+		parts.push({ pos, idx, paint: flip ? [] : (m.paint ?? []) });
 	};
-	if (obj.positions && obj.indices) add({ positions: obj.positions, indices: obj.indices }, null);
+	if (obj.positions && obj.indices)
+		add({ positions: obj.positions, indices: obj.indices, paint: obj.paint }, null);
 	for (const c of obj.components) {
 		const m = meshOf(c);
 		if (m) add(m, c.transform);
@@ -402,15 +448,17 @@ function worldMesh(
 	const ni = parts.reduce((a, p) => a + p.idx.length, 0);
 	const pos = new Float64Array(nv);
 	const idx = new Uint32Array(ni);
+	const paint: PaintEntry[] = [];
 	let vo = 0,
 		io = 0;
 	for (const p of parts) {
+		for (const e of p.paint) paint.push({ ...e, tri: e.tri + io / 3 });
 		pos.set(p.pos, vo);
 		for (let i = 0; i < p.idx.length; i++) idx[io + i] = p.idx[i] + vo / 3;
 		vo += p.pos.length;
 		io += p.idx.length;
 	}
-	return { pos, idx };
+	return { pos, idx, paint, paintDropped };
 }
 
 /** Drop to z = 0, turn to the minimum-area box about z and centre; compute footprint and hull. */
@@ -507,13 +555,21 @@ export async function extractGeometry(
 		const m = worldMesh(obj, item, (c) => {
 			const objs = c.path ? files.get(c.path.replace(/^\//, '')) : model.objects;
 			const o = objs?.get(c.objectId);
-			return o?.positions && o.indices ? { positions: o.positions, indices: o.indices } : null;
+			return o?.positions && o.indices
+				? { positions: o.positions, indices: o.indices, paint: o.paint }
+				: null;
 		});
 		if (!m || m.pos.length < 9) {
 			warnings.push(`Object ${req.objectId} has no readable mesh; skipped`);
 			continue;
 		}
-		geometry.set(req.objectId, normalizeMesh(m.pos, m.idx, req.objectId));
+		const g = normalizeMesh(m.pos, m.idx, req.objectId);
+		if (m.paint.length) g.paint = m.paint;
+		if (m.paintDropped)
+			warnings.push(
+				`Object ${req.objectId}: ${m.paintDropped} painted triangles were dropped because the object is mirrored in the profile`
+			);
+		geometry.set(req.objectId, g);
 	}
 	return { geometry, warnings };
 }

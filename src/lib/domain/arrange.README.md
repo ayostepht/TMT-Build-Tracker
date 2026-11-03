@@ -108,3 +108,12 @@ TPU never share a plate).
   with a `split` warning.
 - Hulls are used to draw outlines and to find a free angle for long parts; packing itself
   uses bounding boxes.
+
+## Re-orientation (parts bigger than the bed)
+
+When a piece does not fit in its profile orientation (0/90 degrees or a free in-plane angle),
+and its footprint carries `orient` (poses computed on import by `orient.ts`), the arranger uses
+the best fitting resting pose: `ArrangedItem.pose` = `{ m, t, h, hull, desc, ... }`, so a mesh
+vertex goes `p' = Rz(rotation) * (m * p + t) + (x - ox, y - oy, 0)`. `ox, oy` is the offset of
+the turned outline's box centre from the mesh origin (free angles only; absent for 0/90). Items
+without `pose` use the stored mesh as is. Seed footprints (no meshes) cannot be re-oriented.

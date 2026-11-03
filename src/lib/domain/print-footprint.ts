@@ -4,6 +4,7 @@
  * volume, see src/lib/server/print-geometry/). Pure, browser-safe.
  */
 import type { Pt } from './geom2d.ts';
+import type { OrientData } from './orient.ts';
 
 /** One distinct printed object of a part (connectors have several, a wing one). */
 export interface PrintPiece {
@@ -21,6 +22,12 @@ export interface PrintPiece {
 	mesh?: string;
 	/** The kit author's slicer settings for this object (wall_loops, sparse_infill_density, ...). */
 	settings?: Record<string, string>;
+	/** Per-volume slicer settings of the kit author's object (written to the part's metadata). */
+	partSettings?: Record<string, string>;
+	/** Painted triangles kept with the mesh (supports, seam); the export writes them back. */
+	paint?: { supports: number; seam: number };
+	/** Alternative resting poses for beds the profile orientation does not fit (imported geometry only; computed on import or on first use). */
+	orient?: OrientData;
 }
 
 /** Everything the arranger needs to know about one part's geometry. */

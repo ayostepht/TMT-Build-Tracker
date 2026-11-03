@@ -19,6 +19,7 @@ import type { BuildView } from '#lib/domain/types.ts';
 import type { Db } from '../db';
 import { buildPlates, builds, templatePlateLayouts, templatePrintGeometry } from '../db/schema';
 import { loadBuildView } from './view';
+import { ensureOrientations } from '../print-geometry/store';
 
 export const ARRANGED_LAYOUT = 'arranged';
 export const ARRANGED_SOURCE = 'arranged';
@@ -28,6 +29,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Print footprints stored for a template, by slug (seed rows and imported rows alike). */
 export function loadFootprints(db: Db, templateId: string): Map<string, PrintFootprint> {
+	ensureOrientations(db, templateId);
 	const out = new Map<string, PrintFootprint>();
 	for (const r of db
 		.select()
@@ -102,6 +104,7 @@ export function planArrangement(
 		printer: {
 			bedX: p.bedX,
 			bedY: p.bedY,
+			bedZ: p.bedZ,
 			margin: p.margin,
 			spacing: p.spacing,
 			mmSlots: p.mmSlots

@@ -150,3 +150,34 @@ test('design tab: pick a catalog swatch for a slot, search, and add a slot from 
 	await expect(page.locator('li.slot')).toHaveCount(5);
 	await expect(page.locator('li.slot').last()).toContainText(/TPU/i);
 });
+
+test('design tab: Export 3MF opens the export card, or asks for a printer first', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'design-export');
+	await page.goto(`/builds/${buildId}/design`);
+
+	// No printer yet: the dialog explains and links to the Plates tab.
+	await page.getByTestId('export-open').click();
+	const dlg = page.getByTestId('export-dialog');
+	await expect(dlg).toBeVisible();
+	await expect(page.getByTestId('export-dialog-no-printer')).toContainText('Choose your printer');
+	await page.keyboard.press('Escape');
+	await expect(dlg).toBeHidden();
+
+	// The "next step" link goes to the Plates tab.
+	await page.getByTestId('next-plates').click();
+	await expect(page).toHaveURL(/\/plates$/);
+
+	// With a printer, the same dialog hosts the real export card.
+	await page.getByTestId('choose-printer').click();
+	await page.getByTestId('printer-brand').selectOption('Elegoo');
+	await page.getByTestId('printer-model').selectOption({ label: 'Centauri Carbon' });
+	await page.getByTestId('printer-mm').selectOption({ index: 1 });
+	await page.getByTestId('save-printer').click();
+	await expect(page.getByTestId('layout-name')).toBeVisible();
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByTestId('export-open').click();
+	await expect(dlg.getByTestId('export-card')).toBeVisible();
+	await expect(dlg.getByTestId('export-flavor')).toBeVisible();
+});

@@ -4,10 +4,12 @@ import {
 	plateTitle,
 	type ArrangeInput,
 	type ArrangePart,
+	type ArrangePrinter,
 	type ArrangeRole,
 	orientsOf,
 	type ArrangedPlate
 } from './arrange.ts';
+import { computePoses } from './orient.ts';
 
 const roles: ArrangeRole[] = [
 	{ key: 'primary', name: 'Primary', material: 'PETG' },
@@ -38,7 +40,7 @@ const part = (
 	};
 };
 
-const bed = (x: number, y = x, mmSlots = 1) => ({
+const bed = (x: number, y = x, mmSlots = 1): ArrangePrinter => ({
 	bedX: x,
 	bedY: y,
 	margin: 5,
@@ -416,5 +418,85 @@ describe('arrange: determinism and recolor', () => {
 			part('b', 'primary', 50, 50, { grams: 2.5 })
 		]);
 		expect(r.plates[0].estGrams).toEqual({ primary: 42.5 });
+	});
+});
+
+describe('arrange: re-orientation', () => {
+	// 320 x 190 x 20 slab: too big flat for a 256 bed (even tilted), fits standing on its long edge
+	const slab = (withOrient: boolean): ArrangePart => {
+		const mesh = {
+			positions: [
+				-160, -95, 0, 160, -95, 0, 160, 95, 0, -160, 95, 0, -160, -95, 20, 160, -95, 20, 160, 95,
+				20, -160, 95, 20
+			],
+			indices: [
+				0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3,
+				0, 4, 3, 4, 7
+			]
+		};
+		return {
+			slug: 'wing-left',
+			name: 'Wing Left',
+			role: 'accent',
+			units: 1,
+			footprint: {
+				slug: 'wing-left',
+				pieces: [
+					{
+						name: 'wing',
+						w: 320,
+						d: 190,
+						h: 20,
+						copies: 1,
+						mesh: 'wing-left.bin',
+						...(withOrient ? { orient: computePoses(mesh) } : {})
+					}
+				]
+			}
+		};
+	};
+	const printer: ArrangePrinter = { ...bed(256), bedZ: 256 };
+
+	it('uses a standing pose instead of overhanging, with an informational warning', () => {
+		const r = run([slab(true)], printer);
+		expect(r.plates).toHaveLength(1);
+		expect(r.plates[0].oversize).toBeUndefined();
+		const it = r.plates[0].items[0];
+		expect(it.pose).toBeTruthy();
+		expect(it.pose!.h).toBeCloseTo(190, 0);
+		expectValid(r.plates, printer);
+		const w = r.warnings.find((x) => x.code === 'reoriented')!;
+		expect(w.message).toContain('Wing Left re-oriented to fit 256×256');
+		expect(w.message).toContain('stands on its edge, 190 mm tall');
+		expect(w.message).toContain('check supports');
+		expect(r.warnings.some((x) => x.code === 'oversize')).toBe(false);
+	});
+
+	it('keeps the profile orientation whenever it fits', () => {
+		const p = slab(true);
+		p.footprint.pieces[0].w = 200;
+		p.footprint.pieces[0].d = 100;
+		const r = run([p], printer);
+		expect(r.plates[0].items[0].pose).toBeUndefined();
+		expect(r.warnings).toEqual([]);
+	});
+
+	it('seed footprints cannot be re-oriented: the oversize warning points to the import', () => {
+		const r = run([slab(false)], printer);
+		expect(r.plates[0].oversize).toBe(true);
+		expect(r.warnings[0].code).toBe('oversize');
+		expect(r.warnings[0].message).toContain('Importing the print geometry');
+	});
+
+	it('respects the build height', () => {
+		const r = run([slab(true)], { ...bed(256), bedZ: 150 });
+		expect(r.plates[0].oversize).toBe(true);
+		expect(r.warnings[0].message).toContain('does not fit either');
+	});
+
+	it('is deterministic', () => {
+		const a = run([slab(true), part('b', 'accent', 60, 60)], printer);
+		const b = run([slab(true), part('b', 'accent', 60, 60)], printer);
+		expect(JSON.stringify(a)).toBe(JSON.stringify(b));
 	});
 });
