@@ -22,7 +22,7 @@ COPY --from=builder --chown=node:node /app/build ./build
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/drizzle ./drizzle
-COPY --from=builder --chown=node:node /app/scripts/proxy-origin.mjs ./scripts/proxy-origin.mjs
+COPY --from=builder --chown=node:node /app/scripts/proxy-origin.mjs /app/scripts/import-prototype.mjs /app/scripts/bundle-prototype-export.mjs ./scripts/
 USER node
 VOLUME /data
 EXPOSE 3000

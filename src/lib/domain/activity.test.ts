@@ -86,6 +86,34 @@ describe('describeActivity', () => {
 			'Steph deleted a failed print of plate 3 from the log'
 		);
 	});
+	it('run edits and deletes mention recomputed parts', () => {
+		expect(
+			say('run.delete', {
+				plateNumber: null,
+				partSlug: part.slug,
+				result: 'Success',
+				recomputed: [{ slug: part.slug, from: 'Printed', to: 'To print' }]
+			})
+		).toBe(
+			`Steph deleted a successful print of ${part.name} from the log and set ${part.name} back to To print`
+		);
+		expect(say('run.delete', { plateNumber: 3, result: 'Failed', recomputed: [] })).toBe(
+			'Steph deleted a failed print of plate 3 from the log'
+		);
+		expect(
+			say('run.update', {
+				plateNumber: null,
+				partSlug: part.slug,
+				result: 'Failed',
+				recomputed: [{ slug: part.slug, from: 'Printed', to: 'Reprint' }]
+			})
+		).toBe(
+			`Steph edited a print log of ${part.name} (changed the result to failed) and set ${part.name} to Reprint`
+		);
+		expect(say('run.update', { plateNumber: 3, result: 'Success', note: 'x', grams: 2 })).toBe(
+			'Steph edited a print log of plate 3 (changed the result to success, the grams and the note)'
+		);
+	});
 	it('undo', () => {
 		expect(say('run.undo', { plateNumber: 3, result: 'Failed' })).toBe(
 			'Steph undid a failed print of plate 3'
@@ -101,6 +129,9 @@ describe('describeActivity', () => {
 		const f = view.filaments[0];
 		expect(say('filament.spools', { role: f.key, spools: 5 })).toBe(
 			`Steph set ${filamentLabel(f)} spools to 5`
+		);
+		expect(say('filament.spools', { role: f.key, spools: 4.5 })).toBe(
+			`Steph set ${filamentLabel(f)} spools to 4.5`
 		);
 		expect(say('filament.update', { role: f.key, hex: '#112233' })).toContain('#112233');
 	});

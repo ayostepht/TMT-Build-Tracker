@@ -72,8 +72,8 @@ export const setRunEstimate = (id: string, slugs: string[], seconds: number | nu
 
 export const logRun = (id: string, input: PrintRunInput) =>
 	call<{ id: string }>('POST', `${b(id)}/runs`, input).then((r) => r.id);
-export const deleteRun = (id: string, runId: string) =>
-	call('DELETE', `${b(id)}/runs/${encodeURIComponent(runId)}`);
+export const deleteRun = (id: string, runId: string, { recompute = true } = {}) =>
+	call('DELETE', `${b(id)}/runs/${encodeURIComponent(runId)}${recompute ? '' : '?recompute=0'}`);
 
 /** In `slicerByPart`, a null value clears that part's entry. */
 export const updatePlate = (
@@ -105,3 +105,39 @@ export const getView = (id: string) => call<BuildView>('GET', `${b(id)}/view`);
 /** Delete a run and restore the affected parts to `parts` (their state before the run was logged). */
 export const undoRun = (id: string, runId: string, parts: PartSnapshot[]) =>
 	call('POST', `${b(id)}/runs/${encodeURIComponent(runId)}/undo`, { parts });
+
+/** Correct a past print log; changing result, part or date re-derives the affected parts' statuses. */
+export const updateRun = (
+	id: string,
+	runId: string,
+	patch: {
+		date?: string;
+		result?: PrintRunInput['result'];
+		grams?: number | null;
+		hours?: number | null;
+		note?: string;
+		partSlug?: string | null;
+	}
+) => call('PATCH', `${b(id)}/runs/${encodeURIComponent(runId)}`, patch);
+
+export interface ImportSummary {
+	parts: number;
+	runs: number;
+	plates: number;
+	spools: number;
+	warnings: string[];
+	/** The build has no progress yet (importing needs no "replace"). */
+	empty: boolean;
+}
+
+/** Import progress from the original prototype. `dryRun` only reports what would happen. */
+export const importPrototype = (
+	id: string,
+	data: unknown,
+	opts: { replace?: boolean; dryRun?: boolean } = {}
+) =>
+	call<ImportSummary & { replaced?: boolean }>(
+		'POST',
+		`${b(id)}/import${opts.dryRun ? '?dryRun=1' : ''}`,
+		{ data, replace: opts.replace === true }
+	);

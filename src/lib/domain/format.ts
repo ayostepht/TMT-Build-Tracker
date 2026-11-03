@@ -5,6 +5,11 @@ export function fmt(n: number): string {
 	return Math.round(n).toLocaleString('en-US');
 }
 
+/** Spool count without trailing zeros: 4.5, 3, 0.25 (at most 2 decimals). */
+export function fmtSpools(n: number): string {
+	return String(Math.round(n * 100) / 100);
+}
+
 /** Hours from seconds: "12 h" at 10 h and over, "4.5 h" below. */
 export function fmtH(seconds: number): string {
 	const h = seconds / 3600;

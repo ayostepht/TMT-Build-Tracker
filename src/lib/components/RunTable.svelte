@@ -5,13 +5,16 @@
 		runs,
 		colorOf,
 		canEdit,
-		ondelete
+		ondelete,
+		onedit
 	}: {
 		runs: PrintRun[];
 		/** When set, adds a Color column showing this label for each run. */
 		colorOf?: (r: PrintRun) => string;
 		canEdit: boolean;
 		ondelete: (r: PrintRun) => void;
+		/** When set, editors get an Edit button per row. */
+		onedit?: (r: PrintRun) => void;
 	} = $props();
 </script>
 
@@ -35,6 +38,14 @@
 					<td>{r.note}{r.userName ? ` (${r.userName})` : ''}</td>
 					<td>
 						{#if canEdit}
+							{#if onedit}
+								<button
+									class="btn sm"
+									type="button"
+									aria-label="Edit entry"
+									onclick={() => onedit(r)}>Edit</button
+								>
+							{/if}
 							<button class="x" type="button" aria-label="Delete entry" onclick={() => ondelete(r)}
 								>×</button
 							>

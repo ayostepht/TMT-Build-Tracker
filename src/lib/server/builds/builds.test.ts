@@ -19,10 +19,13 @@ import { seedTemplates } from '../seed/run';
 import {
 	addRun,
 	deleteBuild,
+	deleteRun,
 	printingAction,
 	setPartStatus,
 	undoRun,
-	updateBuild
+	updateBuild,
+	updateFilament,
+	updateRun
 } from './actions';
 import { createBuild } from './create';
 import { loadBuildView } from './view';
@@ -143,6 +146,24 @@ describe('mutations', () => {
 		});
 	});
 
+	it('filament spools accept fractions, round to 0.01 and reject bad values', () => {
+		const id = mk();
+		const spools = () =>
+			loadBuildView(db, id, 'owner')!.filaments.find((f) => f.key === 'primary')!.spools;
+		updateFilament(db, id, 'editor', 'primary', { spools: 4.5 });
+		expect(spools()).toBe(4.5);
+		updateFilament(db, id, 'editor', 'primary', { spools: 2.346 });
+		expect(spools()).toBe(2.35);
+		const act = db.select().from(activity).where(eq(activity.kind, 'filament.spools')).all();
+		expect(act).toHaveLength(2);
+		for (const bad of [-1, 100, 'abc', null, NaN])
+			expect(() => updateFilament(db, id, 'editor', 'primary', { spools: bad })).toThrow(ApiError);
+		expect(spools()).toBe(2.35);
+		expect(() => updateFilament(db, id, 'viewer', 'primary', { spools: 1 })).toThrowError(
+			expect.objectContaining({ status: 403 })
+		);
+	});
+
 	it('printing start/stop round-trips', () => {
 		const id = mk();
 		const slug = loadBuildView(db, id, 'owner')!.parts[0].slug;
@@ -230,5 +251,78 @@ describe('undoRun', () => {
 		expect(after.state[slug].status).toBe('Printing');
 		expect(after.state[slug].startedAt).toBe(before.startedAt);
 		expect(after.activity[0].kind).toBe('run.undo');
+	});
+});
+
+describe('editing and deleting past print logs', () => {
+	const logPart = (id: string, slug: string) =>
+		addRun(db, id, 'editor', {
+			plateNumber: null,
+			partSlug: slug,
+			date: '2026-01-02',
+			result: 'Success',
+			grams: 10,
+			hours: 1,
+			note: 'first'
+		});
+	const lastAct = (id: string) =>
+		db.select().from(activity).where(eq(activity.buildId, id)).all().at(-1)!;
+
+	it('deleteRun recomputes the part and records it; viewers get 403', () => {
+		const id = mk();
+		const slug = loadBuildView(db, id, 'owner')!.parts[0].slug;
+		const runId = logPart(id, slug);
+		expect(loadBuildView(db, id, 'owner')!.state[slug]).toMatchObject({ status: 'Printed' });
+		expect(() => deleteRun(db, id, 'viewer', runId)).toThrowError(
+			expect.objectContaining({ status: 403 })
+		);
+		deleteRun(db, id, 'editor', runId);
+		const v = loadBuildView(db, id, 'owner')!;
+		expect(v.runs).toHaveLength(0);
+		expect(v.state[slug]).toMatchObject({ status: 'To print', printedOn: null });
+		const a = lastAct(id);
+		expect(a.kind).toBe('run.delete');
+		expect(a.payload).toMatchObject({
+			recomputed: [{ slug, from: 'Printed', to: 'To print' }]
+		});
+	});
+
+	it('deleteRun with recompute false leaves statuses alone', () => {
+		const id = mk();
+		const slug = loadBuildView(db, id, 'owner')!.parts[0].slug;
+		const runId = logPart(id, slug);
+		const events = onBuildEvents(id);
+		deleteRun(db, id, 'editor', runId, { recompute: false });
+		const v = loadBuildView(db, id, 'owner')!;
+		expect(v.runs).toHaveLength(0);
+		expect(v.state[slug].status).toBe('Printed');
+		expect(lastAct(id).payload).toMatchObject({ recomputed: [] });
+		expect(events.at(-1)).toMatchObject({ kind: 'run.delete' });
+	});
+
+	it('updateRun: Success to Failed gives Reprint; grams/note edits do not touch statuses', () => {
+		const id = mk();
+		const slug = loadBuildView(db, id, 'owner')!.parts[0].slug;
+		const runId = logPart(id, slug);
+		expect(() => updateRun(db, id, 'viewer', runId, { note: 'x' })).toThrowError(
+			expect.objectContaining({ status: 403 })
+		);
+		expect(() => updateRun(db, id, 'editor', runId, { result: 'Bogus' })).toThrow(ApiError);
+		expect(() => updateRun(db, id, 'editor', 'nope', { note: 'x' })).toThrowError(
+			expect.objectContaining({ status: 404 })
+		);
+		updateRun(db, id, 'editor', runId, { grams: 55, note: 'edited' });
+		let v = loadBuildView(db, id, 'owner')!;
+		expect(v.runs[0]).toMatchObject({ grams: 55, note: 'edited' });
+		expect(v.state[slug].status).toBe('Printed');
+		expect(lastAct(id)).toMatchObject({ kind: 'run.update' });
+
+		updateRun(db, id, 'editor', runId, { result: 'Failed' });
+		v = loadBuildView(db, id, 'owner')!;
+		expect(v.state[slug]).toMatchObject({ status: 'Reprint', printedOn: null });
+		expect(lastAct(id).payload).toMatchObject({
+			result: 'Failed',
+			recomputed: [{ slug, from: 'Printed', to: 'Reprint' }]
+		});
 	});
 });

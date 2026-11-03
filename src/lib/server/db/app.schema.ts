@@ -183,7 +183,7 @@ export const buildFilaments = sqliteTable(
 		name: text('name').notNull(),
 		material: text('material').notNull(),
 		hex: text('hex').notNull(),
-		spools: integer('spools').notNull().default(0),
+		spools: real('spools').notNull().default(0),
 		spoolmanSpoolId: integer('spoolman_spool_id')
 	},
 	(t) => [primaryKey({ columns: [t.buildId, t.roleKey] })]

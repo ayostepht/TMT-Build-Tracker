@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build",
+		"build": "vite build && vite build -c vite.cli.config.ts",
 		"preview": "vite preview",
 		"start": "node --import ./scripts/proxy-origin.mjs build",
 		"prepare": "svelte-kit sync || echo ''",

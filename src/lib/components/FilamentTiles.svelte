@@ -11,7 +11,7 @@
 	const left = $derived(time.adjustedLeftSec ?? time.leftSec);
 
 	function saveSpools(role: string, raw: string) {
-		const v = Math.max(0, Math.round((Number(raw) || 0) * 100) / 100);
+		const v = Math.min(99, Math.max(0, Math.round((Number(raw) || 0) * 100) / 100));
 		ctx.act(() => updateFilament(ctx.id, role, { spools: v }));
 	}
 </script>
@@ -48,7 +48,8 @@
 					id="sp-{s.role}"
 					type="number"
 					min="0"
-					step="0.01"
+					step="0.25"
+					inputmode="decimal"
 					value={f?.spools ?? 0}
 					disabled={!ctx.canEdit}
 					aria-label="{filLabel(f, s.role)} spools on hand"

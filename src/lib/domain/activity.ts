@@ -1,4 +1,4 @@
-import { fmt, fmtHM } from './format.ts';
+import { fmt, fmtHM, fmtSpools } from './format.ts';
 import { filamentLabel } from './labels.ts';
 import type { ActivityItem, BuildView } from './types.ts';
 
@@ -12,6 +12,15 @@ function list(items: string[]): string {
 	if (items.length <= 1) return items[0] ?? '';
 	if (items.length === 2) return `${items[0]} and ${items[1]}`;
 	return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** " and set Handle Left back to To print" for the `recomputed` payload of run edits and deletes. */
+function recomputedText(v: unknown, part: (slug: unknown) => string): string {
+	if (!Array.isArray(v)) return '';
+	const items = v
+		.filter((x): x is Obj => typeof x === 'object' && x !== null && typeof x.to === 'string')
+		.map((x) => `${part(x.slug)} ${x.to === 'To print' ? 'back to ' : 'to '}${x.to as string}`);
+	return items.length ? ` and set ${list(items)}` : '';
 }
 
 /**
@@ -80,6 +89,7 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 				: `${who} set the time estimate for ${parts(p.slugs)} to ${fmtHM(s)}`;
 		}
 		case 'run.add':
+		case 'run.update':
 		case 'run.delete':
 		case 'run.undo': {
 			const result = (str(p.result) ?? 'print').toLowerCase();
@@ -94,7 +104,18 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 							? part(p.partSlug)
 							: 'a part';
 			if (a.kind === 'run.undo') return `${who} undid a ${adj} print of ${target}`;
-			if (a.kind === 'run.delete') return `${who} deleted a ${adj} print of ${target} from the log`;
+			if (a.kind === 'run.update') {
+				const bits: string[] = [];
+				if ('result' in p) bits.push(`the result to ${(str(p.result) ?? 'unknown').toLowerCase()}`);
+				if ('date' in p) bits.push(`the date to ${str(p.date) ?? 'unknown'}`);
+				if ('newPartSlug' in p) bits.push(`the part to ${part(p.newPartSlug)}`);
+				if ('grams' in p) bits.push('the grams');
+				if ('hours' in p) bits.push('the hours');
+				if ('note' in p) bits.push('the note');
+				return `${who} edited a print log of ${target}${bits.length ? ` (changed ${list(bits)})` : ''}${recomputedText(p.recomputed, part)}`;
+			}
+			if (a.kind === 'run.delete')
+				return `${who} deleted a ${adj} print of ${target} from the log${recomputedText(p.recomputed, part)}`;
 			let grams = num(p.grams);
 			if (grams === null) grams = view.runs.find((r) => r.id === p.runId)?.grams ?? null;
 			return `${who} logged a ${adj} print of ${target}${grams !== null ? ` (${fmt(grams)} g)` : ''}`;
@@ -111,15 +132,25 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			const s = num(p.spools);
 			return s === null
 				? `${who} updated spools for ${fil(p.role)}`
-				: `${who} set ${fil(p.role)} spools to ${fmt(s)}`;
+				: `${who} set ${fil(p.role)} spools to ${fmtSpools(s)}`;
 		}
 		case 'filament.update': {
 			const bits: string[] = [];
 			if (str(p.name)) bits.push(`renamed it to "${str(p.name)}"`);
 			if (str(p.material)) bits.push(`set the material to ${str(p.material)}`);
 			if (str(p.hex)) bits.push(`changed the color to ${str(p.hex)}`);
-			if (num(p.spools) !== null) bits.push(`set spools to ${fmt(num(p.spools) as number)}`);
+			if (num(p.spools) !== null) bits.push(`set spools to ${fmtSpools(num(p.spools) as number)}`);
 			return `${who} updated ${fil(p.role)}${bits.length ? `: ${list(bits)}` : ''}`;
+		}
+		case 'build.import': {
+			const bits = [
+				num(p.parts) !== null ? `${fmt(num(p.parts) as number)} parts` : null,
+				num(p.runs) !== null ? `${fmt(num(p.runs) as number)} prints` : null
+			].filter((x): x is string => !!x);
+			const what = `progress from the original prototype${bits.length ? ` (${list(bits)})` : ''}${p.replaced ? ', replacing what was there' : ''}`;
+			return a.userId === null && !a.userName
+				? `An administrator imported ${what}`
+				: `${who} imported ${what}`;
 		}
 		default:
 			return `${who} made a change (${a.kind})`;

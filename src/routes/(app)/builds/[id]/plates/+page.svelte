@@ -2,7 +2,7 @@
 	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
 	import { printing, deleteRun, updatePlate } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from '#lib/components/build-context.svelte.ts';
-	import type { Plate } from '#lib/domain/types.ts';
+	import type { Plate, PrintRun } from '#lib/domain/types.ts';
 	import RoleChip from '#lib/components/RoleChip.svelte';
 	import RunTable from '#lib/components/RunTable.svelte';
 	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
@@ -10,6 +10,8 @@
 
 	const ctx = getBuildCtx();
 	let logOpen = $state<Record<number, boolean>>({});
+	let editing = $state<PrintRun | null>(null);
+	let editOpen = $state(false);
 	const startedOf = (pl: Plate) =>
 		pl.parts
 			.map((s) => (ctx.view.state[s]?.status === 'Printing' ? ctx.view.state[s].startedAt : null))
@@ -144,6 +146,7 @@
 						? (r) => (r.partSlug ? filLabel(ctx.filament(roleOf(r.partSlug))) : '')
 						: undefined}
 					ondelete={(r) => ctx.act(() => deleteRun(ctx.id, r.id))}
+					onedit={(r) => ((editing = r), (editOpen = true))}
 				/>
 			</div>
 		{/if}
@@ -151,6 +154,9 @@
 {:else}
 	<p class="empty">This template has no plates yet.</p>
 {/each}
+{#if ctx.canEdit}
+	<LogRunSheet bind:open={editOpen} editRun={editing} />
+{/if}
 <p class="foot">
 	3MF upload, to organize plates from your own slicer project, comes in a later version.
 </p>

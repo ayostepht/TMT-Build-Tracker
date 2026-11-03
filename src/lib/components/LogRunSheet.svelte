@@ -1,39 +1,52 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { RUN_RESULTS, type PrintRunInput, type RunResult } from '#lib/domain/types.ts';
+	import {
+		RUN_RESULTS,
+		type PrintRun,
+		type PrintRunInput,
+		type RunResult
+	} from '#lib/domain/types.ts';
 	import {
 		durText,
 		elapsedSeconds,
 		fmt,
 		hoursFromSeconds,
 		parseDur,
+		recomputeParts,
+		runTargets,
 		runOutcomeSummary,
 		snapshotParts,
 		toLocalInput,
 		today
 	} from '#lib/domain/index.ts';
-	import { logRun, undoRun } from '#lib/client/api.ts';
+	import { deleteRun, logRun, undoRun, updateRun } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { toasts } from './toast.svelte.ts';
 
 	let {
 		open = $bindable(false),
-		plateNumber = null,
-		slugs,
+		plateNumber: plateNumberIn = null,
+		slugs: slugsIn = [],
 		startedAt = null,
-		title = 'Log print'
+		title: titleIn = 'Log print',
+		editRun = null
 	}: {
 		open?: boolean;
 		/** Plate this run belongs to; null logs against a single part. */
 		plateNumber?: number | null;
 		/** Parts the run concerns (those on the printer, or the whole plate, or one part). */
-		slugs: string[];
+		slugs?: string[];
 		/** When the print started, if known: prefills the total time. */
 		startedAt?: string | null;
 		title?: string;
+		/** Edit this past log instead of creating a new one. */
+		editRun?: PrintRun | null;
 	} = $props();
 
 	const ctx = getBuildCtx();
+	const title = $derived(editRun ? 'Edit print log' : titleIn);
+	const plateNumber = $derived(editRun ? editRun.plateNumber : plateNumberIn);
+	const slugs = $derived(editRun ? runTargets(ctx.view, editRun) : slugsIn);
 	const uid = $props.id();
 
 	let dlg = $state<HTMLDialogElement>();
@@ -49,6 +62,9 @@
 	let picked = $state('');
 	let busy = $state(false);
 	let error = $state<string | null>(null);
+	let editDate = $state('');
+	let confirmDelete = $state(false);
+	let keepStatuses = $state(false);
 
 	const plate = $derived(
 		plateNumber == null ? null : (ctx.view.plates.find((p) => p.number === plateNumber) ?? null)
@@ -91,7 +107,7 @@
 			plateNumber: plate ? plate.number : null,
 			partSlug: plate ? pickedSlug : (slugs[0] ?? null),
 			partSlugs: subset,
-			date: toLocalInput(finDate).slice(0, 10) || today(),
+			date: editRun ? editDate : toLocalInput(finDate).slice(0, 10) || today(),
 			result: res,
 			grams: gramsShown === '' ? null : Number(gramsShown),
 			hours: hoursFromSeconds(durSeconds),
@@ -99,7 +115,54 @@
 			note: note.trim()
 		};
 	}
-	const summary = $derived(runOutcomeSummary(ctx.view, buildInput(result)));
+	const nameOf = (s: string) => partOf(s)?.name ?? s;
+	const statusChange = (patches: ReturnType<typeof recomputeParts>) =>
+		patches
+			.filter((p) => p.status && p.status !== ctx.view.state[p.slug]?.status)
+			.map(
+				(p) =>
+					`${nameOf(p.slug)} ${p.status === 'To print' ? 'goes back to' : 'becomes'} ${p.status}`
+			);
+	const sentence = (l: string[]) =>
+		l.length < 2 ? (l[0] ?? '') : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`;
+	/** Edit mode: parts whose status the saved edit would change. */
+	const editNext = $derived.by((): PrintRun | null => {
+		if (!editRun || !result) return null;
+		return {
+			...editRun,
+			result,
+			date: editDate || editRun.date,
+			grams: gramsShown === '' ? null : Number(gramsShown),
+			hours: hoursFromSeconds(durSeconds),
+			note: note.trim()
+		};
+	});
+	const editChanges = $derived.by(() => {
+		if (!editRun || !editNext) return [];
+		const touched = editNext.result !== editRun.result || editNext.date !== editRun.date;
+		if (!touched) return [];
+		const runs = ctx.view.runs
+			.map((r) => (r.id === editRun.id ? editNext : r))
+			.sort((a, b) => (a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1));
+		return statusChange(recomputeParts(ctx.view, runs, slugs));
+	});
+	const deleteChanges = $derived.by(() => {
+		if (!editRun) return [];
+		return statusChange(
+			recomputeParts(
+				ctx.view,
+				ctx.view.runs.filter((r) => r.id !== editRun.id),
+				slugs
+			)
+		);
+	});
+	const summary = $derived(
+		editRun
+			? editChanges.length
+				? `Saving: ${sentence(editChanges)}.`
+				: 'Saving changes the log only; part statuses stay as they are.'
+			: runOutcomeSummary(ctx.view, buildInput(result))
+	);
 	const canSave = $derived(!!result && !durInvalid && !gramsInvalid && !busy);
 
 	function recalc() {
@@ -119,11 +182,23 @@
 		grams = '';
 		gramsEdited = false;
 		durEdited = false;
+		confirmDelete = false;
+		keepStatuses = false;
+		editDate = today();
 		picked = slugs[0] ?? '';
 		error = null;
 		busy = false;
 		fin = toLocalInput(new Date());
 		dur = durText(elapsedSeconds(startedAt, new Date()));
+		if (editRun) {
+			result = editRun.result;
+			note = editRun.note;
+			grams = editRun.grams == null ? '' : String(editRun.grams);
+			gramsEdited = true;
+			dur = durText(editRun.hours == null ? null : Math.round(editRun.hours * 3600));
+			durEdited = true;
+			editDate = editRun.date;
+		}
 	}
 
 	$effect(() => {
@@ -152,11 +227,50 @@
 		return partOf(slugs[0])?.name ?? 'part';
 	}
 
+	async function remove() {
+		if (!editRun) return;
+		busy = true;
+		error = null;
+		try {
+			await deleteRun(ctx.id, editRun.id, { recompute: !keepStatuses });
+			await ctx.refresh();
+			open = false;
+			toasts.push('Print log deleted');
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'That did not delete.';
+			await ctx.refresh();
+		} finally {
+			busy = false;
+		}
+	}
+
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
 		if (!canSave || !result) return;
 		busy = true;
 		error = null;
+		if (editRun) {
+			const d = editNext;
+			if (!d) return;
+			const patch: Parameters<typeof updateRun>[2] = {};
+			if (d.result !== editRun.result) patch.result = d.result;
+			if (d.date !== editRun.date) patch.date = d.date;
+			if (d.grams !== editRun.grams) patch.grams = d.grams;
+			if (d.hours !== editRun.hours) patch.hours = d.hours;
+			if (d.note !== editRun.note) patch.note = d.note;
+			try {
+				if (Object.keys(patch).length) await updateRun(ctx.id, editRun.id, patch);
+				await ctx.refresh();
+				open = false;
+				toasts.push('Print log updated');
+			} catch (err) {
+				error = err instanceof Error ? err.message : 'That did not save.';
+				await ctx.refresh();
+			} finally {
+				busy = false;
+			}
+			return;
+		}
 		const input = { ...buildInput(result), result } as PrintRunInput;
 		const before = snapshotParts(ctx.view, slugs);
 		try {
@@ -219,19 +333,26 @@
 				</label>
 			{/if}
 
-			<label class="f" for="{uid}-fin"
-				>Finished at
-				<span class="inline">
-					<input
-						id="{uid}-fin"
-						type="datetime-local"
-						max={toLocalInput(new Date())}
-						value={fin}
-						onchange={(e) => setFin(e.currentTarget.value)}
-					/>
-					<button class="btn sm" type="button" onclick={setNow}>Now</button>
-				</span>
-			</label>
+			{#if editRun}
+				<label class="f" for="{uid}-date"
+					>Date
+					<input id="{uid}-date" type="date" max={today()} required bind:value={editDate} />
+				</label>
+			{:else}
+				<label class="f" for="{uid}-fin"
+					>Finished at
+					<span class="inline">
+						<input
+							id="{uid}-fin"
+							type="datetime-local"
+							max={toLocalInput(new Date())}
+							value={fin}
+							onchange={(e) => setFin(e.currentTarget.value)}
+						/>
+						<button class="btn sm" type="button" onclick={setNow}>Now</button>
+					</span>
+				</label>
+			{/if}
 
 			<label class="f" for="{uid}-dur"
 				>Total print time
@@ -287,7 +408,35 @@
 			</p>
 			{#if error}<p class="err" role="alert">{error}</p>{/if}
 
+			{#if editRun && confirmDelete}
+				<div class="confirm" role="alertdialog" aria-label="Confirm delete">
+					<p>
+						Delete this log?
+						{#if deleteChanges.length && !keepStatuses}{sentence(deleteChanges)}.{:else}Part
+							statuses stay as they are.{/if}
+					</p>
+					{#if deleteChanges.length}
+						<label class="chk"
+							><input type="checkbox" bind:checked={keepStatuses} /> Keep part statuses as they are</label
+						>
+					{/if}
+					<div class="row">
+						<button class="btn" type="button" onclick={() => (confirmDelete = false)}
+							>Keep it</button
+						>
+						<button class="btn danger" type="button" disabled={busy} onclick={remove}
+							>Delete log</button
+						>
+					</div>
+				</div>
+			{/if}
+
 			<footer>
+				{#if editRun && !confirmDelete}
+					<button class="btn danger del" type="button" onclick={() => (confirmDelete = true)}
+						>Delete</button
+					>
+				{/if}
 				<button class="btn" type="button" onclick={() => (open = false)}>Cancel</button>
 				<button class="btn primary" type="submit" disabled={!canSave}>Save</button>
 			</footer>
@@ -427,6 +576,35 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 8px;
+	}
+	.del {
+		margin-right: auto;
+	}
+	.confirm {
+		display: grid;
+		gap: 8px;
+		padding: 10px;
+		border-radius: 8px;
+		background: var(--bad-soft);
+		color: var(--ink);
+	}
+	.confirm p {
+		margin: 0;
+		font-size: 14px;
+	}
+	.confirm .row {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+	}
+	.chk {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		font-size: 13px;
+	}
+	.chk input {
+		width: auto;
 	}
 	@media (max-width: 760px) {
 		.sheet {

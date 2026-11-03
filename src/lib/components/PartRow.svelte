@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { PART_STATUSES, type PartDef } from '#lib/domain/types.ts';
+	import { PART_STATUSES, type PartDef, type PrintRun } from '#lib/domain/types.ts';
 	import { fmt, plateOf } from '#lib/domain/index.ts';
 	import { setPartStatus, updatePart, deleteRun } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
@@ -38,6 +38,8 @@
 	}
 
 	let logOpen = $state(false);
+	let editing = $state<PrintRun | null>(null);
+	let editOpen = $state(false);
 </script>
 
 <div class="row" data-s={st?.status} data-id={part.slug}>
@@ -172,6 +174,7 @@
 						runs={log}
 						canEdit={ctx.canEdit}
 						ondelete={(r) => ctx.act(() => deleteRun(ctx.id, r.id))}
+						onedit={(r) => ((editing = r), (editOpen = true))}
 					/>
 				{:else}
 					<div class="empty">
@@ -188,6 +191,7 @@
 						startedAt={st?.status === 'Printing' ? st.startedAt : null}
 						title="Log print: {part.name}"
 					/>
+					<LogRunSheet bind:open={editOpen} editRun={editing} />
 				{/if}
 			</div>
 		</div>

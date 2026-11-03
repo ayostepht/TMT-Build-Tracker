@@ -6,6 +6,7 @@
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import FilamentPicker from '#lib/components/FilamentPicker.svelte';
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
+	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
@@ -91,10 +92,17 @@
 				<input
 					type="number"
 					min="0"
-					step="0.01"
+					step="0.25"
+					inputmode="decimal"
 					value={f.spools}
 					disabled={!ctx.canEdit}
-					onchange={(e) => saveFil(f, { spools: Math.max(0, Number(e.currentTarget.value) || 0) })}
+					onchange={(e) =>
+						saveFil(f, {
+							spools: Math.min(
+								99,
+								Math.max(0, Math.round((Number(e.currentTarget.value) || 0) * 100) / 100)
+							)
+						})}
 				/></label
 			>
 		</div>
@@ -102,6 +110,7 @@
 </section>
 
 <MoveToChapter />
+<ImportPrototype />
 
 {#if ctx.view.role === 'owner'}
 	<section class="card danger-zone">

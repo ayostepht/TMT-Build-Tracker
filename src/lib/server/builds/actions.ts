@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import {
 	applyRun,
+	recomputeParts,
 	runTargets,
 	setPrintStart,
 	setRunEstimate,
@@ -15,6 +16,7 @@ import {
 	type BuildView,
 	type PartPatch,
 	type PartStatus,
+	type PrintRun,
 	type PrintRunInput
 } from '#lib/domain/types.ts';
 import { ApiError, buildAccess, requireEditor, requireOwner } from '../access';
@@ -287,8 +289,14 @@ export function addRun(db: Db, buildId: string, userId: string, body: unknown): 
 	return runId;
 }
 
-export function deleteRun(db: Db, buildId: string, userId: string, runId: string): void {
-	mutateBuild(db, buildId, userId, (tx) => {
+export function deleteRun(
+	db: Db,
+	buildId: string,
+	userId: string,
+	runId: string,
+	opts: { recompute?: boolean } = {}
+): void {
+	mutateBuild(db, buildId, userId, (tx, view) => {
 		const r = tx
 			.select()
 			.from(printRuns)
@@ -296,9 +304,24 @@ export function deleteRun(db: Db, buildId: string, userId: string, runId: string
 			.get();
 		if (!r) throw new ApiError(404, 'Run not found');
 		tx.delete(printRuns).where(eq(printRuns.id, runId)).run();
+		const patches =
+			opts.recompute === false
+				? []
+				: recomputeParts(
+						view,
+						view.runs.filter((x) => x.id !== runId),
+						runTargets(view, runFromRow(r))
+					);
 		return {
 			kind: 'run.delete',
-			payload: { runId, plateNumber: r.plateNumber, partSlug: r.partSlug, result: r.result }
+			payload: {
+				runId,
+				plateNumber: r.plateNumber,
+				partSlug: r.partSlug,
+				result: r.result,
+				recomputed: recomputedList(view, patches)
+			},
+			patches
 		};
 	});
 }
@@ -351,12 +374,12 @@ export function updateFilament(
 		if (body.spools !== undefined) {
 			if (
 				typeof body.spools !== 'number' ||
-				!Number.isInteger(body.spools) ||
+				!Number.isFinite(body.spools) ||
 				body.spools < 0 ||
 				body.spools > 99
 			)
-				bad('spools must be an integer 0-99');
-			set.spools = body.spools;
+				bad('spools must be a number from 0 to 99');
+			set.spools = Math.round(body.spools * 100) / 100;
 		}
 		for (const f of ['name', 'material'] as const) {
 			if (body[f] === undefined) continue;
@@ -495,4 +518,111 @@ export function moveBuild(db: Db, buildId: string, userId: string, body: unknown
 			.run();
 	});
 	publish(db, buildId, userId, 'build.move', now);
+}
+
+type RunRow = typeof printRuns.$inferSelect;
+
+function runFromRow(r: RunRow): PrintRun {
+	return {
+		id: r.id,
+		plateNumber: r.plateNumber,
+		partSlug: r.partSlug,
+		partSlugs: r.partSlugs ?? null,
+		date: r.date,
+		result: r.result as PrintRun['result'],
+		grams: r.grams,
+		hours: r.hours,
+		printer: r.printer,
+		userId: r.userId,
+		userName: null,
+		note: r.note
+	};
+}
+
+/** `[{ slug, from, to }]` for the patches that change a part's status (activity payload). */
+function recomputedList(view: BuildView, patches: PartPatch[]) {
+	return patches
+		.filter((p) => p.status !== undefined && p.status !== view.state[p.slug]?.status)
+		.map((p) => ({ slug: p.slug, from: view.state[p.slug].status, to: p.status as PartStatus }));
+}
+
+/**
+ * Correct a past print log. Changing result, part or date re-derives the status of the
+ * parts the run (before and after the edit) targets; grams, hours and note never do.
+ */
+export function updateRun(
+	db: Db,
+	buildId: string,
+	userId: string,
+	runId: string,
+	body: unknown
+): void {
+	if (!isObj(body)) bad('Invalid body');
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		const row = tx
+			.select()
+			.from(printRuns)
+			.where(and(eq(printRuns.id, runId), eq(printRuns.buildId, buildId)))
+			.get();
+		if (!row) throw new ApiError(404, 'Run not found');
+		const old = runFromRow(row);
+		const set: Partial<typeof printRuns.$inferInsert> = {};
+		const changed: Obj = {};
+		if (body.date !== undefined) {
+			set.date = dateStr(body.date, 'date');
+			changed.date = set.date;
+		}
+		if (body.result !== undefined) {
+			if (!(RUN_RESULTS as readonly unknown[]).includes(body.result)) bad('Unknown result');
+			set.result = body.result as string;
+			changed.result = set.result;
+		}
+		if (body.grams !== undefined) {
+			set.grams = optNum(body.grams, 'grams') ?? null;
+			changed.grams = set.grams;
+		}
+		if (body.hours !== undefined) {
+			set.hours = optNum(body.hours, 'hours') ?? null;
+			changed.hours = set.hours;
+		}
+		if (body.note !== undefined) {
+			if (typeof body.note !== 'string') bad('note must be a string');
+			set.note = body.note.slice(0, 2000);
+			changed.note = true;
+		}
+		if (body.partSlug !== undefined) {
+			const s = optStr(body.partSlug, 'partSlug') ?? null;
+			if (s && !view.state[s]) bad('Unknown part');
+			if (s === null && old.plateNumber === null) bad('A part log needs a part');
+			const pl =
+				old.plateNumber === null ? null : view.plates.find((x) => x.number === old.plateNumber);
+			if (s && pl && !pl.parts.includes(s)) bad('Part is not on this plate');
+			set.partSlug = s;
+			changed.newPartSlug = s;
+		}
+		if (!Object.keys(set).length) bad('Nothing to update');
+		tx.update(printRuns).set(set).where(eq(printRuns.id, runId)).run();
+
+		const next: PrintRun = { ...old, ...(set as Partial<PrintRun>) };
+		let patches: PartPatch[] = [];
+		if ('result' in set || 'partSlug' in set || 'date' in set) {
+			const runs = view.runs
+				.map((r) => (r.id === runId ? { ...next, userName: r.userName } : r))
+				.sort((a, b) => (a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1));
+			const slugs = [...new Set([...runTargets(view, old), ...runTargets(view, next)])];
+			patches = recomputeParts(view, runs, slugs);
+		}
+		return {
+			kind: 'run.update',
+			payload: {
+				runId,
+				plateNumber: next.plateNumber,
+				partSlug: next.partSlug,
+				partSlugs: next.partSlugs,
+				...changed,
+				recomputed: recomputedList(view, patches)
+			},
+			patches
+		};
+	});
 }

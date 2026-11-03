@@ -90,6 +90,15 @@ SvelteKit 3 specifics that trip people up:
   sign-up and lazily for legacy users in `src/lib/server/teams.ts`). Chapters
   are ordinary organizations and optional; personal workspaces can't take
   invitations; builds move personal → chapter via `POST /api/builds/[id]/move`
+- Run history is the source of truth for run-driven statuses:
+  `src/lib/domain/recompute.ts` (`recomputeParts`) replays a part's runs
+  through `applyRun`; `deleteRun`/`updateRun` recompute targeted parts
+  (`?recompute=0` to skip). Undo right after logging uses
+  `POST /api/builds/[id]/runs/[runId]/undo` with a client snapshot
+- Prototype import: pure converter `src/lib/domain/import-prototype.ts`,
+  server `src/lib/server/builds/import.ts` (`POST /api/builds/[id]/import`,
+  `?dryRun=1`), CLI bundled by `vite.cli.config.ts` into `build/cli/` and run
+  via `scripts/import-prototype.mjs` (see README); `scripts/bundle-prototype-export.mjs`
 - `src/lib/server/filaments/`: bundled SpoolmanDB catalog (`catalog.json`,
   MIT, attribution in `THIRD_PARTY.md`; refresh with `npm run
   filaments:update`), served by `/api/filaments*`; browser-safe helpers in
@@ -141,7 +150,7 @@ an empty data directory.
 ## Roadmap
 
 Milestones (each shippable): 1 scaffold (done) · 2 multi-build port of the prototype
-with tabs, teams and live updates (done) · 3 import from the original prototype · 4
+with tabs, teams and live updates (done) · 3 import from the original prototype (done) · 4
 live color prototyper + shareable designs · 5 3MF upload → plates · 6
 assembly + handoff · 7 Spoolman + printer adapters (Moonraker, OctoPrint,
 Bambu LAN) · 8 release (Unraid template, Community Apps). Update this line as

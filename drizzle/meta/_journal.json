@@ -15,6 +15,13 @@
       "when": 1793653264844,
       "tag": "0001_next_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793688861231,
+      "tag": "0002_rich_domino",
+      "breakpoints": true
     }
   ]
 }
