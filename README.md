@@ -24,14 +24,15 @@ Add a container with repository `ghcr.io/ayostepht/tmt-build-tracker:latest`, po
 
 ## Environment variables
 
-| Variable                                              | Description                                                                                    |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev.                |
-| `BETTER_AUTH_SECRET`                                  | Required in production. Generate with `openssl rand -base64 32`.                               |
-| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work. |
-| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button.        |
-| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                       |
-| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image.                            |
+| Variable                                              | Description                                                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev.                             |
+| `BETTER_AUTH_SECRET`                                  | Required in production. Generate with `openssl rand -base64 32`.                                            |
+| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work.              |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button.                     |
+| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                                    |
+| `ADMIN_EMAILS`                                        | Optional comma-separated emails that are site admins (kit and 3D model management), besides the first user. |
+| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image.                                         |
 
 For OIDC, register the redirect URI `<PUBLIC_URL>/api/auth/callback/oidc` with your provider.
 

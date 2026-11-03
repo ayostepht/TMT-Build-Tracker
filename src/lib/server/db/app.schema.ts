@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import type { VariantGroup } from '#lib/domain/types.ts';
 import { organization, user } from './auth.schema';
 
 const id = () =>
@@ -23,6 +24,10 @@ export const templates = sqliteTable('templates', {
 	globalSettings: text('global_settings').notNull().default(''),
 	sections: text('sections', { mode: 'json' })
 		.$type<string[]>()
+		.notNull()
+		.default(sql`'[]'`),
+	variantGroups: text('variant_groups', { mode: 'json' })
+		.$type<VariantGroup[]>()
 		.notNull()
 		.default(sql`'[]'`),
 	createdAt: createdAt()
@@ -124,6 +129,46 @@ export const templateHardware = sqliteTable(
 	(t) => [primaryKey({ columns: [t.templateId, t.name] })]
 );
 
+export const templatePartPlacements = sqliteTable(
+	'template_part_placements',
+	{
+		templateId: templateId(),
+		slug: text('slug').notNull(),
+		/** Column-major 4x4 (three.js order), mm. */
+		matrix: text('matrix', { mode: 'json' }).$type<number[]>().notNull(),
+		/** Extra instances, each a column-major 4x4. */
+		instances: text('instances', { mode: 'json' })
+			.$type<number[][]>()
+			.notNull()
+			.default(sql`'[]'`),
+		placed: integer('placed', { mode: 'boolean' }).notNull().default(false),
+		updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.slug] })]
+);
+
+/** The assembled 3D model of a template, built per install from uploaded STEP files. The GLB lives in the data volume (see uploadsDir()); this row records it. */
+export const templateModels = sqliteTable('template_models', {
+	templateId: text('template_id')
+		.primaryKey()
+		.references(() => templates.id, { onDelete: 'cascade' }),
+	glbPath: text('glb_path').notNull(),
+	/** Changes on every re-import; part of the model URL for cache busting. */
+	version: text('version').notNull(),
+	size: integer('size').notNull().default(0),
+	/** Part slugs present as nodes in the GLB. */
+	slugs: text('slugs', { mode: 'json' })
+		.$type<string[]>()
+		.notNull()
+		.default(sql`'[]'`),
+	sourceNote: text('source_note').notNull().default(''),
+	createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+	createdAt: createdAt()
+});
+
 // ---- Color designs
 
 export const colorDesigns = sqliteTable('color_designs', {
@@ -162,6 +207,8 @@ export const builds = sqliteTable(
 		phase: text('phase').notNull().default('design'),
 		deliveryDate: text('delivery_date'),
 		design: text('design', { mode: 'json' }).$type<Record<string, unknown>>(),
+		/** group key → option key; null on builds from before variants (= template defaults). */
+		variantChoices: text('variant_choices', { mode: 'json' }).$type<Record<string, string>>(),
 		createdBy: text('created_by')
 			.notNull()
 			.references(() => user.id),

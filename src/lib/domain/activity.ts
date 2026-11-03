@@ -2,7 +2,8 @@ import { fmt, fmtHM, fmtSpools } from './format.ts';
 import { filamentLabel } from './labels.ts';
 import type { ActivityItem, BuildView } from './types.ts';
 
-type Names = Pick<BuildView, 'parts' | 'filaments' | 'members' | 'runs'>;
+type Names = Pick<BuildView, 'parts' | 'filaments' | 'members' | 'runs'> &
+	Partial<Pick<BuildView, 'variantGroups'>>;
 type Obj = Record<string, unknown>;
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
@@ -61,6 +62,13 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			return str(p.toName)
 				? `${who} moved this build to ${str(p.toName)}`
 				: `${who} moved this build to a chapter`;
+		case 'build.variant': {
+			const g = view.variantGroups?.find((x) => x.key === p.group);
+			const o = g?.options.find((x) => x.key === p.to);
+			const gName = g?.name ?? str(p.groupName) ?? 'an option';
+			const oName = o?.name ?? str(p.toName) ?? 'another option';
+			return `${who} switched ${gName} to ${oName}`;
+		}
 		case 'part.status': {
 			const to = str(p.to);
 			return to

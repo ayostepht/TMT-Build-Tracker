@@ -72,7 +72,7 @@ describe('createBuild', () => {
 		expect(n(buildParts)).toBe(tpl.parts.length);
 		expect(n(buildPlates)).toBe(tpl.plates.length);
 		expect(n(buildFilaments)).toBe(tpl.filamentRoles.length);
-		expect(tpl.parts.length).toBe(33);
+		expect(tpl.parts.length).toBe(40);
 		expect(tpl.plates.length).toBe(24);
 		expect(tpl.filamentRoles.length).toBe(4);
 	});

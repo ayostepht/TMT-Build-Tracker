@@ -305,3 +305,21 @@ describe('grouping', () => {
 		expect(primaryOnly.every((g) => g.parts.every((p) => p.role === 'primary'))).toBe(true);
 	});
 });
+
+describe('variants and parts on no plate', () => {
+	it('a part on no plate is its own unit with one run', async () => {
+		const { units } = await import('./accounting.ts');
+		const v = makeView(undefined, 0, { footrest: 'two-piece', seat: 'bucket-seat' });
+		const us = units(v);
+		expect(us.find((u) => u.parts.some((p) => p.slug === 'footrest'))).toBeUndefined();
+		const front = us.find((u) => u.key === 'footrest-front')!;
+		expect(front).toMatchObject({ plate: 0, runs: 1 });
+		expect(us.find((u) => u.key === 'bucket-seat')).toBeDefined();
+		// every active part is in exactly one unit
+		const seen = us.flatMap((u) => u.parts.map((p) => p.slug)).sort();
+		expect(seen).toEqual(v.parts.map((p) => p.slug).sort());
+		// accounting does not blow up and counts only active parts
+		expect(filamentStats(v).every((f) => Number.isFinite(f.need))).toBe(true);
+		expect(overallProgress(v).total).toBe(v.parts.length);
+	});
+});

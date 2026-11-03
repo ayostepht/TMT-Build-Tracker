@@ -22,7 +22,11 @@ export const POST: RequestHandler = (event) =>
 				name: o.name as string,
 				recipient: str(o.recipient),
 				hospital: str(o.hospital),
-				deliveryDate: str(o.deliveryDate)
+				deliveryDate: str(o.deliveryDate),
+				variantChoices:
+					typeof o.variantChoices === 'object' && o.variantChoices !== null
+						? (o.variantChoices as Record<string, string>)
+						: null
 			},
 			userId
 		);

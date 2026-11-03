@@ -1,12 +1,21 @@
 /** Test helper: turns a template seed plus a color design into a BuildView with every part "To print". */
 import { tmtTemplate } from '../server/seed/tmt.ts';
 import type { TemplateSeed } from '../server/seed/types.ts';
+import { inactiveSlugs, resolveChoices, variantOfPart } from './variants.ts';
 import type { BuildView, PartState, PrintRun } from './types.ts';
 
-export function makeView(seed: TemplateSeed = tmtTemplate, designIndex = 0): BuildView {
+export function makeView(
+	seed: TemplateSeed = tmtTemplate,
+	designIndex = 0,
+	variantChoices: Record<string, string> = {}
+): BuildView {
 	const design = seed.designs[designIndex];
 	const t0 = '2026-01-01T00:00:00.000Z';
-	const parts = seed.parts.map((p, i) => ({
+	const groups = seed.variantGroups ?? [];
+	const choices = resolveChoices(groups, variantChoices);
+	const inactive = inactiveSlugs(groups, choices);
+	const variantOf = variantOfPart(groups);
+	const allParts = seed.parts.map((p, i) => ({
 		slug: p.slug,
 		name: p.name,
 		section: p.section,
@@ -22,9 +31,12 @@ export function makeView(seed: TemplateSeed = tmtTemplate, designIndex = 0): Bui
 		components: p.components ?? [],
 		allowedMaterials: p.allowedMaterials,
 		symmetryGroup: p.symmetryGroup ?? null,
+		variantGroup: variantOf.get(p.slug)?.group ?? null,
+		variantOption: variantOf.get(p.slug)?.option ?? null,
 		guideRefs: p.guideRefs,
 		sort: i
 	}));
+	const parts = allParts.filter((p) => !inactive.has(p.slug));
 	const state: Record<string, PartState> = {};
 	for (const p of parts) {
 		state[p.slug] = {
@@ -68,18 +80,24 @@ export function makeView(seed: TemplateSeed = tmtTemplate, designIndex = 0): Bui
 		})),
 		parts,
 		state,
-		plates: seed.plates.map((p) => ({
-			number: p.number,
-			name: p.name,
-			estSeconds: p.estSeconds,
-			runs: p.runs,
-			runNote: p.runNote ?? null,
-			perPartRuns: !!p.perPartRuns,
-			parts: p.parts,
-			slicerGrams: null,
-			slicerByPart: {},
-			thumbnailPath: null
-		})),
+		variantGroups: groups,
+		variantChoices: choices,
+		allParts,
+		model: null,
+		plates: seed.plates
+			.map((p) => ({
+				number: p.number,
+				name: p.name,
+				estSeconds: p.estSeconds,
+				runs: p.runs,
+				runNote: p.runNote ?? null,
+				perPartRuns: !!p.perPartRuns,
+				parts: p.parts.filter((s) => !inactive.has(s)),
+				slicerGrams: null,
+				slicerByPart: {},
+				thumbnailPath: null
+			}))
+			.filter((p) => p.parts.length > 0),
 		runs: [],
 		guidePages: [],
 		hardware: [],

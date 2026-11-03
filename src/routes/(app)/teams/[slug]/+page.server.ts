@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { APIError } from 'better-auth/api';
+import { inactiveSlugs } from '#lib/domain/variants.ts';
 import { normalizeRole, ApiError } from '#lib/server/access.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { createBuild } from '#lib/server/builds/create.ts';
@@ -13,6 +14,7 @@ import {
 	invitation,
 	member,
 	organization,
+	templateParts,
 	templates,
 	user
 } from '#lib/server/db/schema.ts';
@@ -48,22 +50,51 @@ export const load: PageServerLoad = async ({ params, locals, request }) => {
 		}
 	}
 
+	// Progress counts only the parts active under each build's variant choices.
+	const groupsByTemplate = new Map(
+		db
+			.select({ id: templates.id, groups: templates.variantGroups })
+			.from(templates)
+			.all()
+			.map((t) => [t.id, t.groups])
+	);
 	const buildRows = db
 		.select({
 			id: builds.id,
 			name: builds.name,
 			phase: builds.phase,
 			deliveryDate: builds.deliveryDate,
-			total: sql<number>`(select count(*) from ${buildParts} where ${buildParts.buildId} = ${builds.id})`,
-			printed: sql<number>`(select count(*) from ${buildParts} where ${buildParts.buildId} = ${builds.id} and ${buildParts.status} = 'Printed')`
+			templateId: builds.templateId,
+			choices: builds.variantChoices
 		})
 		.from(builds)
 		.where(eq(builds.organizationId, org.id))
 		.orderBy(sql`${builds.createdAt} desc`)
 		.all()
-		.map((b) => ({ ...b, progress: b.total ? Math.round((b.printed / b.total) * 100) : 0 }));
+		.map(({ templateId, choices, ...b }) => {
+			const off = inactiveSlugs(groupsByTemplate.get(templateId) ?? [], choices);
+			const rows = db
+				.select({ slug: buildParts.partSlug, status: buildParts.status })
+				.from(buildParts)
+				.where(eq(buildParts.buildId, b.id))
+				.all()
+				.filter((r) => !off.has(r.slug));
+			const total = rows.length;
+			const printed = rows.filter((r) => r.status === 'Printed').length;
+			return { ...b, total, printed, progress: total ? Math.round((printed / total) * 100) : 0 };
+		});
 
-	const tpls = db.select({ id: templates.id, name: templates.name }).from(templates).all();
+	const tpls = db
+		.select({ id: templates.id, name: templates.name, variantGroups: templates.variantGroups })
+		.from(templates)
+		.all();
+	const partNames = Object.fromEntries(
+		db
+			.select({ slug: templateParts.slug, name: templateParts.name })
+			.from(templateParts)
+			.all()
+			.map((p) => [p.slug, p.name])
+	);
 	const designs = db
 		.select({ id: colorDesigns.id, name: colorDesigns.name, templateId: colorDesigns.templateId })
 		.from(colorDesigns)
@@ -110,6 +141,7 @@ export const load: PageServerLoad = async ({ params, locals, request }) => {
 		canEdit: role !== 'viewer',
 		builds: buildRows,
 		templates: tpls,
+		partNames,
 		designs,
 		members,
 		invites
@@ -137,7 +169,12 @@ export const actions: Actions = {
 					name: s('name') ?? '',
 					recipient: s('recipient'),
 					hospital: s('hospital'),
-					deliveryDate: s('deliveryDate')
+					deliveryDate: s('deliveryDate'),
+					variantChoices: Object.fromEntries(
+						[...f.entries()]
+							.filter(([k, v]) => k.startsWith('variant:') && typeof v === 'string' && v)
+							.map(([k, v]) => [k.slice(8), v as string])
+					)
 				},
 				locals.user!.id
 			);

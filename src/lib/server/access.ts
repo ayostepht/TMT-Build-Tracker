@@ -1,7 +1,8 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { TeamRole } from '#lib/domain/types.ts';
 import type { Db } from './db';
-import { builds, member } from './db/schema';
+import { adminEmails } from './config';
+import { builds, member, user } from './db/schema';
 
 export class ApiError extends Error {
 	constructor(
@@ -65,4 +66,26 @@ export function buildAccess(
 	const role = getMemberRole(db, b.organizationId, userId);
 	if (!role) return null;
 	return { organizationId: b.organizationId, role, canEdit: canEditRole(role) };
+}
+
+/**
+ * Site admins manage install-wide things (template kits, 3D models). A site
+ * admin is the earliest-created user, or anyone whose email is listed in the
+ * comma-separated `ADMIN_EMAILS` env var (case-insensitive).
+ */
+export function isSiteAdmin(db: Db, u: { id: string; email?: string | null }): boolean {
+	const email = (u.email ?? '').trim().toLowerCase();
+	if (email && adminEmails().includes(email)) return true;
+	const first = db
+		.select({ id: user.id })
+		.from(user)
+		.orderBy(asc(user.createdAt), sql`rowid`)
+		.limit(1)
+		.get();
+	return first?.id === u.id;
+}
+
+/** Guard for site-admin endpoints and pages (caller must already be signed in): 404 for everyone else (does not reveal the admin area). */
+export function requireSiteAdmin(db: Db, u: { id: string; email?: string | null }): void {
+	if (!isSiteAdmin(db, u)) throw new ApiError(404, 'Not found');
 }

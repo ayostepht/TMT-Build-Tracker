@@ -61,6 +61,8 @@ export interface PartDef {
 	components: PartComponent[];
 	allowedMaterials: string[];
 	symmetryGroup: string | null;
+	variantGroup: string | null; // VariantGroup.key when this part belongs to a variant option
+	variantOption: string | null; // VariantOption.key
 	guideRefs: { page: number; text: string }[];
 	sort: number;
 }
@@ -152,13 +154,62 @@ export interface BuildSummary {
 	sections: string[];
 }
 
+/**
+ * Variants: a template may offer alternative parts for one function (e.g. seat:
+ * cushions OR foaming bucket seat). Each build chooses one option per group.
+ * Parts belonging to an option that is not chosen are excluded from
+ * `BuildView.parts`, `state`, `plates[].parts` (plates left empty are dropped)
+ * and all accounting. Parts with no variant group are always active.
+ */
+export interface VariantOption {
+	key: string; // e.g. 'cushions', 'bucket-seat'
+	name: string;
+	description: string;
+	parts: string[]; // part slugs used by this option
+}
+
+export interface VariantGroup {
+	key: string; // e.g. 'seat', 'rear-caster', 'footrest', 'rim'
+	name: string;
+	defaultOption: string;
+	options: VariantOption[];
+}
+
+/**
+ * Where a part sits in the template's assembled 3D model. Placement data
+ * (numbers only) may live in the seed; the model geometry never does: it is
+ * built per install from uploaded STEP files and served from the /data volume.
+ */
+export interface PartPlacement {
+	slug: string;
+	/** Column-major 4x4 matrix (three.js `Matrix4.fromArray` order), mm, y up. Identity when the STEP is already in the assembly frame. */
+	matrix: number[];
+	/** Extra instances (e.g. the mirrored right-hand copy, 4 rim halves, 16 tire segments), each a column-major 4x4 matrix. */
+	instances: number[][];
+	/** False when the part has no usable placement yet; the Design tab lists it below the 3D view instead. */
+	placed: boolean;
+}
+
+export interface TemplateModelInfo {
+	/** URL of the GLB served by the app (e.g. `/api/templates/<id>/model.glb?v=<hash>`); one node per part named by slug, hardware nodes named `hw:<name>`. */
+	url: string;
+	version: string; // hash or timestamp, for cache busting
+	placements: PartPlacement[];
+	/** Slugs present as nodes in the GLB. */
+	slugs: string[];
+}
+
 export interface BuildView {
 	build: BuildSummary;
 	role: TeamRole;
 	canEdit: boolean; // owner or editor
 	filaments: FilamentRole[];
-	parts: PartDef[]; // sorted by `sort`
-	state: Record<string, PartState>; // by part slug; every part has an entry
+	parts: PartDef[]; // active parts only (variant choices applied), sorted by `sort`
+	state: Record<string, PartState>; // by part slug; every active part has an entry
+	variantGroups: VariantGroup[]; // all groups with all options, for the chooser
+	variantChoices: Record<string, string>; // group key → chosen option key (every group present)
+	allParts: PartDef[]; // every template part incl. inactive variant options (Design tab, 3D view)
+	model: TemplateModelInfo | null; // null until a site admin imports the 3D model
 	plates: Plate[]; // sorted by number
 	runs: PrintRun[]; // oldest first
 	guidePages: GuidePage[];

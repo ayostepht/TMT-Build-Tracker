@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import { isSiteAdmin } from '#lib/server/access.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import {
@@ -40,6 +41,8 @@ export const load: LayoutServerLoad = async ({ locals, url, request }) => {
 		user: { id: locals.user.id, name: locals.user.name, email: locals.user.email },
 		teams,
 		activeTeamId,
+		/** Install-wide admin (first user or ADMIN_EMAILS): shows the "Kit admin" link. */
+		siteAdmin: isSiteAdmin(db, locals.user),
 		invitationCount: pendingInvitationCount(db, locals.user.email)
 	};
 };

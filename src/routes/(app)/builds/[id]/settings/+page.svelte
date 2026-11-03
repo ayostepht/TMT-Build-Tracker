@@ -2,11 +2,12 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { BUILD_PHASES, type BuildPhase, type FilamentRole } from '#lib/domain/types.ts';
-	import { updateBuild, updateFilament, deleteBuild } from '#lib/client/api.ts';
+	import { updateBuild, updateFilament, deleteBuild, setVariant } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import FilamentPicker from '#lib/components/FilamentPicker.svelte';
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
 	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
+	import VariantChooser from '#lib/components/VariantChooser.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
@@ -72,6 +73,22 @@
 		</div>
 	{/if}
 </form>
+
+{#if ctx.view.variantGroups.length}
+	<section class="card">
+		<h2>Options</h2>
+		<p class="muted">
+			Pick the parts this build uses. Progress on the other option is kept if you switch back.
+		</p>
+		<VariantChooser
+			groups={ctx.view.variantGroups}
+			choices={ctx.view.variantChoices}
+			partNames={Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name]))}
+			disabled={!ctx.canEdit}
+			onselect={(group, option) => ctx.act(() => setVariant(ctx.id, group, option))}
+		/>
+	</section>
+{/if}
 
 <section class="card">
 	<h2>Filament</h2>

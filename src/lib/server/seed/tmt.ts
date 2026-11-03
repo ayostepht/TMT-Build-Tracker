@@ -11,6 +11,15 @@ const NOEXT = "File has no extension; rename to .step if the slicer won't open i
 const NOSHEET = 'Not on the settings sheet: use the MakerWorld profile values.';
 const KITCASTER = 'KIT version for the kit rear caster. Not the non-KIT';
 
+// Column-major 4x4 matrices (three.js order), mm, y up, assembly frame of MakeGood's rendering file.
+const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+// Mirror across the x = 0 plane (negative determinant: the importer must flip triangle winding).
+const MIRROR_X = [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+// Hub cap STEP: axis along y, so rotate y to +x / -x and move the cap's own centre (0, 23.2, -0.1) to (+-231.4, 145, -300).
+const HUB_CAP_RIGHT = [0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 208.2, 145, -299.9, 1];
+const HUB_CAP_LEFT = [0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, -208.2, 144.9, -299.9, 1];
+const placedAtOrigin = (...slugs: string[]) => slugs.map((slug) => ({ slug, placed: true }));
+
 export const tmtTemplate: TemplateSeed = {
 	slug: 'makegood-tmt-revb',
 	name: 'MakeGood 3D TMT',
@@ -148,6 +157,24 @@ export const tmtTemplate: TemplateSeed = {
 			allowedMaterials: TPU,
 			guideRefs: [{ page: 23, text: 'Headrest cushion attaches with sticky velcro' }]
 		},
+		{
+			slug: 'bucket-seat',
+			name: 'Foaming TPU Bucket Seat',
+			section: 'Seat',
+			defaultRole: 'soft',
+			bomGrams: null,
+			qty: 1,
+			walls: 2,
+			infill: '10%',
+			supports: '',
+			sourceFile: 'TMT 3D Seat 280, With Slots REV 05.1.STEP',
+			notes: [
+				"Variant: replaces the two seat cushions. MakeGood's foaming TPU 90A profile: 2 walls, 10% infill, 1 top layer, 0.2 mm layers.",
+				'Weight and supports are not published; weigh it once printed.'
+			],
+			allowedMaterials: ['TPU 90A foaming'],
+			guideRefs: []
+		},
 
 		// ---- Frame
 		{
@@ -278,6 +305,38 @@ export const tmtTemplate: TemplateSeed = {
 					text: 'One-piece footrest: skip joining halves. Step 15: tighten bolts until visible in the slits'
 				}
 			]
+		},
+		{
+			slug: 'footrest-front',
+			name: 'Footrest Front',
+			section: 'Frame',
+			defaultRole: 'primary',
+			bomGrams: null,
+			qty: 1,
+			walls: 2,
+			infill: '15%',
+			supports: '',
+			sourceFile: '3DTMT I1 FOOTREST FRONT REV A.STEP',
+			notes: ['Variant: two-piece footrest, replaces the one-piece footrest. Join the two halves.'],
+			allowedMaterials: PETG,
+			symmetryGroup: 'footrest-halves',
+			guideRefs: [{ page: 17, text: 'Steps 13-16: join the footrest halves' }]
+		},
+		{
+			slug: 'footrest-rear',
+			name: 'Footrest Rear',
+			section: 'Frame',
+			defaultRole: 'primary',
+			bomGrams: null,
+			qty: 1,
+			walls: 2,
+			infill: '15%',
+			supports: '',
+			sourceFile: '3DTMT I2 FOOTREST REAR REV A.STEP',
+			notes: ['Variant: two-piece footrest, replaces the one-piece footrest. Join the two halves.'],
+			allowedMaterials: PETG,
+			symmetryGroup: 'footrest-halves',
+			guideRefs: [{ page: 17, text: 'Steps 13-16: join the footrest halves' }]
 		},
 		{
 			slug: 'storage-left',
@@ -620,6 +679,44 @@ export const tmtTemplate: TemplateSeed = {
 			]
 		},
 		{
+			slug: 'rims-small-1-4',
+			name: 'Smaller Wheel Rims 1 and 4',
+			section: 'Wheels',
+			defaultRole: 'accent',
+			bomGrams: null,
+			qty: 2,
+			walls: 2,
+			infill: '15%',
+			supports: 'Yes',
+			sourceFile: '3DTMT O WHEEL RIM REV A.STEP',
+			notes: [
+				"Variant: smaller wheel, replaces the standard rims. MakeGood's plate 20 prints 4 halves; print 2 in the Accent color.",
+				'Weight, walls and supports follow the standard rim until measured.'
+			],
+			allowedMaterials: PETG,
+			symmetryGroup: 'rims-small',
+			guideRefs: [{ page: 19, text: 'Steps 21-24: handgrips on the outside' }]
+		},
+		{
+			slug: 'rims-small-2-3',
+			name: 'Smaller Wheel Rims 2 and 3',
+			section: 'Wheels',
+			defaultRole: 'primary',
+			bomGrams: null,
+			qty: 2,
+			walls: 2,
+			infill: '15%',
+			supports: 'Yes',
+			sourceFile: '3DTMT O WHEEL RIM REV A.STEP',
+			notes: [
+				"Variant: smaller wheel, replaces the standard rims. MakeGood's plate 20 prints 4 halves; print 2 in the Primary color.",
+				'Weight, walls and supports follow the standard rim until measured.'
+			],
+			allowedMaterials: PETG,
+			symmetryGroup: 'rims-small',
+			guideRefs: [{ page: 19, text: 'Steps 21-24: handgrips on the outside' }]
+		},
+		{
 			slug: 'hub-caps',
 			name: 'Hub Caps',
 			section: 'Wheels',
@@ -681,6 +778,38 @@ export const tmtTemplate: TemplateSeed = {
 			notes: [`${KITCASTER} E2 file.`],
 			allowedMaterials: PETG,
 			symmetryGroup: 'rear-caster-mount',
+			guideRefs: [{ page: 15, text: 'Steps 6-8: rear caster mounts' }]
+		},
+		{
+			slug: 'rear-caster-left-mcmaster',
+			name: 'Rear Caster Mount Left (McMaster)',
+			section: 'Wheels',
+			defaultRole: 'primary',
+			bomGrams: null,
+			qty: 1,
+			walls: 4,
+			infill: '20%',
+			supports: 'Yes',
+			sourceFile: '3DTMT E1 CASTER MOUNT REAR LEFT REV A.STEP',
+			notes: ['Variant: for the McMaster-Carr caster instead of the kit caster. E1 file.'],
+			allowedMaterials: PETG,
+			symmetryGroup: 'rear-caster-mount-mcmaster',
+			guideRefs: [{ page: 15, text: 'Steps 6-8: rear caster mounts' }]
+		},
+		{
+			slug: 'rear-caster-right-mcmaster',
+			name: 'Rear Caster Mount Right (McMaster)',
+			section: 'Wheels',
+			defaultRole: 'primary',
+			bomGrams: null,
+			qty: 1,
+			walls: 4,
+			infill: '20%',
+			supports: 'Yes',
+			sourceFile: '3DTMT E2 CASTER MOUNT REAR RIGHT REV A.STEP',
+			notes: ['Variant: for the McMaster-Carr caster instead of the kit caster. E2 file.'],
+			allowedMaterials: PETG,
+			symmetryGroup: 'rear-caster-mount-mcmaster',
 			guideRefs: [{ page: 15, text: 'Steps 6-8: rear caster mounts' }]
 		}
 	],
@@ -851,5 +980,141 @@ export const tmtTemplate: TemplateSeed = {
 				'rear-caster-right': 'primary'
 			}
 		}
+	],
+	variantGroups: [
+		{
+			key: 'seat',
+			name: 'Seat',
+			defaultOption: 'cushions',
+			options: [
+				{
+					key: 'cushions',
+					name: 'Cushions',
+					description: 'Two TPU cushions (base and back) stuck on with velcro.',
+					parts: ['cushion-top', 'cushion-base']
+				},
+				{
+					key: 'bucket-seat',
+					name: 'Foaming TPU bucket seat',
+					description:
+						'One foaming TPU 90A seat shell instead of the two cushions. The soft headrest cushion stays.',
+					parts: ['bucket-seat']
+				}
+			]
+		},
+		{
+			key: 'rear-caster',
+			name: 'Rear caster',
+			defaultOption: 'kit',
+			options: [
+				{
+					key: 'kit',
+					name: 'Kit caster',
+					description: 'Mounts for the caster that comes in the MakeGood hardware kit.',
+					parts: ['rear-caster-left', 'rear-caster-right']
+				},
+				{
+					key: 'mcmaster',
+					name: 'McMaster caster',
+					description: 'Mounts for the McMaster-Carr caster you buy yourself.',
+					parts: ['rear-caster-left-mcmaster', 'rear-caster-right-mcmaster']
+				}
+			]
+		},
+		{
+			key: 'footrest',
+			name: 'Footrest',
+			defaultOption: 'one-piece',
+			options: [
+				{
+					key: 'one-piece',
+					name: 'One piece',
+					description: 'A single large print; needs a big enough printer bed.',
+					parts: ['footrest']
+				},
+				{
+					key: 'two-piece',
+					name: 'Two pieces',
+					description: 'Front and rear halves that are joined at assembly; fits smaller printers.',
+					parts: ['footrest-front', 'footrest-rear']
+				}
+			]
+		},
+		{
+			key: 'rim',
+			name: 'Wheel rim',
+			defaultOption: 'standard',
+			options: [
+				{
+					key: 'standard',
+					name: 'Standard rims',
+					description: 'Rim REV B, four halves in two colors.',
+					parts: ['rims-1-4', 'rims-2-3']
+				},
+				{
+					key: 'smaller',
+					name: 'Smaller rims',
+					description:
+						'Rim REV A, a smaller wheel for printers with a smaller bed; four halves in two colors.',
+					parts: ['rims-small-1-4', 'rims-small-2-3']
+				}
+			]
+		}
+	],
+	// Placements from the STEP/assembly spike (numbers only; the geometry is imported per install).
+	// Identity means the part's STEP file already sits in the assembly frame.
+	// Wheel axis for later manual placement of rims and tires: along x, centres x = +-208.3, y = 145, z = -300.
+	// Not placed: no STEP in the assembly frame or not measured. The variant parts (bucket seat, two-piece
+	// footrest, McMaster rear casters, smaller rims) were not measured in the spike, so they are not placed
+	// yet; they also sit on no plate until Milestone 5 adds per-printer plate layouts.
+	placements: [
+		...placedAtOrigin(
+			'seat-center',
+			'seat-back-top',
+			'seat-back-bottom',
+			'wing-left',
+			'wing-right',
+			'wheel-mount-left',
+			'wheel-mount-right',
+			'handle-left',
+			'handle-right',
+			'storage-left',
+			'storage-right',
+			'cushion-top',
+			'cushion-base',
+			'rear-caster-left',
+			'rear-caster-right',
+			'footrest', // about 2 mm off the assembly, fine
+			'push-top',
+			'push-bottom',
+			'push-pin',
+			'headrest-mount' // plausible, not verified
+		),
+		// Single brace at x = -46 (the file spans x -92..0). A mirrored second brace is not supported by the data.
+		{ slug: 'push-brace', matrix: IDENTITY, placed: true },
+		// Derived from the assembly: hub caps at x = +-231.4 on the wheel axis.
+		{ slug: 'hub-caps', matrix: HUB_CAP_RIGHT, instances: [HUB_CAP_LEFT], placed: true },
+		// GUESS: the connector files (J frame pin, L front caster pin, M pin lock, N wheel block) are identity,
+		// and the second instance mirrors all of them across x = 0. Exact for J, L and M; N may be off by 0.5 mm.
+		{ slug: 'connectors', matrix: IDENTITY, instances: [MIRROR_X], placed: true },
+		...[
+			'push-grip',
+			'soft-headrest',
+			'headrest-brace',
+			'headrest-bolt',
+			'front-caster-mount',
+			'buckles',
+			'harness',
+			'rims-1-4',
+			'rims-2-3',
+			'tires',
+			'bucket-seat',
+			'footrest-front',
+			'footrest-rear',
+			'rear-caster-left-mcmaster',
+			'rear-caster-right-mcmaster',
+			'rims-small-1-4',
+			'rims-small-2-3'
+		].map((slug) => ({ slug, matrix: IDENTITY, placed: false }))
 	]
 };

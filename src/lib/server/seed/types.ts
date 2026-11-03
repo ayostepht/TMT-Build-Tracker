@@ -58,6 +58,28 @@ export interface ColorDesignSeed {
 	roles: { key: string; name: string; material: string; hex: string }[];
 	partRoles: Record<string, string>;
 }
+export interface VariantOptionSeed {
+	key: string;
+	name: string;
+	description: string;
+	/** Part slugs used by this option. A part belongs to at most one option; `PartDef.variantGroup/variantOption` are derived from this. */
+	parts: string[];
+}
+export interface VariantGroupSeed {
+	key: string;
+	name: string;
+	defaultOption: string;
+	options: VariantOptionSeed[];
+}
+/** Where a part sits in the assembled model (numbers only, no geometry). Matrices are column-major 4x4 (three.js order), mm, y up. */
+export interface PlacementSeed {
+	slug: string;
+	/** Defaults to identity (the STEP file is already in the assembly frame). */
+	matrix?: number[];
+	/** Extra instances (mirrored copies, repeated segments). */
+	instances?: number[][];
+	placed: boolean;
+}
 export interface TemplateSeed {
 	slug: string;
 	name: string;
@@ -72,4 +94,8 @@ export interface TemplateSeed {
 	guidePages: GuidePageSeed[];
 	hardware: HardwareSeed[];
 	designs: ColorDesignSeed[];
+	/** Alternative parts for one function; omit for kits without options. */
+	variantGroups?: VariantGroupSeed[];
+	/** Placements of parts in the assembled model; parts without an entry are treated as not placed. */
+	placements?: PlacementSeed[];
 }

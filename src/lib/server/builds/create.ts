@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import { ApiError, requireEditor } from '../access';
 import type { Db } from '../db';
 import {
@@ -22,6 +23,8 @@ export interface CreateBuildInput {
 	recipient?: string | null;
 	hospital?: string | null;
 	deliveryDate?: string | null;
+	/** group key → option key; groups left out get the template default. Unknown keys are rejected. */
+	variantChoices?: Record<string, string> | null;
 }
 
 /** Create a build from a template (and optional color design) in one transaction. Returns the new id. */
@@ -35,6 +38,10 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 	return db.transaction((tx) => {
 		const tpl = tx.select().from(templates).where(eq(templates.id, input.templateId)).get();
 		if (!tpl) throw new ApiError(400, 'Unknown template');
+
+		const choices = input.variantChoices ?? {};
+		const badChoice = validateChoices(tpl.variantGroups, choices);
+		if (badChoice) throw new ApiError(400, badChoice);
 
 		let design: typeof colorDesigns.$inferSelect | undefined;
 		if (input.designId) {
@@ -62,6 +69,7 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 							partRoles: design.partRoles
 						}
 					: null,
+				variantChoices: resolveChoices(tpl.variantGroups, choices),
 				createdBy: userId
 			})
 			.returning({ id: builds.id })
@@ -85,6 +93,7 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 				})
 				.run();
 		}
+		// Rows for every part, active or not, so switching variants keeps any progress.
 		for (const p of tx
 			.select({ slug: templateParts.slug })
 			.from(templateParts)

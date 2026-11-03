@@ -1,4 +1,5 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
+import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
 	ActivityItem,
 	BuildPhase,
@@ -7,9 +8,11 @@ import type {
 	PartPatch,
 	PartState,
 	PartStatus,
+	PartPlacement,
 	Plate,
 	PrintRun,
-	RunResult
+	RunResult,
+	TemplateModelInfo
 } from '#lib/domain/types.ts';
 import { buildAccess } from '../access';
 import type { Db } from '../db';
@@ -24,6 +27,8 @@ import {
 	templateFilamentRoles,
 	templateGuidePages,
 	templateHardware,
+	templateModels,
+	templatePartPlacements,
 	templateParts,
 	templatePlates,
 	templates,
@@ -72,7 +77,12 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 	const order = [...tRoles.keys()];
 	filaments.sort((a, c) => order.indexOf(a.key) - order.indexOf(c.key));
 
-	const parts: PartDef[] = db
+	const variantGroups = tpl.variantGroups ?? [];
+	const variantChoices = resolveChoices(variantGroups, b.variantChoices);
+	const inactive = inactiveSlugs(variantGroups, variantChoices);
+	const variantOf = variantOfPart(variantGroups);
+
+	const allParts: PartDef[] = db
 		.select()
 		.from(templateParts)
 		.where(eq(templateParts.templateId, tpl.id))
@@ -94,12 +104,16 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			components: p.components,
 			allowedMaterials: p.allowedMaterials,
 			symmetryGroup: p.symmetryGroup,
+			variantGroup: variantOf.get(p.slug)?.group ?? null,
+			variantOption: variantOf.get(p.slug)?.option ?? null,
 			guideRefs: p.guideRefs,
 			sort: p.sort
 		}));
+	const parts = allParts.filter((p) => !inactive.has(p.slug));
 
 	const state: Record<string, PartState> = {};
 	for (const s of db.select().from(buildParts).where(eq(buildParts.buildId, buildId)).all()) {
+		if (inactive.has(s.partSlug)) continue;
 		state[s.partSlug] = {
 			slug: s.partSlug,
 			status: s.status as PartStatus,
@@ -109,6 +123,19 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			comps: s.comps,
 			assigneeUserId: s.assigneeUserId,
 			updatedAt: s.updatedAt.toISOString()
+		};
+	}
+	// Builds from before a part existed may lack a row until the next startup backfill.
+	for (const p of parts) {
+		state[p.slug] ??= {
+			slug: p.slug,
+			status: 'To print',
+			startedAt: null,
+			printedOn: null,
+			runEstSeconds: null,
+			comps: {},
+			assigneeUserId: null,
+			updatedAt: b.createdAt.toISOString()
 		};
 	}
 
@@ -137,7 +164,9 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			slicerGrams: p.slicerGrams,
 			slicerByPart: p.slicerByPart,
 			thumbnailPath: p.thumbnailPath
-		}));
+		}))
+		.map((p) => ({ ...p, parts: p.parts.filter((s) => !inactive.has(s)) }))
+		.filter((p) => p.parts.length > 0);
 
 	const runs: PrintRun[] = db
 		.select({ r: printRuns, userName: user.name })
@@ -186,6 +215,30 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		.all()
 		.map((m) => ({ userId: m.userId, name: m.name, role: normalizeRole(m.role) }));
 
+	const modelRow = db
+		.select()
+		.from(templateModels)
+		.where(eq(templateModels.templateId, tpl.id))
+		.get();
+	const model: TemplateModelInfo | null = modelRow
+		? {
+				url: `/api/templates/${encodeURIComponent(tpl.id)}/model.glb?v=${encodeURIComponent(modelRow.version)}`,
+				version: modelRow.version,
+				placements: db
+					.select()
+					.from(templatePartPlacements)
+					.where(eq(templatePartPlacements.templateId, tpl.id))
+					.all()
+					.map((r): PartPlacement => ({
+						slug: r.slug,
+						matrix: r.matrix,
+						instances: r.instances,
+						placed: r.placed
+					})),
+				slugs: modelRow.slugs
+			}
+		: null;
+
 	return {
 		build: {
 			id: b.id,
@@ -207,6 +260,10 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		filaments,
 		parts,
 		state,
+		variantGroups,
+		variantChoices,
+		allParts,
+		model,
 		plates,
 		runs,
 		guidePages: db

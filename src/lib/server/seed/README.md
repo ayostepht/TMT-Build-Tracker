@@ -11,6 +11,8 @@ Each file here describes one printable kit as a `TemplateSeed` (see `types.ts`).
 - **guidePages**: page number, title and display order (`sort`).
 - **hardware**: purchased or non-printed items. `qty` is only set when the source states it.
 - **designs**: named color schemes. Each maps every part slug to a role key and gives the role a brand-specific name, material and hex.
+- **variantGroups** (optional): alternatives for one function, for example seat cushions or a bucket seat. Each group has a `defaultOption` and options listing the part `slugs` they use; a part belongs to at most one option, and parts in no option are always used. A build picks one option per group and parts of the other options are left out of its parts, plates and totals.
+- **placements** (optional): where each part sits in the assembled 3D model: a column-major 4x4 `matrix` (identity when the STEP file is already in the assembly frame), extra `instances` (mirrored copies), and `placed`. Numbers only; the model geometry is imported per install and never stored in the repo.
 
 ## Adding a kit
 

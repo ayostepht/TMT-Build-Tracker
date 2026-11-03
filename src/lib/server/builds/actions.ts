@@ -626,3 +626,27 @@ export function updateRun(
 		};
 	});
 }
+
+/**
+ * Switch a build's choice for one variant group. Progress rows of the options not
+ * chosen stay in the database, so switching back restores them.
+ */
+export function setVariant(db: Db, buildId: string, userId: string, body: unknown): void {
+	if (!isObj(body) || typeof body.group !== 'string' || typeof body.option !== 'string')
+		bad('group and option are required');
+	const { group, option } = body as { group: string; option: string };
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		const g = view.variantGroups.find((x) => x.key === group);
+		if (!g) bad('Unknown variant group');
+		const o = g.options.find((x) => x.key === option);
+		if (!o) bad('Unknown option');
+		const from = view.variantChoices[group];
+		if (from === option) bad('Already selected');
+		const choices = { ...view.variantChoices, [group]: option };
+		tx.update(builds).set({ variantChoices: choices }).where(eq(builds.id, buildId)).run();
+		return {
+			kind: 'build.variant',
+			payload: { group, groupName: g.name, from, to: option, toName: o.name }
+		};
+	});
+}

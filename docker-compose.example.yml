@@ -14,6 +14,9 @@ services:
       # PUBLIC_URL: https://tmt.example.com
       # Generate with: openssl rand -base64 32
       BETTER_AUTH_SECRET: change-me
+      # Optional. Comma-separated emails that are site admins (template kits, 3D models)
+      # in addition to the first account created on this install.
+      # ADMIN_EMAILS: you@example.com
       # Optional OIDC single sign-on (all three required to enable)
       # OIDC_ISSUER: https://auth.example.com/application/o/tmt/
       # OIDC_CLIENT_ID: ""

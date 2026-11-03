@@ -48,6 +48,9 @@
 			{/if}
 		</div>
 		<div class="who">
+			{#if data.siteAdmin}
+				<a class="muted" href={resolve('/(app)/admin/templates')}>Kit admin</a>
+			{/if}
 			{#if !showSwitcher}
 				<a class="muted" href={resolve('/(app)/onboarding')}>Create a chapter</a>
 			{/if}

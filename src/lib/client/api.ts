@@ -31,6 +31,7 @@ export interface NewBuildInput {
 	recipient?: string | null;
 	hospital?: string | null;
 	deliveryDate?: string | null;
+	variantChoices?: Record<string, string>;
 }
 export const createBuild = (input: NewBuildInput) =>
 	call<{ id: string }>('POST', '/api/builds', input).then((r) => r.id);
@@ -48,6 +49,10 @@ export const updateBuild = (
 export const deleteBuild = (id: string) => call('DELETE', b(id));
 export const moveBuild = (id: string, organizationId: string) =>
 	call('POST', `${b(id)}/move`, { organizationId });
+
+/** Choose a variant option (group key, option key) for a build. */
+export const setVariant = (id: string, group: string, option: string) =>
+	call('PATCH', `${b(id)}/variants`, { group, option });
 
 export const setPartStatus = (id: string, slug: string, status: PartStatus) =>
 	call('POST', `${b(id)}/parts/${encodeURIComponent(slug)}/status`, { status });

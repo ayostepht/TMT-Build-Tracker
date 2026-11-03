@@ -3,12 +3,19 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import type { PageProps } from './$types';
+	import VariantChooser from '#lib/components/VariantChooser.svelte';
 
 	let { data, form }: PageProps = $props();
 	let templateId = $state('');
 	$effect(() => {
 		if (!templateId) templateId = data.templates[0]?.id ?? '';
 	});
+	let choices = $state<Record<string, string>>({});
+	$effect(() => {
+		void templateId;
+		choices = {};
+	});
+	const template = $derived(data.templates.find((t) => t.id === templateId));
 	const designs = $derived(data.designs.filter((d) => d.templateId === templateId));
 	const isOwner = $derived(data.role === 'owner');
 	const inviteUrl = (id: string) => `${page.url.origin}/invite/${id}`;
@@ -52,6 +59,15 @@
 					{#each designs as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
 				</select>
 			</label>
+			{#key templateId}
+				<VariantChooser
+					groups={template?.variantGroups ?? []}
+					{choices}
+					partNames={data.partNames}
+					fieldPrefix="variant:"
+					onselect={(g, o) => (choices = { ...choices, [g]: o })}
+				/>
+			{/key}
 			<label class="field">Recipient (optional)<input name="recipient" /></label>
 			<label class="field">Hospital (optional)<input name="hospital" /></label>
 			<label class="field">Delivery date (optional)<input type="date" name="deliveryDate" /></label>

@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 // Runtime configuration read from environment variables. Kept free of SvelteKit
 // imports so it can be used from tests and tooling.
 const env = process.env;
@@ -53,4 +55,28 @@ export function oidcConfig(): OidcConfig | null {
 		clientSecret: OIDC_CLIENT_SECRET,
 		providerName: OIDC_PROVIDER_NAME || 'SSO'
 	};
+}
+
+/** Directory holding the database file (the `/data` volume in Docker). `:memory:` databases use the OS temp dir. */
+export function dataDir(): string {
+	const url = databaseUrl();
+	return url === ':memory:' ? tmpdir() : dirname(resolve(url));
+}
+
+/** Where user-imported files live (never in git): `<dataDir>/uploads`. */
+export function uploadsDir(): string {
+	return join(dataDir(), 'uploads');
+}
+
+/** Absolute path of the assembled model GLB for a template: `<uploadsDir>/models/<templateId>.glb`. */
+export function templateModelPath(templateId: string): string {
+	return join(uploadsDir(), 'models', `${templateId}.glb`);
+}
+
+/** Lower-cased emails in `ADMIN_EMAILS` (comma-separated) that count as site admins. */
+export function adminEmails(): string[] {
+	return (env.ADMIN_EMAILS ?? '')
+		.split(',')
+		.map((e) => e.trim().toLowerCase())
+		.filter(Boolean);
 }
