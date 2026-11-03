@@ -5,6 +5,7 @@
  */
 import type { Pt } from './geom2d.ts';
 import type { OrientData } from './orient.ts';
+import type { PieceSilhouettes } from './silhouette.ts';
 
 /** One distinct printed object of a part (connectors have several, a wing one). */
 export interface PrintPiece {
@@ -28,6 +29,8 @@ export interface PrintPiece {
 	paint?: { supports: number; seam: number };
 	/** Alternative resting poses for beds the profile orientation does not fit (imported geometry only; computed on import or on first use). */
 	orient?: OrientData;
+	/** True top-down outlines (profile orientation and one per pose); computed on import or on first use. */
+	sil?: PieceSilhouettes;
 }
 
 /** Everything the arranger needs to know about one part's geometry. */

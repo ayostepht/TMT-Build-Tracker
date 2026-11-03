@@ -1,172 +1,408 @@
 <script lang="ts">
-	import { placedHull, type ArrangedPlate } from '#lib/domain/arrange.ts';
+	import type { ArrangedPlate } from '#lib/domain/arrange.ts';
+	import type { LegendRow } from '#lib/domain/plate-legend.ts';
+	import {
+		edgeColor,
+		placeRings,
+		ringsToPath,
+		roundedRectPath,
+		type Silhouette
+	} from '#lib/domain/silhouette.ts';
 	import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 
 	/**
-	 * Top view of one arranged plate: the bed, the edge margin and each part's outline
-	 * (hull when known, else its box) at its planned position, colored by filament and
-	 * labelled. Presentational; y points up on the bed so the SVG flips it.
+	 * Top view of one arranged plate, drawn like a slicer's plate preview: a textured build
+	 * plate with a grid, each part as its real outline (holes included) in its filament color
+	 * with a soft shadow, and a numbered badge at the most "inside" point of every piece. The
+	 * numbers match the legend next to it. Pieces without a known mesh are drawn as dashed
+	 * rounded boxes ("approximate"). Presentational; bed y points up, so the SVG flips it.
 	 */
 	let {
 		plate,
 		footprints,
+		silhouettes = {},
+		rows,
 		colorOf,
-		labelOf
+		active = null,
+		onactive,
+		onselect
 	}: {
 		plate: ArrangedPlate;
 		footprints: Record<string, PrintFootprint>;
+		silhouettes?: Record<string, Silhouette>;
+		rows: LegendRow[];
 		colorOf: (role: string) => string;
-		labelOf: (slug: string) => string;
+		/** Slug of the highlighted part (hover or pinned from the legend). */
+		active?: string | null;
+		onactive?: (slug: string | null) => void;
+		onselect?: (slug: string) => void;
 	} = $props();
 
+	const uid = $props.id();
 	const bed = $derived(plate.bed);
-	// extra room around the bed so oversize parts are visible
-	const pad = $derived(plate.oversize ? 40 : 6);
+	// extra room around the bed so oversize parts are visible; labels live in the bottom strip
+	const pad = $derived(plate.oversize ? 40 : 7);
+	const footer = 15;
+	const scale = $derived(Math.max(1, Math.max(bed.x, bed.y) / 256));
+	const numberOf = $derived(new Map(rows.map((r) => [r.slug, r])));
+
+	const grid = $derived.by(() => {
+		let minor = '';
+		let major = '';
+		for (let x = 10; x < bed.x; x += 10)
+			if (x % 50 === 0) major += `M${x} 0V${bed.y}`;
+			else minor += `M${x} 0V${bed.y}`;
+		for (let y = 10; y < bed.y; y += 10) {
+			const sy = bed.y - y;
+			if (y % 50 === 0) major += `M0 ${sy}H${bed.x}`;
+			else minor += `M0 ${sy}H${bed.x}`;
+		}
+		return { minor, major };
+	});
+
 	const shapes = $derived(
-		plate.items.map((it) => {
+		plate.items.map((it, i) => {
+			const sil = it.sil ? silhouettes[it.sil] : undefined;
 			const piece = footprints[it.slug]?.pieces[it.piece];
-			// A re-oriented item carries the outline of its own pose
-			const src = it.pose?.hull?.length ? it.pose.hull : piece?.hull;
-			const hull = src?.length
-				? placedHull(src, it.rotation)
-				: ([
-						[-it.w / 2, -it.d / 2],
-						[it.w / 2, -it.d / 2],
-						[it.w / 2, it.d / 2],
-						[-it.w / 2, it.d / 2]
-					] as [number, number][]);
-			// For an oversize part the box can exceed the bed; draw the unrotated footprint box
-			const pts = (
-				plate.oversize && piece && !it.pose
-					? [
-							[-piece.w / 2, -piece.d / 2],
-							[piece.w / 2, -piece.d / 2],
-							[piece.w / 2, piece.d / 2],
-							[-piece.w / 2, piece.d / 2]
-						]
-					: hull
-			).map(
-				([x, y]) =>
-					`${(it.x - (it.ox ?? 0) + x).toFixed(1)},${(bed.y - (it.y - (it.oy ?? 0) + y)).toFixed(1)}`
-			);
-			return { it, points: pts.join(' ') };
+			// For an oversize part the box can exceed the bed: draw it unrotated
+			const flat = plate.oversize && !it.pose;
+			const rot = flat ? 0 : it.rotation;
+			const dx = it.x - (flat ? 0 : (it.ox ?? 0));
+			const dy = it.y - (flat ? 0 : (it.oy ?? 0));
+			let d: string;
+			let pole: [number, number];
+			let inr: number;
+			if (sil) {
+				d = ringsToPath(placeRings(sil.rings, rot, dx, dy), bed.y);
+				const p = placeRings([[sil.pole]], rot, dx, dy)[0][0];
+				pole = [p[0], bed.y - p[1]];
+				inr = sil.r;
+			} else {
+				const w = flat && piece ? piece.w : it.w;
+				const dd = flat && piece ? piece.d : it.d;
+				d = roundedRectPath(it.x, bed.y - it.y, w, dd);
+				pole = [it.x, bed.y - it.y];
+				inr = Math.min(w, dd) / 2;
+			}
+			const color = colorOf(it.role);
+			const row = numberOf.get(it.slug);
+			return {
+				i,
+				it,
+				d,
+				pole,
+				// badge radius: sits inside the shape when it can, never smaller than legible
+				rb: Math.min(8.5 * scale, Math.max(4 * scale, inr * 0.85)),
+				color,
+				edge: edgeColor(color),
+				approx: !sil,
+				n: row?.n ?? 0,
+				name: row?.name ?? it.slug,
+				turned: !!it.pose,
+				tilted: it.rotation % 90 !== 0
+			};
 		})
 	);
-	const fit = (t: string, w: number, fs: number) => {
-		const max = Math.max(3, Math.floor(w / (fs * 0.55)));
-		return t.length > max ? `${t.slice(0, max - 1)}…` : t;
-	};
-	const big = (w: number, d: number) => w > 34 && d > 22;
-	// piece copies of the same part would repeat the label; label the first and the large ones
-	const labelled = $derived(
-		new Set(
-			plate.items
-				.map((it, i) => [it, i] as const)
-				.filter(
-					([it, i]) => big(it.w, it.d) && plate.items.findIndex((x) => x.slug === it.slug) === i
-				)
-				.map(([, i]) => i)
-		)
-	);
+	const pick = (slug: string | null) => onactive?.(slug);
 </script>
 
 <svg
 	class="plate-diagram"
-	viewBox="{-pad} {-pad} {bed.x + pad * 2} {bed.y + pad * 2}"
+	class:has-active={active != null}
+	viewBox="{-pad} {-pad} {bed.x + pad * 2} {bed.y + pad * 2 + footer}"
 	role="img"
 	aria-label="Top view of plate {plate.number}: {plate.name}"
 	data-testid="plate-diagram"
 >
-	<rect class="bed" x="0" y="0" width={bed.x} height={bed.y} rx="4" />
+	<defs>
+		<pattern id="{uid}-pei" width="2.4" height="2.4" patternUnits="userSpaceOnUse">
+			<circle cx="0.6" cy="0.7" r="0.22" class="pei-dot" />
+			<circle cx="1.8" cy="1.9" r="0.18" class="pei-dot" />
+			<circle cx="1.5" cy="0.3" r="0.14" class="pei-dot" />
+		</pattern>
+		<linearGradient id="{uid}-bedglow" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" class="glow-hi" />
+			<stop offset="1" class="glow-lo" />
+		</linearGradient>
+		<linearGradient id="{uid}-gloss" x1="0.15" y1="0" x2="0.5" y2="1">
+			<stop offset="0" stop-color="#fff" stop-opacity="0.34" />
+			<stop offset="0.45" stop-color="#fff" stop-opacity="0.04" />
+			<stop offset="1" stop-color="#000" stop-opacity="0.2" />
+		</linearGradient>
+		<filter
+			id="{uid}-shadow"
+			x="-4%"
+			y="-4%"
+			width="108%"
+			height="108%"
+			color-interpolation-filters="sRGB"
+		>
+			<feDropShadow dx="0.6" dy="1.5" stdDeviation="1.3" flood-color="#000" flood-opacity="0.42" />
+		</filter>
+		{#each shapes as s (s.i)}<path id="{uid}-p{s.i}" d={s.d} />{/each}
+	</defs>
+
+	<!-- build plate -->
+	<rect class="bed" x="0" y="0" width={bed.x} height={bed.y} rx="7" />
+	<rect class="bed-tex" x="0" y="0" width={bed.x} height={bed.y} rx="7" fill="url(#{uid}-pei)" />
+	<rect
+		class="bed-glow"
+		x="0"
+		y="0"
+		width={bed.x}
+		height={bed.y}
+		rx="7"
+		fill="url(#{uid}-bedglow)"
+	/>
+	<path class="grid minor" d={grid.minor} />
+	<path class="grid major" d={grid.major} />
+	<rect class="bed-edge" x="0" y="0" width={bed.x} height={bed.y} rx="7" />
 	<rect
 		class="margin"
 		x={bed.margin}
 		y={bed.margin}
 		width={bed.x - bed.margin * 2}
 		height={bed.y - bed.margin * 2}
+		rx="3"
 	/>
-	{#each shapes as s, i (i)}
-		<polygon
-			class="part"
-			class:over={plate.oversize}
-			points={s.points}
-			fill={colorOf(s.it.role)}
-			data-slug={s.it.slug}
-		/>
-		{#if s.it.pose}
-			<g class="badge" data-testid="reoriented-badge" data-slug={s.it.slug}>
-				<title>Re-oriented: {s.it.pose.desc}</title>
-				<rect x={s.it.x - 22} y={bed.y - s.it.y - s.it.d / 2 + 3} width="44" height="11" rx="3" />
-				<text x={s.it.x} y={bed.y - s.it.y - s.it.d / 2 + 11.2} text-anchor="middle"
-					>re-oriented</text
-				>
-			</g>
-		{/if}
-		{#if labelled.has(i) || plate.oversize}
-			<text
-				class="lbl"
-				x={s.it.x}
-				y={bed.y - s.it.y}
-				text-anchor="middle"
-				dominant-baseline="middle"
-				font-size={Math.max(7, Math.min(16, Math.min(s.it.w, s.it.d) / 3.2))}
-				>{fit(
-					labelOf(s.it.slug),
-					s.it.w,
-					Math.max(7, Math.min(16, Math.min(s.it.w, s.it.d) / 3.2))
-				)}</text
+	<!-- origin axes (front-left) -->
+	<g class="origin" aria-hidden="true">
+		<path class="ax-x" d="M3.5 {bed.y - 3.5}H17" />
+		<path class="ax-y" d="M3.5 {bed.y - 3.5}V{bed.y - 17}" />
+		<circle cx="3.5" cy={bed.y - 3.5} r="1.5" class="ax-o" />
+	</g>
+	<!-- front edge and size -->
+	<g class="bed-meta" aria-hidden="true">
+		<path class="front" d="M{bed.x / 2 - 9} {bed.y + 4.5}H{bed.x / 2 + 9}" />
+		<text x={bed.x / 2} y={bed.y + 12} text-anchor="middle">FRONT</text>
+		<text x={bed.x} y={bed.y + 12} text-anchor="end">{bed.x} × {bed.y} mm</text>
+	</g>
+
+	<!-- parts -->
+	<g filter="url(#{uid}-shadow)">
+		{#each shapes as s (s.i)}
+			<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+			<use
+				href="#{uid}-p{s.i}"
+				class="part"
+				class:approx={s.approx}
+				class:over={plate.oversize}
+				class:dim={active != null && active !== s.it.slug}
+				class:on={active === s.it.slug}
+				fill={s.color}
+				stroke={s.edge}
+				fill-rule="evenodd"
+				data-slug={s.it.slug}
+				data-testid="plate-part"
+				onpointerenter={() => pick(s.it.slug)}
+				onpointerleave={() => pick(null)}
+				onclick={() => onselect?.(s.it.slug)}
 			>
-		{/if}
-	{/each}
+				<title
+					>{s.n ? `${s.n}. ` : ''}{s.name}{s.approx ? ' (approximate shape)' : ''}{s.turned
+						? ' (re-oriented)'
+						: ''}</title
+				>
+			</use>
+		{/each}
+	</g>
+	<g class="gloss" aria-hidden="true">
+		{#each shapes as s (s.i)}
+			{#if !s.approx}
+				<use
+					href="#{uid}-p{s.i}"
+					fill="url(#{uid}-gloss)"
+					fill-rule="evenodd"
+					class:dim={active != null && active !== s.it.slug}
+				/>
+			{/if}
+		{/each}
+	</g>
+
+	<!-- badges -->
+	<g class="badges">
+		{#each shapes as s (s.i)}
+			<g
+				class="badge"
+				class:on={active === s.it.slug}
+				class:dim={active != null && active !== s.it.slug}
+				data-slug={s.it.slug}
+				transform="translate({s.pole[0]} {s.pole[1]})"
+				aria-hidden="true"
+			>
+				<circle r={s.rb} />
+				<text dy="0.36em" text-anchor="middle" font-size={s.rb * (s.n > 9 ? 1.05 : 1.3)}>{s.n}</text
+				>
+				{#if s.turned || s.tilted}
+					<g
+						class="flag"
+						data-testid={s.turned ? 'reoriented-badge' : 'tilted-badge'}
+						data-slug={s.it.slug}
+						transform="translate({s.rb * 0.82} {-s.rb * 0.82})"
+					>
+						<title
+							>{s.turned
+								? `Re-oriented: ${s.it.pose?.desc}`
+								: `Turned ${Math.round(s.it.rotation)}° to fit the bed`}</title
+						>
+						<circle r={s.rb * 0.62} />
+						<path
+							d="M{-s.rb * 0.2} {s.rb * 0.12}A{s.rb * 0.24} {s.rb * 0.24} 0 1 1 {s.rb * 0.1} {s.rb *
+								0.2}"
+						/>
+					</g>
+				{/if}
+			</g>
+		{/each}
+	</g>
 </svg>
 
 <style>
 	.plate-diagram {
 		display: block;
 		width: 100%;
-		max-width: 340px;
 		height: auto;
-		aspect-ratio: auto;
+		overflow: visible;
+		-webkit-user-select: none;
+		user-select: none;
 	}
 	.bed {
-		fill: rgba(127, 127, 127, 0.08);
-		stroke: var(--line);
-		stroke-width: 1.5;
+		fill: var(--bed);
+	}
+	.pei-dot {
+		fill: var(--bed-dot);
+		opacity: 0.55;
+	}
+	.glow-hi {
+		stop-color: #fff;
+		stop-opacity: 0.16;
+	}
+	.glow-lo {
+		stop-color: #000;
+		stop-opacity: 0.08;
+	}
+	.grid {
+		fill: none;
+		stroke: var(--bed-line);
+		vector-effect: non-scaling-stroke;
+	}
+	.grid.minor {
+		stroke-width: 0.6px;
+		opacity: 0.13;
+	}
+	.grid.major {
+		stroke-width: 0.9px;
+		opacity: 0.3;
+	}
+	.bed-edge {
+		fill: none;
+		stroke: var(--bed-edge);
+		stroke-width: 1.4px;
+		vector-effect: non-scaling-stroke;
 	}
 	.margin {
 		fill: none;
-		stroke: var(--line);
-		stroke-width: 0.8;
-		stroke-dasharray: 3 3;
+		stroke: var(--bed-text);
+		stroke-width: 1px;
+		stroke-dasharray: 4 3;
+		opacity: 0.5;
+		vector-effect: non-scaling-stroke;
+	}
+	.ax-x,
+	.ax-y {
+		fill: none;
+		stroke-width: 1.6px;
+		stroke-linecap: round;
+		vector-effect: non-scaling-stroke;
+	}
+	.ax-x {
+		stroke: #e0483c;
+	}
+	.ax-y {
+		stroke: #3aa655;
+	}
+	.ax-o {
+		fill: var(--bed-text);
+	}
+	.bed-meta text {
+		fill: var(--muted);
+		font: 600 6.2px var(--f-body);
+		letter-spacing: 0.08em;
+	}
+	.front {
+		stroke: var(--muted);
+		stroke-width: 1.6px;
+		stroke-linecap: round;
+		vector-effect: non-scaling-stroke;
 	}
 	.part {
-		fill-opacity: 0.55;
-		stroke: currentColor;
-		stroke-width: 1;
+		stroke-width: 1px;
 		stroke-linejoin: round;
+		vector-effect: non-scaling-stroke;
+		cursor: pointer;
+		transition: opacity 0.15s;
+	}
+	.part.approx {
+		fill-opacity: 0.78;
+		stroke-dasharray: 3 2.5;
+		stroke-width: 1.3px;
 	}
 	.part.over {
 		stroke: var(--bad);
 		stroke-dasharray: 5 3;
-		stroke-width: 1.6;
-		fill-opacity: 0.25;
+		stroke-width: 1.6px;
 	}
-	.badge rect {
-		fill: var(--card);
-		stroke: currentColor;
-		stroke-width: 0.8;
+	.part.on {
+		stroke: var(--accent);
+		stroke-width: 2.4px;
+	}
+	.part.dim,
+	.gloss .dim {
+		opacity: 0.32;
+	}
+	.gloss {
+		pointer-events: none;
+	}
+	.badge {
+		pointer-events: none;
+		transition: opacity 0.15s;
+	}
+	.badge circle {
+		fill: #fff;
+		stroke: #1b2033;
+		stroke-width: 1.1px;
+		vector-effect: non-scaling-stroke;
 	}
 	.badge text {
-		fill: currentColor;
-		font-size: 7px;
-		pointer-events: none;
+		fill: #1b2033;
+		font-family: var(--f-body);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
 	}
-	.lbl {
-		fill: currentColor;
-		paint-order: stroke;
-		stroke: var(--card);
-		stroke-width: 2.5px;
-		stroke-opacity: 0.7;
-		pointer-events: none;
+	.badge.on circle {
+		fill: var(--accent);
+		stroke: #fff;
+		stroke-width: 1.6px;
+	}
+	.badge.on text {
+		fill: #fff;
+	}
+	.badge.dim {
+		opacity: 0.45;
+	}
+	.flag {
+		pointer-events: auto;
+	}
+	.flag circle {
+		fill: #f0a020;
+		stroke: #fff;
+		stroke-width: 0.9px;
+	}
+	.flag path {
+		fill: none;
+		stroke: #1b2033;
+		stroke-width: 0.9px;
+		stroke-linecap: round;
+		vector-effect: non-scaling-stroke;
 	}
 </style>

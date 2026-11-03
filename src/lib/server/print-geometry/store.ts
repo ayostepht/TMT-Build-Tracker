@@ -14,6 +14,7 @@ import { templatePrintGeometry } from '../db/schema';
 import { SEED_NOTE } from '../seed/run';
 import type { ExtractedPart } from './extract';
 import { computePoses, ORIENT_VERSION } from '#lib/domain/orient.ts';
+import { computePieceSilhouettes, SIL_VERSION } from '#lib/domain/silhouette.ts';
 import { decodeMesh, encodeMesh, type PrintMesh } from './mesh-format';
 
 export const printDir = (templateId: string) => join(uploadsDir(), 'print', templateId);
@@ -91,7 +92,7 @@ export function storeExtractedParts(
 								}
 							}
 						: {}),
-					orient: computePoses({ positions: p.geometry.positions, indices: p.geometry.indices })
+					...orientAndSil({ positions: p.geometry.positions, indices: p.geometry.indices })
 				};
 			})
 		};
@@ -116,6 +117,13 @@ export function storeExtractedParts(
 		n++;
 	}
 	return n;
+}
+
+/** Poses plus true outlines for one mesh (profile orientation and each pose). */
+function orientAndSil(mesh: { positions: ArrayLike<number>; indices: ArrayLike<number> }) {
+	const orient = computePoses(mesh);
+	const sil = computePieceSilhouettes(mesh, orient.poses);
+	return { orient, ...(sil ? { sil } : {}) };
 }
 
 /** Remove all imported geometry of a template (meshes and rows); seed rows stay. */
@@ -167,7 +175,53 @@ export function ensureOrientations(db: Db, templateId: string): number {
 			if (!pc.mesh || pc.orient?.v === ORIENT_VERSION) continue;
 			try {
 				const mesh = readPieceMesh(templateId, pc.mesh);
+				pc.sil = undefined;
 				pc.orient = computePoses(mesh);
+				changed = true;
+				n++;
+			} catch {
+				// mesh file missing: nothing to compute
+			}
+		}
+		if (changed)
+			db.update(templatePrintGeometry)
+				.set({ footprint: fp as unknown as Record<string, unknown> })
+				.where(
+					and(
+						eq(templatePrintGeometry.templateId, templateId),
+						eq(templatePrintGeometry.slug, r.slug)
+					)
+				)
+				.run();
+	}
+	return n;
+}
+
+/**
+ * Compute and cache the top-down silhouettes (diagram outlines) of pieces imported before
+ * they existed, with an older version, or whose poses changed. Limited to `slugs` when given
+ * (the diagram only needs the parts on the plates). Returns the number of pieces computed.
+ */
+export function ensureSilhouettes(db: Db, templateId: string, slugs?: Iterable<string>): number {
+	const only = slugs ? new Set(slugs) : null;
+	let n = 0;
+	const rows = db
+		.select()
+		.from(templatePrintGeometry)
+		.where(eq(templatePrintGeometry.templateId, templateId))
+		.all();
+	for (const r of rows) {
+		if (only && !only.has(r.slug)) continue;
+		const fp = r.footprint as unknown as PrintFootprint;
+		if (!fp?.pieces?.length) continue;
+		let changed = false;
+		for (const pc of fp.pieces) {
+			const poses = pc.orient?.poses ?? [];
+			if (!pc.mesh || (pc.sil?.v === SIL_VERSION && pc.sil.poses.length === poses.length)) continue;
+			try {
+				const sil = computePieceSilhouettes(readPieceMesh(templateId, pc.mesh), poses);
+				if (!sil) continue;
+				pc.sil = sil;
 				changed = true;
 				n++;
 			} catch {

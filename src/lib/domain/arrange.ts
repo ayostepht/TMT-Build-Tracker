@@ -21,6 +21,7 @@
 import { boxOrients, rotatePoints, type Pt } from './geom2d.ts';
 import { chooseOrientation, describePose, type OrientData, type PrintPose } from './orient.ts';
 import type { PrintFootprint } from './print-footprint.ts';
+import type { Silhouette } from './silhouette.ts';
 import type { BuildPrinter } from './types.ts';
 
 const EPS = 1e-6;
@@ -117,6 +118,8 @@ export interface ArrangedItem {
 	oy?: number;
 	/** Set when the part is re-oriented in 3D (it did not fit in its profile orientation). */
 	pose?: ItemPose;
+	/** Response only (GET /arrangement): key into ArrangementInfo.silhouettes for this item's outline. */
+	sil?: string;
 }
 
 export interface ArrangedPlate {
@@ -796,4 +799,6 @@ export interface ArrangementInfo {
 	hasPlateRuns: boolean;
 	/** Footprints (with hulls) of the parts on arranged plates, for drawing. */
 	footprints: Record<string, PrintFootprint>;
+	/** True outlines of the pieces on the plates by ArrangedItem.sil key (absent for seed footprints). */
+	silhouettes: Record<string, Silhouette>;
 }

@@ -57,6 +57,11 @@
 	--bad-soft: #fbe5e3;
 	--run: #1a6fb0;
 	--run-soft: #e0eefa;
+	--bed: #e6e2da;
+	--bed-dot: #bdb7ab;
+	--bed-line: #6f695d;
+	--bed-edge: #aaa498;
+	--bed-text: #6a655b;
 	--f-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
 	--f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--f-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
@@ -79,6 +84,11 @@
 		--bad-soft: #3d1c1a;
 		--run: #6cb8f5;
 		--run-soft: #16304a;
+		--bed: #5c616a;
+		--bed-dot: #8b919b;
+		--bed-line: #d4d8df;
+		--bed-edge: #838995;
+		--bed-text: #d6dae1;
 		color-scheme: dark;
 	}
 }
@@ -98,6 +108,11 @@
 	--bad-soft: #3d1c1a;
 	--run: #6cb8f5;
 	--run-soft: #16304a;
+	--bed: #5c616a;
+	--bed-dot: #8b919b;
+	--bed-line: #d4d8df;
+	--bed-edge: #838995;
+	--bed-text: #d6dae1;
 	color-scheme: dark;
 }
 * {

@@ -20,7 +20,7 @@
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
-	import PlateDiagram from '#lib/components/PlateDiagram.svelte';
+	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
 	import ExportCard from '#lib/components/ExportCard.svelte';
 	import type { BuildPrinter } from '#lib/domain/types.ts';
@@ -115,8 +115,9 @@
 			rearranging = false;
 		}
 	}
-	const short = (s: string) => (s.length > 18 ? `${s.slice(0, 17)}…` : s);
 	let logOpen = $state<Record<number, boolean>>({});
+	// Plates that have both a slicer thumbnail and an arrangement: which one to show.
+	let diagramOn = $state<Record<number, boolean>>({});
 	let editing = $state<PrintRun | null>(null);
 	let editOpen = $state(false);
 	const startedOf = (pl: Plate) =>
@@ -291,29 +292,36 @@
 
 		{#if arranged(pl.number) && arr}
 			{@const ap = arranged(pl.number)!}
-			<div class="arranged">
-				<PlateDiagram
+			{#if pl.thumbnailPath}
+				<div class="view-toggle" role="group" aria-label="Plate {pl.number} view">
+					<button
+						type="button"
+						class="seg"
+						aria-pressed={!diagramOn[pl.number]}
+						onclick={() => (diagramOn[pl.number] = false)}>Slicer preview</button
+					>
+					<button
+						type="button"
+						class="seg"
+						aria-pressed={!!diagramOn[pl.number]}
+						onclick={() => (diagramOn[pl.number] = true)}>Diagram</button
+					>
+				</div>
+			{/if}
+			{#if !pl.thumbnailPath || diagramOn[pl.number]}
+				<PlateArrangement
 					plate={ap}
 					footprints={arr.footprints}
+					silhouettes={arr.silhouettes ?? {}}
 					colorOf={(r) => ctx.filament(r)?.hex ?? '#888888'}
-					labelOf={(s) => short(partOf(s)?.name ?? s)}
+					nameOf={(s) => partOf(s)?.name ?? s}
+					filamentLabel={(r) => filLabel(ctx.filament(r), r)}
+					perRun={pl.runs > 1}
+					bedLabel="{arr.printer?.bedX} × {arr.printer?.bedY} mm"
 				/>
-				<div class="arr-info">
-					{#if ap.oversize}
-						<span class="over-note"
-							>Does not fit the bed ({arr.printer?.bedX} × {arr.printer?.bedY} mm).</span
-						>
-					{:else}
-						<span class="meta num">{Math.round(ap.utilisation * 100)}% of the bed used</span>
-					{/if}
-					{#each Object.entries(ap.estGrams) as [role, g] (role)}
-						<span class="meta num" data-testid="plate-grams"
-							>{filLabel(ctx.filament(role), role)} ~{fmt(g)} g{pl.runs > 1 ? ' per run' : ''}</span
-						>
-					{/each}
-				</div>
-			</div>
-		{:else if pl.thumbnailPath}
+			{/if}
+		{/if}
+		{#if pl.thumbnailPath && !(arranged(pl.number) && arr && diagramOn[pl.number])}
 			<img
 				class="plate-thumb"
 				src={plateThumbnailUrl(ctx.id, pl.number, pl.source)}
@@ -485,23 +493,25 @@
 	.warns li.oversize {
 		color: var(--bad);
 	}
-	.arranged {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 10px 16px;
-		align-items: flex-start;
+	.view-toggle {
+		display: inline-flex;
+		justify-self: start;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		overflow: hidden;
 	}
-	.arranged :global(svg) {
-		flex: 0 1 300px;
-	}
-	.arr-info {
-		display: grid;
-		gap: 4px;
-		min-width: 140px;
-	}
-	.over-note {
-		color: var(--bad);
+	.seg {
+		border: 0;
+		background: transparent;
+		color: var(--muted);
+		font: inherit;
 		font-size: 13px;
+		padding: 5px 12px;
+		cursor: pointer;
+	}
+	.seg[aria-pressed='true'] {
+		background: var(--accent-soft);
+		color: var(--accent);
 		font-weight: 600;
 	}
 	.fil-grams {

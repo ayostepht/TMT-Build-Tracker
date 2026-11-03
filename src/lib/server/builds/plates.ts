@@ -29,6 +29,7 @@ import type { BuildView } from '#lib/domain/types.ts';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import type { ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
+import type { Silhouette } from '#lib/domain/silhouette.ts';
 import { ApiError, buildAccess } from '../access';
 import { uploadsDir } from '../config';
 import type { Db } from '../db';
@@ -45,6 +46,7 @@ import {
 	writePlan
 } from './arrange-plan';
 import { loadBuildView } from './view';
+import { ensureOrientations, ensureSilhouettes } from '../print-geometry/store';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -529,7 +531,6 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 	const view = loadBuildView(db, buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
 	const row = db.select().from(builds).where(eq(builds.id, buildId)).get();
-	const footprints = loadFootprints(db, view.build.templateId);
 	const stored = db
 		.select()
 		.from(buildPlates)
@@ -538,17 +539,46 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 		.all()
 		.filter((p) => p.source === ARRANGED_SOURCE && p.arrangement)
 		.map((p) => p.arrangement!);
+	// Outlines for the diagram: only what is on the plates; computed once, then cached in the row.
+	const onPlates = new Set(stored.flatMap((pl) => pl.parts));
+	ensureOrientations(db, view.build.templateId);
+	ensureSilhouettes(db, view.build.templateId, onPlates);
+	const footprints = loadFootprints(db, view.build.templateId);
 	const plan = planArrangement(view, footprints, layoutHintFor(db, view.build.templateId));
 	const used: Record<string, PrintFootprint> = {};
 	for (const pl of stored)
 		for (const s of pl.parts) {
 			const fp = footprints.get(s);
-			if (fp) used[s] = { ...fp, pieces: fp.pieces.map((pc) => ({ ...pc, orient: undefined })) };
+			if (fp)
+				used[s] = {
+					...fp,
+					pieces: fp.pieces.map((pc) => ({ ...pc, orient: undefined, sil: undefined }))
+				};
 		}
+	const silhouettes: Record<string, Silhouette> = {};
+	const plates = stored.map((pl) => ({
+		...pl,
+		items: pl.items.map((it) => {
+			const pc = footprints.get(it.slug)?.pieces[it.piece];
+			if (!pc?.sil) return it;
+			let key = `${it.slug}:${it.piece}`;
+			let sil = pc.sil.profile;
+			if (it.pose) {
+				const idx =
+					pc.orient?.poses.findIndex((p) => p.m.every((v, i) => v === it.pose!.m[i])) ?? -1;
+				if (idx < 0 || !pc.sil.poses[idx]) return it; // pose not found: draw the box instead
+				key += `:${idx}`;
+				sil = pc.sil.poses[idx];
+			}
+			silhouettes[key] = sil;
+			return { ...it, sil: key };
+		})
+	}));
 	return {
 		printer: view.printer,
 		layout: row?.plateLayout ?? null,
-		plates: stored,
+		plates,
+		silhouettes,
 		fresh: plan
 			? {
 					plates: plan.result.plates.length,
