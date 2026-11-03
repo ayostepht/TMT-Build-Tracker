@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { onDestroy } from 'svelte';
 	import PlacementEditor from '#lib/components/PlacementEditor.svelte';
+	import PrintGeometryCard from './PrintGeometryCard.svelte';
 	import {
 		getModelJob,
 		removeHardwareGlb,
@@ -210,6 +211,8 @@
 			<p class="muted">Import the model first.</p>
 		{/if}
 	</div>
+
+	<PrintGeometryCard templateId={data.template.id} />
 </section>
 
 <style>

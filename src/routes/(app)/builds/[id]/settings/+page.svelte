@@ -2,13 +2,20 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { BUILD_PHASES, type BuildPhase, type FilamentRole } from '#lib/domain/types.ts';
-	import { updateBuild, updateFilament, deleteBuild, setVariant } from '#lib/client/api.ts';
+	import {
+		updateBuild,
+		updateFilament,
+		deleteBuild,
+		setVariant,
+		setPrinter
+	} from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import FilamentPicker from '#lib/components/FilamentPicker.svelte';
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
 	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
+	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
@@ -41,6 +48,15 @@
 		patch: Partial<Pick<FilamentRole, 'name' | 'hex' | 'material' | 'spools'>>
 	) {
 		ctx.act(() => updateFilament(ctx.id, f.key, patch));
+	}
+
+	let printerDraft = $state<import('#lib/domain/types.ts').BuildPrinter | null | undefined>();
+	let printerSaved = $state('');
+	async function savePrinter() {
+		if (printerDraft === undefined) return;
+		const ok = await ctx.act(() => setPrinter(ctx.id, printerDraft!));
+		printerSaved = ok ? 'Saved' : '';
+		setTimeout(() => (printerSaved = ''), 2000);
 	}
 
 	let confirming = $state(false);
@@ -91,13 +107,43 @@
 	</section>
 {/if}
 
+<section class="card" data-testid="printer-settings">
+	<h2>Printer</h2>
+	<p class="muted">
+		The printer you plan to print on. Plates are arranged for its bed, and its multi-material system
+		decides which colors can share a plate.
+	</p>
+	<PrinterPicker
+		value={ctx.view.printer}
+		disabled={!ctx.canEdit}
+		onchange={(p) => (printerDraft = p)}
+	/>
+	{#if ctx.canEdit}
+		<div>
+			<button
+				class="btn primary"
+				type="button"
+				disabled={printerDraft === undefined}
+				data-testid="save-printer-settings"
+				onclick={savePrinter}>Save printer</button
+			>
+			<span class="muted" role="status">{printerSaved}</span>
+		</div>
+	{/if}
+</section>
+
 <section class="card">
 	<h2>Plate layout</h2>
 	<p class="muted">
 		Which printer's plate grouping this build follows. Upload a sliced 3MF on the Plates tab to use
 		your own.
 	</p>
-	<PlateLayoutPicker buildId={ctx.id} disabled={!ctx.canEdit} onchanged={() => ctx.refresh()} />
+	<PlateLayoutPicker
+		buildId={ctx.id}
+		printer={ctx.view.printer}
+		disabled={!ctx.canEdit}
+		onchanged={() => ctx.refresh()}
+	/>
 </section>
 
 <section class="card">

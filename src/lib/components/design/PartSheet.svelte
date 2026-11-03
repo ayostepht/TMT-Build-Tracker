@@ -34,7 +34,7 @@
 			<h3>{part.name}</h3>
 		</div>
 		<button type="button" class="btn sm" onclick={onclose} aria-label="Close part details">
-			Close
+			<span aria-hidden="true">×</span> Close
 		</button>
 	</header>
 	<p class="now">

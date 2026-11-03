@@ -44,3 +44,11 @@ these libraries ship any MakeGood data.
 - **glTF-Transform** (MIT, https://gltf-transform.dev): builds and optimises the GLB.
 - **meshoptimizer** (MIT, https://github.com/zeux/meshoptimizer): geometry compression
   (EXT_meshopt_compression).
+
+## Fonts
+
+`static/fonts/` bundles latin-subset woff2 files of Barlow Condensed (500, 600,
+700; Copyright The Barlow Project Authors), IBM Plex Sans (variable 400-600) and
+IBM Plex Mono (400, 500) (Copyright IBM Corp.), downloaded from Google Fonts so
+the app has no runtime dependency on it. All three are licensed under the SIL
+Open Font License 1.1 (<https://openfontlicense.org>).

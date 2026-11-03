@@ -1,0 +1,519 @@
+/**
+ * Streaming geometry reader for slicer 3MF files: pulls the meshes of chosen
+ * objects out of `3D/Objects/*.model` (the plate parser never inflates those),
+ * applies the transforms MakeGood placed them with and returns them dropped to
+ * z = 0 and centred, with footprint, hull and per-object settings.
+ *
+ * Supports the Bambu/Orca layout (build items -> objects with components that
+ * point at `3D/Objects/object_N.model` through `p:path`) and plain 3MF files with
+ * meshes inline in `3D/3dmodel.model`. The zip is read twice: first the small
+ * entries (3dmodel.model, model_settings.config), then only the object files
+ * that were chosen. Memory stays near the size of the chosen meshes.
+ */
+import { Unzip, UnzipInflate, UnzipPassThrough, strFromU8 } from 'fflate';
+import { XMLParser } from 'fast-xml-parser';
+import { decodeEntities } from '#lib/domain/threemf.ts';
+import {
+	bounds,
+	convexHull,
+	minAreaAngle,
+	round1,
+	rotatePoints,
+	simplifyHull,
+	type Pt
+} from '#lib/domain/geom2d.ts';
+
+export type Source = AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
+export type SourceFactory = () => Source;
+
+export interface Component {
+	path: string | null;
+	objectId: string;
+	/** 3MF 3x4 row-vector transform (12 numbers) or null for identity. */
+	transform: number[] | null;
+}
+export interface RawObject {
+	id: string;
+	components: Component[];
+	/** Inline mesh (plain 3MF): vertex xyz and triangle indices. */
+	positions?: Float64Array;
+	indices?: Uint32Array;
+}
+export interface BuildItem {
+	objectId: string;
+	transform: number[] | null;
+}
+export interface ModelScan {
+	objects: Map<string, RawObject>;
+	items: BuildItem[];
+}
+
+class Grow64 {
+	a = new Float64Array(1024);
+	n = 0;
+	push(v: number) {
+		if (this.n === this.a.length) {
+			const b = new Float64Array(this.a.length * 2);
+			b.set(this.a);
+			this.a = b;
+		}
+		this.a[this.n++] = v;
+	}
+	done() {
+		return this.a.slice(0, this.n);
+	}
+}
+class Grow32 {
+	a = new Uint32Array(1024);
+	n = 0;
+	push(v: number) {
+		if (this.n === this.a.length) {
+			const b = new Uint32Array(this.a.length * 2);
+			b.set(this.a);
+			this.a = b;
+		}
+		this.a[this.n++] = v;
+	}
+	done() {
+		return this.a.slice(0, this.n);
+	}
+}
+
+const TAG = /<(vertex|triangle|component|item|object|\/object)\b([^>]*)>/g;
+const VERTEX = /x="([^"]*)"\s+y="([^"]*)"\s+z="([^"]*)"/;
+const TRI = /v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/;
+
+function attr(s: string, name: string): string | null {
+	const m = new RegExp(`(?:^|[\\s:])${name}="([^"]*)"`).exec(s);
+	return m ? m[1] : null;
+}
+function parseTransform(s: string | null): number[] | null {
+	if (!s) return null;
+	const n = s.trim().split(/\s+/).map(Number);
+	return n.length === 12 && n.every(Number.isFinite) ? n : null;
+}
+
+/** Incremental scanner for a 3dmodel.model / object model text stream. */
+export class ModelScanner {
+	readonly scan: ModelScan = { objects: new Map(), items: [] };
+	private decoder = new TextDecoder();
+	private tail = '';
+	private cur: { obj: RawObject; v: Grow64; t: Grow32; hasMesh: boolean } | null = null;
+	bytes = 0;
+	constructor(private readonly keepMeshes = true) {}
+
+	push(chunk: Uint8Array, final: boolean) {
+		this.bytes += chunk.length;
+		let buf = this.tail + this.decoder.decode(chunk, { stream: !final });
+		this.tail = '';
+		if (!final) {
+			const lt = buf.lastIndexOf('<');
+			if (lt >= 0 && !buf.includes('>', lt)) {
+				this.tail = buf.slice(lt);
+				buf = buf.slice(0, lt);
+			}
+		}
+		this.handle(buf);
+		if (final && this.cur) this.closeObject();
+	}
+
+	private closeObject() {
+		const c = this.cur!;
+		if (c.hasMesh && this.keepMeshes) {
+			c.obj.positions = c.v.done();
+			c.obj.indices = c.t.done();
+		}
+		this.scan.objects.set(c.obj.id, c.obj);
+		this.cur = null;
+	}
+
+	private handle(text: string) {
+		TAG.lastIndex = 0;
+		let m: RegExpExecArray | null;
+		while ((m = TAG.exec(text))) {
+			const kind = m[1];
+			const rest = m[2];
+			if (kind === 'vertex') {
+				if (!this.cur || !this.keepMeshes) continue;
+				const a = VERTEX.exec(rest);
+				if (!a) continue;
+				this.cur.hasMesh = true;
+				this.cur.v.push(+a[1]);
+				this.cur.v.push(+a[2]);
+				this.cur.v.push(+a[3]);
+			} else if (kind === 'triangle') {
+				if (!this.cur || !this.keepMeshes) continue;
+				const a = TRI.exec(rest);
+				if (a) {
+					this.cur.t.push(+a[1]);
+					this.cur.t.push(+a[2]);
+					this.cur.t.push(+a[3]);
+				} else {
+					const v1 = attr(rest, 'v1'),
+						v2 = attr(rest, 'v2'),
+						v3 = attr(rest, 'v3');
+					if (v1 && v2 && v3) {
+						this.cur.t.push(+v1);
+						this.cur.t.push(+v2);
+						this.cur.t.push(+v3);
+					}
+				}
+			} else if (kind === 'component') {
+				if (!this.cur) continue;
+				const oid = attr(rest, 'objectid');
+				if (!oid) continue;
+				this.cur.obj.components.push({
+					path: attr(rest, 'path'),
+					objectId: oid,
+					transform: parseTransform(attr(rest, 'transform'))
+				});
+			} else if (kind === 'item') {
+				const oid = attr(rest, 'objectid');
+				if (oid)
+					this.scan.items.push({
+						objectId: oid,
+						transform: parseTransform(attr(rest, 'transform'))
+					});
+			} else if (kind === 'object') {
+				if (this.cur) this.closeObject();
+				const id = attr(rest, 'id');
+				if (!id) continue;
+				if (/\/\s*$/.test(rest)) {
+					this.scan.objects.set(id, { id, components: [] });
+					continue;
+				}
+				this.cur = {
+					obj: { id, components: [] },
+					v: new Grow64(),
+					t: new Grow32(),
+					hasMesh: false
+				};
+			} else if (kind === '/object') {
+				if (this.cur) this.closeObject();
+			}
+		}
+	}
+}
+
+/** Streams selected zip entries (by exact name) to a callback; everything else is never inflated. */
+export async function streamEntries(
+	source: Source,
+	want: (name: string) => ModelScanner | Uint8Array[] | null,
+	onDone?: (name: string, data: ModelScanner | Uint8Array) => void,
+	maxEntryBytes = 1 << 30
+): Promise<void> {
+	let failure: Error | null = null;
+	const uz = new Unzip((file) => {
+		if (failure) return;
+		const sink = want(file.name);
+		if (!sink) return;
+		let size = 0;
+		let dead = false;
+		file.ondata = (err, chunk, final) => {
+			if (dead) return;
+			if (err) {
+				failure ??= new Error(`Cannot read ${file.name}: ${err.message}`);
+				dead = true;
+				return;
+			}
+			size += chunk.length;
+			if (size > maxEntryBytes) {
+				dead = true;
+				file.terminate();
+				failure ??= new Error(`${file.name} is too large to read`);
+				return;
+			}
+			if (sink instanceof ModelScanner) {
+				sink.push(chunk, final);
+				if (final) onDone?.(file.name, sink);
+			} else {
+				sink.push(chunk);
+				if (final) {
+					const buf = new Uint8Array(size);
+					let o = 0;
+					for (const c of sink) {
+						buf.set(c, o);
+						o += c.length;
+					}
+					onDone?.(file.name, buf);
+				}
+			}
+		};
+		file.start();
+	});
+	uz.register(UnzipInflate);
+	uz.register(UnzipPassThrough);
+	try {
+		for await (const chunk of source as AsyncIterable<Uint8Array>) {
+			uz.push(chunk);
+			if (failure) break;
+		}
+		if (!failure) uz.push(new Uint8Array(0), true);
+	} catch (e) {
+		failure ??= new Error(
+			`This does not look like a valid 3MF (zip) file: ${(e as Error).message}`
+		);
+	}
+	if (failure) throw failure;
+}
+
+// ---- model_settings.config
+
+const xml = new XMLParser({
+	ignoreAttributes: false,
+	attributeNamePrefix: '@',
+	parseAttributeValue: false,
+	parseTagValue: false,
+	isArray: (n) => ['object', 'part', 'volume', 'plate', 'model_instance', 'metadata'].includes(n)
+});
+type XNode = Record<string, unknown>;
+const asArr = <T>(v: T | T[] | undefined | null): T[] =>
+	Array.isArray(v) ? v : v == null ? [] : [v];
+
+export interface ObjectSettings {
+	name: string;
+	/** Every `<metadata key=... value=...>` of the object (wall_loops, sparse_infill_density, ...). */
+	settings: Record<string, string>;
+	/** Volume subtypes other than a normal part (modifiers, negative parts, supports). */
+	extraSubtypes: string[];
+}
+
+export function parseModelSettings(bytes: Uint8Array): Map<string, ObjectSettings> {
+	const doc = xml.parse(strFromU8(bytes)) as XNode;
+	const out = new Map<string, ObjectSettings>();
+	for (const o of asArr<XNode>(((doc.config ?? {}) as XNode).object as XNode[])) {
+		const settings: Record<string, string> = {};
+		for (const m of asArr<XNode>(o.metadata as XNode[])) {
+			const k = m['@key'];
+			if (typeof k === 'string') settings[k] = decodeEntities(String(m['@value'] ?? ''));
+		}
+		const subs = asArr<XNode>((o.part ?? o.volume) as XNode[])
+			.map((p) => String(p['@subtype'] ?? 'normal_part'))
+			.filter((s) => s !== 'normal_part');
+		const name = settings.name ?? `Object ${o['@id']}`;
+		delete settings.name;
+		out.set(String(o['@id']), { name, settings, extraSubtypes: subs });
+	}
+	return out;
+}
+
+// ---- structure pass
+
+export interface Structure {
+	model: ModelScan;
+	objects: Map<string, ObjectSettings>;
+	warnings: string[];
+}
+
+export async function readStructure(open: SourceFactory): Promise<Structure> {
+	const model = new ModelScanner(true);
+	let ms: Uint8Array | null = null;
+	await streamEntries(
+		open(),
+		(name) => {
+			if (name === '3D/3dmodel.model') return model;
+			if (name === 'Metadata/model_settings.config') return [];
+			return null;
+		},
+		(name, data) => {
+			if (name === 'Metadata/model_settings.config') ms = data as Uint8Array;
+		}
+	);
+	return {
+		model: model.scan,
+		objects: ms ? parseModelSettings(ms) : new Map(),
+		warnings: []
+	};
+}
+
+// ---- geometry
+
+export interface ExtractRequest {
+	/** Build item / model_settings object id. */
+	objectId: string;
+}
+
+export interface Geometry {
+	objectId: string;
+	/** Float32 xyz, z up, lowest vertex z = 0, XY box centre at the origin, turned by `angleDeg`. */
+	positions: Float32Array;
+	indices: Uint32Array;
+	w: number;
+	d: number;
+	h: number;
+	/** Box size before the min-area turn (as MakeGood placed it). */
+	placedW: number;
+	placedD: number;
+	/** Counter-clockwise turn about z that was baked in, degrees. */
+	angleDeg: number;
+	hull: Pt[];
+	tris: number;
+}
+
+const norm = (v: number) => (Math.abs(v) < 1e-12 ? 0 : v);
+
+function apply(t: number[] | null, x: number, y: number, z: number): [number, number, number] {
+	if (!t) return [x, y, z];
+	return [
+		x * t[0] + y * t[3] + z * t[6] + t[9],
+		x * t[1] + y * t[4] + z * t[7] + t[10],
+		x * t[2] + y * t[5] + z * t[8] + t[11]
+	];
+}
+const det3 = (t: number[] | null) =>
+	!t
+		? 1
+		: t[0] * (t[4] * t[8] - t[5] * t[7]) -
+			t[1] * (t[3] * t[8] - t[5] * t[6]) +
+			t[2] * (t[3] * t[7] - t[4] * t[6]);
+
+/** Combine meshes of an item's components (item transform last). */
+function worldMesh(
+	obj: RawObject,
+	item: BuildItem,
+	meshOf: (c: Component) => { positions: Float64Array; indices: Uint32Array } | null
+): { pos: Float64Array; idx: Uint32Array } | null {
+	const parts: { pos: Float64Array; idx: Uint32Array }[] = [];
+	const add = (m: { positions: Float64Array; indices: Uint32Array }, ct: number[] | null) => {
+		const pos = new Float64Array(m.positions.length);
+		for (let i = 0; i < m.positions.length; i += 3) {
+			const [x, y, z] = apply(
+				item.transform,
+				...apply(ct, m.positions[i], m.positions[i + 1], m.positions[i + 2])
+			);
+			pos[i] = x;
+			pos[i + 1] = y;
+			pos[i + 2] = z;
+		}
+		// a mirroring transform flips the winding
+		const flip = det3(item.transform) * det3(ct) < 0;
+		const idx = new Uint32Array(m.indices);
+		if (flip)
+			for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
+		parts.push({ pos, idx });
+	};
+	if (obj.positions && obj.indices) add({ positions: obj.positions, indices: obj.indices }, null);
+	for (const c of obj.components) {
+		const m = meshOf(c);
+		if (m) add(m, c.transform);
+	}
+	if (!parts.length) return null;
+	const nv = parts.reduce((a, p) => a + p.pos.length, 0);
+	const ni = parts.reduce((a, p) => a + p.idx.length, 0);
+	const pos = new Float64Array(nv);
+	const idx = new Uint32Array(ni);
+	let vo = 0,
+		io = 0;
+	for (const p of parts) {
+		pos.set(p.pos, vo);
+		for (let i = 0; i < p.idx.length; i++) idx[io + i] = p.idx[i] + vo / 3;
+		vo += p.pos.length;
+		io += p.idx.length;
+	}
+	return { pos, idx };
+}
+
+/** Drop to z = 0, turn to the minimum-area box about z and centre; compute footprint and hull. */
+export function normalizeMesh(pos: Float64Array, idx: Uint32Array, objectId: string): Geometry {
+	const n = pos.length / 3;
+	let minZ = Infinity,
+		maxZ = -Infinity;
+	const pts: Pt[] = new Array(n);
+	for (let i = 0; i < n; i++) {
+		pts[i] = [pos[i * 3], pos[i * 3 + 1]];
+		const z = pos[i * 3 + 2];
+		if (z < minZ) minZ = z;
+		if (z > maxZ) maxZ = z;
+	}
+	const hull0 = convexHull(pts);
+	const placed = bounds(hull0);
+	const ang = minAreaAngle(hull0);
+	const c = Math.cos(ang);
+	const s = Math.sin(ang);
+	const rotated = rotatePoints(hull0, ang);
+	const rb = bounds(rotated);
+	const cx = (rb.minX + rb.maxX) / 2;
+	const cy = (rb.minY + rb.maxY) / 2;
+	const positions = new Float32Array(pos.length);
+	for (let i = 0; i < n; i++) {
+		const x = pos[i * 3];
+		const y = pos[i * 3 + 1];
+		positions[i * 3] = norm(x * c - y * s - cx);
+		positions[i * 3 + 1] = norm(x * s + y * c - cy);
+		positions[i * 3 + 2] = norm(pos[i * 3 + 2] - minZ);
+	}
+	const hull = simplifyHull(
+		rotated.map(([x, y]) => [x - cx, y - cy] as Pt),
+		24
+	).map(([x, y]) => [round1(x), round1(y)] as Pt);
+	return {
+		objectId,
+		positions,
+		indices: idx,
+		w: Math.ceil(rb.w * 10) / 10,
+		d: Math.ceil(rb.d * 10) / 10,
+		h: Math.ceil((maxZ - minZ) * 10) / 10,
+		placedW: Math.ceil(placed.w * 10) / 10,
+		placedD: Math.ceil(placed.d * 10) / 10,
+		angleDeg: Math.round(((ang * 180) / Math.PI) * 10) / 10,
+		hull,
+		tris: idx.length / 3
+	};
+}
+
+/**
+ * Extract the geometry of the requested build objects (by object id). Object files
+ * that no request needs are never inflated. Returns a map objectId -> geometry.
+ */
+export async function extractGeometry(
+	open: SourceFactory,
+	structure: Structure,
+	requests: ExtractRequest[],
+	onProgress?: (done: number, total: number) => void
+): Promise<{ geometry: Map<string, Geometry>; warnings: string[] }> {
+	const warnings: string[] = [];
+	const { model } = structure;
+	const itemOf = new Map(model.items.map((i) => [i.objectId, i]));
+	const need = new Map<string, string[]>(); // path -> object ids
+	const todo: { req: ExtractRequest; obj: RawObject; item: BuildItem }[] = [];
+	for (const r of requests) {
+		const obj = model.objects.get(r.objectId);
+		const item = itemOf.get(r.objectId);
+		if (!obj || !item) {
+			warnings.push(`Object ${r.objectId} has no build item; skipped`);
+			continue;
+		}
+		todo.push({ req: r, obj, item });
+		for (const c of obj.components)
+			if (c.path) {
+				const p = c.path.replace(/^\//, '');
+				need.set(p, [...(need.get(p) ?? []), r.objectId]);
+			}
+	}
+	const files = new Map<string, Map<string, RawObject>>(); // path -> objects
+	if (need.size) {
+		let done = 0;
+		await streamEntries(
+			open(),
+			(name) => (need.has(name) ? new ModelScanner(true) : null),
+			(name, data) => {
+				files.set(name, (data as ModelScanner).scan.objects);
+				onProgress?.(++done, need.size);
+			}
+		);
+	}
+	const geometry = new Map<string, Geometry>();
+	for (const { req, obj, item } of todo) {
+		const m = worldMesh(obj, item, (c) => {
+			const objs = c.path ? files.get(c.path.replace(/^\//, '')) : model.objects;
+			const o = objs?.get(c.objectId);
+			return o?.positions && o.indices ? { positions: o.positions, indices: o.indices } : null;
+		});
+		if (!m || m.pos.length < 9) {
+			warnings.push(`Object ${req.objectId} has no readable mesh; skipped`);
+			continue;
+		}
+		geometry.set(req.objectId, normalizeMesh(m.pos, m.idx, req.objectId));
+	}
+	return { geometry, warnings };
+}

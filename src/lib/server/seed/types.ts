@@ -1,3 +1,5 @@
+import type { PrintFootprintSeed } from '#lib/domain/print-footprint.ts';
+export type { PrintFootprintSeed };
 export interface FilamentRoleSeed {
 	key: string;
 	name: string;
@@ -108,4 +110,6 @@ export interface TemplateSeed {
 	variantGroups?: VariantGroupSeed[];
 	/** Placements of parts in the assembled model; parts without an entry are treated as not placed. */
 	placements?: PlacementSeed[];
+	/** Print footprints per part (numbers only, mm), so plates can be planned without the geometry import. */
+	printFootprints?: PrintFootprintSeed[];
 }

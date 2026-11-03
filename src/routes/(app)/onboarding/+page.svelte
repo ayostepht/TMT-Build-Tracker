@@ -6,7 +6,7 @@
 	let { data, form }: PageProps = $props();
 </script>
 
-<section class="stack">
+<section class="stack narrow">
 	<div class="kicker">Chapters</div>
 	<h1>Build with others</h1>
 	<p class="muted">

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import type { VariantGroup } from '#lib/domain/types.ts';
+import type { ArrangedPlate } from '#lib/domain/arrange.ts';
+import type { BuildPrinter, VariantGroup } from '#lib/domain/types.ts';
 import { organization, user } from './auth.schema';
 
 const id = () =>
@@ -267,6 +268,8 @@ export const builds = sqliteTable(
 		variantChoices: text('variant_choices', { mode: 'json' }).$type<Record<string, string>>(),
 		/** Plate layout source: a template_plate_layouts key, or 'upload' when plates came from the build's own 3MF. Null = template default. */
 		plateLayout: text('plate_layout'),
+		/** Printer the build is planned for (BuildPrinter json); null = not chosen. */
+		printer: text('printer', { mode: 'json' }).$type<BuildPrinter>(),
 		createdBy: text('created_by')
 			.notNull()
 			.references(() => user.id),
@@ -339,6 +342,8 @@ export const buildPlates = sqliteTable(
 			.$type<Record<string, number>>()
 			.notNull()
 			.default(sql`'{}'`),
+		/** Arranged plates (source 'arranged'): item positions in mm, see domain/arrange.ts ArrangedPlate. Null otherwise. */
+		arrangement: text('arrangement', { mode: 'json' }).$type<ArrangedPlate>(),
 		/** 'template' | 'layout:<key>' | 'upload:<build_uploads.id>' */
 		source: text('source').notNull().default('template')
 	},
@@ -401,4 +406,37 @@ export const buildUploads = sqliteTable(
 		createdAt: createdAt()
 	},
 	(t) => [index('build_uploads_build_idx').on(t.buildId, t.createdAt)]
+);
+
+/**
+ * Print-orientation geometry of a template's parts, imported by a site admin from the
+ * kit author's profile 3MF (numbers in `footprint`/`hull`/`settings`, the mesh in a
+ * binary file under uploadsDir()/print/<templateId>/<slug>.bin, never in git).
+ * One row per part slug; duplicate objects (16 tires, 8 wheel pins) are one mesh plus
+ * `footprint.copies`. Format: src/lib/server/print-geometry/README in `format.ts`.
+ */
+export const templatePrintGeometry = sqliteTable(
+	'template_print_geometry',
+	{
+		templateId: templateId(),
+		slug: text('slug').notNull(),
+		/** PrintFootprint json: width/depth/height in mm plus copies per run. */
+		footprint: text('footprint', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+		/** 2D convex hull of the footprint, [x, y][] in mm, centred on the footprint's bbox centre. */
+		hull: text('hull', { mode: 'json' }).$type<[number, number][]>().notNull(),
+		height: real('height').notNull(),
+		tris: integer('tris').notNull().default(0),
+		/** MakeGood's per-object slicer settings (wall_loops, sparse_infill_density, support, brim, layer height). */
+		settings: text('settings', { mode: 'json' })
+			.$type<Record<string, string>>()
+			.notNull()
+			.default(sql`'{}'`),
+		/** Relative to uploadsDir(): `print/<templateId>/<slug>.bin`. */
+		meshPath: text('mesh_path').notNull(),
+		sourceNote: text('source_note').notNull().default(''),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.slug] })]
 );

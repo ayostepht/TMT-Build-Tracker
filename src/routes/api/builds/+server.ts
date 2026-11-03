@@ -1,6 +1,7 @@
 import { getDb } from '#lib/server/db/index.ts';
 import { ApiError } from '#lib/server/access.ts';
 import { createBuild } from '#lib/server/builds/create.ts';
+import { parsePrinter } from '#lib/printers/printer.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import type { RequestHandler } from './$types';
 
@@ -24,6 +25,7 @@ export const POST: RequestHandler = (event) =>
 				hospital: str(o.hospital),
 				deliveryDate: str(o.deliveryDate),
 				plateLayout: str(o.plateLayout),
+				printer: o.printer == null ? null : parsePrinterInput(o.printer),
 				variantChoices:
 					typeof o.variantChoices === 'object' && o.variantChoices !== null
 						? (o.variantChoices as Record<string, string>)
@@ -33,3 +35,11 @@ export const POST: RequestHandler = (event) =>
 		);
 		return { id };
 	});
+
+function parsePrinterInput(v: unknown) {
+	try {
+		return parsePrinter(v);
+	} catch (e) {
+		throw new ApiError(400, (e as Error).message);
+	}
+}

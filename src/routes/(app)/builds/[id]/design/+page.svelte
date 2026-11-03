@@ -54,6 +54,8 @@
 	}
 
 	function pick(slug: string | null) {
+		// Picking the selected part again toggles it off.
+		slug = slug === selected ? null : slug;
 		selected = slug;
 		if (slug && typeof window !== 'undefined' && window.matchMedia('(max-width: 899px)').matches) {
 			queueMicrotask(() =>
@@ -62,6 +64,12 @@
 		}
 	}
 </script>
+
+<svelte:window
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && selected !== null) selected = null;
+	}}
+/>
 
 <svelte:head><title>Design · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
@@ -108,7 +116,7 @@
 			{roleFilter}
 			onselect={(slug) => {
 				pick(slug);
-				stage?.focus(slug);
+				if (selected) stage?.focus(slug);
 			}}
 		/>
 

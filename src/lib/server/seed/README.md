@@ -22,3 +22,5 @@ Each file here describes one printable kit as a `TemplateSeed` (see `types.ts`).
 3. Import it in `index.ts` and add it to `templateSeeds`.
 
 Every part slug must appear on exactly one plate, every `defaultRole` and design `partRoles` key must exist, and every `guideRefs.page` must be in `guidePages`.
+
+- **printFootprints** (optional): per part, the bed area one printed unit takes in the kit author's print orientation: `w`/`d`/`h` in mm (or `pieces` for parts made of several objects), `copies` per unit and `unitsPerPlate` (how many units one plate run holds). Numbers only. Stored in `template_print_geometry` with `source_note = 'seed'`; an admin's geometry import replaces them and later seeding never overwrites imported rows.

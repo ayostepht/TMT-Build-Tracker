@@ -365,7 +365,8 @@ export class ChairScene {
 				mat.needsUpdate = true;
 				for (const m of inst.meshes) {
 					m.visible = !hidden;
-					if (!hidden) pick.push(m);
+					// Dimmed parts read as empty space: a tap on them deselects instead of picking.
+					if (!hidden && !dimmed) pick.push(m);
 				}
 			}
 		}

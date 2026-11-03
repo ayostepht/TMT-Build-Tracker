@@ -220,7 +220,30 @@ export interface BuildView {
 	hardware: HardwareItem[];
 	activity: ActivityItem[]; // newest first, at most 50
 	members: { userId: string; name: string; role: TeamRole }[];
+	/** Printer chosen for plate planning; null until the user picks one. */
+	printer: BuildPrinter | null;
 }
 
 /** A change to one part's state produced by a domain action; the server persists it. */
 export type PartPatch = { slug: string } & Partial<Omit<PartState, 'slug' | 'updatedAt'>>;
+
+/**
+ * The printer a build is planned for (set in New build, Settings or the Plates tab).
+ * `catalogId` points into `src/lib/printers/catalog.ts` (null = custom printer).
+ * The plate arranger (`arrange.ts`) uses bed, margin, spacing and `mmSlots`.
+ * All lengths in mm.
+ */
+export interface BuildPrinter {
+	catalogId: string | null;
+	name: string;
+	bedX: number;
+	bedY: number;
+	bedZ: number;
+	/** Filaments one plate may use (1 = single filament, 4 = CANVAS / AMS, ...). */
+	mmSlots: number;
+	nozzle: number;
+	/** Keep-out border around the bed edge. Default 5. */
+	margin: number;
+	/** Gap between parts on a plate. Default 8. */
+	spacing: number;
+}

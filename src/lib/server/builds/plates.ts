@@ -27,11 +27,24 @@ import {
 import { toStoredSummary, type StoredSummary, type ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { BuildView } from '#lib/domain/types.ts';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
+import type { ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
+import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import { ApiError, buildAccess } from '../access';
 import { uploadsDir } from '../config';
 import type { Db } from '../db';
 import { buildPlates, builds, buildUploads, printRuns, templatePlateLayouts } from '../db/schema';
 import { mutateBuild } from './actions';
+import {
+	ARRANGED_LAYOUT,
+	ARRANGED_SOURCE,
+	hasPlateRuns,
+	layoutHintFor,
+	loadFootprints,
+	planArrangement,
+	signature,
+	writePlan
+} from './arrange-plan';
+import { loadBuildView } from './view';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -469,4 +482,85 @@ export function plateThumbnailFile(
 	if (!row?.p || row.p !== buildThumbRel(buildId, number)) return null;
 	const abs = join(uploadsDir(), row.p);
 	return existsSync(abs) ? abs : null;
+}
+
+// ---- arranged plates (printer-aware planner)
+
+/**
+ * Replace the build's plates with the arranger's plan for the build's printer. Parts are
+ * grouped by filament and packed onto the bed (see `domain/arrange.ts`); positions are kept
+ * in `build_plates.arrangement`. Print logs attached to the old plates need `convertRuns`
+ * (409 otherwise), exactly like `setPlateLayout`.
+ */
+export function arrangeForPrinter(
+	db: Db,
+	buildId: string,
+	userId: string,
+	body: unknown = {}
+): { plates: number; convertedRuns: number; warnings: ArrangeWarning[] } {
+	const convertRuns = isObj(body) && body.convertRuns === true;
+	let result = { plates: 0, convertedRuns: 0, warnings: [] as ArrangeWarning[] };
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		if (!view.printer) bad('Choose a printer first');
+		const plan = planArrangement(
+			view,
+			loadFootprints(tx, view.build.templateId),
+			layoutHintFor(tx, view.build.templateId)
+		)!;
+		requireConversion(view, convertRuns);
+		const convertedRuns = convertPlateRuns(tx, buildId, view);
+		clearBuildThumbs(buildId);
+		const plates = writePlan(tx, buildId, plan);
+		result = { plates, convertedRuns, warnings: plan.result.warnings };
+		return {
+			kind: 'plates.arrange',
+			payload: {
+				printer: view.printer!.name,
+				plates,
+				convertedRuns,
+				warnings: plan.result.warnings.length
+			}
+		};
+	});
+	return result;
+}
+
+export function buildArrangement(db: Db, buildId: string, userId: string): ArrangementInfo {
+	const view = loadBuildView(db, buildId, userId);
+	if (!view) throw new ApiError(404, 'Not found');
+	const row = db.select().from(builds).where(eq(builds.id, buildId)).get();
+	const footprints = loadFootprints(db, view.build.templateId);
+	const stored = db
+		.select()
+		.from(buildPlates)
+		.where(eq(buildPlates.buildId, buildId))
+		.orderBy(asc(buildPlates.number))
+		.all()
+		.filter((p) => p.source === ARRANGED_SOURCE && p.arrangement)
+		.map((p) => p.arrangement!);
+	const plan = planArrangement(view, footprints, layoutHintFor(db, view.build.templateId));
+	const used: Record<string, PrintFootprint> = {};
+	for (const pl of stored)
+		for (const s of pl.parts) {
+			const fp = footprints.get(s);
+			if (fp) used[s] = fp;
+		}
+	return {
+		printer: view.printer,
+		layout: row?.plateLayout ?? null,
+		plates: stored,
+		fresh: plan
+			? {
+					plates: plan.result.plates.length,
+					warnings: plan.result.warnings,
+					unsized: plan.unsized
+				}
+			: null,
+		stale:
+			row?.plateLayout === ARRANGED_LAYOUT &&
+			!!plan &&
+			signature(plan.result.plates) !== signature(stored),
+		hasPlateRuns: hasPlateRuns(view),
+		footprints: used
+	};
 }

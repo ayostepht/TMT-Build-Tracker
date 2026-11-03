@@ -13,6 +13,7 @@ import {
 	BUILD_PHASES,
 	PART_STATUSES,
 	RUN_RESULTS,
+	type BuildPrinter,
 	type BuildView,
 	type PartPatch,
 	type PartStatus,
@@ -31,7 +32,9 @@ import {
 	user
 } from '../db/schema';
 import { emitBuildEvent } from '../events';
+import { parsePrinter } from '#lib/printers/printer.ts';
 import { isPersonalOrg } from '../teams';
+import { autoRearrangeBuild, REARRANGE_KINDS } from './arrange-plan';
 import { applyPatches, loadBuildView } from './view';
 
 interface Outcome {
@@ -91,6 +94,7 @@ export function mutateBuild(
 		if (!view) throw new ApiError(404, 'Not found');
 		const o = fn(tx, view, now);
 		if (o.patches?.length) applyPatches(tx, buildId, o.patches, now);
+		if (REARRANGE_KINDS.has(o.kind)) autoRearrangeBuild(tx, buildId, userId);
 		tx.insert(activity)
 			.values({ buildId, userId, kind: o.kind, payload: o.payload ?? {}, at: now })
 			.run();
@@ -647,6 +651,33 @@ export function setVariant(db: Db, buildId: string, userId: string, body: unknow
 		return {
 			kind: 'build.variant',
 			payload: { group, groupName: g.name, from, to: option, toName: o.name }
+		};
+	});
+}
+
+/**
+ * Set (or clear with `null`) the printer a build is planned for: `{ printer: BuildPrinter | null }`.
+ * Editors and owners. Arranged plates are re-arranged for the new bed by `mutateBuild`
+ * unless print logs hang on plates.
+ */
+export function setPrinter(db: Db, buildId: string, userId: string, body: unknown): void {
+	if (!isObj(body) || !('printer' in body))
+		bad('printer is required (an object, or null to clear)');
+	let printer: BuildPrinter | null = null;
+	if (body.printer !== null) {
+		try {
+			printer = parsePrinter(body.printer);
+		} catch (e) {
+			bad((e as Error).message);
+		}
+	}
+	mutateBuild(db, buildId, userId, (tx) => {
+		tx.update(builds).set({ printer }).where(eq(builds.id, buildId)).run();
+		return {
+			kind: 'build.printer',
+			payload: printer
+				? { name: printer.name, bedX: printer.bedX, bedY: printer.bedY, mmSlots: printer.mmSlots }
+				: { name: null }
 		};
 	});
 }

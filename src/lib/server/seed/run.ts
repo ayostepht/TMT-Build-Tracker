@@ -9,9 +9,14 @@ import {
 	templateParts,
 	templatePlateLayouts,
 	templatePlates,
+	templatePrintGeometry,
 	templates
 } from '../db/schema';
+import { seedToFootprint } from '#lib/domain/print-footprint.ts';
 import type { TemplateSeed } from './types';
+
+/** `template_print_geometry.source_note` of rows that come from the seed (no mesh). */
+export const SEED_NOTE = 'seed';
 
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
@@ -318,6 +323,52 @@ function reconcileTemplate(tx: Tx, s: TemplateSeed, existingId: string | null): 
 					instances: p?.instances ?? [],
 					placed: p?.placed ?? false
 				})
+				.run();
+			changed = true;
+		}
+	}
+	// Print footprints: insert missing; update rows that still hold seed values (imported geometry wins).
+	for (const f of s.printFootprints ?? []) {
+		const fp = seedToFootprint(f);
+		if (!fp.pieces.length || !s.parts.some((p) => p.slug === f.slug)) continue;
+		const cur = tx
+			.select({
+				note: templatePrintGeometry.sourceNote,
+				footprint: templatePrintGeometry.footprint
+			})
+			.from(templatePrintGeometry)
+			.where(
+				and(
+					eq(templatePrintGeometry.templateId, templateId),
+					eq(templatePrintGeometry.slug, f.slug)
+				)
+			)
+			.get();
+		const big = fp.pieces.reduce((a, b) => (b.w * b.d > a.w * a.d ? b : a));
+		const row = {
+			footprint: fp as unknown as Record<string, unknown>,
+			hull: (fp.pieces[0]?.hull ?? []) as [number, number][],
+			height: big.h,
+			tris: 0,
+			settings: {},
+			meshPath: '',
+			sourceNote: SEED_NOTE,
+			updatedAt: new Date()
+		};
+		if (!cur) {
+			tx.insert(templatePrintGeometry)
+				.values({ templateId, slug: f.slug, ...row })
+				.run();
+			changed = true;
+		} else if (cur.note === SEED_NOTE && JSON.stringify(cur.footprint) !== JSON.stringify(fp)) {
+			tx.update(templatePrintGeometry)
+				.set(row)
+				.where(
+					and(
+						eq(templatePrintGeometry.templateId, templateId),
+						eq(templatePrintGeometry.slug, f.slug)
+					)
+				)
 				.run();
 			changed = true;
 		}

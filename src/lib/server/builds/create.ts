@@ -1,7 +1,9 @@
 import { and, eq } from 'drizzle-orm';
+import type { BuildPrinter } from '#lib/domain/types.ts';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import { ApiError, requireEditor } from '../access';
 import { canSeeDesign } from '../designs/access';
+import { arrangeForPrinter } from './plates';
 import type { Db } from '../db';
 import {
 	activity,
@@ -29,6 +31,8 @@ export interface CreateBuildInput {
 	variantChoices?: Record<string, string> | null;
 	/** A built-in plate layout key (`template_plate_layouts`); omitted = the template's default plates. */
 	plateLayout?: string | null;
+	/** Printer to plan plates for (BuildPrinter, validated). With one set, plates are arranged right away unless a layout is chosen. */
+	printer?: BuildPrinter | null;
 }
 
 /** Create a build from a template (and optional color design) in one transaction. Returns the new id. */
@@ -39,7 +43,7 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 	if (input.deliveryDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.deliveryDate))
 		throw new ApiError(400, 'Delivery date must be YYYY-MM-DD');
 
-	return db.transaction((tx) => {
+	const newId = db.transaction((tx) => {
 		const tpl = tx.select().from(templates).where(eq(templates.id, input.templateId)).get();
 		if (!tpl) throw new ApiError(400, 'Unknown template');
 
@@ -88,6 +92,7 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 					: null,
 				variantChoices: resolveChoices(tpl.variantGroups, choices),
 				plateLayout: layout?.key ?? null,
+				printer: input.printer ?? null,
 				createdBy: userId
 			})
 			.returning({ id: builds.id })
@@ -176,4 +181,7 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 			.run();
 		return id;
 	});
+	// A printer without an explicit layout: plan the plates for it right away.
+	if (input.printer && !input.plateLayout) arrangeForPrinter(db, newId, userId);
+	return newId;
 }

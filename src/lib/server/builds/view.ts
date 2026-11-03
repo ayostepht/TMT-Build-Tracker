@@ -3,6 +3,7 @@ import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/varian
 import type {
 	ActivityItem,
 	BuildPhase,
+	BuildPrinter,
 	BuildView,
 	PartDef,
 	PartPatch,
@@ -162,7 +163,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		layoutNotes.set(l.key, new Map(l.plates.map((p) => [p.number, p.runNote ?? null])));
 	const noteFor = (source: string | null, number: number): string | null => {
 		if (source?.startsWith('layout:')) return layoutNotes.get(source.slice(7))?.get(number) ?? null;
-		if (source?.startsWith('upload:')) return null;
+		if (source?.startsWith('upload:') || source === 'arranged') return null;
 		return runNotes.get(number) ?? null;
 	};
 	const plates: Plate[] = db
@@ -301,7 +302,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			.all()
 			.map((h) => ({ name: h.name, qty: h.qty, note: h.note })),
 		activity: acts,
-		members
+		members,
+		printer: (b.printer as BuildPrinter | null) ?? null
 	};
 }
 

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import type { BuildPrinter } from '#lib/domain/types.ts';
 	import {
+		arrangePlates,
 		buildPlateLayouts,
 		setPlateLayout,
 		templatePlateLayouts,
@@ -13,7 +15,9 @@
 	 *   form post carries the choice ('' = the template's default plates).
 	 * - Existing build: pass `buildId`; changing the select switches the build's plates
 	 *   right away (asks before converting print logs that hang on plates) and calls
-	 *   `onchanged`. With `allowUpload`, an extra entry calls `onupload`.
+	 *   `onchanged`. With `allowUpload`, an extra entry calls `onupload`. With a `printer`, the
+	 *   first entry arranges the plates for that printer's bed; the kit author's own layouts
+	 *   are listed as "MakeGood tuned profile".
 	 */
 	let {
 		templateId = '',
@@ -21,6 +25,7 @@
 		name = 'plateLayout',
 		disabled = false,
 		allowUpload = false,
+		printer = null,
 		label = 'Plate layout',
 		onchanged,
 		onupload
@@ -30,10 +35,17 @@
 		name?: string;
 		disabled?: boolean;
 		allowUpload?: boolean;
+		/** The build's printer; enables "Arrange for my printer". */
+		printer?: BuildPrinter | null;
 		label?: string;
 		onchanged?: () => void;
 		onupload?: () => void;
 	} = $props();
+
+	const ARRANGE = '__arrange__';
+	const ARRANGED = 'arranged';
+	const asValue = (c: string | null) => (c === ARRANGED ? ARRANGE : (c ?? ''));
+	const kitName = (n: string) => `MakeGood tuned profile: ${n}`;
 
 	let layouts = $state<PlateLayoutInfo[]>([]);
 	let current = $state<string | null>(null); // build mode: layout key, 'upload' or null
@@ -47,7 +59,7 @@
 				const r = await buildPlateLayouts(buildId);
 				layouts = r.layouts;
 				current = r.current;
-				value = r.current ?? '';
+				value = r.current === ARRANGED ? ARRANGE : (r.current ?? '');
 			} else if (templateId) {
 				layouts = await templatePlateLayouts(templateId);
 				value = '';
@@ -71,37 +83,40 @@
 		value = picked;
 		if (!buildId) return;
 		if (value === '__upload__') {
-			value = current ?? '';
+			value = current === ARRANGED ? ARRANGE : (current ?? '');
 			onupload?.();
 			return;
 		}
-		const key = value || layouts.find((l) => l.isDefault)?.key || '';
+		const arranging = value === ARRANGE;
+		const key = arranging ? ARRANGED : value || layouts.find((l) => l.isDefault)?.key || '';
 		if (!key || key === current) return;
 		busy = true;
 		try {
+			const apply = (convert: boolean) =>
+				arranging ? arrangePlates(buildId, convert) : setPlateLayout(buildId, key, convert);
 			try {
-				await setPlateLayout(buildId, key);
+				await apply(false);
 			} catch (e) {
 				if (e instanceof Error && /print log/.test(e.message)) {
 					if (!confirm(`${e.message}\n\nSwitch layout and convert them?`)) {
-						value = current ?? '';
+						value = asValue(current);
 						return;
 					}
-					await setPlateLayout(buildId, key, true);
+					await apply(true);
 				} else throw e;
 			}
 			current = key;
 			onchanged?.();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not switch the layout.';
-			value = current ?? '';
+			value = asValue(current);
 		} finally {
 			busy = false;
 		}
 	}
 </script>
 
-{#if layouts.length > 1 || (buildId && (allowUpload || current === 'upload'))}
+{#if layouts.length > 1 || (buildId && (allowUpload || current === 'upload' || printer))}
 	<label class="field plate-layout">
 		{label}
 		<select
@@ -119,8 +134,15 @@
 					<option value={l.key}>{l.name}</option>
 				{/each}
 			{:else}
+				{#if printer}
+					<option value={ARRANGE}
+						>Arrange for my printer ({printer.name}, {printer.bedX}×{printer.bedY} mm)</option
+					>
+				{:else if current === ARRANGED}
+					<option value={ARRANGE} disabled>Arranged (no printer set)</option>
+				{/if}
 				{#each layouts as l (l.key)}
-					<option value={l.key}>{l.name} ({l.plateCount} plates)</option>
+					<option value={l.key}>{kitName(l.name)} ({l.plateCount} plates)</option>
 				{/each}
 				{#if current === 'upload'}<option value="upload" disabled>Your uploaded 3MF</option>{/if}
 				{#if allowUpload}<option value="__upload__">Upload my sliced 3MF…</option>{/if}

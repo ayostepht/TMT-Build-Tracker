@@ -140,6 +140,16 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			const n = num(p.convertedRuns) ?? 0;
 			return `${who} switched the plates to the ${str(p.name) ?? 'selected'} layout (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
 		}
+		case 'build.printer': {
+			const n = str(p.name);
+			return n
+				? `${who} set the printer to ${n} (${num(p.bedX) ?? '?'}×${num(p.bedY) ?? '?'} mm bed)`
+				: `${who} cleared the printer`;
+		}
+		case 'plates.arrange': {
+			const n = num(p.convertedRuns) ?? 0;
+			return `${who} arranged the plates for ${str(p.printer) ?? 'the printer'} (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
+		}
 		case 'plates.upload': {
 			const n = num(p.convertedRuns) ?? 0;
 			return `${who} organized the plates from ${str(p.fileName) ?? 'an uploaded 3MF'} (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;

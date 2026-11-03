@@ -389,3 +389,57 @@ export const savePlacement = (
 		`${tpl(templateId)}/placements/${encodeURIComponent(slug)}`,
 		patch
 	).then((r) => r.placement);
+
+// ---- printer-aware plate planner
+
+/** Set (or clear with null) the printer a build is planned for. */
+export const setPrinter = (
+	id: string,
+	printer: import('#lib/domain/types.ts').BuildPrinter | null
+) => call('PATCH', `${b(id)}/printer`, { printer });
+
+/** Arrange the build's plates for its printer; `convertRuns` confirms converting plate print logs. */
+export const arrangePlates = (id: string, convertRuns = false) =>
+	call<{
+		plates: number;
+		convertedRuns: number;
+		warnings: import('#lib/domain/arrange.ts').ArrangeWarning[];
+	}>('POST', `${b(id)}/plates/arrange`, { convertRuns });
+
+export type ArrangementDto = import('#lib/domain/arrange.ts').ArrangementInfo;
+export const getArrangement = (id: string) => call<ArrangementDto>('GET', `${b(id)}/arrangement`);
+
+// ---- print geometry (site admin, kit page)
+
+export interface PrintGeometryRow {
+	slug: string;
+	/** 'seed' (numbers from the kit data) or the import's note. */
+	source: string;
+	w: number;
+	d: number;
+	h: number;
+	pieces: number;
+	copies: number;
+	hasMesh: boolean;
+	settings: Record<string, string>;
+	updatedAt: string;
+}
+export interface PrintGeometryImportResult {
+	imported: number;
+	report: { file: string; matched: number; unmatched: string[]; warnings: string[]; ms: number }[];
+}
+export const listPrintGeometry = (templateId: string) =>
+	call<{ rows: PrintGeometryRow[] }>('GET', `${tpl(templateId)}/print-geometry`).then(
+		(r) => r.rows
+	);
+export const uploadPrintGeometry = (
+	templateId: string,
+	file: File,
+	onProgress?: (fraction: number) => void
+) =>
+	uploadFile<PrintGeometryImportResult>(
+		`${tpl(templateId)}/print-geometry?name=${encodeURIComponent(file.name)}`,
+		file,
+		'application/octet-stream',
+		onProgress
+	);

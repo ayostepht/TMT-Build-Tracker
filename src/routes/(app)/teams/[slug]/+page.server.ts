@@ -5,6 +5,7 @@ import { inactiveSlugs } from '#lib/domain/variants.ts';
 import { normalizeRole, ApiError } from '#lib/server/access.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { createBuild } from '#lib/server/builds/create.ts';
+import { parsePrinter } from '#lib/printers/printer.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { isPersonalMetadata } from '#lib/server/teams.ts';
 import {
@@ -171,6 +172,7 @@ export const actions: Actions = {
 					hospital: s('hospital'),
 					deliveryDate: s('deliveryDate'),
 					plateLayout: s('plateLayout'),
+					printer: printerFromForm(s('printer')),
 					variantChoices: Object.fromEntries(
 						[...f.entries()]
 							.filter(([k, v]) => k.startsWith('variant:') && typeof v === 'string' && v)
@@ -254,3 +256,13 @@ export const actions: Actions = {
 		}
 	}
 };
+
+/** The New build form carries the printer as JSON in one hidden field; empty = none. */
+function printerFromForm(raw: string | null) {
+	if (!raw) return null;
+	try {
+		return parsePrinter(JSON.parse(raw));
+	} catch (e) {
+		throw new ApiError(400, e instanceof Error ? e.message : 'Invalid printer');
+	}
+}

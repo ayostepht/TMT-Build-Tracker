@@ -80,3 +80,24 @@ test('design tab: move parts between slots, add a color, share a design and star
 		await page.locator('li.slot[data-role="primary"] b').innerText()
 	);
 });
+
+test('design tab: Esc, the close button and picking the same part again deselect', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'deselect');
+	await page.goto(`/builds/${buildId}/design`);
+	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const sheet = page.getByTestId('part-sheet');
+	await wing.click();
+	await expect(sheet).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(sheet).toHaveCount(0);
+	await wing.click();
+	await expect(sheet).toBeVisible();
+	await sheet.getByRole('button', { name: 'Close part details' }).click();
+	await expect(sheet).toHaveCount(0);
+	await wing.click();
+	await expect(sheet).toBeVisible();
+	await wing.click();
+	await expect(sheet).toHaveCount(0);
+});

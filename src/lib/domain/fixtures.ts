@@ -104,7 +104,8 @@ export function makeView(
 		guidePages: [],
 		hardware: [],
 		activity: [],
-		members: []
+		members: [],
+		printer: null
 	};
 }
 
