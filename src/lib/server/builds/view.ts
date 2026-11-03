@@ -226,6 +226,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		? {
 				url: `/api/templates/${encodeURIComponent(tpl.id)}/model.glb?v=${encodeURIComponent(modelRow.version)}`,
 				version: modelRow.version,
+				// Filled by the model-import feature once a hardware GLB can be uploaded.
+				hardwareUrl: null,
 				placements: db
 					.select()
 					.from(templatePartPlacements)

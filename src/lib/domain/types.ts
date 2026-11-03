@@ -195,6 +195,8 @@ export interface PartPlacement {
 export interface TemplateModelInfo {
 	/** URL of the GLB served by the app (e.g. `/api/templates/<id>/model.glb?v=<hash>`); one node per part named by slug, hardware nodes named `hw:<name>`. */
 	url: string;
+	/** Optional second GLB with neutral hardware (casters, bolts, bearings), nodes named `hw:<name>`, already in the assembly frame; uploaded by a site admin (built offline with scripts/step-to-glb.mjs). */
+	hardwareUrl: string | null;
 	version: string; // hash or timestamp, for cache busting
 	placements: PartPlacement[];
 	/** Slugs present as nodes in the GLB. */
