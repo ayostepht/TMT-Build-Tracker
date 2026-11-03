@@ -53,9 +53,32 @@ export function slicerFor(view: BuildView, u: Unit): number | null {
 	return positive(pl.perPartRuns ? pl.slicerByPart[u.key] : pl.slicerGrams);
 }
 
+/**
+ * Grams per run by role from a sliced 3MF (`Plate.filamentGrams`), for a whole-plate unit;
+ * null when the plate has none (the unit is then all one role, `Unit.role`).
+ */
+function plateRoleGrams(view: BuildView, u: Unit): Record<string, number> | null {
+	const pl = plateByNumber(view, u.plate);
+	if (!pl || pl.perPartRuns) return null;
+	const fg = Object.fromEntries(
+		Object.entries(pl.filamentGrams ?? {}).filter(([, g]) => typeof g === 'number' && g > 0)
+	);
+	return Object.keys(fg).length ? fg : null;
+}
+
+/** How a unit's grams split over filament roles: {role: 1} normally, grams-proportional for multi-filament plates. */
+export function roleShares(view: BuildView, u: Unit): Record<string, number> {
+	const fg = plateRoleGrams(view, u);
+	if (!fg) return { [u.role]: 1 };
+	const total = Object.values(fg).reduce((a, b) => a + b, 0);
+	return Object.fromEntries(Object.entries(fg).map(([r, g]) => [r, g / total]));
+}
+
 export function estPerRun(view: BuildView, u: Unit): number {
 	const s = slicerFor(view, u);
 	if (s) return s;
+	const fg = plateRoleGrams(view, u);
+	if (fg) return Object.values(fg).reduce((a, b) => a + b, 0);
 	return u.parts.reduce((a, p) => a + (p.bomGrams || 0), 0) / u.runs;
 }
 
@@ -121,16 +144,17 @@ export interface FilamentStat {
 export function filamentStats(view: BuildView): FilamentStat[] {
 	const all = units(view);
 	return view.filaments.map((f) => {
-		const us = all.filter((u) => u.role === f.key);
-		const used = us.reduce((a, u) => a + unitUsed(view, u), 0);
-		const need = us.reduce((a, u) => a + unitLeft(view, u), 0);
+		const share = (u: Unit) => roleShares(view, u)[f.key] ?? 0;
+		const us = all.filter((u) => share(u) > 0);
+		const used = us.reduce((a, u) => a + unitUsed(view, u) * share(u), 0);
+		const need = us.reduce((a, u) => a + unitLeft(view, u) * share(u), 0);
 		const haveGrams = (Number(f.spools) || 0) * 1000;
 		const spare = haveGrams - used - need;
 		return {
 			role: f.key,
 			used,
 			need,
-			total: us.reduce((a, u) => a + estTotal(view, u), 0),
+			total: us.reduce((a, u) => a + estTotal(view, u) * share(u), 0),
 			unweighed: us.filter((u) => !unitDone(view, u) && !estPerRun(view, u)).length,
 			haveGrams,
 			short: spare < 0,

@@ -170,6 +170,7 @@ export const actions: Actions = {
 					recipient: s('recipient'),
 					hospital: s('hospital'),
 					deliveryDate: s('deliveryDate'),
+					plateLayout: s('plateLayout'),
 					variantChoices: Object.fromEntries(
 						[...f.entries()]
 							.filter(([k, v]) => k.startsWith('variant:') && typeof v === 'string' && v)

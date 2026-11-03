@@ -11,6 +11,7 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \
+    BODY_SIZE_LIMIT=200M \
     PORT=3000 \
     HOST=0.0.0.0 \
     DATABASE_URL=/data/tmt.db

@@ -23,6 +23,7 @@ export const POST: RequestHandler = (event) =>
 				recipient: str(o.recipient),
 				hospital: str(o.hospital),
 				deliveryDate: str(o.deliveryDate),
+				plateLayout: str(o.plateLayout),
 				variantChoices:
 					typeof o.variantChoices === 'object' && o.variantChoices !== null
 						? (o.variantChoices as Record<string, string>)

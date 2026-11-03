@@ -1,4 +1,5 @@
 import type { BuildPhase, BuildView, PartStatus, PrintRunInput } from '#lib/domain/types.ts';
+import type { ThreeMfPlate, ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { PartSnapshot } from '#lib/domain/logrun.ts';
 
 async function call<T = Record<string, never>>(
@@ -146,3 +147,245 @@ export const importPrototype = (
 		`${b(id)}/import${opts.dryRun ? '?dryRun=1' : ''}`,
 		{ data, replace: opts.replace === true }
 	);
+
+// ---- Design tab and shareable designs
+
+export interface DesignRoleInput {
+	key?: string;
+	name: string;
+	material: string;
+	hex: string;
+}
+
+/** Edit a build's colors: move parts between slots, add a slot, remove an unused one. */
+export const setBuildDesign = (
+	id: string,
+	patch: { partRoles?: Record<string, string>; addRole?: DesignRoleInput; removeRole?: string }
+) => call('PATCH', `${b(id)}/design`, patch);
+
+export const createDesign = (input: { buildId: string; name: string; isPublic: boolean }) =>
+	call<{ id: string; slug: string }>('POST', '/api/designs', input);
+
+export const updateDesignMeta = (id: string, patch: { name?: string; isPublic?: boolean }) =>
+	call('PATCH', `/api/designs/${encodeURIComponent(id)}`, patch);
+
+export const deleteDesign = (id: string) =>
+	call('DELETE', `/api/designs/${encodeURIComponent(id)}`);
+
+/** Replace a build's colors with a saved design. */
+export const applyDesign = (id: string, buildId: string) =>
+	call('POST', `/api/designs/${encodeURIComponent(id)}/apply`, { buildId });
+
+/** Upload the PNG preview of a design you wrote (up to 2 MB). */
+export async function uploadDesignSnapshot(id: string, png: Blob): Promise<void> {
+	const res = await fetch(`/api/designs/${encodeURIComponent(id)}/snapshot`, {
+		method: 'PUT',
+		headers: { 'content-type': 'image/png' },
+		body: png
+	});
+	if (!res.ok) {
+		let msg = `Request failed (${res.status})`;
+		try {
+			msg = ((await res.json()) as { error?: string }).error ?? msg;
+		} catch {
+			/* non-JSON error body */
+		}
+		throw new Error(msg);
+	}
+}
+
+// ---- Plate layouts and slicer uploads (milestone 5)
+
+export interface PlateLayoutInfo {
+	key: string;
+	name: string;
+	printerNote: string;
+	isDefault: boolean;
+	plateCount: number;
+}
+export const templatePlateLayouts = (templateId: string) =>
+	call<{ layouts: PlateLayoutInfo[] }>(
+		'GET',
+		`/api/templates/${encodeURIComponent(templateId)}/plate-layouts`
+	).then((r) => r.layouts);
+export const buildPlateLayouts = (buildId: string) =>
+	call<{ layouts: PlateLayoutInfo[]; current: string | null }>(
+		'GET',
+		`${b(buildId)}/plates/layouts`
+	);
+export const setPlateLayout = (buildId: string, key: string, convertRuns = false) =>
+	call<{ plates: number; convertedRuns: number }>('POST', `${b(buildId)}/plates/layout`, {
+		key,
+		convertRuns
+	});
+
+export type UploadedPlate = Omit<ThreeMfPlate, 'thumbnail'> & { hasThumbnail: boolean };
+export interface UploadSuggestionsDto {
+	matches: Record<string, { slug: string | null; confidence: number; reason: string }>;
+	mapping: Record<string, string | null>;
+	filamentMap: Record<string, string | null>;
+	variantChoices: Record<string, string>;
+}
+export interface UploadResult {
+	uploadId: string;
+	summary: Omit<ThreeMfSummary, 'plates'> & { plates: UploadedPlate[] };
+	suggestions: UploadSuggestionsDto;
+}
+
+/** Streams the file to the server (raw body, so large files and progress work). */
+export function uploadThreeMf(
+	buildId: string,
+	file: File,
+	onProgress?: (fraction: number) => void
+): Promise<UploadResult> {
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', `${b(buildId)}/plates/upload?name=${encodeURIComponent(file.name)}`);
+		xhr.setRequestHeader('content-type', 'application/octet-stream');
+		xhr.upload.onprogress = (e) => {
+			if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+		};
+		xhr.onerror = () => reject(new Error('Upload failed. Check the connection and try again.'));
+		xhr.onload = () => {
+			let data: Record<string, unknown> = {};
+			try {
+				data = JSON.parse(xhr.responseText);
+			} catch {
+				/* non-JSON error body */
+			}
+			if (xhr.status >= 200 && xhr.status < 300) resolve(data as unknown as UploadResult);
+			else
+				reject(
+					new Error(
+						xhr.status === 413
+							? ((data.error as string) ?? 'The file is too large for this server')
+							: ((data.error as string) ?? `Upload failed (${xhr.status})`)
+					)
+				);
+		};
+		xhr.send(file);
+	});
+}
+export const applyPlateUpload = (
+	buildId: string,
+	uploadId: string,
+	body: {
+		mapping: Record<string, string | null>;
+		filamentMap: Record<string, string | null>;
+		variantChoices?: Record<string, string>;
+		convertRuns?: boolean;
+	}
+) =>
+	call<{ plates: number; skipped: number; convertedRuns: number }>(
+		'POST',
+		`${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}/apply`,
+		body
+	);
+export const discardPlateUpload = (buildId: string, uploadId: string) =>
+	call('DELETE', `${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}`);
+export const plateThumbnailUrl = (buildId: string, number: number, v = '') =>
+	`${b(buildId)}/plates/${number}/thumbnail${v ? `?v=${encodeURIComponent(v)}` : ''}`;
+export const uploadThumbnailUrl = (buildId: string, uploadId: string, number: number) =>
+	`${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}/thumbnail/${number}`;
+
+// ---- 3D model admin (site admin only) --------------------------------------------
+
+export interface ModelJobInfo {
+	id: string;
+	status: 'queued' | 'running' | 'done' | 'failed';
+	progress: number;
+	message: string;
+	report: {
+		file: string;
+		slug: string | null;
+		slugs?: string[];
+		status: 'ok' | 'missing' | 'failed' | 'skipped' | 'unknown';
+		triangles?: number;
+		ms?: number;
+		error?: string;
+		detail?: string;
+	}[];
+	createdAt: string;
+	finishedAt: string | null;
+}
+
+const tpl = (id: string) => `/api/templates/${encodeURIComponent(id)}`;
+
+/** Upload a raw file as the request body with upload progress (fetch cannot report it). */
+function uploadFile<T>(
+	url: string,
+	file: File,
+	contentType: string,
+	onProgress?: (fraction: number) => void
+): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', url);
+		xhr.setRequestHeader('content-type', contentType);
+		xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+		xhr.onerror = () => reject(new Error('The upload failed (network error)'));
+		xhr.onload = () => {
+			let data: { error?: string } & Record<string, unknown> = {};
+			try {
+				data = JSON.parse(xhr.responseText);
+			} catch {
+				/* non-JSON body, e.g. a proxy error page */
+			}
+			if (xhr.status >= 200 && xhr.status < 300) resolve(data as T);
+			else
+				reject(
+					new Error(
+						data.error ??
+							(xhr.status === 413
+								? 'The file is too large for the server (see BODY_SIZE_LIMIT in the README)'
+								: `Upload failed (${xhr.status})`)
+					)
+				);
+		};
+		xhr.send(file);
+	});
+}
+
+export const uploadStepZip = (
+	templateId: string,
+	file: File,
+	onProgress?: (fraction: number) => void
+) =>
+	uploadFile<{ jobId: string }>(
+		`${tpl(templateId)}/model?name=${encodeURIComponent(file.name)}`,
+		file,
+		'application/zip',
+		onProgress
+	).then((r) => r.jobId);
+
+export const getModelJob = (templateId: string, jobId: string) =>
+	call<{ job: ModelJobInfo }>(
+		'GET',
+		`${tpl(templateId)}/model/jobs/${encodeURIComponent(jobId)}`
+	).then((r) => r.job);
+
+export const uploadHardwareGlb = (
+	templateId: string,
+	file: File,
+	onProgress?: (fraction: number) => void
+) =>
+	uploadFile<{ hardwareUrl: string | null }>(
+		`${tpl(templateId)}/model/hardware`,
+		file,
+		'model/gltf-binary',
+		onProgress
+	);
+
+export const removeHardwareGlb = (templateId: string) =>
+	call('DELETE', `${tpl(templateId)}/model/hardware`);
+
+export const savePlacement = (
+	templateId: string,
+	slug: string,
+	patch: { matrix?: number[]; instances?: number[][]; placed?: boolean }
+) =>
+	call<{ placement: import('#lib/domain/types.ts').PartPlacement }>(
+		'PATCH',
+		`${tpl(templateId)}/placements/${encodeURIComponent(slug)}`,
+		patch
+	).then((r) => r.placement);

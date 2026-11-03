@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import { ApiError, requireEditor } from '../access';
+import { canSeeDesign } from '../designs/access';
 import type { Db } from '../db';
 import {
 	activity,
@@ -11,6 +12,7 @@ import {
 	colorDesigns,
 	templateFilamentRoles,
 	templateParts,
+	templatePlateLayouts,
 	templatePlates,
 	templates
 } from '../db/schema';
@@ -25,6 +27,8 @@ export interface CreateBuildInput {
 	deliveryDate?: string | null;
 	/** group key → option key; groups left out get the template default. Unknown keys are rejected. */
 	variantChoices?: Record<string, string> | null;
+	/** A built-in plate layout key (`template_plate_layouts`); omitted = the template's default plates. */
+	plateLayout?: string | null;
 }
 
 /** Create a build from a template (and optional color design) in one transaction. Returns the new id. */
@@ -43,11 +47,24 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 		const badChoice = validateChoices(tpl.variantGroups, choices);
 		if (badChoice) throw new ApiError(400, badChoice);
 
+		const layout = input.plateLayout
+			? tx
+					.select()
+					.from(templatePlateLayouts)
+					.where(
+						and(
+							eq(templatePlateLayouts.templateId, tpl.id),
+							eq(templatePlateLayouts.key, input.plateLayout)
+						)
+					)
+					.get()
+			: undefined;
+		if (input.plateLayout && !layout) throw new ApiError(400, 'Unknown plate layout');
+
 		let design: typeof colorDesigns.$inferSelect | undefined;
 		if (input.designId) {
 			design = tx.select().from(colorDesigns).where(eq(colorDesigns.id, input.designId)).get();
-			if (!design || design.templateId !== tpl.id) throw new ApiError(400, 'Unknown design');
-			if (!design.isPublic && design.authorUserId !== userId)
+			if (!design || design.templateId !== tpl.id || !canSeeDesign(tx, design, userId))
 				throw new ApiError(400, 'Unknown design');
 		}
 
@@ -70,6 +87,7 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 						}
 					: null,
 				variantChoices: resolveChoices(tpl.variantGroups, choices),
+				plateLayout: layout?.key ?? null,
 				createdBy: userId
 			})
 			.returning({ id: builds.id })
@@ -93,6 +111,28 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 				})
 				.run();
 		}
+		// Colors a design added beyond the kit's own slots.
+		const own = new Set(
+			tx
+				.select({ key: templateFilamentRoles.key })
+				.from(templateFilamentRoles)
+				.where(eq(templateFilamentRoles.templateId, tpl.id))
+				.all()
+				.map((r) => r.key)
+		);
+		for (const r of design?.roles ?? []) {
+			if (own.has(r.key)) continue;
+			tx.insert(buildFilaments)
+				.values({
+					buildId: id,
+					roleKey: r.key,
+					name: r.name,
+					material: r.material,
+					hex: r.hex,
+					spools: 0
+				})
+				.run();
+		}
 		// Rows for every part, active or not, so switching variants keeps any progress.
 		for (const p of tx
 			.select({ slug: templateParts.slug })
@@ -101,11 +141,24 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 			.all()) {
 			tx.insert(buildParts).values({ buildId: id, partSlug: p.slug }).run();
 		}
-		for (const p of tx
-			.select()
-			.from(templatePlates)
-			.where(eq(templatePlates.templateId, tpl.id))
-			.all()) {
+		if (layout) {
+			for (const p of layout.plates)
+				tx.insert(buildPlates)
+					.values({
+						buildId: id,
+						number: p.number,
+						name: p.name,
+						estSeconds: p.estSeconds,
+						runs: p.runs,
+						perPartRuns: p.perPartRuns ?? false,
+						parts: p.parts,
+						source: `layout:${layout.key}`
+					})
+					.run();
+		}
+		for (const p of layout
+			? []
+			: tx.select().from(templatePlates).where(eq(templatePlates.templateId, tpl.id)).all()) {
 			tx.insert(buildPlates)
 				.values({
 					buildId: id,

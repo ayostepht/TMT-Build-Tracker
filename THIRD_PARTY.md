@@ -28,3 +28,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## 3D model pipeline (npm dependencies)
+
+The kit admin converts each install's own MakeGood STEP files into a web model. None of
+these libraries ship any MakeGood data.
+
+- **occt-import-js** (LGPL-2.1, https://github.com/kovacsv/occt-import-js): a WebAssembly build of
+  OpenCascade that reads STEP files. Used unmodified as an npm dependency, loaded at runtime from
+  `node_modules`; you can replace it with your own build of the library.
+- **OpenCascade Technology** (LGPL-2.1 with the OCCT exception, https://dev.opencascade.org): the
+  geometry kernel compiled into occt-import-js.
+- **three** (MIT, https://threejs.org): the 3D viewer (`ChairViewer`), including its GLTFLoader,
+  OrbitControls, RoomEnvironment and meshopt decoder add-ons.
+- **glTF-Transform** (MIT, https://gltf-transform.dev): builds and optimises the GLB.
+- **meshoptimizer** (MIT, https://github.com/zeux/meshoptimizer): geometry compression
+  (EXT_meshopt_compression).

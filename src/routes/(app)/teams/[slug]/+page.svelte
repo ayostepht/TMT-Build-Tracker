@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import type { PageProps } from './$types';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
+	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 
 	let { data, form }: PageProps = $props();
 	let templateId = $state('');
@@ -68,6 +69,7 @@
 					onselect={(g, o) => (choices = { ...choices, [g]: o })}
 				/>
 			{/key}
+			<PlateLayoutPicker {templateId} />
 			<label class="field">Recipient (optional)<input name="recipient" /></label>
 			<label class="field">Hospital (optional)<input name="hospital" /></label>
 			<label class="field">Delivery date (optional)<input type="date" name="deliveryDate" /></label>

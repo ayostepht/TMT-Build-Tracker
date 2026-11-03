@@ -1,4 +1,5 @@
 import { backfillBuildParts } from './builds/backfill';
+import { failStaleModelJobs, kickQueue } from './models/jobs';
 import { getDb, runMigrations } from './db';
 import { templateSeeds } from './seed';
 import { seedTemplates } from './seed/run';
@@ -15,5 +16,8 @@ export function startup(): void {
 	if (updated.length) console.log(`[tmt] updated templates: ${updated.join(', ')}`);
 	const added = backfillBuildParts(db);
 	if (added) console.log(`[tmt] added ${added} part rows to existing builds`);
+	const stale = failStaleModelJobs(db);
+	if (stale) console.log(`[tmt] marked ${stale} interrupted 3D model job(s) as failed`);
+	kickQueue(db);
 	done = true;
 }

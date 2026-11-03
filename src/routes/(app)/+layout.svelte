@@ -48,6 +48,7 @@
 			{/if}
 		</div>
 		<div class="who">
+			<a class="muted" href={resolve('/(app)/designs')}>Designs</a>
 			{#if data.siteAdmin}
 				<a class="muted" href={resolve('/(app)/admin/templates')}>Kit admin</a>
 			{/if}

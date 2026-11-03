@@ -1,14 +1,43 @@
 <script lang="ts">
 	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
-	import { printing, deleteRun, updatePlate } from '#lib/client/api.ts';
+	import {
+		printing,
+		deleteRun,
+		updatePlate,
+		buildPlateLayouts,
+		plateThumbnailUrl,
+		type PlateLayoutInfo
+	} from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from '#lib/components/build-context.svelte.ts';
 	import type { Plate, PrintRun } from '#lib/domain/types.ts';
 	import RoleChip from '#lib/components/RoleChip.svelte';
 	import RunTable from '#lib/components/RunTable.svelte';
 	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
+	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
+	import PlateUpload from '#lib/components/PlateUpload.svelte';
 
 	const ctx = getBuildCtx();
+	let uploading = $state(false);
+	let notice = $state<string | null>(null);
+	let layouts = $state<PlateLayoutInfo[]>([]);
+	let current = $state<string | null>(null);
+	// Reload the layout name whenever the plates come from somewhere else (switch, upload, other tab).
+	$effect(() => {
+		void ctx.view.plates[0]?.source;
+		buildPlateLayouts(ctx.id)
+			.then((r) => {
+				layouts = r.layouts;
+				current = r.current;
+			})
+			.catch(() => {});
+	});
+	const layoutName = $derived(
+		current === 'upload'
+			? 'Your uploaded 3MF'
+			: (layouts.find((l) => l.key === current)?.name ?? 'Template default')
+	);
+	const layoutNote = $derived(layouts.find((l) => l.key === current)?.printerNote ?? null);
 	let logOpen = $state<Record<number, boolean>>({});
 	let editing = $state<PrintRun | null>(null);
 	let editOpen = $state(false);
@@ -48,6 +77,39 @@
 	}
 </script>
 
+<section class="card layout-card" aria-label="Plate layout">
+	<div class="group-head">
+		<h2>Plate layout: <span data-testid="layout-name">{layoutName}</span></h2>
+		<span class="meta num">{ctx.view.plates.length} plates</span>
+	</div>
+	{#if layoutNote && current !== 'upload'}<p class="muted">{layoutNote}</p>{/if}
+	{#if ctx.canEdit}
+		<PlateLayoutPicker
+			buildId={ctx.id}
+			allowUpload
+			onchanged={() => ctx.refresh()}
+			onupload={() => ((uploading = true), (notice = null))}
+		/>
+	{/if}
+	<p class="meta">
+		Unsliced files do not carry print times or grams. Upload a sliced 3MF to get them per plate, or
+		type the slicer grams on each plate.
+	</p>
+	{#if notice}<p class="ok-note" role="status">{notice}</p>{/if}
+</section>
+
+{#if uploading && ctx.canEdit}
+	<PlateUpload
+		view={ctx.view}
+		onclose={() => (uploading = false)}
+		ondone={(msg) => {
+			uploading = false;
+			notice = msg;
+			ctx.refresh();
+		}}
+	/>
+{/if}
+
 {#each ctx.view.plates as pl (pl.number)}
 	{@const runs = ctx.view.runs.filter((r) => r.plateNumber === pl.number)}
 	{@const idle = pl.parts.filter((s) => !['Printed', 'Printing'].includes(status(s) ?? ''))}
@@ -77,6 +139,25 @@
 			{/if}
 		</div>
 
+		{#if pl.thumbnailPath}
+			<img
+				class="plate-thumb"
+				src={plateThumbnailUrl(ctx.id, pl.number, pl.source)}
+				alt="Plate {pl.number} preview"
+				loading="lazy"
+				width="160"
+				height="160"
+			/>
+		{/if}
+		{#if Object.keys(pl.filamentGrams).length}
+			<div class="fil-grams">
+				{#each Object.entries(pl.filamentGrams) as [role, g] (role)}
+					<span class="meta num"
+						>{filLabel(ctx.filament(role), role)} {fmt(g)} g{pl.runs > 1 ? ' per run' : ''}</span
+					>
+				{/each}
+			</div>
+		{/if}
 		<div class="now-parts">
 			{#each pl.parts as slug (slug)}
 				<button
@@ -157,6 +238,33 @@
 {#if ctx.canEdit}
 	<LogRunSheet bind:open={editOpen} editRun={editing} />
 {/if}
-<p class="foot">
-	3MF upload, to organize plates from your own slicer project, comes in a later version.
-</p>
+
+<style>
+	.layout-card {
+		margin-bottom: 12px;
+	}
+	.layout-card p {
+		margin: 0;
+	}
+	.ok-note {
+		padding: 8px 10px;
+		border-radius: 6px;
+		background: var(--ok-soft);
+		color: var(--ok);
+		font-size: 13px;
+	}
+	.plate-thumb {
+		justify-self: start;
+		max-width: 100%;
+		height: auto;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: #fff;
+		object-fit: contain;
+	}
+	.fil-grams {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 12px;
+	}
+</style>

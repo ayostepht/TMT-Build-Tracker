@@ -36,6 +36,7 @@ export default defineConfig({
 					PORT: String(PORT),
 					DATABASE_URL: `${DB_DIR}/tmt.db`,
 					BETTER_AUTH_SECRET: 'e2e-secret-not-for-production-0123456789abcdef',
+					BODY_SIZE_LIMIT: '256M',
 					PUBLIC_URL: '',
 					BETTER_AUTH_URL: '',
 					ORIGIN: ''

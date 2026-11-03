@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -8,12 +9,13 @@
 	<div class="kicker">Site admin</div>
 	<h1>Kits</h1>
 	<p class="muted">
-		Templates installed on this server. Model import and placement editing will appear here.
+		Templates installed on this server. Open a kit to import its 3D model and adjust where each part
+		sits.
 	</p>
 	<ul class="tpl-list">
 		{#each data.templates as t (t.id)}
 			<li class="tpl">
-				<h3>{t.name}</h3>
+				<h3><a href={resolve('/(app)/admin/templates/[id]', { id: t.id })}>{t.name}</a></h3>
 				<div class="muted">{t.version}</div>
 				<div class="counts">
 					<span class="set">{t.parts} parts</span>

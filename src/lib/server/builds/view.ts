@@ -14,7 +14,9 @@ import type {
 	RunResult,
 	TemplateModelInfo
 } from '#lib/domain/types.ts';
+import { materialFamily } from '#lib/filament-catalog.ts';
 import { buildAccess } from '../access';
+import { hardwareModelUrl } from '../models/hardware';
 import type { Db } from '../db';
 import {
 	activity,
@@ -30,6 +32,7 @@ import {
 	templateModels,
 	templatePartPlacements,
 	templateParts,
+	templatePlateLayouts,
 	templatePlates,
 	templates,
 	user
@@ -67,7 +70,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 				name: f.name,
 				material: f.material,
 				hex: f.hex,
-				tpu: t?.tpu ?? false,
+				tpu: t?.tpu ?? materialFamily(f.material) === 'tpu',
 				spools: f.spools,
 				recommendedSpools: t?.recommendedSpools ?? 1,
 				spoolmanSpoolId: f.spoolmanSpoolId
@@ -75,7 +78,9 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		});
 	// keep template role order
 	const order = [...tRoles.keys()];
-	filaments.sort((a, c) => order.indexOf(a.key) - order.indexOf(c.key));
+	// Colors added in the Design tab come after the template's own slots.
+	const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length);
+	filaments.sort((a, c) => rank(a.key) - rank(c.key));
 
 	const variantGroups = tpl.variantGroups ?? [];
 	const variantChoices = resolveChoices(variantGroups, b.variantChoices);
@@ -147,6 +152,19 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			.all()
 			.map((p) => [p.number, p.runNote])
 	);
+	// Plates copied from a built-in layout take their run note from that layout.
+	const layoutNotes = new Map<string, Map<number, string | null>>();
+	for (const l of db
+		.select()
+		.from(templatePlateLayouts)
+		.where(eq(templatePlateLayouts.templateId, tpl.id))
+		.all())
+		layoutNotes.set(l.key, new Map(l.plates.map((p) => [p.number, p.runNote ?? null])));
+	const noteFor = (source: string | null, number: number): string | null => {
+		if (source?.startsWith('layout:')) return layoutNotes.get(source.slice(7))?.get(number) ?? null;
+		if (source?.startsWith('upload:')) return null;
+		return runNotes.get(number) ?? null;
+	};
 	const plates: Plate[] = db
 		.select()
 		.from(buildPlates)
@@ -158,7 +176,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			name: p.name,
 			estSeconds: p.estSeconds,
 			runs: p.runs,
-			runNote: runNotes.get(p.number) ?? null,
+			runNote: noteFor(p.source, p.number),
 			perPartRuns: p.perPartRuns,
 			parts: p.parts,
 			slicerGrams: p.slicerGrams,
@@ -226,8 +244,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		? {
 				url: `/api/templates/${encodeURIComponent(tpl.id)}/model.glb?v=${encodeURIComponent(modelRow.version)}`,
 				version: modelRow.version,
-				// Filled by the model-import feature once a hardware GLB can be uploaded.
-				hardwareUrl: null,
+				hardwareUrl: hardwareModelUrl(tpl.id),
 				placements: db
 					.select()
 					.from(templatePartPlacements)

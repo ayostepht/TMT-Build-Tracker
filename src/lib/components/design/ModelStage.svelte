@@ -1,0 +1,123 @@
+<script lang="ts">
+	import { resolve } from '$app/paths';
+	import ChairViewer from '#lib/components/ChairViewer.svelte';
+	import type { PartPlacement, TemplateModelInfo } from '#lib/domain/types.ts';
+
+	/**
+	 * The 3D stage of the Design tab and the designs gallery. The only place that
+	 * imports ChairViewer; shows a friendly empty state while the template has no
+	 * model, and forwards the viewer's methods.
+	 */
+	let {
+		model,
+		colors,
+		hidden = [],
+		selected = null,
+		dimOthers = false,
+		placements,
+		onpick,
+		onready,
+		autoRotate = false,
+		siteAdmin = false,
+		label = 'Chair preview'
+	}: {
+		model: TemplateModelInfo | null;
+		colors: Record<string, string>;
+		hidden?: string[];
+		selected?: string | null;
+		dimOthers?: boolean;
+		placements?: PartPlacement[];
+		onpick?: (slug: string | null) => void;
+		onready?: (info: { rendered: string[]; unplaced: string[] }) => void;
+		autoRotate?: boolean;
+		siteAdmin?: boolean;
+		label?: string;
+	} = $props();
+
+	let viewer = $state<ReturnType<typeof ChairViewer>>();
+
+	export function snapshot(opts?: {
+		width?: number;
+		height?: number;
+		background?: string;
+	}): Promise<Blob> {
+		if (!viewer) return Promise.reject(new Error('No 3D view to capture'));
+		return viewer.snapshot(opts);
+	}
+	export function resetView() {
+		viewer?.resetView();
+	}
+	export function focus(slug: string) {
+		viewer?.focus(slug);
+	}
+</script>
+
+<div class="stage" role="group" aria-label={label}>
+	{#if model}
+		<ChairViewer
+			bind:this={viewer}
+			{model}
+			{colors}
+			{hidden}
+			{selected}
+			{dimOthers}
+			{placements}
+			{onpick}
+			{onready}
+			{autoRotate}
+		>
+			{#snippet fallback()}
+				<div class="empty">
+					<strong>3D preview is not available in this browser</strong>
+					<p class="muted">Colors still work: use the part list and the color slots.</p>
+				</div>
+			{/snippet}
+		</ChairViewer>
+		<button type="button" class="reset btn sm" onclick={() => viewer?.resetView()}>
+			Reset view
+		</button>
+	{:else}
+		<div class="empty" data-testid="no-model">
+			<strong>No 3D model yet</strong>
+			<p class="muted">
+				A kit admin can import MakeGood's STEP files to turn this on. Until then, pick colors from
+				the part list.
+			</p>
+			{#if siteAdmin}
+				<a class="btn sm" href={resolve('/(app)/admin/templates')}>Open kit admin</a>
+			{/if}
+		</div>
+	{/if}
+</div>
+
+<style>
+	.stage {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		min-height: 220px;
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		overflow: hidden;
+	}
+	.empty {
+		height: 100%;
+		display: grid;
+		place-content: center;
+		justify-items: center;
+		gap: 8px;
+		text-align: center;
+		padding: 24px;
+	}
+	.empty p {
+		margin: 0;
+		max-width: 38ch;
+	}
+	.reset {
+		position: absolute;
+		right: 10px;
+		bottom: 10px;
+		opacity: 0.9;
+	}
+</style>

@@ -136,6 +136,14 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			if (p.slicerGrams === null) return `${who} cleared the slicer weight of ${label}`;
 			return `${who} updated the slicer weights of ${label}`;
 		}
+		case 'plates.layout': {
+			const n = num(p.convertedRuns) ?? 0;
+			return `${who} switched the plates to the ${str(p.name) ?? 'selected'} layout (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
+		}
+		case 'plates.upload': {
+			const n = num(p.convertedRuns) ?? 0;
+			return `${who} organized the plates from ${str(p.fileName) ?? 'an uploaded 3MF'} (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
+		}
 		case 'filament.spools': {
 			const s = num(p.spools);
 			return s === null
@@ -150,6 +158,30 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			if (num(p.spools) !== null) bits.push(`set spools to ${fmtSpools(num(p.spools) as number)}`);
 			return `${who} updated ${fil(p.role)}${bits.length ? `: ${list(bits)}` : ''}`;
 		}
+		case 'design.update': {
+			const bits: string[] = [];
+			if (Array.isArray(p.moves)) {
+				// "moved Wing Left and Wing Right to Overture Blue", one clause per target color.
+				const byRole = new Map<string, { to: string; names: string[] }>();
+				for (const m of p.moves as Obj[]) {
+					const to = str(m.roleName) ?? fil(m.role);
+					const key = str(m.role) ?? to;
+					const e = byRole.get(key) ?? { to, names: [] };
+					e.names.push(str(m.name) ?? part(m.slug));
+					byRole.set(key, e);
+				}
+				for (const e of byRole.values()) bits.push(`moved ${list(e.names)} to ${e.to}`);
+			}
+			const added = (p.added ?? null) as Obj | null;
+			if (added) bits.push(`added a color: ${str(added.name) ?? 'new color'}`);
+			const removed = (p.removed ?? null) as Obj | null;
+			if (removed) bits.push(`removed a color: ${str(removed.name) ?? 'a color'}`);
+			return bits.length ? `${who} ${list(bits)}` : `${who} changed the colors`;
+		}
+		case 'design.apply':
+			return str(p.designName)
+				? `${who} applied the color design "${str(p.designName)}"`
+				: `${who} applied a color design`;
 		case 'build.import': {
 			const bits = [
 				num(p.parts) !== null ? `${fmt(num(p.parts) as number)} parts` : null,

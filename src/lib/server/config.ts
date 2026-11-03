@@ -73,6 +73,16 @@ export function templateModelPath(templateId: string): string {
 	return join(uploadsDir(), 'models', `${templateId}.glb`);
 }
 
+/** Absolute path of the optional neutral hardware GLB: `<uploadsDir>/models/<templateId>-hardware.glb`. */
+export function templateHardwarePath(templateId: string): string {
+	return join(uploadsDir(), 'models', `${templateId}-hardware.glb`);
+}
+
+/** Where uploaded STEP zips wait for their conversion job: `<uploadsDir>/imports`. */
+export function importsDir(): string {
+	return join(uploadsDir(), 'imports');
+}
+
 /** Lower-cased emails in `ADMIN_EMAILS` (comma-separated) that count as site admins. */
 export function adminEmails(): string[] {
 	return (env.ADMIN_EMAILS ?? '')

@@ -1,0 +1,82 @@
+import { expect, test } from './fixtures';
+import { ownerWithBuild } from './helpers';
+
+// CI has no MakeGood files, so the 3D model is absent: the Design tab must work from the part list alone.
+test('design tab: move parts between slots, add a color, share a design and start a build from it', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'design');
+
+	// Overview tile of the first slot before any change.
+	await page.goto(`/builds/${buildId}`);
+	const tile = page.locator('.tile').first();
+	await expect(tile).toBeVisible();
+	const beforeTile = await tile.innerText();
+
+	await page.goto(`/builds/${buildId}/design`);
+	await expect(page.getByTestId('no-model')).toContainText('No 3D model yet');
+
+	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const wingBefore = await wing.innerText();
+	await wing.click();
+	const sheet = page.getByTestId('part-sheet');
+	await expect(sheet).toContainText('Wing Left');
+	// Wings are PETG parts: flexible slots are listed but disabled, with the reason.
+	await expect(sheet.locator('button[data-role="soft"]')).toBeDisabled();
+	await expect(sheet).toContainText('needs PETG');
+
+	// "Apply to both sides" is on by default.
+	await sheet.locator('button[data-role="primary"]').click();
+	await expect(page.locator('button.row[data-slug="wing-left"]')).not.toHaveText(wingBefore);
+	const right = page.locator('button.row[data-slug="wing-right"]');
+	await expect(right).toContainText(
+		await page.locator('li.slot[data-role="primary"] b').innerText()
+	);
+
+	// The Overview filament tile changed (the wings moved onto the first slot).
+	await page.goto(`/builds/${buildId}`);
+	await expect(page.locator('.tile').first()).not.toHaveText(beforeTile);
+
+	// Add a color through the picker.
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('button', { name: 'Add a color' }).click();
+	const add = page.locator('.add');
+	await add.getByLabel('Name', { exact: true }).fill('E2E Red');
+	await add.getByLabel('Name', { exact: true }).press('Tab');
+	await add.getByRole('button', { name: 'Add color' }).click();
+	const slot = page.locator('li.slot[data-role="e2e-red"]');
+	await expect(slot).toContainText('E2E Red');
+
+	// Move a handle to it (one side only).
+	await page.locator('button.row[data-slug="handle-left"]').click();
+	await page.getByLabel(/Apply to both sides/).uncheck();
+	await page.getByTestId('part-sheet').locator('button[data-role="e2e-red"]').click();
+	await expect(page.locator('button.row[data-slug="handle-left"]')).toContainText('E2E Red');
+	await expect(page.locator('button.row[data-slug="handle-right"]')).not.toContainText('E2E Red');
+	await expect(slot).toContainText('1 parts');
+
+	// Save as a public design.
+	await page.getByLabel('Design name').fill('E2E Blues');
+	await page.getByLabel(/Share publicly/).check();
+	await page.getByRole('button', { name: 'Save design' }).click();
+	await expect(page.getByTestId('design-saved')).toContainText('Saved "E2E Blues"');
+
+	// It shows up in the gallery, and a new build can start from it.
+	await page.goto('/designs');
+	const card = page.locator('[data-design]', { hasText: 'E2E Blues' });
+	await expect(card).toBeVisible();
+	await expect(card).toContainText('Olive Owner');
+	await card.getByRole('link', { name: 'E2E Blues' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'E2E Blues' })).toBeVisible();
+	await expect(page.locator('li[data-role="e2e-red"]')).toContainText('E2E Red');
+	await page.getByLabel('Build name').fill('From design');
+	await page.getByRole('button', { name: 'Start a build' }).click();
+	await expect(page).toHaveURL(/\/builds\/[^/]+$/);
+
+	await page.getByRole('link', { name: 'Design', exact: true }).click();
+	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
+	await expect(page.locator('button.row[data-slug="handle-left"]')).toContainText('E2E Red');
+	await expect(page.locator('button.row[data-slug="wing-right"]')).toContainText(
+		await page.locator('li.slot[data-role="primary"] b').innerText()
+	);
+});

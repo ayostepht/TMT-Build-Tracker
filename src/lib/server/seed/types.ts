@@ -42,6 +42,14 @@ export interface PlateSeed {
 	perPartRuns?: boolean;
 	parts: string[];
 }
+export interface PlateLayoutSeed {
+	key: string;
+	name: string;
+	/** Which printers this layout is for, shown next to the picker. */
+	printerNote: string;
+	isDefault?: boolean;
+	plates: PlateSeed[];
+}
 export interface GuidePageSeed {
 	page: number;
 	title: string;
@@ -91,6 +99,8 @@ export interface TemplateSeed {
 	filamentRoles: FilamentRoleSeed[];
 	parts: PartSeed[];
 	plates: PlateSeed[];
+	/** Built-in plate layouts per printer family; the default one equals `plates`. Omit for kits with a single layout. */
+	plateLayouts?: PlateLayoutSeed[];
 	guidePages: GuidePageSeed[];
 	hardware: HardwareSeed[];
 	designs: ColorDesignSeed[];

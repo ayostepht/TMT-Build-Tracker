@@ -8,6 +8,7 @@
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
 	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
+	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
@@ -89,6 +90,15 @@
 		/>
 	</section>
 {/if}
+
+<section class="card">
+	<h2>Plate layout</h2>
+	<p class="muted">
+		Which printer's plate grouping this build follows. Upload a sliced 3MF on the Plates tab to use
+		your own.
+	</p>
+	<PlateLayoutPicker buildId={ctx.id} disabled={!ctx.canEdit} onchanged={() => ctx.refresh()} />
+</section>
 
 <section class="card">
 	<h2>Filament</h2>

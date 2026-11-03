@@ -7,6 +7,7 @@ import {
 	templateHardware,
 	templatePartPlacements,
 	templateParts,
+	templatePlateLayouts,
 	templatePlates,
 	templates
 } from '../db/schema';
@@ -183,6 +184,48 @@ function reconcileTemplate(tx: Tx, s: TemplateSeed, existingId: string | null): 
 			changed = true;
 		}
 	}
+
+	// Plate layouts (insert missing, update static fields)
+	const layouts = new Map(
+		tx
+			.select()
+			.from(templatePlateLayouts)
+			.where(eq(templatePlateLayouts.templateId, templateId))
+			.all()
+			.map((l) => [l.key, l])
+	);
+	(s.plateLayouts ?? []).forEach((l, i) => {
+		const values = {
+			name: l.name,
+			printerNote: l.printerNote,
+			isDefault: l.isDefault ?? false,
+			plates: l.plates.map((p) => ({
+				number: p.number,
+				name: p.name,
+				estSeconds: p.estSeconds,
+				runs: p.runs,
+				...(p.runNote ? { runNote: p.runNote } : {}),
+				...(p.perPartRuns ? { perPartRuns: true } : {}),
+				parts: p.parts
+			})),
+			sort: i
+		};
+		const cur = layouts.get(l.key);
+		if (!cur) {
+			tx.insert(templatePlateLayouts)
+				.values({ templateId, key: l.key, ...values })
+				.run();
+			changed = true;
+		} else if (JSON.stringify(pick(cur, values)) !== JSON.stringify(values)) {
+			tx.update(templatePlateLayouts)
+				.set(values)
+				.where(
+					and(eq(templatePlateLayouts.templateId, templateId), eq(templatePlateLayouts.key, l.key))
+				)
+				.run();
+			changed = true;
+		}
+	});
 
 	// Guide pages (insert missing, update titles)
 	const pages = new Map(

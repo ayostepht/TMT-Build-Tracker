@@ -1,4 +1,4 @@
-import type { TemplateSeed } from './types';
+import type { PlateSeed, TemplateSeed } from './types';
 
 const PETG = ['PETG'];
 const TPU = ['TPU 95A'];
@@ -1118,3 +1118,119 @@ export const tmtTemplate: TemplateSeed = {
 		].map((slug) => ({ slug, matrix: IDENTITY, placed: false }))
 	]
 };
+
+/**
+ * The H-series profile (Bambu H2D / H2S): 21 plates. Names and groupings follow
+ * MakeGood's profile; the file is unsliced, so no times. The foaming bucket seat
+ * has no plate in either profile (it ships as a separate foaming-TPU file).
+ */
+const H2D_PLATES: PlateSeed[] = [
+	{
+		number: 1,
+		name: 'Handle Left and Storage Right',
+		estSeconds: null,
+		runs: 1,
+		parts: ['handle-left', 'storage-right']
+	},
+	{
+		number: 2,
+		name: 'Handle Right and Storage Left',
+		estSeconds: null,
+		runs: 1,
+		parts: ['storage-left', 'handle-right']
+	},
+	{ number: 3, name: 'Wheel Mount Left', estSeconds: null, runs: 1, parts: ['wheel-mount-left'] },
+	{ number: 4, name: 'Wheel Mount Right', estSeconds: null, runs: 1, parts: ['wheel-mount-right'] },
+	{ number: 5, name: 'Wing Left', estSeconds: null, runs: 1, parts: ['wing-left'] },
+	{ number: 6, name: 'Wing Right', estSeconds: null, runs: 1, parts: ['wing-right'] },
+	{
+		number: 7,
+		name: 'Seat Back and Center',
+		estSeconds: null,
+		runs: 1,
+		parts: ['seat-back-top', 'seat-back-bottom', 'seat-center']
+	},
+	{
+		number: 8,
+		name: 'Caster Mount (McMaster)',
+		estSeconds: null,
+		runs: 1,
+		parts: ['rear-caster-left-mcmaster', 'rear-caster-right-mcmaster']
+	},
+	{
+		number: 9,
+		name: 'Caster Mount (Kit)',
+		estSeconds: null,
+		runs: 1,
+		parts: ['rear-caster-left', 'rear-caster-right']
+	},
+	{
+		number: 10,
+		name: 'Headrest and Footrest',
+		estSeconds: null,
+		runs: 1,
+		parts: ['headrest-mount', 'headrest-brace', 'headrest-bolt', 'footrest-front', 'footrest-rear']
+	},
+	{
+		number: 11,
+		name: 'Connectors, Buckles and Slides',
+		estSeconds: null,
+		runs: 1,
+		parts: ['connectors', 'front-caster-mount', 'hub-caps', 'buckles']
+	},
+	{
+		number: 12,
+		name: 'Wheel Rim',
+		estSeconds: null,
+		runs: 2,
+		runNote: 'Print 4 times: 2 in the Accent color, 2 in the Primary color',
+		perPartRuns: true,
+		parts: ['rims-1-4', 'rims-2-3']
+	},
+	{
+		number: 13,
+		name: 'Push Handle',
+		estSeconds: null,
+		runs: 1,
+		parts: ['push-top', 'push-bottom', 'push-brace', 'push-pin']
+	},
+	{ number: 14, name: 'TPU Harness and Straps', estSeconds: null, runs: 1, parts: ['harness'] },
+	{ number: 15, name: 'TPU Cushion Base', estSeconds: null, runs: 1, parts: ['cushion-base'] },
+	{ number: 16, name: 'TPU Cushion Back', estSeconds: null, runs: 1, parts: ['cushion-top'] },
+	{ number: 17, name: 'TPU Headrest', estSeconds: null, runs: 1, parts: ['soft-headrest'] },
+	{ number: 18, name: 'TPU Push Handle Grip', estSeconds: null, runs: 1, parts: ['push-grip'] },
+	{
+		number: 19,
+		name: 'TPU 95A Tires',
+		estSeconds: null,
+		runs: 1,
+		runNote: 'All 16 tire segments are on this one plate',
+		parts: ['tires']
+	},
+	{
+		number: 20,
+		name: 'Wheel Rim Smaller',
+		estSeconds: null,
+		runs: 1,
+		runNote: 'Two halves per print: once in the Accent color, once in the Primary color',
+		perPartRuns: true,
+		parts: ['rims-small-1-4', 'rims-small-2-3']
+	},
+	{ number: 21, name: 'Footrest 1-Piece', estSeconds: null, runs: 1, parts: ['footrest'] }
+];
+
+tmtTemplate.plateLayouts = [
+	{
+		key: 'xpa',
+		name: 'Bambu X1 / P1 / A1',
+		printerNote: 'MakeGood X/P/A series profile: 24 plates for 256 mm class beds.',
+		isDefault: true,
+		plates: tmtTemplate.plates
+	},
+	{
+		key: 'h2d',
+		name: 'Bambu H2D / H2S',
+		printerNote: 'MakeGood H series profile: 21 plates for the larger H2D / H2S bed.',
+		plates: H2D_PLATES
+	}
+];

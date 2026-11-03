@@ -99,6 +99,29 @@ SvelteKit 3 specifics that trip people up:
   server `src/lib/server/builds/import.ts` (`POST /api/builds/[id]/import`,
   `?dryRun=1`), CLI bundled by `vite.cli.config.ts` into `build/cli/` and run
   via `scripts/import-prototype.mjs` (see README); `scripts/bundle-prototype-export.mjs`
+- Variants: `templates.variant_groups`, `builds.variant_choices`;
+  `src/lib/domain/variants.ts`. `BuildView.parts`/`state`/`plates` hold
+  active parts only; `allParts` has everything. Seed reconcile
+  (`seed/run.ts`) upserts new template data into existing installs on
+  startup and never touches builds; `backfillBuildParts` adds rows
+- 3D model: STEP zip → `src/lib/server/models/` (forked worker bundled by
+  `vite.worker.config.ts`, ~80 s / ~620 MB peak for the TMT) → GLB with one
+  node per slug in each STEP's own frame; placements (`template_part_placements`,
+  column-major 4x4 + instances) are applied at runtime by
+  `ChairViewer.svelte` (`src/lib/client/three/`), so nudging never
+  reconverts. Hardware GLB is built offline (`scripts/step-to-glb.mjs`).
+  Kit admin (`/admin/templates/[id]`, site admins: first user or
+  `ADMIN_EMAILS`) has the upload and the nudge editor
+- Designs: `src/lib/domain/design.ts`, `src/lib/server/designs/`
+  (visibility: public, author, or shares a workspace with the author),
+  Design tab components in `src/lib/components/design/`, gallery at `/designs`
+- Plates: built-in layouts in `template_plate_layouts` (`xpa` default, `h2d`),
+  `builds.plate_layout`; 3MF parser `src/lib/server/threemf/` (Bambu, Orca
+  family, plain; Metadata only, never `3D/Objects/*`), matcher
+  `src/lib/domain/plates-match.ts`, apply in `src/lib/server/builds/plates.ts`
+  (plate-attached runs must be converted to per-part runs: `convertRuns`)
+- Uploads stream the raw body to disk; `BODY_SIZE_LIMIT=200M` is set in the
+  Dockerfile (adapter-node rejects bigger bodies before any handler)
 - `src/lib/server/filaments/`: bundled SpoolmanDB catalog (`catalog.json`,
   MIT, attribution in `THIRD_PARTY.md`; refresh with `npm run
   filaments:update`), served by `/api/filaments*`; browser-safe helpers in
@@ -149,9 +172,11 @@ an empty data directory.
 
 ## Roadmap
 
-Milestones (each shippable): 1 scaffold (done) · 2 multi-build port of the prototype
-with tabs, teams and live updates (done) · 3 import from the original prototype (done) · 4
-live color prototyper + shareable designs · 5 3MF upload → plates · 6
-assembly + handoff · 7 Spoolman + printer adapters (Moonraker, OctoPrint,
-Bambu LAN) · 8 release (Unraid template, Community Apps). Update this line as
-milestones land.
+Milestones (each shippable): 1 scaffold (done) · 2 multi-build port of the
+prototype with tabs, teams and live updates (done) · 3 import from the
+original prototype (done) · 4 live color prototyper + shareable designs
+(done; 8 parts still need placing in the nudge editor) · 5 3MF upload →
+plates (done; Elegoo/Orca untested against a real sliced file) · 6 assembly
++ handoff · 7 Spoolman + printer adapters (Elegoo Centauri Carbon/SDCP,
+Moonraker, OctoPrint, Bambu LAN) · 8 release (Unraid template, Community
+Apps). Update this line as milestones land.

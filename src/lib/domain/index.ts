@@ -9,3 +9,4 @@ export * from './activity.ts';
 export * from './logrun.ts';
 export * from './recompute.ts';
 export * from './variants.ts';
+export * from './design.ts';

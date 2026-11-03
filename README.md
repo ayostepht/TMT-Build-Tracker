@@ -24,15 +24,17 @@ Add a container with repository `ghcr.io/ayostepht/tmt-build-tracker:latest`, po
 
 ## Environment variables
 
-| Variable                                              | Description                                                                                                 |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev.                             |
-| `BETTER_AUTH_SECRET`                                  | Required in production. Generate with `openssl rand -base64 32`.                                            |
-| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work.              |
-| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button.                     |
-| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                                    |
-| `ADMIN_EMAILS`                                        | Optional comma-separated emails that are site admins (kit and 3D model management), besides the first user. |
-| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image.                                         |
+| Variable                                              | Description                                                                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev.                                                                   |
+| `BETTER_AUTH_SECRET`                                  | Required in production. Generate with `openssl rand -base64 32`.                                                                                  |
+| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work.                                                    |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button.                                                           |
+| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                                                                          |
+| `ADMIN_EMAILS`                                        | Optional comma-separated emails that are site admins (kit and 3D model management), besides the first user.                                       |
+| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image.                                                                               |
+| `BODY_SIZE_LIMIT`                                     | Largest request body adapter-node accepts. The image sets `200M` for STEP zip uploads (see 3D model).                                             |
+| `MAX_3MF_MB`                                          | Largest slicer 3MF the Plates tab accepts (default `200`); it is streamed to disk, parsed and deleted. Needs `BODY_SIZE_LIMIT` at least as large. |
 
 For OIDC, register the redirect URI `<PUBLIC_URL>/api/auth/callback/oidc` with your provider.
 
@@ -44,6 +46,42 @@ Out of the box the app accepts the address a request arrives on, so `http://<ser
 - **`PUBLIC_URL=https://tmt.example.com`:** that origin is used for every request regardless of headers, cookies are `Secure`, and OIDC redirect URIs are built from it. Opening the app through any other address (for example the LAN IP) then fails form posts and sign-in by design; pick one address.
 
 Do not expose the container port directly to the internet when `PUBLIC_URL` is unset; put it behind the proxy.
+
+## 3D model (site admin)
+
+The kit admin (`/admin/templates`, visible to the first user and to `ADMIN_EMAILS`) builds the
+chair's 3D model from **your own copy** of MakeGood's STEP files. Nothing from MakeGood is in this
+repository or the image; the model lives in the `/data` volume.
+
+1. Open **Kit admin**, pick the kit, choose MakeGood's STEP zip (up to 200 MB) and press **Import
+   the model**. A background job converts the files in a separate process (heap capped at 768 MB,
+   one job at a time) and reports per file: converted, missing, failed or skipped (the assembly and
+   the `OBSOLETE/` folder are never converted). It takes about a minute for the whole kit.
+2. **Placement**: the viewer lists every part; pick one and nudge it (position in mm, rotation in
+   degrees, mirror, extra copies such as the 4 rim halves or 16 tire segments). **Save** stores the
+   numbers; the model itself is never reconverted.
+3. **Hardware (optional)**: casters, bolts and bearings come from the assembly STEP, which needs
+   about 1.4 GB of memory, so convert it once on a machine with enough RAM and upload the GLB:
+
+   ```bash
+   npm ci
+   node --max-old-space-size=4096 scripts/step-to-glb.mjs "TMT 3D TOP ASSEMBLY.step" hardware.glb
+   # see which products are in the assembly / pick them yourself:
+   node scripts/step-to-glb.mjs "TMT 3D TOP ASSEMBLY.step" --list
+   node scripts/step-to-glb.mjs "TMT 3D TOP ASSEMBLY.step" hardware.glb --include 'caster|bearing' --exclude 'wheel'
+   ```
+
+   then upload `hardware.glb` in the kit admin (or `curl -X POST -H 'content-type: model/gltf-binary'
+--data-binary @hardware.glb -b <session cookie> <url>/api/templates/<id>/model/hardware`).
+
+Uploads are sent as the raw file body (not multipart), so the server streams them to disk instead of
+holding 200 MB in memory. adapter-node rejects request bodies over `BODY_SIZE_LIMIT` (default 512 kB),
+so the image sets `BODY_SIZE_LIMIT=200M`; if you run it another way, set that variable (it applies to
+every route, each of which has its own smaller limit where it matters). A reverse proxy needs the
+same: in Nginx Proxy Manager add `client_max_body_size 200m;` under Advanced.
+
+Developing without the zip: `node scripts/dev-register-model.mjs <db file> <template slug> <model.glb>`
+copies a GLB you built earlier into the data directory next to the database and registers it.
 
 ## Importing from the original prototype
 
