@@ -1,7 +1,9 @@
 // Bundles the import CLI core (src/lib/server/builds/import-cli.ts) into
 // build/cli/import-cli.js so the production image, which has no devDependencies
 // and no TypeScript sources, can run scripts/import-prototype.mjs.
-// Runs after `vite build` (see the "build" script); dependencies stay external.
+// Runs after `vite build` (see the "build" script). Only runtime dependencies
+// (better-sqlite3) stay external; devDependencies such as drizzle-orm are pruned
+// from the image, so they must be bundled.
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -12,5 +14,5 @@ export default defineConfig({
 		target: 'node22',
 		rollupOptions: { output: { entryFileNames: 'import-cli.js', format: 'esm' } }
 	},
-	ssr: { external: ['better-sqlite3'] }
+	ssr: { noExternal: true, external: ['better-sqlite3'] }
 });
