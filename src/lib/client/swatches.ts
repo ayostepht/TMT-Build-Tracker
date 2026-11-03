@@ -31,7 +31,12 @@ export function loadRecent(): SwatchTuple[] {
 	try {
 		const v = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
 		return Array.isArray(v)
-			? v.filter((t) => Array.isArray(t) && t.length === 4 && t.every((s) => typeof s === 'string'))
+			? v.filter(
+					(t) =>
+						Array.isArray(t) &&
+						(t.length === 4 || t.length === 5) &&
+						t.every((s) => typeof s === 'string')
+				)
 			: [];
 	} catch {
 		return [];

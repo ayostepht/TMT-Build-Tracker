@@ -83,6 +83,30 @@ same: in Nginx Proxy Manager add `client_max_body_size 200m;` under Advanced.
 Developing without the zip: `node scripts/dev-register-model.mjs <db file> <template slug> <model.glb>`
 copies a GLB you built earlier into the data directory next to the database and registers it.
 
+## Export for your slicer (3MF)
+
+The **Plates** tab has an **Export for your slicer** card. It builds a 3MF from the build's arranged plates and filaments, so after you change colors and re-arrange, the next download has the new groups.
+
+- **Elegoo Slicer / OrcaSlicer** and **Bambu Studio**: one project file with every plate (or the plates you tick), one object per part, the filament slot of each part's color, MakeGood's per-part settings (walls, infill, supports, brim) and the printer's bed. Plates sit in the slicer's shared build volume at its own grid offsets (see `src/lib/server/threemf-export/plate-grid.ts`).
+- **Other slicer**: a plain 3MF per plate (a zip when you export several); the filament is part of each object's name, and PrusaSlicer also gets the extruder per object.
+- Needs a printer on the build and the print geometry imported by a site admin (kit admin page, or the CLI below). Parts without imported geometry are left out and listed in the card and in `Metadata/tmt_export_notes.txt`.
+- API: `GET /api/builds/<id>/export.3mf?flavor=orca|bambu|plain&plates=1,2` and `GET /api/builds/<id>/export/preview` (JSON summary). Any team member, viewers included. The file is streamed, never held in memory.
+
+If the build's plates are not arranged for its printer, or colors changed since, the export arranges in memory (nothing is saved) and says so.
+
+## Importing print geometry without the browser
+
+For the 88 MB MakeGood profile, the CLI runs the same import as the kit admin page, inside the container:
+
+```bash
+docker cp profile.3mf <container>:/tmp/profile.3mf
+docker exec <container> node scripts/import-print-geometry.mjs --list
+docker exec <container> node scripts/import-print-geometry.mjs \
+  --db /data/tmt.db --template makegood-tmt-revb --file /tmp/profile.3mf [--file /tmp/harness.zip]
+```
+
+`--file` may be repeated and may be a zip of 3MFs. `--init` migrates and seeds a brand new (scratch) database first.
+
 ## Importing from the original prototype
 
 If you tracked a build in the original single-page prototype, you can bring its progress over (part statuses, print logs, slicer weights, spool counts). Export the prototype's saved data (ask Claude to export it, or copy the artifact database) into a folder laid out as `parts/<part-id>.json`, `plates/<number>.json` and `settings/filament.json`, then bundle it into one file:

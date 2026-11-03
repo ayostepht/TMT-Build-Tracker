@@ -22,6 +22,7 @@
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
 	import PlateDiagram from '#lib/components/PlateDiagram.svelte';
 	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
+	import ExportCard from '#lib/components/ExportCard.svelte';
 	import type { BuildPrinter } from '#lib/domain/types.ts';
 
 	const ctx = getBuildCtx();
@@ -244,6 +245,8 @@
 	</p>
 	{#if notice}<p class="ok-note" role="status">{notice}</p>{/if}
 </section>
+
+<ExportCard />
 
 {#if uploading && ctx.canEdit}
 	<PlateUpload

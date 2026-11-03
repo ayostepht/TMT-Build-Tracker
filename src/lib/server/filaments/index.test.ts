@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brands, colors, materials, search, swatches } from './index.ts';
+import { brands, colors, flagsOf, materials, search, swatches } from './index.ts';
 import { normalise } from '../../../../scripts/update-filaments.mjs';
 import { materialFamily, preferMaterials, suggestName } from '#lib/filament-catalog.ts';
 
@@ -105,5 +105,41 @@ describe('swatches', () => {
 		}
 		expect(petg.every((t) => materialFamily(t[3]) === 'petg')).toBe(true);
 		expect(tpu.every((t) => materialFamily(t[3]) === 'tpu')).toBe(true);
+	});
+});
+
+describe('swatch flags', () => {
+	const find = (family: 'petg' | 'tpu', brand: string, name: string) =>
+		swatches(family).find((t) => t[0] === brand && t[1] === name);
+	it('emits a 5th flag element only for marked colors', () => {
+		expect(find('petg', 'Matter3D Inc', 'Matte Gunmetal Grey')?.[4]).toBe('matte');
+		expect(find('petg', '3DJAKE', 'Blue Transparent')?.[4]).toBe('translucent');
+		expect(find('petg', 'CC3D', 'Glow in the Dark Green')?.[4]).toContain('glow');
+		expect(find('petg', 'Ambrosia', 'Rainbow Fusion')?.[4]).toContain('multi');
+		const plain = swatches('petg').filter((t) => t.length === 4);
+		expect(plain.length).toBeGreaterThan(swatches('petg').length / 2);
+		for (const t of swatches('petg').concat(swatches('tpu'))) {
+			expect(t.length === 4 || t.length === 5).toBe(true);
+			if (t.length === 5)
+				expect(t[4]).toMatch(
+					/^(matte|silk|translucent|glow|multi)( (matte|silk|translucent|glow|multi))*$/
+				);
+		}
+	});
+	it('maps each structured field, including silk, to a flag', () => {
+		const c = { name: 'x', hex: '#000000' };
+		expect(flagsOf(c)).toBe('');
+		expect(flagsOf({ ...c, finish: 'glossy' })).toBe('');
+		expect(flagsOf({ ...c, finish: 'silk' })).toBe('silk');
+		expect(
+			flagsOf({
+				...c,
+				finish: 'matte',
+				glow: true,
+				translucent: true,
+				hexes: ['#000000', '#ffffff']
+			})
+		).toBe('matte translucent glow multi');
+		expect(flagsOf({ ...c, hexes: ['#000000'] })).toBe('');
 	});
 });

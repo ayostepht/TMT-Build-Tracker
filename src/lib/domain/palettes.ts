@@ -14,8 +14,24 @@ import {
 	type Oklch
 } from './color.ts';
 
-/** Compact catalog entry as served by `/api/filaments/swatches`: brand, color name, #hex, material. */
-export type SwatchTuple = [brand: string, name: string, hex: string, material: string];
+/**
+ * Compact catalog entry as served by `/api/filaments/swatches`: brand, color name, #hex, material,
+ * and optionally space-separated catalog flags (see {@link FLAG_MATTE} and friends).
+ */
+export type SwatchTuple = [
+	brand: string,
+	name: string,
+	hex: string,
+	material: string,
+	flags?: string
+];
+
+/** Flag tokens a swatch tuple's optional 5th element may carry (from the catalog's structured fields). */
+export const FLAG_MATTE = 'matte';
+export const FLAG_TRANSLUCENT = 'translucent';
+export const FLAG_GLOW = 'glow';
+export const FLAG_MULTI = 'multi';
+export const FLAG_SILK = 'silk';
 
 export const SLOTS = ['primary', 'accent', 'soft', 'tire'] as const;
 export type SlotKey = (typeof SLOTS)[number];
@@ -177,6 +193,10 @@ export interface Match {
 	/** CIEDE2000 distance from the wanted color. */
 	de: number;
 	target: string;
+	/** True when no standard filament was close, so a fallback (other brand, matte, far color) was used. */
+	relaxed?: boolean;
+	/** Why the match is relaxed, ready to show in the UI. */
+	relaxedReason?: string;
 }
 
 export interface MatchOptions {
@@ -204,9 +224,6 @@ export const POPULAR_BRANDS = [
 const POPULAR = new Set(POPULAR_BRANDS.map((b) => b.toLowerCase()));
 const UNKNOWN_BRAND_PENALTY = 5;
 
-/** Multi-color, glitter and similar products whose single catalog hex misleads. */
-const GIMMICK =
-	/rainbow|gradient|multi|tri-?colou?r|dual|marble|galaxy|sparkle|glitter|glow|chameleon/i;
 const labs = new WeakMap<SwatchTuple[], Lab[]>();
 function labsOf(items: SwatchTuple[]): Lab[] {
 	let l = labs.get(items);
@@ -219,13 +236,113 @@ function labsOf(items: SwatchTuple[]): Lab[] {
 
 export const tupleKey = (t: SwatchTuple) => `${t[0]}|${t[1]}|${t[3]}`;
 
-/** Extra distance for exotic variants: carbon/glass-filled, odd hardness, engineering blends. */
+/**
+ * Filaments the palettes and the generator never pick on their own. The chair is a load-bearing
+ * kids' mobility device, so we skip anything weaker or less consistent than plain PETG / TPU 95A,
+ * and anything whose single catalog hex misleads (multi-color, glitter, glow, translucent).
+ * `relaxable` entries are only a quality worry, not a safety one: the fallback may use them
+ * (matte) when nothing standard is close. The manual swatch picker is not affected.
+ * Patterns run on the color name and material (not the brand) and are case-insensitive.
+ */
+export const EXCLUDED_FILAMENTS: readonly {
+	id: string;
+	pattern: RegExp;
+	flag?: string;
+	relaxable?: boolean;
+	reason: string;
+}[] = [
+	{
+		id: 'matte',
+		pattern: /\bmatt?e?\b/i,
+		flag: FLAG_MATTE,
+		relaxable: true,
+		reason: 'matte prints with poorer layer quality and strength'
+	},
+	{
+		id: 'silk',
+		pattern: /\bsilk/i,
+		flag: FLAG_SILK,
+		reason: 'silk blends are weaker between layers'
+	},
+	{
+		id: 'transparent',
+		pattern: /\b(tr?ansparent|translucent|clear|see-?through)\b/i,
+		flag: FLAG_TRANSLUCENT,
+		reason: 'transparent filament has a misleading color and weaker prints'
+	},
+	{
+		id: 'glow',
+		pattern: /\b(glow|luminous|noctilucent|phosphor\w*)\b/i,
+		flag: FLAG_GLOW,
+		reason: 'glow pigments are abrasive and weaken the part'
+	},
+	{ id: 'marble', pattern: /\bmarble?\b/i, reason: 'marble blends are brittle' },
+	{ id: 'wood', pattern: /\bwood(en|y)?\b/i, reason: 'wood-filled filament is brittle' },
+	{
+		id: 'sparkle',
+		pattern: /sparkl|glitter|galaxy|starry|stardust/i,
+		reason: 'glitter and galaxy fillers weaken the part'
+	},
+	{
+		id: 'multicolor',
+		pattern: /rainbow|gradient|multi-?colou?r|\bmulti\b|\bdual\b|tri-?colou?r|chameleon/i,
+		flag: FLAG_MULTI,
+		reason: 'multi-color products do not match a single hex'
+	},
+	{
+		id: 'filled',
+		pattern: /\b(cf|gf)\d*\b|-(cf|gf)\d*\b|carbon[\s-]?fib|glass[\s-]?fib|\bfibre?\b/i,
+		reason: 'carbon/glass-filled filament is abrasive and brittle'
+	},
+	{
+		id: 'rock',
+		pattern: /\brock\b|\bterrazzo\b|\bspeckle[ds]?\b|\bgranite\b/i,
+		reason: 'stone and speckle textured filaments are rough and not one color'
+	},
+	{ id: 'foam', pattern: /foam/i, reason: 'foaming TPU is soft and weak' }
+];
+
+/** The only TPU hardness used for the soft and tire slots. */
+export const ALLOWED_TPU_HARDNESS = '95A';
+
+/** Shore hardnesses mentioned in a TPU's text ("95A", "64D", "TPU90"); bare TPU numbers mean A. */
+function hardnesses(text: string): string[] {
+	const out: string[] = [];
+	for (const m of text.matchAll(/(?<![\d.])(\d{2,3})\s?-?([ad])(?![a-z])/gi))
+		out.push(`${m[1]}${m[2].toUpperCase()}`);
+	for (const m of text.matchAll(/tpu\s?-?(\d{2,3})(?![\d.])/gi))
+		if (!out.some((h) => h.startsWith(m[1]))) out.push(`${m[1]}A`);
+	return out;
+}
+
+/** Why a swatch is excluded ('' when fine). `allowMatte` is the fallback tier. */
+export function exclusionReason(t: SwatchTuple, allowMatte = false): string {
+	const text = `${t[1]} ${t[3]}`;
+	const flags = (t[4] ?? '').toLowerCase().split(/\s+/);
+	for (const e of EXCLUDED_FILAMENTS) {
+		if (allowMatte && e.relaxable) continue;
+		if ((e.flag && flags.includes(e.flag)) || e.pattern.test(text)) return e.reason;
+	}
+	if (materialFamily(t[3]) === 'tpu') {
+		// Brands that name the grade instead of the number (Extrudr FLEX Medium / Soft / Hard).
+		if (/\b(medium|soft|hard|semi-?flex|for ams)\b/i.test(t[1]))
+			return 'only 95A TPU is used (a different grade is named)';
+		const h = hardnesses(`${t[1]} ${t[3]}`);
+		if (h.some((x) => x !== ALLOWED_TPU_HARDNESS))
+			return `only ${ALLOWED_TPU_HARDNESS} TPU is used (this is ${h.find((x) => x !== ALLOWED_TPU_HARDNESS)})`;
+	}
+	return '';
+}
+
+export const isAllowedFilament = (t: SwatchTuple, allowMatte = false) =>
+	exclusionReason(t, allowMatte) === '';
+
+/** Extra distance for lesser variants of the allowed materials. */
 function materialPenalty(material: string): number {
 	const m = material
 		.trim()
 		.toLowerCase()
 		.replace(/[\s_]+/g, '-');
-	if (/-(cf|gf)/.test(m)) return 9;
 	switch (materialFamily(m)) {
 		case 'petg':
 			return m === 'petg' ? 0 : 5;
@@ -236,10 +353,15 @@ function materialPenalty(material: string): number {
 	}
 }
 
-export function nearest(
+/** A match farther than this (CIEDE2000) triggers the relaxed fallback tiers. */
+export const MAX_STANDARD_DE = 25;
+
+function pick(
 	target: string,
 	items: SwatchTuple[],
-	opts: MatchOptions = {}
+	opts: MatchOptions,
+	allowMatte: boolean,
+	onlyBrand?: string
 ): Match | null {
 	const t = hexToLab(target);
 	const L = labsOf(items);
@@ -251,12 +373,14 @@ export function nearest(
 	for (let i = 0; i < items.length; i++) {
 		const it = items[i];
 		if (opts.exclude?.has(tupleKey(it))) continue;
+		if (onlyBrand && it[0].toLowerCase() !== onlyBrand) continue;
+		if (!isAllowedFilament(it, allowMatte)) continue;
 		if (avoid.some((a) => deltaE2000(L[i], a.lab) < a.min)) continue;
 		const de = deltaE2000(t, L[i]);
 		const score =
 			de +
-			(GIMMICK.test(it[1]) ? 15 : 0) +
 			materialPenalty(it[3]) * 0.5 +
+			(allowMatte && exclusionReason(it) ? 3 : 0) +
 			(want
 				? it[0].toLowerCase() !== want
 					? BRAND_PENALTY
@@ -281,6 +405,44 @@ export function nearest(
 		de: bestDe,
 		target
 	};
+}
+
+/**
+ * Closest allowed filament to `target`. Tiers: the preferred brand (if any), then every brand,
+ * then every brand with matte allowed (never silk, transparent, filled, ...). The first tier within
+ * {@link MAX_STANDARD_DE} wins; otherwise the closest of all tiers is returned with `relaxed: true`.
+ */
+export function nearest(
+	target: string,
+	items: SwatchTuple[],
+	opts: MatchOptions = {}
+): Match | null {
+	const want = opts.brand?.trim().toLowerCase();
+	const tiers: { m: Match | null; note: string }[] = [];
+	if (want) tiers.push({ m: pick(target, items, opts, false, want), note: '' });
+	tiers.push({ m: pick(target, items, opts, false), note: 'other brand' });
+	tiers.push({ m: pick(target, items, opts, true), note: 'matte' });
+	const ok = tiers.find((x) => x.m && x.m.de <= MAX_STANDARD_DE);
+	let chosen = ok;
+	if (!chosen) {
+		for (const x of tiers) if (x.m && (!chosen || x.m.de < chosen.m!.de - 1e-9)) chosen = x;
+	}
+	if (!chosen?.m) return null;
+	const first = tiers[0];
+	const relaxed = chosen !== first || chosen.m.de > MAX_STANDARD_DE;
+	if (!relaxed) return chosen.m;
+	const m = chosen.m;
+	const how =
+		chosen.note === 'matte'
+			? ' (matte)'
+			: chosen.note && want
+				? ` (not ${opts.brand!.trim()})`
+				: '';
+	const reason =
+		m.de > MAX_STANDARD_DE
+			? `Closest standard filament isn't close (ΔE ${m.de.toFixed(0)}); using ${m.name}${how}`
+			: `No close standard filament; using ${m.name}${how}`;
+	return { ...m, relaxed: true, relaxedReason: reason };
 }
 
 export interface CatalogSwatches {

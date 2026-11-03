@@ -274,6 +274,9 @@
 					<span class="lbl">
 						<span class="muted small">{SLOT_LABEL[s]}</span>
 						<span class="nm">{m?.name ?? 'No match'}</span>
+						{#if m?.relaxed && m.relaxedReason}
+							<span class="rnote small" data-testid="relaxed-note">{m.relaxedReason}</span>
+						{/if}
 					</span>
 				</li>
 			{/each}
@@ -429,6 +432,11 @@
 		display: grid;
 		min-width: 0;
 		line-height: 1.2;
+	}
+	.rnote {
+		color: var(--muted, inherit);
+		font-style: italic;
+		line-height: 1.3;
 	}
 	.nm {
 		font-size: 13px;

@@ -1,5 +1,13 @@
 import raw from './catalog.json' with { type: 'json' };
 import { materialFamily, suggestName } from '#lib/filament-catalog.ts';
+import {
+	FLAG_GLOW,
+	FLAG_MATTE,
+	FLAG_MULTI,
+	FLAG_SILK,
+	FLAG_TRANSLUCENT,
+	type SwatchTuple
+} from '#lib/domain/palettes.ts';
 import type { CatalogBrand, CatalogColor, FilamentCatalog, SearchHit } from './types.ts';
 
 const catalog = raw as FilamentCatalog;
@@ -58,10 +66,25 @@ export function search(q: string, limit = 50): SearchHit[] {
 }
 
 export type SwatchFamily = 'petg' | 'tpu' | 'other';
-const swatchCache = new Map<SwatchFamily, [string, string, string, string][]>();
+const swatchCache = new Map<SwatchFamily, SwatchTuple[]>();
 
-/** Compact `[brand, color, #hex, material]` tuples for every color of a material family (swatch grids). */
-export function swatches(family: SwatchFamily): [string, string, string, string][] {
+/** Space-separated flags from the catalog's structured fields ('' when none); see `FLAG_*` in palettes.ts. */
+export function flagsOf(c: CatalogColor): string {
+	const f: string[] = [];
+	if (c.finish === 'matte') f.push(FLAG_MATTE);
+	if (c.finish === 'silk') f.push(FLAG_SILK);
+	if (c.translucent) f.push(FLAG_TRANSLUCENT);
+	if (c.glow) f.push(FLAG_GLOW);
+	if (c.hexes && c.hexes.length > 1) f.push(FLAG_MULTI);
+	return f.join(' ');
+}
+
+/**
+ * Compact `[brand, color, #hex, material, flags?]` tuples for every color of a material family (swatch
+ * grids). The 5th element is only present when the catalog marks the color matte, silk, translucent,
+ * glow or multi-color, which keeps the payload small.
+ */
+export function swatches(family: SwatchFamily): SwatchTuple[] {
 	let out = swatchCache.get(family);
 	if (!out) {
 		out = [];
@@ -74,7 +97,10 @@ export function swatches(family: SwatchFamily): [string, string, string, string]
 					const key = `${b.name}|${c.name}|${c.hex}|${m.material}`.toLowerCase();
 					if (seen.has(key)) continue;
 					seen.add(key);
-					out.push([b.name, c.name, c.hex.toLowerCase(), m.material]);
+					const t: SwatchTuple = [b.name, c.name, c.hex.toLowerCase(), m.material];
+					const flags = flagsOf(c);
+					if (flags) t.push(flags);
+					out.push(t);
 				}
 			}
 		swatchCache.set(family, out);

@@ -67,3 +67,22 @@ test('generate a palette from a base color, preview it and apply it', async ({ p
 	const filament = page.getByRole('region', { name: 'Filament' });
 	for (const n of names) await expect(filament).toContainText(n);
 });
+
+test('a relaxed match explains itself under the swatch', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'relaxed');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	// With Overture preferred, Columbus Blues has no close Overture soft TPU and falls back to another brand.
+	await page.getByLabel('Preferred brand').selectOption('Overture');
+	const card = page.locator('[data-palette="columbus-blues"]');
+	const note = card.getByTestId('relaxed-note');
+	await expect(note).toHaveCount(1);
+	await expect(note).toContainText('No close standard filament');
+	await expect(note).toContainText('not Overture');
+	// The note sits outside the filament name so the name stays clean.
+	await expect(card.locator('.nm', { hasText: 'No close standard' })).toHaveCount(0);
+	// Exact matches carry no note.
+	await expect(
+		page.locator('[data-palette="mono-graphite"]').getByTestId('relaxed-note')
+	).toHaveCount(0);
+});

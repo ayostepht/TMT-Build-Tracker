@@ -148,6 +148,10 @@ SvelteKit 3 specifics that trip people up:
 - State rules live in `src/lib/domain/actions.ts` only; the server persists
   the returned patches and never re-implements them.
 - Route ids include the `(app)` group: `resolve('/(app)/builds/[id]')`.
+- E2E specs share one database and server per run. A spec that changes
+  template-level data (e.g. `e2e/print-geometry-helper.ts` replacing seed
+  footprint rows) must restore it in `afterAll`; specs must pass both alone
+  and in the full suite.
 - No email sending yet: invitations produce a copyable `/invite/[id]` link.
 - Schema change → edit `schema.ts`, `npm run db:generate`, commit the new
   migration with the code that uses it.

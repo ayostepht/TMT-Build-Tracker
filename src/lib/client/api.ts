@@ -443,3 +443,18 @@ export const uploadPrintGeometry = (
 		'application/octet-stream',
 		onProgress
 	);
+
+// ---- 3MF export for a slicer
+
+export type ExportPreviewDto = import('#lib/domain/export-types.ts').ExportPreview;
+export type ExportFlavor = import('#lib/domain/export-types.ts').Flavor;
+
+function exportQuery(flavor: ExportFlavor, plates?: number[]) {
+	const q = new URLSearchParams({ flavor });
+	if (plates?.length) q.set('plates', plates.join(','));
+	return q.toString();
+}
+export const exportPreview = (id: string, flavor: ExportFlavor, plates?: number[]) =>
+	call<ExportPreviewDto>('GET', `${b(id)}/export/preview?${exportQuery(flavor, plates)}`);
+export const exportDownloadUrl = (id: string, flavor: ExportFlavor, plates?: number[]) =>
+	`${b(id)}/export.3mf?${exportQuery(flavor, plates)}`;
