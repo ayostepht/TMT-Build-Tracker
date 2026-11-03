@@ -95,7 +95,9 @@ export function makeView(
 				parts: p.parts.filter((s) => !inactive.has(s)),
 				slicerGrams: null,
 				slicerByPart: {},
-				thumbnailPath: null
+				thumbnailPath: null,
+				filamentGrams: {},
+				source: 'template'
 			}))
 			.filter((p) => p.parts.length > 0),
 		runs: [],

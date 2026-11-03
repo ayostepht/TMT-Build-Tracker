@@ -90,7 +90,9 @@ export interface Plate {
 	parts: string[]; // part slugs
 	slicerGrams: number | null; // per run, whole plate (when !perPartRuns)
 	slicerByPart: Record<string, number>; // per run, per part (when perPartRuns)
-	thumbnailPath: string | null;
+	thumbnailPath: string | null; // served via GET /api/builds/[id]/plates/[number]/thumbnail when set
+	filamentGrams: Record<string, number>; // grams per run by filament role key, from a sliced 3MF; {} when unknown
+	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>'
 }
 
 /**

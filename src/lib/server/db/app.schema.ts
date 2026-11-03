@@ -169,6 +169,62 @@ export const templateModels = sqliteTable('template_models', {
 	createdAt: createdAt()
 });
 
+/** Background conversions of an uploaded STEP zip into the template's GLB (milestone 4). */
+export const templateModelJobs = sqliteTable(
+	'template_model_jobs',
+	{
+		id: id(),
+		templateId: templateId(),
+		status: text('status').notNull().default('queued'), // queued | running | done | failed
+		progress: integer('progress').notNull().default(0), // 0-100
+		message: text('message').notNull().default(''),
+		/** Uploaded file under the uploads dir; deleted after the job unless kept for debugging. */
+		inputPath: text('input_path').notNull(),
+		/** Per-file results: { file, slug | null, status, triangles?, ms?, error? }[] */
+		report: text('report', { mode: 'json' })
+			.$type<Record<string, unknown>[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt(),
+		finishedAt: integer('finished_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [index('template_model_jobs_template_idx').on(t.templateId, t.createdAt)]
+);
+
+/**
+ * Built-in plate layouts per printer family (milestone 5), e.g. 'xpa' (Bambu
+ * X1/P1/A1, 24 plates) and 'h2d' (Bambu H2D/H2S, 21 plates). Data only: plate
+ * names, part slugs, runs and estimates; no slicer files. `template_plates`
+ * stays the default layout for existing code.
+ */
+export const templatePlateLayouts = sqliteTable(
+	'template_plate_layouts',
+	{
+		templateId: templateId(),
+		key: text('key').notNull(),
+		name: text('name').notNull(),
+		printerNote: text('printer_note').notNull().default(''),
+		isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+		plates: text('plates', { mode: 'json' })
+			.$type<
+				{
+					number: number;
+					name: string;
+					estSeconds: number | null;
+					runs: number;
+					runNote?: string;
+					perPartRuns?: boolean;
+					parts: string[];
+				}[]
+			>()
+			.notNull()
+			.default(sql`'[]'`),
+		sort: integer('sort').notNull().default(0)
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.key] })]
+);
+
 // ---- Color designs
 
 export const colorDesigns = sqliteTable('color_designs', {
@@ -209,6 +265,8 @@ export const builds = sqliteTable(
 		design: text('design', { mode: 'json' }).$type<Record<string, unknown>>(),
 		/** group key → option key; null on builds from before variants (= template defaults). */
 		variantChoices: text('variant_choices', { mode: 'json' }).$type<Record<string, string>>(),
+		/** Plate layout source: a template_plate_layouts key, or 'upload' when plates came from the build's own 3MF. Null = template default. */
+		plateLayout: text('plate_layout'),
 		createdBy: text('created_by')
 			.notNull()
 			.references(() => user.id),
@@ -275,7 +333,14 @@ export const buildPlates = sqliteTable(
 			.$type<Record<string, number>>()
 			.notNull()
 			.default(sql`'{}'`),
-		thumbnailPath: text('thumbnail_path')
+		thumbnailPath: text('thumbnail_path'),
+		/** Grams per run by build filament role key, from a sliced 3MF (milestone 5). */
+		filamentGrams: text('filament_grams', { mode: 'json' })
+			.$type<Record<string, number>>()
+			.notNull()
+			.default(sql`'{}'`),
+		/** 'template' | 'layout:<key>' | 'upload:<build_uploads.id>' */
+		source: text('source').notNull().default('template')
 	},
 	(t) => [primaryKey({ columns: [t.buildId, t.number] })]
 );
@@ -315,4 +380,25 @@ export const activity = sqliteTable(
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 	},
 	(t) => [index('activity_build_idx').on(t.buildId, t.at)]
+);
+
+/** Slicer files uploaded to a build (milestone 5). The original file is not kept; only the parsed summary and thumbnails. */
+export const buildUploads = sqliteTable(
+	'build_uploads',
+	{
+		id: id(),
+		buildId: buildId(),
+		kind: text('kind').notNull().default('3mf'),
+		fileName: text('file_name').notNull(),
+		size: integer('size').notNull().default(0),
+		/** Parsed, normalised 3MF summary (printer, filaments, plates, objects) plus the user's object → part mapping. */
+		summary: text('summary', { mode: 'json' })
+			.$type<Record<string, unknown>>()
+			.notNull()
+			.default(sql`'{}'`),
+		status: text('status').notNull().default('parsed'), // parsed | applied | discarded
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt()
+	},
+	(t) => [index('build_uploads_build_idx').on(t.buildId, t.createdAt)]
 );

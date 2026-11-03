@@ -163,7 +163,9 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			parts: p.parts,
 			slicerGrams: p.slicerGrams,
 			slicerByPart: p.slicerByPart,
-			thumbnailPath: p.thumbnailPath
+			thumbnailPath: p.thumbnailPath,
+			filamentGrams: p.filamentGrams ?? {},
+			source: p.source ?? 'template'
 		}))
 		.map((p) => ({ ...p, parts: p.parts.filter((s) => !inactive.has(s)) }))
 		.filter((p) => p.parts.length > 0);
