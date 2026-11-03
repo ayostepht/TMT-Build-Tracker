@@ -1,3 +1,4 @@
+import { compose, ringInstances, tidy, type Mat } from '#lib/client/three/matrix.ts';
 import type { PlateSeed, TemplateSeed } from './types';
 
 const PETG = ['PETG'];
@@ -18,6 +19,13 @@ const MIRROR_X = [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 // Hub cap STEP: axis along y, so rotate y to +x / -x and move the cap's own centre (0, 23.2, -0.1) to (+-231.4, 145, -300).
 const HUB_CAP_RIGHT = [0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 208.2, 145, -299.9, 1];
 const HUB_CAP_LEFT = [0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, -208.2, 144.9, -299.9, 1];
+// Wheel axle: along x through (+-208.3, 145, -300) (measured on the assembly's wheel bearings). The rim,
+// tire and cap STEP files all have their axle along their own y axis with +y pointing outwards, and the
+// part's origin on the axle in the middle of the rim (rim y -24.3..24.3, tire y -24.2..36.2, cap y 19..27).
+// `spin` turns the part about the axle (degrees); the wheel is symmetric so only the split line matters.
+const WHEEL_X = 208.3;
+const wheelPose = (side: 1 | -1, spin = 0): Mat =>
+	tidy(compose({ pos: [side * WHEEL_X, 145, -300], rot: [spin, 0, -90 * side], scale: [1, 1, 1] }));
 const placedAtOrigin = (...slugs: string[]) => slugs.map((slug) => ({ slug, placed: true }));
 
 export const tmtTemplate: TemplateSeed = {
@@ -1059,14 +1067,51 @@ export const tmtTemplate: TemplateSeed = {
 					parts: ['rims-small-1-4', 'rims-small-2-3']
 				}
 			]
+		},
+		{
+			key: 'headrest',
+			name: 'Headrest',
+			defaultOption: 'include',
+			options: [
+				{
+					key: 'include',
+					name: 'With headrest',
+					description:
+						'Headrest mount, brace, bolt and the soft headrest cushion. Using headrest and push handle together: install the headrest first.',
+					parts: ['headrest-mount', 'headrest-brace', 'headrest-bolt', 'soft-headrest']
+				},
+				{
+					key: 'none',
+					name: 'No headrest',
+					description: 'Skip the optional headrest: nothing to print or assemble for it.',
+					parts: []
+				}
+			]
+		},
+		{
+			key: 'push-handle',
+			name: 'Push handle',
+			defaultOption: 'include',
+			options: [
+				{
+					key: 'include',
+					name: 'With push handle',
+					description:
+						'Push handle top, bottom, brace and pin, plus the soft TPU grip. If you also build the headrest, install the headrest first.',
+					parts: ['push-top', 'push-bottom', 'push-brace', 'push-pin', 'push-grip']
+				},
+				{
+					key: 'none',
+					name: 'No push handle',
+					description: 'Skip the optional push handle: nothing to print or assemble for it.',
+					parts: []
+				}
+			]
 		}
 	],
-	// Placements from the STEP/assembly spike (numbers only; the geometry is imported per install).
-	// Identity means the part's STEP file already sits in the assembly frame.
-	// Wheel axis for later manual placement of rims and tires: along x, centres x = +-208.3, y = 145, z = -300.
-	// Not placed: no STEP in the assembly frame or not measured. The variant parts (bucket seat, two-piece
-	// footrest, McMaster rear casters, smaller rims) were not measured in the spike, so they are not placed
-	// yet; they also sit on no plate until Milestone 5 adds per-printer plate layouts.
+	// Placements. Numbers only; the geometry is imported per install. Parts in the assembly frame sit at identity.
+	// Frame: y up, +z towards the front (footrest), +x the chair's left. Wheel axle along x at (+-208.3, 145, -300).
+	// Derivations (measured on the converted per-part GLB and the old assembly's bounding boxes):
 	placements: [
 		...placedAtOrigin(
 			'seat-center',
@@ -1088,34 +1133,79 @@ export const tmtTemplate: TemplateSeed = {
 			'push-top',
 			'push-bottom',
 			'push-pin',
-			'headrest-mount' // plausible, not verified
+			'headrest-mount', // seat-back rear face at z -499, top of its stem at y 695
+			// Variant parts whose STEP frame is the assembly frame (boxes match the one-piece footrest and the kit casters).
+			'footrest-front', // x +-138, y 40..97.5, z -148..0
+			'footrest-rear', // x +-138, y 40..104, z -220..-51.8
+			'rear-caster-left-mcmaster', // identical boxes to the kit mounts
+			'rear-caster-right-mcmaster'
 		),
 		// Single brace at x = -46 (the file spans x -92..0). A mirrored second brace is not supported by the data.
 		{ slug: 'push-brace', matrix: IDENTITY, placed: true },
 		// Derived from the assembly: hub caps at x = +-231.4 on the wheel axis.
 		{ slug: 'hub-caps', matrix: HUB_CAP_RIGHT, instances: [HUB_CAP_LEFT], placed: true },
-		// GUESS: the connector files (J frame pin, L front caster pin, M pin lock, N wheel block) are identity,
-		// and the second instance mirrors all of them across x = 0. Exact for J, L and M; N may be off by 0.5 mm.
+		// Connector STEP: J frame pins, N wheel block, L pin and M lock are already in the assembly frame on the
+		// -x side (identity); the mirrored copy covers +x. The loose bodies laid out near the origin (spacers,
+		// washers, wheel pins) are clipped away by the viewer (domain/part-clips.ts) instead of floating under the footrest.
 		{ slug: 'connectors', matrix: IDENTITY, instances: [MIRROR_X], placed: true },
-		...[
-			'push-grip',
-			'soft-headrest',
-			'headrest-brace',
-			'headrest-bolt',
-			'front-caster-mount',
-			'buckles',
-			'harness',
-			'rims-1-4',
-			'rims-2-3',
-			'tires',
-			'bucket-seat',
-			'footrest-front',
-			'footrest-rear',
-			'rear-caster-left-mcmaster',
-			'rear-caster-right-mcmaster',
-			'rims-small-1-4',
-			'rims-small-2-3'
-		].map((slug) => ({ slug, matrix: IDENTITY, placed: false }))
+		// Front caster mount REV C: box x -193.5..-156, y -39.3..17.2, z -141.6..-29.8 sits right under the right wing
+		// (wing bottom y 15, x -190..-140), so the STEP frame is the assembly frame; mirror for the left wing.
+		{ slug: 'front-caster-mount', matrix: IDENTITY, instances: [MIRROR_X], placed: true },
+		// Headrest: cushion, brace and bolt share one frame (+z forward, y 0..76 up, origin at the brace's underside).
+		// Brace back face (z -12.5) against the mount's front face (z -499) gives tz -486.5; -488 lets the bolt head
+		// (z -36..-25) sit behind the stem's rear face (z -516). Top flush with the stem top (y 695): ty 619.
+		// The bolt slot position on the stem is not in the data, so this is the highest position.
+		...['headrest-brace', 'soft-headrest', 'headrest-bolt'].map((slug) => ({
+			slug,
+			matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 619, -488, 1],
+			placed: true
+		})),
+		// Push grip: 200 x 50 x 50 sleeve along x, centre (0, -15, 0). The push handle top bar (x +-80, y 875..924,
+		// z -664..-625) has its centre at (0, 899.5, -644.5), so the grip centre goes there.
+		{
+			slug: 'push-grip',
+			matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 914.5, -644.5, 1],
+			placed: true
+		},
+		// Rim halves: a half disc (x +-140, z 0..140, y +-24.3), identical in both parts. Per wheel the second half is
+		// turned 180 degrees about the axle; the split runs along a diagonal as in the old assembly's quarter pieces
+		// (spin 45). Instance 0 = +x wheel, instance 1 = -x wheel.
+		{ slug: 'rims-1-4', matrix: wheelPose(1, 45), instances: [wheelPose(-1, 45)], placed: true },
+		{ slug: 'rims-2-3', matrix: wheelPose(1, 225), instances: [wheelPose(-1, 225)], placed: true },
+		// Smaller rims REV A: one quarter disc (x 0..140, z 0..140) per piece, four per wheel; 1-4 covers one half of
+		// each wheel (spins 45 and 135) and 2-3 the other (225, 315), so the two colors split the wheel in halves.
+		{
+			slug: 'rims-small-1-4',
+			matrix: wheelPose(1, 45),
+			instances: [wheelPose(1, 135), wheelPose(-1, 45), wheelPose(-1, 135)],
+			placed: true
+		},
+		{
+			slug: 'rims-small-2-3',
+			matrix: wheelPose(1, 225),
+			instances: [wheelPose(1, 315), wheelPose(-1, 225), wheelPose(-1, 315)],
+			placed: true
+		},
+		// Tires: one segment spans 45 degrees (outer radius 175, from +z towards -x in its own frame); 8 around each
+		// wheel (16 in total: the first 8 on the +x wheel, then 8 on the -x wheel).
+		{
+			slug: 'tires',
+			matrix: wheelPose(1),
+			instances: [
+				...ringInstances(wheelPose(1), 8, [WHEEL_X, 145, -300], 'x'),
+				wheelPose(-1),
+				...ringInstances(wheelPose(-1), 8, [-WHEEL_X, 145, -300], 'x')
+			].map(tidy),
+			placed: true
+		},
+		// Harness and buckles are flat-printed TPU that bends when installed: the viewer draws a stylized procedural
+		// harness (domain/standins.ts) from the seat, back and footrest boxes. No STEP placement. The bucket seat has
+		// no geometry in the model; place it in the nudge editor once its STEP is imported.
+		...['buckles', 'harness', 'bucket-seat'].map((slug) => ({
+			slug,
+			matrix: IDENTITY,
+			placed: false
+		}))
 	]
 };
 

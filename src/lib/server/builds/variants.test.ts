@@ -110,7 +110,9 @@ describe('seed reconcile', () => {
 		expect(first).toEqual({ inserted: [], updated: [tmt.slug] });
 		expect(old.select({ n: count() }).from(templateParts).get()!.n).toBe(tmt.parts.length);
 		expect(old.select({ n: count() }).from(templatePartPlacements).get()!.n).toBe(tmt.parts.length);
-		expect(old.select().from(templates).get()!.variantGroups).toHaveLength(4);
+		expect(old.select().from(templates).get()!.variantGroups).toHaveLength(
+			tmt.variantGroups!.length
+		);
 		// builds untouched by the seed
 		expect(JSON.stringify(old.select().from(builds).all())).toBe(buildsBefore);
 		expect(old.select({ n: count() }).from(buildParts).get()!.n).toBe(rowsBefore);
@@ -129,9 +131,18 @@ describe('seed reconcile', () => {
 
 	it('counts placed and unplaced parts', () => {
 		const rows = db.select().from(templatePartPlacements).all();
-		expect(rows.filter((r) => r.placed)).toHaveLength(23);
-		expect(rows.filter((r) => !r.placed)).toHaveLength(17);
+		const placed = tmt.placements!.filter((p) => p.placed).length;
+		expect(rows.filter((r) => r.placed)).toHaveLength(placed);
+		expect(rows.filter((r) => !r.placed)).toHaveLength(tmt.parts.length - placed);
+		// Only the harness, buckles and the bucket seat (no STEP geometry) stay unplaced.
+		expect(
+			rows
+				.filter((r) => !r.placed)
+				.map((r) => r.slug)
+				.sort()
+		).toEqual(['bucket-seat', 'buckles', 'harness']);
 		expect(rows.find((r) => r.slug === 'hub-caps')!.instances).toHaveLength(1);
+		expect(rows.find((r) => r.slug === 'tires')!.instances).toHaveLength(15);
 	});
 });
 
@@ -146,7 +157,9 @@ describe('variants in the build view', () => {
 			seat: 'cushions',
 			'rear-caster': 'kit',
 			footrest: 'one-piece',
-			rim: 'standard'
+			rim: 'standard',
+			headrest: 'include',
+			'push-handle': 'include'
 		});
 		expect(v.parts).toHaveLength(33);
 		expect(Object.keys(v.state)).toHaveLength(33);

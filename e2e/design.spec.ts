@@ -15,6 +15,7 @@ test('design tab: move parts between slots, add a color, share a design and star
 
 	await page.goto(`/builds/${buildId}/design`);
 	await expect(page.getByTestId('no-model')).toContainText('No 3D model yet');
+	await page.getByRole('tab', { name: 'Parts' }).click();
 
 	const wing = page.locator('button.row[data-slug="wing-left"]');
 	const wingBefore = await wing.innerText();
@@ -37,16 +38,18 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await page.goto(`/builds/${buildId}`);
 	await expect(page.locator('.tile').first()).not.toHaveText(beforeTile);
 
-	// Add a color through the picker.
+	// Add a color through the swatch picker (a custom color here, a catalog swatch below).
 	await page.goto(`/builds/${buildId}/design`);
 	await page.getByRole('button', { name: 'Add a color' }).click();
-	const add = page.locator('.add');
-	await add.getByLabel('Name', { exact: true }).fill('E2E Red');
-	await add.getByLabel('Name', { exact: true }).press('Tab');
-	await add.getByRole('button', { name: 'Add color' }).click();
+	const picker = page.getByTestId('swatch-picker');
+	await picker.getByText('Add custom color').click();
+	await picker.getByLabel('Custom color name').fill('E2E Red');
+	await picker.getByRole('button', { name: 'Use this color' }).click();
+	await expect(picker).toHaveCount(0);
 	const slot = page.locator('li.slot[data-role="e2e-red"]');
 	await expect(slot).toContainText('E2E Red');
 
+	await page.getByRole('tab', { name: 'Parts' }).click();
 	// Move a handle to it (one side only).
 	await page.locator('button.row[data-slug="handle-left"]').click();
 	await page.getByLabel(/Apply to both sides/).uncheck();
@@ -75,6 +78,8 @@ test('design tab: move parts between slots, add a color, share a design and star
 
 	await page.getByRole('link', { name: 'Design', exact: true }).click();
 	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
 	await expect(page.locator('button.row[data-slug="handle-left"]')).toContainText('E2E Red');
 	await expect(page.locator('button.row[data-slug="wing-right"]')).toContainText(
 		await page.locator('li.slot[data-role="primary"] b').innerText()
@@ -86,6 +91,7 @@ test('design tab: Esc, the close button and picking the same part again deselect
 }) => {
 	const { buildId } = await ownerWithBuild(page, 'deselect');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Parts' }).click();
 	const wing = page.locator('button.row[data-slug="wing-left"]');
 	const sheet = page.getByTestId('part-sheet');
 	await wing.click();
@@ -100,4 +106,47 @@ test('design tab: Esc, the close button and picking the same part again deselect
 	await expect(sheet).toBeVisible();
 	await wing.click();
 	await expect(sheet).toHaveCount(0);
+});
+
+test('design tab: pick a catalog swatch for a slot, search, and add a slot from a swatch', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'swatch');
+	await page.goto(`/builds/${buildId}/design`);
+
+	// Tap the slot's big swatch: the picker opens with real catalog colors.
+	const slot = page.locator('li.slot[data-role="primary"]');
+	const before = await slot.locator('b').innerText();
+	await slot
+		.getByRole('button', { name: /^Change filament for/ })
+		.first()
+		.click();
+	const picker = page.getByTestId('swatch-picker');
+	await expect(picker).toBeVisible();
+	await picker.getByRole('button', { name: 'Overture', exact: true }).click();
+	await picker.getByLabel('Search colors').fill('red');
+	const swatch = picker.getByTestId('swatch').first();
+	await expect(swatch).toBeVisible();
+	const label = (await swatch.getAttribute('aria-label')) ?? '';
+	const name = label.split(',')[0];
+	expect(name).toMatch(/red/i);
+	await swatch.click();
+	await expect(slot.locator('b')).toContainText(name);
+	expect(await slot.locator('b').innerText()).not.toBe(before);
+	await expect(picker.getByTestId('swatch-detail')).toContainText(name);
+	await picker.getByRole('button', { name: 'Done' }).click();
+	await expect(picker).toHaveCount(0);
+
+	// The pick was saved, not just shown.
+	await page.reload();
+	await expect(page.locator('li.slot[data-role="primary"] b')).toContainText(name);
+
+	// New slot: choose the material, tap a swatch, the slot appears in one step.
+	await page.getByRole('button', { name: 'Add a color' }).click();
+	await page.getByRole('button', { name: /^TPU/ }).click();
+	await picker.getByLabel('Search colors').fill('black');
+	await picker.getByTestId('swatch').first().click();
+	await expect(picker).toHaveCount(0);
+	await expect(page.locator('li.slot')).toHaveCount(5);
+	await expect(page.locator('li.slot').last()).toContainText(/TPU/i);
 });

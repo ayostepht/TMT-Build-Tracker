@@ -1,5 +1,5 @@
 import raw from './catalog.json' with { type: 'json' };
-import { suggestName } from '#lib/filament-catalog.ts';
+import { materialFamily, suggestName } from '#lib/filament-catalog.ts';
 import type { CatalogBrand, CatalogColor, FilamentCatalog, SearchHit } from './types.ts';
 
 const catalog = raw as FilamentCatalog;
@@ -55,4 +55,29 @@ export function search(q: string, limit = 50): SearchHit[] {
 		}
 	}
 	return hits;
+}
+
+export type SwatchFamily = 'petg' | 'tpu' | 'other';
+const swatchCache = new Map<SwatchFamily, [string, string, string, string][]>();
+
+/** Compact `[brand, color, #hex, material]` tuples for every color of a material family (swatch grids). */
+export function swatches(family: SwatchFamily): [string, string, string, string][] {
+	let out = swatchCache.get(family);
+	if (!out) {
+		out = [];
+		const seen = new Set<string>();
+		for (const b of catalog.brands)
+			for (const m of b.materials) {
+				if (materialFamily(m.material) !== family) continue;
+				for (const c of m.colors) {
+					if (!/^#[0-9a-fA-F]{6}$/.test(c.hex)) continue;
+					const key = `${b.name}|${c.name}|${c.hex}|${m.material}`.toLowerCase();
+					if (seen.has(key)) continue;
+					seen.add(key);
+					out.push([b.name, c.name, c.hex.toLowerCase(), m.material]);
+				}
+			}
+		swatchCache.set(family, out);
+	}
+	return out;
 }

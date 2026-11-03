@@ -13,12 +13,34 @@ import {
 	templates
 } from '../db/schema';
 import { seedToFootprint } from '#lib/domain/print-footprint.ts';
-import type { TemplateSeed } from './types';
+import type { PlacementSeed, TemplateSeed } from './types';
 
 /** `template_print_geometry.source_note` of rows that come from the seed (no mesh). */
 export const SEED_NOTE = 'seed';
 
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+/**
+ * A database placement follows the seed only when no admin has edited it (`updatedBy` is null)
+ * and its numbers differ from the seed's.
+ */
+export function shouldUpdatePlacement(
+	cur: { matrix: number[]; instances: number[][]; placed: boolean; updatedBy: string | null },
+	seed: PlacementSeed
+): boolean {
+	if (cur.updatedBy !== null) return false;
+	const matrix = seed.matrix ?? IDENTITY;
+	const instances = seed.instances ?? [];
+	return (
+		cur.placed !== seed.placed ||
+		!sameNumbers(cur.matrix, matrix) ||
+		cur.instances.length !== instances.length ||
+		cur.instances.some((m, i) => !sameNumbers(m, instances[i]))
+	);
+}
+
+const sameNumbers = (a: number[], b: number[]) =>
+	a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
@@ -38,8 +60,8 @@ export interface SeedResult {
  *   of parts, plates, roles and the template row (name, version, sections, variant
  *   groups, ...) are updated to the seed's values. Nothing is ever deleted, builds are
  *   never touched (existing builds get their new `build_parts` rows from
- *   `backfillBuildParts`), and placements already in the database are left alone because
- *   they can be edited in the app.
+ *   `backfillBuildParts`), and a placement is updated from the seed only while no admin has
+ *   edited it (`updated_by IS NULL`); admin edits are never overwritten.
  */
 export function seedTemplates(db: Db, seeds: TemplateSeed[]): SeedResult {
 	const inserted: string[] = [];
@@ -300,20 +322,42 @@ function reconcileTemplate(tx: Tx, s: TemplateSeed, existingId: string | null): 
 		changed = true;
 	}
 
-	// Placements (insert missing only; admins can edit them in the app). Parts the seed
-	// does not mention get an unplaced identity row so every part has one.
-	const placed = new Set(
+	// Placements: insert missing rows; update a row from the seed only while no admin has edited it
+	// (`updated_by IS NULL`) and it differs. Admin edits are never overwritten. Parts the seed does
+	// not mention get an unplaced identity row so every part has one.
+	const existingPlacements = new Map(
 		tx
-			.select({ slug: templatePartPlacements.slug })
+			.select()
 			.from(templatePartPlacements)
 			.where(eq(templatePartPlacements.templateId, templateId))
 			.all()
-			.map((p) => p.slug)
+			.map((p) => [p.slug, p])
 	);
 	const placements = new Map((s.placements ?? []).map((p) => [p.slug, p]));
 	if (s.placements) {
 		for (const part of s.parts) {
-			if (placed.has(part.slug)) continue;
+			const cur = existingPlacements.get(part.slug);
+			if (cur) {
+				const p = placements.get(part.slug);
+				if (p && shouldUpdatePlacement(cur, p)) {
+					tx.update(templatePartPlacements)
+						.set({
+							matrix: p.matrix ?? IDENTITY,
+							instances: p.instances ?? [],
+							placed: p.placed,
+							updatedAt: new Date()
+						})
+						.where(
+							and(
+								eq(templatePartPlacements.templateId, templateId),
+								eq(templatePartPlacements.slug, part.slug)
+							)
+						)
+						.run();
+					changed = true;
+				}
+				continue;
+			}
 			const p = placements.get(part.slug);
 			tx.insert(templatePartPlacements)
 				.values({

@@ -44,7 +44,11 @@
 							<b>{o.name}</b>
 							{#if o.description}<span class="muted">{o.description}</span>{/if}
 							<span class="parts muted">
-								Prints: {o.parts.map((s) => partNames[s] ?? s).join(', ')}
+								{#if o.parts.length}
+									Prints: {o.parts.map((s) => partNames[s] ?? s).join(', ')}
+								{:else}
+									Prints nothing
+								{/if}
 							</span>
 						</span>
 					</label>

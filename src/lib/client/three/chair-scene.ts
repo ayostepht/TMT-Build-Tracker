@@ -7,7 +7,18 @@ import type * as T from 'three';
 import type { GLTF, GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { PartPlacement } from '#lib/domain/types.ts';
+import {
+	aabbUnion,
+	frontCasterAnchors,
+	harnessLayout,
+	rearCasterAnchor,
+	DEFAULT_GROUND_Y,
+	type Aabb
+} from '#lib/domain/standins.ts';
+import { PART_CLIPS } from '#lib/domain/part-clips.ts';
 import { fitDistance, fitDistanceBox } from './fit.ts';
+import { isTap, resolvePick } from './picking.ts';
+import { buildBuckle, buildCaster, buildRibbon } from './standins.ts';
 
 export interface Libs {
 	THREE: typeof T;
@@ -65,6 +76,16 @@ interface Instance {
 const NEUTRAL = '#b9bdc6';
 const HIGHLIGHT = 0x3b82f6;
 const DIR = [0.9, 0.6, 1.1];
+/** Named camera directions (from the chair's centre; +z is the front of the chair, +x its left). */
+export const VIEWS = {
+	front34: DIR,
+	front: [0, 0.25, 1],
+	side: [1, 0.2, 0],
+	back34: [-0.9, 0.6, -1.1],
+	back: [0, 0.3, -1],
+	top: [0, 1, 0.001]
+} as const;
+export type ViewName = keyof typeof VIEWS;
 
 export class ChairScene {
 	private THREE: typeof T;
@@ -77,6 +98,11 @@ export class ChairScene {
 	private raycaster: T.Raycaster;
 	private env: T.Texture | null = null;
 	private hwMaterial: T.MeshStandardMaterial;
+	private treadMaterial: T.MeshStandardMaterial;
+	/** Procedural casters (always drawn; the hardware GLB's own casters are hidden). */
+	private casters: T.Group;
+	private standinOwned: { dispose(): void }[] = [];
+	private showHardware = true;
 
 	private prims = new Map<string, Prim[]>(); // slug -> geometry
 	private instances = new Map<string, Instance[]>(); // slug -> rendered instances
@@ -141,7 +167,8 @@ export class ChairScene {
 		this.camera = new THREE.PerspectiveCamera(32, 1, 1, 10000);
 		this.parts = new THREE.Group();
 		this.hardware = new THREE.Group();
-		this.scene.add(this.parts, this.hardware);
+		this.casters = new THREE.Group();
+		this.scene.add(this.parts, this.hardware, this.casters);
 		this.raycaster = new THREE.Raycaster();
 		this.center = new THREE.Vector3();
 		this.hwMaterial = new THREE.MeshStandardMaterial({
@@ -149,6 +176,13 @@ export class ChairScene {
 			roughness: 0.45,
 			metalness: 0.55
 		});
+
+		this.treadMaterial = new THREE.MeshStandardMaterial({
+			color: 0x2f3138,
+			roughness: 0.85,
+			metalness: 0
+		});
+		this.renderer.localClippingEnabled = true;
 
 		this.controls = new libs.OrbitControls(this.camera, canvas);
 		this.controls.enableDamping = true;
@@ -171,8 +205,7 @@ export class ChairScene {
 			const d = this.down;
 			this.down = null;
 			const pe = e as PointerEvent;
-			if (!d || Math.hypot(pe.clientX - d.x, pe.clientY - d.y) > 6 || performance.now() - d.t > 600)
-				return;
+			if (!isTap(d, { x: pe.clientX, y: pe.clientY, t: performance.now() })) return; // a drag
 			this.pick(pe.clientX, pe.clientY);
 		});
 		this.listen(canvas, 'pointercancel', () => (this.down = null));
@@ -274,12 +307,15 @@ export class ChairScene {
 				this.hwOwned.push(m.geometry);
 				([] as T.Material[]).concat(m.material).forEach((x) => x.dispose());
 				m.material = this.hwMaterial;
+				// The stand-in casters replace the vendor casters; keep bolts, bearings and the like.
+				if (/caster/i.test(this.rawName(hw, m))) m.visible = false;
 			});
 			this.hardware.add(hw.scene);
 		}
 		this.hardware.traverse((o) => {
 			(o as T.Mesh).raycast = () => {};
 		});
+		this.hardware.visible = this.showHardware;
 		this.loaded = true;
 		this.rebuild();
 		this.fit(false);
@@ -300,6 +336,7 @@ export class ChairScene {
 	// ---- parts -------------------------------------------------------------------
 
 	private clearInstances() {
+		this.removeStandins();
 		for (const list of this.instances.values()) for (const i of list) i.material.dispose();
 		this.instances.clear();
 		this.parts.clear();
@@ -323,6 +360,11 @@ export class ChairScene {
 				if (m.length !== 16) continue;
 				const place = new THREE.Matrix4().fromArray(m);
 				const material = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 });
+				const clip = PART_CLIPS[p.slug];
+				if (clip)
+					material.clippingPlanes = [
+						new THREE.Plane(new THREE.Vector3(...clip.normal), clip.constant).applyMatrix4(place)
+					];
 				const meshes = prims.map((prim) => {
 					const mesh = new THREE.Mesh(prim.geometry, material);
 					mesh.matrixAutoUpdate = false;
@@ -336,6 +378,7 @@ export class ChairScene {
 			}
 			this.instances.set(p.slug, list);
 		}
+		for (const s of this.buildStandins()) if (!rendered.includes(s)) rendered.push(s);
 		const unplaced = [...known].filter((s) => !rendered.includes(s)).sort();
 		if (!this.fitted && rendered.length) this.fit(false);
 		this.applyLook();
@@ -365,8 +408,8 @@ export class ChairScene {
 				mat.needsUpdate = true;
 				for (const m of inst.meshes) {
 					m.visible = !hidden;
-					// Dimmed parts read as empty space: a tap on them deselects instead of picking.
-					if (!hidden && !dimmed) pick.push(m);
+					// Dimmed parts stay pickable: a tap on one switches the selection to it.
+					if (!hidden) pick.push(m);
 				}
 			}
 		}
@@ -376,7 +419,119 @@ export class ChairScene {
 		this.hwMaterial.opacity = dimHw ? 0.12 : 1;
 		this.hwMaterial.depthWrite = !dimHw;
 		this.hwMaterial.needsUpdate = true;
+		this.treadMaterial.transparent = dimHw;
+		this.treadMaterial.opacity = dimHw ? 0.12 : 1;
+		this.treadMaterial.depthWrite = !dimHw;
+		this.treadMaterial.needsUpdate = true;
 		this.dirty = true;
+	}
+
+	// ---- stand-ins (casters, harness) -------------------------------------------
+
+	private instanceBoxes(slug: string): Aabb[] {
+		const THREE = this.THREE;
+		const out: Aabb[] = [];
+		for (const inst of this.instances.get(slug) ?? []) {
+			const box = new THREE.Box3();
+			for (const m of inst.meshes) box.expandByObject(m);
+			if (!box.isEmpty())
+				out.push({ min: box.min.toArray() as Aabb['min'], max: box.max.toArray() as Aabb['max'] });
+		}
+		return out;
+	}
+
+	private removeStandins() {
+		for (const key of ['harness', 'buckles']) {
+			const list = this.instances.get(key);
+			if (!list) continue;
+			for (const i of list) {
+				i.material.dispose();
+				for (const m of i.meshes) this.parts.remove(m);
+			}
+			this.instances.delete(key);
+		}
+		for (const o of this.standinOwned) o.dispose();
+		this.standinOwned = [];
+		this.casters.clear();
+	}
+
+	/**
+	 * Draws the generic casters and the stylized harness from the placed parts' boxes. Returns the
+	 * slugs it rendered (harness, buckles) so they do not count as unplaced.
+	 */
+	private buildStandins(): string[] {
+		this.removeStandins();
+		if (!this.loaded) return [];
+		const THREE = this.THREE;
+		this.parts.updateMatrixWorld(true);
+		const vis = (s: string) => !this.hidden.has(s);
+		const boxesOf = (slugs: string[]) => slugs.filter(vis).flatMap((s) => this.instanceBoxes(s));
+		const known = (s: string) => this.placements.some((p) => p.slug === s);
+
+		// Casters (neutral grey, always drawn when their mounts are).
+		const wheels = this.instanceBoxes('tires');
+		const ground = wheels.length ? Math.min(...wheels.map((b) => b.min[1])) : DEFAULT_GROUND_Y;
+		const rear = rearCasterAnchor(
+			boxesOf([
+				'rear-caster-left',
+				'rear-caster-right',
+				'rear-caster-left-mcmaster',
+				'rear-caster-right-mcmaster'
+			]),
+			ground
+		);
+		const anchors = [
+			...frontCasterAnchors(boxesOf(['front-caster-mount'])),
+			...(rear ? [rear] : [])
+		];
+		for (const a of anchors)
+			this.casters.add(
+				buildCaster(THREE, a, { metal: this.hwMaterial, tread: this.treadMaterial })
+			);
+
+		// Harness: needs a seat and a back to hang on.
+		const rendered: string[] = [];
+		if (known('harness') || known('buckles')) {
+			const seat =
+				vis('cushion-base') && this.instanceBoxes('cushion-base')[0]
+					? this.instanceBoxes('cushion-base')[0]
+					: this.instanceBoxes('seat-center')[0];
+			const back =
+				vis('cushion-top') && this.instanceBoxes('cushion-top')[0]
+					? this.instanceBoxes('cushion-top')[0]
+					: aabbUnion([
+							...this.instanceBoxes('seat-back-top'),
+							...this.instanceBoxes('seat-back-bottom')
+						]);
+			if (seat && back) {
+				const foot = aabbUnion(boxesOf(['footrest', 'footrest-front', 'footrest-rear']));
+				const layout = harnessLayout({ seat, back, footrest: foot });
+				const strapMeshes: T.Mesh[] = [];
+				const buckleMeshes: T.Mesh[] = [];
+				const strapMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 });
+				const buckleMat = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0 });
+				strapMat.side = THREE.DoubleSide;
+				for (const s of layout.straps) {
+					const geo = buildRibbon(THREE, s, 3);
+					this.standinOwned.push(geo);
+					const mesh = new THREE.Mesh(geo, strapMat);
+					mesh.userData.slug = 'harness';
+					strapMeshes.push(mesh);
+				}
+				for (const b of layout.buckles) {
+					const geo = buildBuckle(THREE, b);
+					this.standinOwned.push(geo);
+					const mesh = new THREE.Mesh(geo, buckleMat);
+					mesh.userData.slug = 'buckles';
+					buckleMeshes.push(mesh);
+				}
+				for (const m of [...strapMeshes, ...buckleMeshes]) this.parts.add(m);
+				this.instances.set('harness', [{ meshes: strapMeshes, material: strapMat }]);
+				this.instances.set('buckles', [{ meshes: buckleMeshes, material: buckleMat }]);
+				rendered.push('harness', 'buckles');
+			}
+		}
+		return rendered;
 	}
 
 	setPlacements(p: PartPlacement[]) {
@@ -389,7 +544,15 @@ export class ChairScene {
 	}
 	setHidden(h: string[]) {
 		this.hidden = new Set(h);
+		// Stand-ins hang on whichever seat/back/mount variants are visible.
+		if (this.loaded) this.buildStandins();
 		this.applyLook();
+	}
+	/** Show or hide the offline hardware GLB (bolts, bearings); the stand-in casters stay. */
+	setShowHardware(on: boolean) {
+		this.showHardware = on;
+		this.hardware.visible = on;
+		this.dirty = true;
 	}
 	setSelection(slug: string | null, dim: boolean) {
 		this.selected = slug;
@@ -411,6 +574,7 @@ export class ChairScene {
 		this.parts.updateMatrixWorld(true);
 		for (const [s, list] of this.instances) {
 			if (slug && s !== slug) continue;
+			if (!slug && this.hidden.has(s)) continue;
 			for (const inst of list) for (const m of inst.meshes) box.expandByObject(m);
 		}
 		if (box.isEmpty() && !slug) box.setFromObject(this.hardware);
@@ -478,6 +642,23 @@ export class ChairScene {
 		this.fit(true);
 	}
 
+	/** True once a model has been installed (used by tests and screenshot tooling). */
+	isLoaded(): boolean {
+		return this.loaded;
+	}
+
+	/** Look at the whole chair from a named direction (no animation). */
+	setView(name: ViewName) {
+		const THREE = this.THREE;
+		const box = this.bounds();
+		if (box.isEmpty()) return;
+		const dir = new THREE.Vector3(...VIEWS[name]).normalize();
+		const d = this.boxDistance(box, dir, this.aspect());
+		const c = box.getCenter(new THREE.Vector3());
+		this.userMoved = true;
+		this.moveCamera(c, c.clone().add(dir.multiplyScalar(d)), false);
+	}
+
 	focus(slug: string) {
 		const THREE = this.THREE;
 		const box = this.bounds(slug);
@@ -514,8 +695,12 @@ export class ChairScene {
 			-((cy - rect.top) / rect.height) * 2 + 1
 		);
 		this.raycaster.setFromCamera(ndc, this.camera);
-		const hit = this.raycaster.intersectObjects(this.pickables, false)[0];
-		this.cb.onpick((hit?.object.userData.slug as string | undefined) ?? null);
+		const hits = this.raycaster.intersectObjects(this.pickables, false);
+		const r = resolvePick(
+			hits.map((h) => ({ slug: h.object.userData.slug as string | undefined }))
+		);
+		// A tap on a part (even a dimmed one) selects it; a tap on empty space deselects.
+		this.cb.onpick(r.kind === 'hit' ? r.slug : null);
 	}
 
 	// ---- render loop -------------------------------------------------------------
@@ -607,6 +792,7 @@ export class ChairScene {
 		this.controls.dispose();
 		this.clearModel();
 		this.hwMaterial.dispose();
+		this.treadMaterial.dispose();
 		this.env?.dispose();
 		this.renderer.dispose();
 		this.renderer.forceContextLoss();

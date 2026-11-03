@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brands, colors, materials, search } from './index.ts';
+import { brands, colors, materials, search, swatches } from './index.ts';
 import { normalise } from '../../../../scripts/update-filaments.mjs';
 import { materialFamily, preferMaterials, suggestName } from '#lib/filament-catalog.ts';
 
@@ -90,5 +90,20 @@ describe('normalise', () => {
 	it('tolerates garbage input', () => {
 		expect(normalise(null).brands).toEqual([]);
 		expect(normalise([null, {}]).brands).toEqual([]);
+	});
+});
+
+describe('swatches', () => {
+	it('lists compact tuples per material family', () => {
+		const petg = swatches('petg');
+		const tpu = swatches('tpu');
+		expect(petg.length).toBeGreaterThan(500);
+		expect(tpu.length).toBeGreaterThan(100);
+		for (const [brand, name, hex, material] of [...petg.slice(0, 50), ...tpu.slice(0, 50)]) {
+			expect(brand && name && material).toBeTruthy();
+			expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+		}
+		expect(petg.every((t) => materialFamily(t[3]) === 'petg')).toBe(true);
+		expect(tpu.every((t) => materialFamily(t[3]) === 'tpu')).toBe(true);
 	});
 });

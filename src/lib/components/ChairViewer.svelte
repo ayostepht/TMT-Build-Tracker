@@ -14,11 +14,13 @@
 		dimOthers?: boolean;
 		/** Overrides `model.placements` (live preview while nudging). */
 		placements?: PartPlacement[];
-		/** Tap or click on a part; empty space gives null. Drags are ignored. */
+		/** Tap or click on a part (dimmed ones too) gives its slug; empty space gives null. Drags are ignored. */
 		onpick?: (slug: string | null) => void;
 		onready?: (info: { rendered: string[]; unplaced: string[] }) => void;
 		/** Slow turntable; never when the user prefers reduced motion. */
 		autoRotate?: boolean;
+		/** Show the offline hardware GLB (bolts, bearings). The stand-in casters and harness are always drawn. */
+		showHardware?: boolean;
 		/** Shown instead of the canvas when WebGL is unavailable. */
 		fallback?: Snippet;
 	}
@@ -33,6 +35,7 @@
 		onpick,
 		onready,
 		autoRotate = false,
+		showHardware = true,
 		fallback
 	}: Props = $props();
 
@@ -62,6 +65,8 @@
 					onprogress: (f) => (progress = f)
 				});
 				scene = created;
+				// Debug / test handle (screenshots, e2e): the scene object on the host element.
+				(host as unknown as { __scene?: ChairScene }).__scene = created;
 			} catch (e) {
 				status = 'nowebgl';
 				errorText = e instanceof Error ? e.message : String(e);
@@ -110,6 +115,9 @@
 	});
 	$effect(() => {
 		scene?.setAutoRotate(autoRotate);
+	});
+	$effect(() => {
+		scene?.setShowHardware(showHardware);
 	});
 
 	/** PNG of the current view. */
