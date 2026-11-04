@@ -1,5 +1,8 @@
 # TMT Build Tracker
 
+> Start here: read `docs/STATUS.md` (current state and next steps), then this file.
+> Maintainer-machine specifics live in the untracked `CLAUDE.local.md`.
+
 Self-hostable, open-source web app for makers 3D-printing **MakeGood 3D TMT**
 (toddler mobility trainer) chairs: teams ("chapters") plan, print, assemble
 and hand off builds together.
@@ -186,17 +189,10 @@ Definition of done for a change: `check`, `lint`, `test` and `build` pass,
 and anything touching startup is verified with `docker build` + a run against
 an empty data directory.
 
-## Roadmap
+## Status, roadmap and handoff
 
-Milestones (each shippable): 1 scaffold (done) · 2 multi-build port of the
-prototype with tabs, teams and live updates (done) · 3 import from the
-original prototype (done) · 4 live color prototyper + shareable designs
-(done; 8 parts still need placing in the nudge editor) · 5 3MF upload →
-plates (done; Elegoo/Orca untested against a real sliced file) · 6 assembly (done)
-+ handoff · 7 Spoolman + printer adapters (done; live test pending) (Elegoo Centauri Carbon/SDCP,
-Moonraker, OctoPrint, Bambu LAN) · 8 release (Unraid template, Community
-Apps). Update this line as milestones land.
-
-Roadmap ideas: accept OctoEverywhere notification webhooks to update print
-status live (needs a publicly reachable URL, so after the release milestone
-puts the app behind a domain; verify a shared secret on every webhook).
+**`docs/STATUS.md` is the source of truth** for where development stands:
+milestone state, decisions not to revisit, open questions for the maintainer,
+backlog and next steps. Read it at the start of every session. Update it at the
+end of every work session and before any context reset, in the same commit as
+the work it describes.
