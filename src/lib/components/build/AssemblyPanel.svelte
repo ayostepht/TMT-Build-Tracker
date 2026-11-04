@@ -53,7 +53,7 @@
 		{#if !ready.ready}
 			<p class="muted">
 				You can start with the steps whose parts are done.
-				<a href={resolve('/(app)/builds/[id]/parts', { id: ctx.id })}>Open the Parts tab</a> to finish
+				<a href={resolve('/(app)/builds/[id]/print', { id: ctx.id })}>Open the Print tab</a> to finish
 				printing:
 			</p>
 			<ul class="missing">

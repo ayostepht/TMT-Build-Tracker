@@ -152,7 +152,7 @@
 				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<a
 					class="btn sm"
-					href={resolve('/(app)/builds/[id]/print', { id: ctx.id }) + '#settings'}
+					href={resolve('/(app)/builds/[id]/files', { id: ctx.id }) + '#settings'}
 					data-testid="export-open-settings">Open Print settings</a
 				>
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->

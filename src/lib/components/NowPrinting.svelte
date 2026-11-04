@@ -34,8 +34,8 @@
 			<NowCard {item} />
 		{:else}
 			<p class="empty">
-				Nothing on the printer. Set a part to Printing, or use Start printing on a plate in the
-				Print tab, and it pins here.
+				Nothing on the printer. Set a part to Printing in the Print tab, or use Start printing on a
+				plate in the Files tab, and it pins here.
 			</p>
 		{/each}
 	</div>

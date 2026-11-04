@@ -16,7 +16,7 @@ test('a viewer sees the build read-only and the API refuses their writes', async
 	await expect(
 		vp.getByRole('combobox', { name: 'Workspace' }).locator('option', { hasText: 'My builds' })
 	).toHaveCount(1);
-	await vp.goto(`/builds/${buildId}/parts`);
+	await vp.goto(`/builds/${buildId}/print`);
 	await expect(vp.getByRole('note')).toContainText('view-only access');
 	await expect(vp.locator('.sync')).toContainText('read only');
 

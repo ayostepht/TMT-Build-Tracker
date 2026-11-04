@@ -152,13 +152,13 @@ test('design tab: pick a catalog swatch for a slot, search, and add a slot from 
 	await expect(page.locator('li.slot').last()).toContainText(/TPU/i);
 });
 
-test('design tab: the next step goes to Print, where the export lives', async ({ page }) => {
+test('design tab: the next step goes to Files, where the export lives', async ({ page }) => {
 	const { buildId } = await ownerWithBuild(page, 'design-export');
 	await page.goto(`/builds/${buildId}/design`);
 	await expect(page.getByTestId('export-open')).toHaveCount(0);
 
 	await page.getByTestId('next-plates').click();
-	await expect(page).toHaveURL(/\/print$/);
+	await expect(page).toHaveURL(/\/files$/);
 	// No printer yet: the export card asks for one.
 	await expect(page.getByTestId('export-no-printer')).toBeVisible();
 

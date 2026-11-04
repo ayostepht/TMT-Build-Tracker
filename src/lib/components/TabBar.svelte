@@ -8,7 +8,7 @@
 		{ label: 'Overview', href: resolve('/(app)/builds/[id]', { id }), exact: true },
 		{ label: 'Design', href: resolve('/(app)/builds/[id]/design', { id }) },
 		{ label: 'Print', href: resolve('/(app)/builds/[id]/print', { id }) },
-		{ label: 'Parts', href: resolve('/(app)/builds/[id]/parts', { id }) },
+		{ label: 'Files', href: resolve('/(app)/builds/[id]/files', { id }) },
 		{ label: 'Finish', href: resolve('/(app)/builds/[id]/finish', { id }) },
 		{ label: '⚙ Settings', name: 'Settings', href: resolve('/(app)/builds/[id]/settings', { id }) }
 	]);

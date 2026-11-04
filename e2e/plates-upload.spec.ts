@@ -6,8 +6,8 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test('switch to the H2D layout, then organize plates from an uploaded 3MF', async ({ page }) => {
 	await ownerWithBuild(page, 'plates');
-	await page.getByRole('link', { name: 'Print', exact: true }).click();
-	await expect(page).toHaveURL(/\/print$/);
+	await page.getByRole('link', { name: 'Files', exact: true }).click();
+	await expect(page).toHaveURL(/\/files$/);
 
 	const cards = page.locator('section.plate-card');
 	const layout = page.getByTestId('plate-layout');

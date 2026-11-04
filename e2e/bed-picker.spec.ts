@@ -6,7 +6,7 @@ const SHOTS = 'data/shots-bed';
 const noOverflow = (page: import('@playwright/test').Page) =>
 	page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
-test('Setup Print step and Print tab picker: bed presets, light and dark, phone and desktop', async ({
+test('Setup Files step and Files tab picker: bed presets, light and dark, phone and desktop', async ({
 	page
 }) => {
 	test.setTimeout(120_000);
@@ -27,7 +27,7 @@ test('Setup Print step and Print tab picker: bed presets, light and dark, phone 
 			await page.screenshot({ path: `${SHOTS}/setup-print-${w}-${scheme}.png`, fullPage: false });
 			if (w === 390) expect(await noOverflow(page)).toBeLessThanOrEqual(0);
 
-			await page.goto(`/builds/${buildId}/print`);
+			await page.goto(`/builds/${buildId}/files`);
 			await page.waitForLoadState('networkidle');
 			await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 			await page.getByTestId('bed-custom').click();

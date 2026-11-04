@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-04, after commit `f4e7715` (kit pack 1.0.1). Keep this file
+_Last updated: 2026-11-04, after the tab rename (Print = tracking, Files = plates and export). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -19,7 +19,7 @@ Milestone 8 (release) has not started.
 | Variants (seat, rear caster, footrest, rim) and accessories (headrest, push handle)                 | Done                                                                |
 | 3D designer (tap parts, slots, swatch picker, 13 palettes, generator, shareable designs)            | Done                                                                |
 | Setup wizard (template, options, colors with the full designer, print, export)                      | Done                                                                |
-| Build tabs: Overview · Design · Print · Parts · Finish · Settings; Builds/Printers nav              | Done                                                                |
+| Build tabs: Overview · Design · Print · Files · Finish · Settings; Builds/Printers nav              | Done                                                                |
 | Printer catalog (70), bed presets, team printers, keep-out zones                                    | Done                                                                |
 | Plate arranging (true outlines, flat rotations only, edge margins, rigid source groups when needed) | Done                                                                |
 | 3MF export (Orca/Elegoo, Bambu, plain), painted supports, `bed_exclude_area`                        | Done, opened in Elegoo Slicer once (v1)                             |
@@ -41,7 +41,7 @@ with ~0.1 mm clearance; footrest and harness each on one plate.
   rigid source layouts only when per-piece packing would split a part.
 - MakeGood files are CC0: ship them as a kit pack (GitHub release asset + Docker image),
   never in git; always credit MakeGood. The maker guide is **not** bundled (link only).
-- One place per task: kit files live in the setup wizard's template step and Print →
+- One place per task: kit files live in the setup wizard's template step and Files →
   print settings; the hardware model is not user-uploadable.
 - Chapters are optional (personal "My builds" workspace). Printers work in personal workspaces.
 - Palettes/generator exclude matte, silk, transparent, glow, marble, wood, glitter, rock
@@ -53,6 +53,8 @@ with ~0.1 mm clearance; footrest and harness each on one plate.
 1. Sliced file to test reading print times and grams: an export **from the app**, sliced in
    Elegoo Slicer and saved with File → Export → "Export plate sliced file" (one or two
    plates is enough). Pending.
+2. "Start printing" for a plate lives on the plate cards in the **Files** tab. Should it
+   (also) be on the **Print** tab, next to part tracking? Pending.
 
 Answered on 2026-11-04 (keep for context):
 
@@ -68,11 +70,14 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
-- Custom filaments: done (workspace-scoped "My filaments" in the swatch picker, Settings picker and palette matcher; `src/lib/server/filaments/custom.ts`, `/api/filaments/custom`). Not yet deployed to the test copy.
-- Queued: rename/reorder build tabs to Overview · Design · Print (was Parts: tracking, logs,
-  now printing) · Files (was Print: bed/printer, plates, own sliced file, export, kit status)
-  · Finish; wizard step "Print" → "Files"; redirects; e2e updates. Maintainer: "Print is
-  more about file generation and organization; Parts is the printing and tracking and
+- Build tabs renamed/reordered (done, not yet deployed): Overview · Design · Print (was Parts:
+  tracking, logs, now printing) · Files (was Print: bed/printer, plates, own sliced file, export,
+  kit status) · Finish · Settings; wizard step "Print" → "Files". Routes `/print` (was
+  `/parts`) and `/files` (was `/print`). 308 redirects: `/parts` → `/print`, `/plates` →
+  `/files`, `/assembly`, `/handoff` → `/finish#…`. `/print` is reused, so `/print#plates|#export|#settings`
+  is redirected client-side to `/files#…`; a bare old `/print` bookmark now shows part tracking
+  (unavoidable). Wizard `?step=` takes 1–5 or template/options/colors/print/files/export.
+  "Start printing" on a plate still lives in the Files tab (plate cards).
   should be earlier".
 - Re-test the latest 3MF export in Elegoo Slicer (plates fit, wings, painted supports,
   cutter zone) after the margin/keep-out/group changes.

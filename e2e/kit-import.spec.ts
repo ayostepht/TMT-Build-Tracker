@@ -233,13 +233,13 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 	} finally {
 		db.close();
 	}
-	// The one drop zone for the built-in kit: a build's Print tab, Print settings.
+	// The one drop zone for the built-in kit: a build's Files tab, Print settings.
 	await page.goto('/');
 	await page.waitForLoadState('networkidle');
 	const buildId = await startBuild(page, 'Kit files build');
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('skip-setup').click();
-	await page.goto(`/builds/${buildId}/print`);
+	await page.goto(`/builds/${buildId}/files`);
 	await page.waitForLoadState('networkidle');
 	await page.getByText('Add or replace files').click();
 

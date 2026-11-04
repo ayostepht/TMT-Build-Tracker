@@ -248,8 +248,8 @@ test('plate layout picker lists the workspace printers first and can add a new o
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { chapterUrl, buildId } = await ownerWithBuild(page, 'picker-printers');
 
-	// No printer yet: only "New printer…" (and a hint). Add one inline from the Print tab.
-	await page.goto(`/builds/${buildId}/print`);
+	// No printer yet: only "New printer…" (and a hint). Add one inline from the Files tab.
+	await page.goto(`/builds/${buildId}/files`);
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	const sel = page.getByTestId('team-printer');
@@ -270,7 +270,7 @@ test('plate layout picker lists the workspace printers first and can add a new o
 	await page.getByTestId('arrange-bed').click();
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Bench Centauri');
 
-	// One printer in the workspace: the setup wizard's Print step preselects it.
+	// One printer in the workspace: the setup wizard's Files step preselects it.
 	await page.goto(chapterUrl);
 	await page.waitForLoadState('networkidle');
 	await startBuild(page, 'Printer chair');
@@ -333,11 +333,11 @@ test('top nav Printers reaches the printers page from a build; a personal worksp
 	await expect(page).toHaveURL(/\/teams\/[^/]+\/printers$/);
 	await expect(page.getByRole('heading', { name: 'Printers', level: 2 })).toBeVisible();
 
-	// Contextual links: Overview's Now printing header and the Print tab.
+	// Contextual links: Overview's Now printing header and the Files tab.
 	await page.goto(`/builds/${buildId}`);
 	await page.getByTestId('now-printers-link').click();
 	await expect(page).toHaveURL(/\/printers$/);
-	await page.goto(`/builds/${buildId}/print`);
+	await page.goto(`/builds/${buildId}/files`);
 	await page.getByTestId('manage-printers').click();
 	await expect(page).toHaveURL(/\/printers$/);
 

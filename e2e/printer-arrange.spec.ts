@@ -10,8 +10,8 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	test.setTimeout(120_000);
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { buildId } = await ownerWithBuild(page, 'arrange');
-	await page.getByRole('link', { name: 'Print', exact: true }).click();
-	await expect(page).toHaveURL(/\/print$/);
+	await page.getByRole('link', { name: 'Files', exact: true }).click();
+	await expect(page).toHaveURL(/\/files$/);
 
 	// The picker offers standard bed sizes first, with example printers computed from the catalog.
 	const layoutSel = page.getByTestId('plate-layout');
@@ -113,7 +113,7 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	}
 	await page.setViewportSize({ width: 390, height: 844 });
 
-	// A small custom bed on the Print tab: the oversize warnings name the bed.
+	// A small custom bed on the Files tab: the oversize warnings name the bed.
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	const panel = page.getByTestId('arrange-bed-panel');
 	await panel.getByTestId('bed-custom').click();

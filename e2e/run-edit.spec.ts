@@ -5,8 +5,8 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test('a past print log can be edited or deleted and part statuses follow', async ({ page }) => {
 	await ownerWithBuild(page, 'runedit');
-	await page.getByRole('link', { name: 'Parts', exact: true }).click();
-	await expect(page).toHaveURL(/\/parts$/);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await expect(page).toHaveURL(/\/print$/);
 	const parts = page.locator('.row');
 	const slugA = (await parts.nth(0).getAttribute('data-id')) as string;
 	const nameA = (await parts.nth(0).locator('.pbtn').innerText()).trim();

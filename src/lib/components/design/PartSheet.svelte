@@ -87,7 +87,7 @@
 	{#if part.guideRefs.length}
 		<p class="muted">
 			Guide: {part.guideRefs.map((g) => `p. ${g.page}`).join(', ')}
-			· <a href={resolve('/(app)/builds/[id]/parts', { id: view.build.id })}>Open Parts tab</a>
+			· <a href={resolve('/(app)/builds/[id]/print', { id: view.build.id })}>Open Print tab</a>
 		</p>
 	{/if}
 </section>

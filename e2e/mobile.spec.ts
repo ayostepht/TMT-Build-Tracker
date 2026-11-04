@@ -3,7 +3,7 @@ import { ownerWithBuild } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-test('Overview and Parts do not scroll sideways at 390px', async ({ page }) => {
+test('Overview and Print do not scroll sideways at 390px', async ({ page }) => {
 	await ownerWithBuild(page, 'mobile');
 	const overflow = () =>
 		page.evaluate(() => ({
@@ -15,9 +15,9 @@ test('Overview and Parts do not scroll sideways at 390px', async ({ page }) => {
 	let m = await overflow();
 	expect(m.scroll, 'overview').toBeLessThanOrEqual(m.client);
 
-	await page.getByRole('link', { name: 'Parts', exact: true }).click();
-	await expect(page).toHaveURL(/\/parts$/);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await expect(page).toHaveURL(/\/print$/);
 	await expect(page.locator('.row').first()).toBeVisible();
 	m = await overflow();
-	expect(m.scroll, 'parts').toBeLessThanOrEqual(m.client);
+	expect(m.scroll, 'print').toBeLessThanOrEqual(m.client);
 });

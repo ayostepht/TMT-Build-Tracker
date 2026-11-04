@@ -292,7 +292,7 @@ export interface HandoffRecord {
 export type PartPatch = { slug: string } & Partial<Omit<PartState, 'slug' | 'updatedAt'>>;
 
 /**
- * The printer a build is planned for (set in New build, Settings or the Print tab).
+ * The printer a build is planned for (set in New build, Settings or the Files tab).
  * `catalogId` points into `src/lib/printers/catalog.ts` (null = custom printer).
  * The plate arranger (`arrange.ts`) uses bed, margin, spacing and `mmSlots`.
  * All lengths in mm.

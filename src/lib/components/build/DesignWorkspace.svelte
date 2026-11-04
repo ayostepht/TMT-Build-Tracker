@@ -180,7 +180,7 @@
 				onpick={pick}
 				onready={(info) => (ready = info)}
 				siteAdmin={page.data.siteAdmin === true}
-				addFilesHref={resolve('/(app)/builds/[id]/print', { id: ctx.id }) + '#settings'}
+				addFilesHref={resolve('/(app)/builds/[id]/files', { id: ctx.id }) + '#settings'}
 			/>
 		</div>
 		{#if preview}
@@ -309,8 +309,8 @@
 
 		{#if !embedded}
 			<section class="next" aria-label="Next steps">
-				<a href={resolve('/(app)/builds/[id]/print', { id: ctx.id })} data-testid="next-plates"
-					>Next: print and export →</a
+				<a href={resolve('/(app)/builds/[id]/files', { id: ctx.id })} data-testid="next-plates"
+					>Next: files and export →</a
 				>
 			</section>
 		{/if}

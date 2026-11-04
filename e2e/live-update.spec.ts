@@ -17,7 +17,7 @@ test('an editor change shows up on the owner page without a reload', async ({ pa
 	// Tag the page so a reload would be noticed.
 	await page.evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));
 
-	await editor.page.goto(`/builds/${buildId}/parts`);
+	await editor.page.goto(`/builds/${buildId}/print`);
 	const first = editor.page.locator('.row').first();
 	const slug = (await first.getAttribute('data-id')) as string;
 	await row(editor.page, slug).getByRole('button', { name: 'Printing', exact: true }).click();

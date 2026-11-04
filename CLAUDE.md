@@ -142,8 +142,8 @@ SvelteKit 3 specifics that trip people up:
   filaments:update`), served by `/api/filaments*`; browser-safe helpers in
   `src/lib/filament-catalog.ts`; UI `FilamentPicker.svelte`
 - `src/routes/(app)/`: signed-in area (layout guard → `/login`; `/` →
-  active workspace); `builds/[id]/` tabs as nested routes (overview, parts,
-  plates, design, assembly, handoff, settings); `teams/[slug]`,
+  active workspace); `builds/[id]/` tabs as nested routes (overview, print, files,
+  design, finish, settings; old /parts, /plates, /assembly, /handoff redirect); `teams/[slug]`,
   `onboarding`; `src/routes/invite/[id]` sits outside the group
 - `src/routes/api/`: JSON endpoints; `/api/health` for the Docker healthcheck
 - `drizzle/`: committed SQL migrations

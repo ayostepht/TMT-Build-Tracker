@@ -5,7 +5,7 @@
 	import KitStatus from '#lib/components/kit/KitStatus.svelte';
 
 	/**
-	 * Print tab: which kit files this build's template has (3D chair, print geometry, guide), and
+	 * Files tab: which kit files this build's template has (3D chair, print geometry, guide), and
 	 * where admins or the template's owners add or replace them. The one drop zone besides the
 	 * setup wizard's template step.
 	 */

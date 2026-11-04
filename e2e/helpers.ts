@@ -68,7 +68,7 @@ export async function createBuild(
 	await page.getByTestId('skip-setup').click();
 	await expect(page).toHaveURL(new RegExp(`/builds/${id}$`));
 	if (layout) {
-		await page.goto(`/builds/${id}/print`);
+		await page.goto(`/builds/${id}/files`);
 		await settled(page);
 		await page.getByTestId('plate-layout').selectOption({ label: layout });
 		await expect(page.getByTestId('layout-name')).toContainText('MakeGood tuned profile');
@@ -153,7 +153,7 @@ export async function signInAsAdmin(page: Page) {
 	expect(res?.status(), 'ADMIN_EMAILS must contain the e2e admin').toBe(200);
 }
 
-/** On the Plates tab: Arrange for my bed > Pick my printer > Elegoo Centauri Carbon with CANVAS. */
+/** On the Files tab: Arrange for my bed > Pick my printer > Elegoo Centauri Carbon with CANVAS. */
 export async function arrangeForCentauri(page: Page) {
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	await page.getByTestId('bed-pick-printer').click();

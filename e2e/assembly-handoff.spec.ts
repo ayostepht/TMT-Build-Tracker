@@ -86,7 +86,7 @@ test('a site admin imports a guide PDF in the browser (Print settings) and maps 
 	const adminBuild = await startBuild(page, 'Guide import build');
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('skip-setup').click();
-	await page.goto(`/builds/${adminBuild}/print`);
+	await page.goto(`/builds/${adminBuild}/files`);
 	await page.waitForLoadState('networkidle');
 	await page.getByText('Add or replace files').click();
 

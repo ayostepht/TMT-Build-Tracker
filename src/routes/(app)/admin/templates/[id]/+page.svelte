@@ -27,11 +27,11 @@
 		<KitStatus templateId={data.template.id} />
 		<KitCredit />
 		<p class="muted">
-			To add or replace files, open a build and use Print, then Print settings. The setup steps of a
+			To add or replace files, open a build and use Files, then Print settings. The setup steps of a
 			new build do the same in "Choose build template".
 			{#if back}
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-				<a href={resolve('/(app)/builds/[id]/print', { id: back.id }) + '#settings'}
+				<a href={resolve('/(app)/builds/[id]/files', { id: back.id }) + '#settings'}
 					>Open Print settings</a
 				>
 			{/if}

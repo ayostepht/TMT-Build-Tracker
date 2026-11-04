@@ -19,15 +19,24 @@
 		{ n: 1, label: 'Template' },
 		{ n: 2, label: 'Options' },
 		{ n: 3, label: 'Colors' },
-		{ n: 4, label: 'Print' },
+		{ n: 4, label: 'Files' },
 		{ n: 5, label: 'Export' }
 	];
 	/** Furthest step reached; a finished setup has reached them all. */
 	const reached = $derived(ctx.view.build.setupStep ?? 5);
 	const param = $derived(page.url.searchParams.get('step'));
 	const isDone = $derived(param === 'done');
+	/** Named `?step=` values: the step labels, plus "print", the old name of step 4. */
+	const STEP_NAMES: Record<string, number> = {
+		template: 1,
+		options: 2,
+		colors: 3,
+		print: 4,
+		files: 4,
+		export: 5
+	};
 	const step = $derived.by(() => {
-		const n = Number(param);
+		const n = param && param in STEP_NAMES ? STEP_NAMES[param] : Number(param);
 		if (Number.isInteger(n) && n >= 1 && n <= 5) return Math.min(n, reached);
 		return Math.min(ctx.view.build.setupStep ?? 1, 5);
 	});
@@ -177,7 +186,7 @@
 		<DesignWorkspace embedded />
 	{:else if step === 4}
 		<section class="card intro">
-			<h2>Print</h2>
+			<h2>Files</h2>
 			<p class="muted">
 				Choose your printer's bed so the parts fit, then how the plates are laid out: arranged for
 				your bed, one of MakeGood's tuned Bambu profiles, or your own sliced file.
@@ -189,7 +198,7 @@
 			<h2>Export</h2>
 			<p class="muted">
 				Download plates for your slicer with the supports and colors in place. You can do this again
-				any time from the Print tab.
+				any time from the Files tab.
 			</p>
 		</section>
 		<ExportCard />

@@ -10,8 +10,8 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await expect(header).toContainText('0 of 33');
 	await expect(page.getByText('Nothing on the printer')).toBeVisible();
 
-	await page.getByRole('link', { name: 'Parts', exact: true }).click();
-	await expect(page).toHaveURL(/\/parts$/);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await expect(page).toHaveURL(/\/print$/);
 	const first = page.locator('.row').first();
 	const slug = (await first.getAttribute('data-id')) as string;
 	const name = (await first.locator('.pbtn').innerText()).trim();
@@ -47,7 +47,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await expect(page.locator('.toasts')).toContainText(`Logged plate ${plateNo} · Failed`);
 	await expect(page.getByText('Nothing on the printer')).toBeVisible();
 
-	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await page.getByRole('link', { name: 'Files', exact: true }).click();
 	const logged = page.getByRole('region', { name: `Plate ${plateNo}` }).locator('tbody tr');
 	await expect(logged).toHaveCount(1);
 	await expect(logged).toContainText('Failed');
@@ -55,7 +55,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await expect(logged).toContainText('120');
 	await expect(logged).toContainText('Warped corner');
 
-	await page.getByRole('link', { name: 'Parts', exact: true }).click();
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	await expect(row(page, slug)).toHaveAttribute('data-s', 'Reprint');
 
 	// Log a success from the part row (phone-sized: the sheet must fit without side scrolling).
@@ -99,7 +99,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 test('filament labels do not repeat the material', async ({ page }) => {
 	await ownerWithBuild(page, 'labels');
 	await expect(page.locator('body')).not.toContainText(/PETG Primary PETG|TPU 95A Tire TPU/);
-	await page.getByRole('link', { name: 'Parts', exact: true }).click();
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	await expect(page.locator('.chips').first().locator('.chip')).toHaveText([
 		'All filament',
 		'Accent PETG',

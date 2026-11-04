@@ -10,7 +10,7 @@ test.afterAll(() => removeSyntheticGeometry());
 const heading = (page: import('@playwright/test').Page, name: string) =>
 	page.getByRole('heading', { name, exact: true });
 
-test('new build walks the setup wizard: template, options, colors, print, export, done', async ({
+test('new build walks the setup wizard: template, options, colors, files, export, done', async ({
 	page
 }) => {
 	test.setTimeout(180_000);
@@ -73,8 +73,8 @@ test('new build walks the setup wizard: template, options, colors, print, export
 	await expect(page.getByTestId('wizard-next')).toBeVisible();
 	await page.getByTestId('wizard-next').click();
 
-	// Step 4: print. Choose the 256 mm bed preset and arrange.
-	await expect(heading(page, 'Print').first()).toBeVisible();
+	// Step 4: files. Choose the 256 mm bed preset and arrange.
+	await expect(heading(page, 'Files').first()).toBeVisible();
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	await page.getByTestId('bed-preset-256x256').click();
@@ -176,13 +176,48 @@ test('"Upload your own files" makes a workspace-owned copy of the kit', async ({
 
 test('old tab URLs redirect to the new tabs', async ({ page }) => {
 	const { buildId } = await ownerWithBuild(page, 'redirects');
-	await page.goto(`/builds/${buildId}/plates`);
-	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}/print$`));
-	await page.goto(`/builds/${buildId}/assembly`);
-	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}/finish#assembly$`));
-	await page.goto(`/builds/${buildId}/handoff`);
-	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}/finish#handoff$`));
+	const b = `/builds/${buildId}`;
+	// 308 for every old path, with the query string kept.
+	for (const [from, to] of [
+		['parts', 'print'],
+		['plates', 'files'],
+		['assembly', 'finish'],
+		['handoff', 'finish']
+	]) {
+		const r = await page.request.get(`${b}/${from}?x=1`, { maxRedirects: 0 });
+		expect(r.status(), from).toBe(308);
+		expect(r.headers()['location'], from).toContain(`${b}/${to}?x=1`);
+	}
+	await page.goto(`${b}/parts`);
+	await expect(page).toHaveURL(new RegExp(`${b}/print$`));
+	await expect(page.getByRole('toolbar', { name: 'Filter parts' })).toBeVisible();
+	await page.goto(`${b}/plates`);
+	await expect(page).toHaveURL(new RegExp(`${b}/files$`));
+	await expect(page.getByTestId('plate-layout')).toBeVisible();
+	await page.goto(`${b}/assembly`);
+	await expect(page).toHaveURL(new RegExp(`${b}/finish#assembly$`));
+	await page.goto(`${b}/handoff`);
+	await expect(page).toHaveURL(new RegExp(`${b}/finish#handoff$`));
 	await expect(page.getByLabel('Recipient name')).toBeVisible();
+
+	// /print was the plates view: its old anchors (bookmarks) move on to /files.
+	for (const h of ['plates', 'export', 'settings']) {
+		await page.goto(`${b}/print#${h}`);
+		await expect(page).toHaveURL(new RegExp(`${b}/files#${h}$`));
+		await expect(page.getByTestId('print-settings')).toBeVisible();
+	}
+	await page.goto(`${b}/print`);
+	await expect(page).toHaveURL(new RegExp(`${b}/print$`));
+});
+
+test('setup wizard: ?step= accepts numbers and names, including the old "print"', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'step-names');
+	for (const s of ['4', 'files', 'print']) {
+		await page.goto(`/builds/${buildId}/setup?step=${s}`);
+		await expect(page.getByTestId('plate-layout')).toBeVisible();
+	}
 });
 
 test('navigation: Builds menu, back to the build on phones, chapter tabs', async ({ page }) => {
@@ -193,9 +228,19 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 	// Build tabs.
 	await page.goto(`/builds/${buildId}`);
 	const tabs = page.getByRole('navigation', { name: 'Build sections' });
-	for (const t of ['Overview', 'Design', 'Print', 'Parts', 'Finish', 'Settings'])
+	for (const t of ['Overview', 'Design', 'Print', 'Files', 'Finish', 'Settings'])
 		await expect(tabs.getByRole('link', { name: t, exact: true })).toBeVisible();
 	await expect(tabs.getByRole('link', { name: 'Plates' })).toHaveCount(0);
+	// Order: Overview, Design, Print, Files, Finish, Settings.
+	expect(await tabs.getByRole('link').allTextContents()).toEqual([
+		'Overview',
+		'Design',
+		'Print',
+		'Files',
+		'Finish',
+		'⚙ Settings'
+	]);
+	await expect(tabs.getByRole('link', { name: 'Parts' })).toHaveCount(0);
 
 	// The Builds menu lists this build with its progress, All builds and New build.
 	await page.getByTestId('builds-menu').click();
