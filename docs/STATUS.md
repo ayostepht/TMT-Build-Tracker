@@ -12,22 +12,22 @@ specifics (test copy, printer IP, deploy routine) are in the untracked
 All planned milestones 1–7 are built and running on the maintainer's test copy.
 Milestone 8 (release) has not started.
 
-| Area | State |
-|---|---|
-| Builds, chapters, roles, live updates, activity | Done |
-| Prototype import, print logs (log sheet, edit, delete, undo) | Done |
-| Variants (seat, rear caster, footrest, rim) and accessories (headrest, push handle) | Done |
-| 3D designer (tap parts, slots, swatch picker, 13 palettes, generator, shareable designs) | Done |
-| Setup wizard (template, options, colors with the full designer, print, export) | Done |
-| Build tabs: Overview · Design · Print · Parts · Finish · Settings; Builds/Printers nav | Done |
-| Printer catalog (70), bed presets, team printers, keep-out zones | Done |
-| Plate arranging (true outlines, flat rotations only, edge margins, rigid source groups when needed) | Done |
-| 3MF export (Orca/Elegoo, Bambu, plain), painted supports, `bed_exclude_area` | Done, opened in Elegoo Slicer once (v1) |
-| Bundled MakeGood kit pack (CC0) 1.0.1, installed on first start | Done |
-| Assembly checklist, photos, handoff, printable summary | Done |
-| Read-only printer status (Elegoo SDCP, Moonraker, OctoPrint, Bambu LAN), job → plate linking | Done; SDCP probe verified live, full supervisor not yet tested live |
-| Spoolman (optional) | Done, mock-tested only |
-| Release (Unraid template, domain, public repo) | Not started |
+| Area                                                                                                | State                                                               |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Builds, chapters, roles, live updates, activity                                                     | Done                                                                |
+| Prototype import, print logs (log sheet, edit, delete, undo)                                        | Done                                                                |
+| Variants (seat, rear caster, footrest, rim) and accessories (headrest, push handle)                 | Done                                                                |
+| 3D designer (tap parts, slots, swatch picker, 13 palettes, generator, shareable designs)            | Done                                                                |
+| Setup wizard (template, options, colors with the full designer, print, export)                      | Done                                                                |
+| Build tabs: Overview · Design · Print · Parts · Finish · Settings; Builds/Printers nav              | Done                                                                |
+| Printer catalog (70), bed presets, team printers, keep-out zones                                    | Done                                                                |
+| Plate arranging (true outlines, flat rotations only, edge margins, rigid source groups when needed) | Done                                                                |
+| 3MF export (Orca/Elegoo, Bambu, plain), painted supports, `bed_exclude_area`                        | Done, opened in Elegoo Slicer once (v1)                             |
+| Bundled MakeGood kit pack (CC0) 1.0.1, installed on first start                                     | Done                                                                |
+| Assembly checklist, photos, handoff, printable summary                                              | Done                                                                |
+| Read-only printer status (Elegoo SDCP, Moonraker, OctoPrint, Bambu LAN), job → plate linking        | Done; SDCP probe verified live, full supervisor not yet tested live |
+| Spoolman (optional)                                                                                 | Done, mock-tested only                                              |
+| Release (Unraid template, domain, public repo)                                                      | Not started                                                         |
 
 Latest real-geometry result (Elegoo Centauri Carbon, 256 × 256 with the cutter
 keep-out, pack 1.0.1): **21 plates, no warnings, export guard clean**; both wings fit
