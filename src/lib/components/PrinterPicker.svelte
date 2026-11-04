@@ -93,7 +93,7 @@
 		if (!sel) return null;
 		return {
 			catalogId: cat?.id ?? null,
-			name: cat ? `${cat.brand} ${cat.model}` : pName,
+			name: cat ? pName || `${cat.brand} ${cat.model}` : pName,
 			bedX,
 			bedY,
 			bedZ,
@@ -134,6 +134,7 @@
 		}
 		const c = catalogPrinter(id)!;
 		const p = printerFromCatalog(c);
+		pName = p.name;
 		brand = c.brand;
 		bedX = p.bedX;
 		bedY = p.bedY;
@@ -347,6 +348,7 @@
 
 <style>
 	.printer-picker {
+		grid-template-columns: minmax(0, 1fr);
 		display: grid;
 		gap: 10px;
 	}
@@ -362,6 +364,12 @@
 	}
 	.row > .grow {
 		flex: 2 1 220px;
+	}
+	.row input,
+	.row select {
+		min-width: 0;
+		max-width: 100%;
+		box-sizing: border-box;
 	}
 	.num-field input {
 		max-width: 140px;

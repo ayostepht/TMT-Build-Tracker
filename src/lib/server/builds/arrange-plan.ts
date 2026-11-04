@@ -19,10 +19,15 @@ import type { BuildView } from '#lib/domain/types.ts';
 import type { Db } from '../db';
 import { buildPlates, builds, templatePlateLayouts, templatePrintGeometry } from '../db/schema';
 import { loadBuildView } from './view';
-import { ensureOrientations } from '../print-geometry/store';
+import { ensureOrientations, ensureSilhouettes } from '../print-geometry/store';
 
 export const ARRANGED_LAYOUT = 'arranged';
 export const ARRANGED_SOURCE = 'arranged';
+
+/** Edge margin stored by builds planned before the default became 1 mm; read as the new default. */
+export const OLD_DEFAULT_MARGIN = 5;
+export const NEW_DEFAULT_MARGIN = 1;
+export const effectiveMargin = (m: number) => (m === OLD_DEFAULT_MARGIN ? NEW_DEFAULT_MARGIN : m);
 
 const TEMPLATE_ROLE_NAMES = /^[a-z]+$/;
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -30,6 +35,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** Print footprints stored for a template, by slug (seed rows and imported rows alike). */
 export function loadFootprints(db: Db, templateId: string): Map<string, PrintFootprint> {
 	ensureOrientations(db, templateId);
+	ensureSilhouettes(db, templateId);
 	const out = new Map<string, PrintFootprint>();
 	for (const r of db
 		.select()
@@ -105,7 +111,7 @@ export function planArrangement(
 			bedX: p.bedX,
 			bedY: p.bedY,
 			bedZ: p.bedZ,
-			margin: p.margin,
+			margin: effectiveMargin(p.margin),
 			spacing: p.spacing,
 			mmSlots: p.mmSlots
 		}

@@ -481,18 +481,152 @@ describe('arrange: re-orientation', () => {
 		const r = run([slab(false)], printer);
 		expect(r.plates[0].oversize).toBe(true);
 		expect(r.warnings[0].code).toBe('oversize');
-		expect(r.warnings[0].message).toContain('Importing the print geometry');
+		expect(r.warnings[0].message).toContain('another profile');
 	});
 
 	it('respects the build height', () => {
 		const r = run([slab(true)], { ...bed(256), bedZ: 150 });
 		expect(r.plates[0].oversize).toBe(true);
-		expect(r.warnings[0].message).toContain('does not fit either');
+		expect(r.warnings[0].message).toContain('bigger bed');
 	});
 
 	it('is deterministic', () => {
 		const a = run([slab(true), part('b', 'accent', 60, 60)], printer);
 		const b = run([slab(true), part('b', 'accent', 60, 60)], printer);
 		expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+	});
+});
+
+describe('arrange: true-outline fitting', () => {
+	// a chevron: box 300 x 200 (does not fit 254 at 0/90) but its slanted outline fits diagonally
+	const chevron: [number, number][] = [
+		[-150, -100],
+		[-120, -100],
+		[0, 40],
+		[120, -100],
+		[150, -100],
+		[150, -60],
+		[-150, -60]
+	];
+	// a bar along the diagonal with cut corners: box 300 x 250
+	const diag: [number, number][] = [
+		[-145.4, -81.6],
+		[-134.6, -98.4],
+		[145.4, 81.6],
+		[134.6, 98.4]
+	];
+	const piece = (w: number, d: number, hull: [number, number][]) => ({ w, d, hull });
+	const tight = (m: number): ArrangePrinter => ({ ...bed(256), margin: m });
+
+	it('the box does not fit but the outline does', () => {
+		const pc = piece(291, 197, diag);
+		expect(
+			orientsOf({ w: 291, d: 197 }, true, 254, 254).some((o) => o.w <= 254 && o.d <= 254)
+		).toBe(false);
+		const o = orientsOf(pc, true, 254, 254);
+		expect(o.length).toBeGreaterThan(0);
+		for (const x of o) {
+			expect(x.w).toBeLessThanOrEqual(254);
+			expect(x.d).toBeLessThanOrEqual(254);
+		}
+		expect(o[0].rot % 90).not.toBe(0);
+	});
+
+	it('prefers the largest clearance', () => {
+		const [best, ...rest] = orientsOf(piece(291, 197, diag), true, 254, 254);
+		for (const r of rest)
+			expect(Math.min(254 - best.w, 254 - best.d)).toBeGreaterThanOrEqual(
+				Math.min(254 - r.w, 254 - r.d) - 1e-9
+			);
+	});
+
+	it('uses the silhouette outline over the hull', () => {
+		const sil = { profile: { rings: [diag as [number, number][]] } };
+		const withSil = {
+			w: 300,
+			d: 250,
+			hull: [
+				[-150, -125],
+				[150, -125],
+				[150, 125],
+				[-150, 125]
+			] as [number, number][],
+			sil
+		};
+		expect(orientsOf(withSil, true, 254, 254).length).toBeGreaterThan(0);
+		expect(orientsOf({ ...withSil, sil: undefined }, true, 254, 254)).toHaveLength(0);
+	});
+
+	it('places a diagonal part alone, centred, with consistent offsets', () => {
+		const p: ArrangePart = {
+			...part('wing', 'primary', 291, 197),
+			footprint: {
+				slug: 'wing',
+				pieces: [{ name: 'wing', w: 291, d: 197, h: 20, copies: 1, hull: diag }]
+			}
+		};
+		const r = run([p, part('small', 'primary', 40, 40)], tight(1));
+		expect(r.warnings.map((w) => w.code)).not.toContain('oversize');
+		const wing = r.plates.find((pl) => pl.parts.includes('wing'))!;
+		expect(wing.items).toHaveLength(1);
+		expect(wing.items[0].x).toBeCloseTo(128, 0);
+		expect(wing.items[0].y).toBeCloseTo(128, 0);
+		expect(wing.items[0].rotation % 90).not.toBe(0);
+		// the turned outline, moved by the item's offsets, lies inside the bed
+		const it = wing.items[0];
+		const a = (it.rotation * Math.PI) / 180;
+		for (const [px, py] of diag) {
+			const X = px * Math.cos(a) - py * Math.sin(a) + it.x - (it.ox ?? 0);
+			const Y = px * Math.sin(a) + py * Math.cos(a) + it.y - (it.oy ?? 0);
+			expect(X).toBeGreaterThanOrEqual(-0.01);
+			expect(X).toBeLessThanOrEqual(256.01);
+			expect(Y).toBeGreaterThanOrEqual(-0.01);
+			expect(Y).toBeLessThanOrEqual(256.01);
+		}
+	});
+
+	it('margin: 1 mm takes what 5 mm rejects', () => {
+		const pc = part('p', 'primary', 252, 100);
+		expect(run([pc], tight(5)).warnings[0]?.code).toBe('oversize');
+		expect(run([pc], tight(1)).warnings).toEqual([]);
+	});
+
+	it('spacing only matters between items', () => {
+		const pc = part('p', 'primary', 254, 254);
+		const r = arrange({ parts: [pc], roles, printer: { ...tight(1), spacing: 20 } });
+		expect(r.warnings).toEqual([]);
+	});
+
+	it('is deterministic', () => {
+		const p: ArrangePart = {
+			...part('wing', 'primary', 291, 197),
+			footprint: {
+				slug: 'wing',
+				pieces: [{ name: 'wing', w: 291, d: 197, h: 20, copies: 1, hull: diag }]
+			}
+		};
+		expect(JSON.stringify(run([p], tight(1)))).toBe(JSON.stringify(run([p], tight(1))));
+	});
+
+	it('reports oversize only when no flat angle fits, without suggesting to stand it up', () => {
+		const sq: [number, number][] = [
+			[-150, -150],
+			[150, -150],
+			[150, 150],
+			[-150, 150]
+		];
+		const p: ArrangePart = {
+			...part('big', 'primary', 300, 300),
+			footprint: {
+				slug: 'big',
+				pieces: [{ name: 'big', w: 300, d: 300, h: 20, copies: 1, hull: sq }]
+			}
+		};
+		const r = run([p], tight(1));
+		expect(r.warnings[0].code).toBe('oversize');
+		expect(r.warnings[0].message).not.toMatch(/stand/i);
+		expect(r.warnings[0].message).toContain('bigger bed');
+		void chevron;
+		void piece;
 	});
 });

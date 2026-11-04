@@ -9,7 +9,7 @@
  * item's footprint box after rotation; `rotation` is 0 or 90 degrees counter-clockwise
  * about z, applied to the stored mesh (whose box centre is at its origin) before moving
  * it to (x, y). Items never overlap and stay inside bed minus `margin`, with at least
- * `spacing` between neighbours (rectangle packing; hulls are for drawing).
+ * `spacing` between neighbours (rectangle packing of each item's turned outline box).
  *
  * Algorithm: parts sharing a filament role (and run count) form one pool, sorted by
  * area, descending. Each keep-together block (a part, or parts with the same `group`) goes
@@ -21,7 +21,7 @@
 import { boxOrients, rotatePoints, type Pt } from './geom2d.ts';
 import { chooseOrientation, describePose, type OrientData, type PrintPose } from './orient.ts';
 import type { PrintFootprint } from './print-footprint.ts';
-import type { Silhouette } from './silhouette.ts';
+import type { PieceSilhouettes, Silhouette } from './silhouette.ts';
 import type { BuildPrinter } from './types.ts';
 
 const EPS = 1e-6;
@@ -362,7 +362,14 @@ const ALLOW_3D_REORIENT = false;
  * (imported geometry), the best fitting resting pose instead. Exported for tests.
  */
 export function pieceOrients(
-	pc: { w: number; d: number; h?: number; hull?: Pt[]; orient?: OrientData },
+	pc: {
+		w: number;
+		d: number;
+		h?: number;
+		hull?: Pt[];
+		sil?: PieceSilhouettes;
+		orient?: OrientData;
+	},
 	rotate: boolean,
 	usableX: number,
 	usableY: number,
@@ -478,14 +485,12 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 		if (bad || !items.length) {
 			if (bad) {
 				const big = items.reduce((a, b) => (area(b) > area(a) ? b : a));
-				const pc = p.footprint.pieces[bad.piece];
-				const tried = pc?.orient?.poses.length ?? 0;
+				const hasOutline =
+					!!p.footprint.pieces[bad.piece]?.sil || !!p.footprint.pieces[bad.piece]?.hull;
 				const advice =
 					p.rotate === false
 						? ''
-						: tried
-							? ` Standing or tilting it (${tried + 1} orientations tried) does not fit either.`
-							: ' Importing the print geometry in the kit admin page lets the arranger try standing or tilting it.';
+						: ` No flat angle of its ${hasOutline ? 'outline' : 'box'} fits. Print it from another profile, on a bigger bed, or as a smaller variant (for example a two-piece version).`;
 				warnings.push({
 					code: 'oversize',
 					slug: p.slug,
@@ -666,14 +671,24 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 			? pl.items
 			: fallback!.items.map((i) => ({ ...i, x: 0, y: 0, pw: i.w, pd: i.d, rot: 0 }));
 		const runs = pl ? pl.runs : runsOf(fallback!.part);
+		// a tilted part that is alone on its plate (it only fits by itself) sits centred on the bed
+		const alone = !!pl && rawItems.length === 1 && rawItems[0].rot % 90 !== 0;
 		const items: ArrangedItem[] = rawItems
 			.sort((a, b) => a.order - b.order || a.piece - b.piece || a.copy - b.copy)
 			.map((i) => ({
 				slug: i.slug,
 				piece: i.piece,
 				copy: i.copy,
-				x: pl ? round1(margin + i.x + i.pw / 2) : round1(printer.bedX / 2),
-				y: pl ? round1(margin + i.y + i.pd / 2) : round1(printer.bedY / 2),
+				x: pl
+					? alone
+						? round1(printer.bedX / 2)
+						: round1(margin + i.x + i.pw / 2)
+					: round1(printer.bedX / 2),
+				y: pl
+					? alone
+						? round1(printer.bedY / 2)
+						: round1(margin + i.y + i.pd / 2)
+					: round1(printer.bedY / 2),
 				w: round1(i.pw),
 				d: round1(i.pd),
 				rotation: i.rot,

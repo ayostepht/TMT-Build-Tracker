@@ -15,7 +15,7 @@
 	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
-	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
+	import BedPicker from '#lib/components/BedPicker.svelte';
 	import SpoolLink from '#lib/components/SpoolLink.svelte';
 
 	const ctx = getBuildCtx();
@@ -109,14 +109,16 @@
 {/if}
 
 <section class="card" data-testid="printer-settings">
-	<h2>Printer</h2>
+	<h2>Bed and printer</h2>
 	<p class="muted">
 		The printer you plan to print on. Plates are arranged for its bed, and its multi-material system
 		decides which colors can share a plate.
 	</p>
-	<PrinterPicker
+	<BedPicker
 		value={ctx.view.printer}
 		disabled={!ctx.canEdit}
+		orgId={ctx.view.build.organizationId}
+		preselectSingle={!ctx.view.printer}
 		onchange={(p) => (printerDraft = p)}
 	/>
 	{#if ctx.canEdit}
@@ -136,11 +138,12 @@
 <section class="card">
 	<h2>Plate layout</h2>
 	<p class="muted">
-		Which printer's plate grouping this build follows. Upload a sliced 3MF on the Plates tab to use
-		your own.
+		Arrange the parts for your bed, or follow one of MakeGood's tuned Bambu profiles. Upload a
+		sliced 3MF on the Plates tab to use your own.
 	</p>
 	<PlateLayoutPicker
 		buildId={ctx.id}
+		bedPanel={false}
 		printer={ctx.view.printer}
 		disabled={!ctx.canEdit}
 		onchanged={() => ctx.refresh()}

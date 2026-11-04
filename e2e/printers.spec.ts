@@ -240,3 +240,47 @@ async function orgId(page: import('@playwright/test').Page): Promise<string> {
 	const orgs = (await r.json()) as { id: string; metadata?: { personal?: boolean } }[];
 	return orgs.find((o) => !o.metadata?.personal)?.id ?? orgs[0].id;
 }
+
+test('plate layout picker lists the workspace printers first and can add a new one', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'picker-printers');
+
+	// No printer yet: only "New printer…" (and a hint). Add one inline from the Plates tab.
+	await page.goto(`/builds/${buildId}/plates`);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
+	const sel = page.getByTestId('team-printer');
+	await expect(sel.locator('option')).toContainText(['No printers added yet', 'New printer…']);
+	await sel.selectOption({ label: 'New printer…' });
+	const dlg = page.getByTestId('new-printer-dialog');
+	await expect(dlg).toBeVisible();
+	await dlg.getByLabel('Name', { exact: true }).fill('Bench Centauri');
+	await dlg.getByTestId('pf-host').fill('127.0.0.1');
+	await dlg.getByTestId('pf-port').fill(String(mock.port));
+	await dlg.getByLabel('Model (optional)').selectOption({ label: 'Centauri Carbon' });
+	await dlg.getByTestId('pf-save').click();
+	await expect(dlg).toBeHidden();
+	// Added to the team AND selected for this build.
+	await expect(sel.locator('option:checked')).toContainText('Bench Centauri');
+	await expect(sel.locator('option:checked')).toContainText('256 × 256');
+	await expect(page.getByTestId('printer-model')).toHaveValue('elegoo-centauri-carbon');
+	await page.getByTestId('arrange-bed').click();
+	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Bench Centauri');
+
+	// One printer in the workspace: the New build form preselects it.
+	await page.goto(chapterUrl);
+	await page.waitForLoadState('networkidle');
+	const form = page.locator('form[action="?/newBuild"]');
+	await expect(form.getByTestId('team-printer').locator('option:checked')).toContainText(
+		'Bench Centauri'
+	);
+	await page.screenshot({ path: `data/shots-bed/newbuild-team-printer-390.png`, fullPage: true });
+	await form.getByLabel('Name', { exact: true }).fill('Printer chair');
+	await form.getByRole('button', { name: 'Create build' }).click();
+	await expect(page).toHaveURL(/\/builds\/[^/]+$/);
+	await page.getByRole('link', { name: 'Plates', exact: true }).click();
+	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Bench Centauri');
+});

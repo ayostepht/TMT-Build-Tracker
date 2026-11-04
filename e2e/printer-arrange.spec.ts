@@ -2,7 +2,7 @@ import { expect, test } from './fixtures';
 import { ownerWithBuild } from './helpers';
 
 // Seed footprints make this work without any MakeGood file in CI.
-const SHOTS = 'data/shots-arrange';
+const SHOTS = 'data/shots-bed';
 
 test('pick a printer, arrange plates, recolor a part, then try a small custom bed', async ({
 	page
@@ -13,17 +13,39 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	await page.getByRole('link', { name: 'Plates', exact: true }).click();
 	await expect(page).toHaveURL(/\/plates$/);
 
+	// The picker offers standard bed sizes first, with example printers computed from the catalog.
+	const layoutSel = page.getByTestId('plate-layout');
+	await layoutSel.selectOption({ label: 'Arrange for my bed' });
+	const presets = page.getByTestId('bed-picker');
+	await expect(presets.getByTestId('bed-preset-256x256')).toContainText(
+		'Centauri Carbon, Bambu X1/P1/A1'
+	);
+	for (const s of [
+		'180x180',
+		'220x220',
+		'235x235',
+		'250x210',
+		'256x256',
+		'300x300',
+		'350x350',
+		'360x360'
+	])
+		await expect(presets.getByTestId(`bed-preset-${s}`)).toBeVisible();
+	await expect(presets.getByTestId('bed-custom')).toBeVisible();
+	await expect(presets.getByTestId('bed-pick-printer')).toBeVisible();
+	await page.screenshot({ path: `${SHOTS}/plates-picker-390.png`, fullPage: true });
+
 	// Choose the Elegoo Centauri Carbon with CANVAS from the catalog.
-	await page.getByTestId('choose-printer').click();
+	await page.getByTestId('bed-pick-printer').click();
 	await page.getByTestId('printer-brand').selectOption('Elegoo');
 	await page.getByTestId('printer-model').selectOption({ label: 'Centauri Carbon' });
 	await expect(page.getByTestId('printer-bedx')).toHaveValue('256');
 	await expect(page.getByTestId('printer-bedy')).toHaveValue('256');
 	await page.getByTestId('printer-mm').selectOption({ index: 1 });
 	await expect(page.getByTestId('printer-summary')).toContainText('4 filaments per plate');
-	await page.getByTestId('save-printer').click();
+	await page.getByTestId('arrange-bed').click();
 
-	// Saving the first printer arranges the plates for it.
+	// Arranging saves the printer as the build's bed and arranges the plates for it.
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Elegoo Centauri Carbon');
 	const cards = page.locator('section.plate-card');
 	await expect(cards.first()).toBeVisible();
@@ -40,11 +62,14 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	// The layout picker offers the arrangement and the kit author's profiles.
 	const picker = page.getByTestId('plate-layout');
 	await expect(picker.locator('option')).toContainText([
-		/Arrange for my printer \(Elegoo Centauri Carbon, 256×256 mm\)/,
-		/MakeGood tuned profile: Bambu X1 \/ P1 \/ A1/,
-		/MakeGood tuned profile: Bambu H2D \/ H2S/,
+		/Arrange for my bed/,
+		/Bambu X1 \/ P1 \/ A1 \(24 plates\)/,
+		/Bambu H2D \/ H2S \(21 plates\)/,
 		/Upload my sliced 3MF/
 	]);
+	await expect(page.locator('.plate-layout-picker')).toContainText(
+		'Hand-tuned by MakeGood for Bambu X1 / P1 / A1 (24 plates) and Bambu H2D / H2S (21 plates)'
+	);
 
 	const wing = page.locator('section.plate-card [data-slug="wing-left"]').first();
 	const before = await wing.getAttribute('fill');
@@ -81,11 +106,11 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	// A small custom printer from Settings: the oversize warnings name the bed.
 	await page.getByRole('link', { name: 'Settings', exact: true }).click();
 	const settings = page.getByTestId('printer-settings');
-	await settings.getByTestId('printer-brand').selectOption('__custom__');
-	await settings.getByLabel('Printer name').fill('Tiny Test Printer');
-	await settings.getByTestId('printer-bedx').fill('180');
-	await settings.getByTestId('printer-bedy').fill('180');
-	await settings.getByTestId('printer-bedx').blur();
+	await settings.getByTestId('bed-custom').click();
+	await settings.getByLabel('Name (optional)').fill('Tiny Test Printer');
+	await settings.getByTestId('bed-x').fill('180');
+	await settings.getByTestId('bed-y').fill('180');
+	await settings.getByTestId('bed-y').blur();
 	await settings.getByTestId('save-printer-settings').click();
 	await expect(settings.getByRole('status')).toHaveText('Saved');
 	await page.getByRole('link', { name: 'Plates', exact: true }).click();
@@ -109,6 +134,11 @@ test('a build created with a printer is arranged right away', async ({ page }) =
 	await page.waitForLoadState('networkidle');
 	const form = page.locator('form[action="?/newBuild"]');
 	await form.getByLabel('Name', { exact: true }).fill('Arranged chair');
+	// The form defaults to "Arrange for my bed" with the 256 x 256 preset selected.
+	await expect(form.getByTestId('plate-layout')).toHaveValue('__arrange__');
+	await expect(form.getByTestId('bed-preset-256x256')).toHaveAttribute('aria-pressed', 'true');
+	await page.screenshot({ path: `${SHOTS}/newbuild-390.png`, fullPage: true });
+	await form.getByTestId('bed-pick-printer').click();
 	await form.getByTestId('printer-brand').selectOption('Bambu Lab');
 	await form.getByTestId('printer-model').selectOption({ label: 'H2D' });
 	await form.getByRole('button', { name: 'Create build' }).click();
@@ -116,4 +146,32 @@ test('a build created with a printer is arranged right away', async ({ page }) =
 	await page.getByRole('link', { name: 'Plates', exact: true }).click();
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Bambu Lab H2D');
 	await expect(page.getByTestId('plate-diagram').first()).toBeVisible();
+});
+
+test('a standard bed preset with height and filament slots is stored as the build printer', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl } = await ownerWithBuild(page, 'arrange3');
+	await page.goto(chapterUrl);
+	await page.waitForLoadState('networkidle');
+	const form = page.locator('form[action="?/newBuild"]');
+	await form.getByLabel('Name', { exact: true }).fill('Preset chair');
+	await form.getByTestId('bed-preset-300x300').click();
+	await form.getByTestId('bed-z').fill('280');
+	await form.getByTestId('bed-slots').selectOption('4');
+	await form.getByRole('button', { name: 'Create build' }).click();
+	await expect(page).toHaveURL(/\/builds\/[^/]+$/);
+	const id = new URL(page.url()).pathname.split('/')[2];
+	const view = await (await page.request.get(`/api/builds/${id}/view`)).json();
+	expect((view.view ?? view).printer).toMatchObject({
+		catalogId: null,
+		name: '300 × 300 bed',
+		bedX: 300,
+		bedY: 300,
+		bedZ: 280,
+		mmSlots: 4
+	});
+	await page.getByRole('link', { name: 'Plates', exact: true }).click();
+	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for 300 × 300 bed');
 });

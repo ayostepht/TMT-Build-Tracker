@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { ownerWithBuild } from './helpers';
+import { arrangeForCentauri, ownerWithBuild } from './helpers';
 
 // CI has no MakeGood files, so the 3D model is absent: the Design tab must work from the part list alone.
 test('design tab: move parts between slots, add a color, share a design and start a build from it', async ({
@@ -170,11 +170,7 @@ test('design tab: Export 3MF opens the export card, or asks for a printer first'
 	await expect(page).toHaveURL(/\/plates$/);
 
 	// With a printer, the same dialog hosts the real export card.
-	await page.getByTestId('choose-printer').click();
-	await page.getByTestId('printer-brand').selectOption('Elegoo');
-	await page.getByTestId('printer-model').selectOption({ label: 'Centauri Carbon' });
-	await page.getByTestId('printer-mm').selectOption({ index: 1 });
-	await page.getByTestId('save-printer').click();
+	await arrangeForCentauri(page);
 	await expect(page.getByTestId('layout-name')).toBeVisible();
 	await page.goto(`/builds/${buildId}/design`);
 	await page.getByTestId('export-open').click();

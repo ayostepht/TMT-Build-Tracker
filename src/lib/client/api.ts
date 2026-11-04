@@ -428,6 +428,7 @@ export interface PrintGeometryRow {
 	copies: number;
 	hasMesh: boolean;
 	settings: Record<string, string>;
+	paintedFaces: number;
 	updatedAt: string;
 }
 export interface PrintGeometryImportResult {
@@ -666,3 +667,11 @@ export const linkFilamentSpool = (
 	call('PUT', `${b(buildId)}/filaments/${encodeURIComponent(role)}/spool`, { spoolId, spoolName });
 export const expectOnPrinter = (printerId: string, buildId: string, plateNumber: number) =>
 	call('POST', `/api/printers/${encodeURIComponent(printerId)}/expect`, { buildId, plateNumber });
+
+// ---- kit status (any signed-in user)
+
+export const getKitStatus = (templateId: string) =>
+	call<{ status: import('#lib/domain/kit-import.ts').KitStatusDto; canImport: boolean }>(
+		'GET',
+		`${tpl(templateId)}/kit-status`
+	);

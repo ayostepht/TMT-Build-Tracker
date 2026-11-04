@@ -1,6 +1,6 @@
 import { unzipSync, strFromU8 } from 'fflate';
 import { expect, test } from './fixtures';
-import { ownerWithBuild } from './helpers';
+import { arrangeForCentauri, ownerWithBuild } from './helpers';
 import {
 	registerSyntheticGeometry,
 	removeSyntheticGeometry,
@@ -28,11 +28,7 @@ test('export for a slicer: no geometry, then a project 3MF per color and a plain
 	expect((await noPrinter.json()).error).toMatch(/printer/i);
 
 	// Elegoo Centauri Carbon with CANVAS (4 filaments); saving arranges the plates.
-	await page.getByTestId('choose-printer').click();
-	await page.getByTestId('printer-brand').selectOption('Elegoo');
-	await page.getByTestId('printer-model').selectOption({ label: 'Centauri Carbon' });
-	await page.getByTestId('printer-mm').selectOption({ index: 1 });
-	await page.getByTestId('save-printer').click();
+	await arrangeForCentauri(page);
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Elegoo Centauri Carbon');
 
 	// No print geometry imported yet: a friendly message, no download.

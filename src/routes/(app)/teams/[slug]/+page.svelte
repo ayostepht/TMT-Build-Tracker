@@ -5,7 +5,6 @@
 	import type { PageProps } from './$types';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
-	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
 	import TeamIntegrations from '#lib/components/TeamIntegrations.svelte';
 
 	let { data, form }: PageProps = $props();
@@ -71,14 +70,7 @@
 					onselect={(g, o) => (choices = { ...choices, [g]: o })}
 				/>
 			{/key}
-			<fieldset class="card-sub" data-testid="newbuild-printer">
-				<legend>Printer (optional)</legend>
-				<PrinterPicker name="printer" />
-				<p class="muted">
-					With a printer, plates are arranged for its bed when the build is created.
-				</p>
-			</fieldset>
-			<PlateLayoutPicker {templateId} />
+			<PlateLayoutPicker {templateId} orgId={data.team.id} />
 			<label class="field">Recipient (optional)<input name="recipient" /></label>
 			<label class="field">Hospital (optional)<input name="hospital" /></label>
 			<label class="field">Delivery date (optional)<input type="date" name="deliveryDate" /></label>
@@ -169,23 +161,3 @@
 		{/if}
 	{/if}
 </section>
-
-<style>
-	.card-sub {
-		border: 1px solid var(--line);
-		border-radius: 8px;
-		padding: 10px 12px 12px;
-		margin: 0;
-		display: grid;
-		gap: 8px;
-		min-width: 0;
-	}
-	.card-sub legend {
-		padding: 0 6px;
-		font-size: 13px;
-		color: var(--muted);
-	}
-	.card-sub p {
-		margin: 0;
-	}
-</style>

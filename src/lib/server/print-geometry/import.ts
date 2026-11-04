@@ -136,6 +136,8 @@ export interface PrintGeometrySummaryRow {
 	copies: number;
 	hasMesh: boolean;
 	settings: Record<string, string>;
+	/** Triangles with painted supports in the author's meshes. */
+	paintedFaces: number;
 	updatedAt: string;
 }
 
@@ -148,7 +150,13 @@ export function listPrintGeometry(db: Db, templateId: string): PrintGeometrySumm
 		.all()
 		.map((r) => {
 			const fp = r.footprint as {
-				pieces?: { w: number; d: number; h: number; copies: number }[];
+				pieces?: {
+					w: number;
+					d: number;
+					h: number;
+					copies: number;
+					paint?: { supports?: number };
+				}[];
 			};
 			const pieces = fp.pieces ?? [];
 			const big = pieces.reduce(
@@ -165,6 +173,7 @@ export function listPrintGeometry(db: Db, templateId: string): PrintGeometrySumm
 				copies: pieces.reduce((a, p) => a + p.copies, 0),
 				hasMesh: !!r.meshPath,
 				settings: r.settings,
+				paintedFaces: pieces.reduce((a, p) => a + (p.paint?.supports ?? 0), 0),
 				updatedAt: r.updatedAt.toISOString()
 			};
 		})

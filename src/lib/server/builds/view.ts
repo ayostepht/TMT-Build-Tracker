@@ -315,7 +315,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		printer: (b.printer as BuildPrinter | null) ?? null,
 		assembly: loadAssembly(db, buildId, tpl.id, variantChoices, parts),
 		photos: loadPhotos(db, buildId),
-		handoff: loadHandoff(db, buildId)
+		handoff: loadHandoff(db, buildId, access.canEdit)
 	};
 }
 
@@ -399,13 +399,14 @@ function loadPhotos(db: Db, buildId: string): BuildPhoto[] {
 		}));
 }
 
-function loadHandoff(db: Db, buildId: string): HandoffRecord | null {
+/** The recipient contact is team-internal: only owners and editors receive it. */
+function loadHandoff(db: Db, buildId: string, canSeeContact: boolean): HandoffRecord | null {
 	const h = db.select().from(buildHandoff).where(eq(buildHandoff.buildId, buildId)).get();
 	if (!h) return null;
 	return {
 		recipientName: h.recipientName,
 		organization: h.organization,
-		contact: h.contact,
+		contact: canSeeContact ? h.contact : null,
 		handedOffOn: h.handedOffOn,
 		location: h.location,
 		notes: h.notes,

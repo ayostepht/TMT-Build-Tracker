@@ -3,6 +3,8 @@
 	import { resolve } from '$app/paths';
 	import { onDestroy } from 'svelte';
 	import PlacementEditor from '#lib/components/PlacementEditor.svelte';
+	import KitFilesImport from '#lib/components/kit/KitFilesImport.svelte';
+	import KitStatus from '#lib/components/kit/KitStatus.svelte';
 	import PrintGeometryCard from './PrintGeometryCard.svelte';
 	import GuideImportCard from './GuideImportCard.svelte';
 	import {
@@ -21,6 +23,7 @@
 	let uploadFrac = $state<number | null>(null);
 	let error = $state('');
 	let hwBusy = $state(false);
+	let kitStatus: KitStatus | undefined = $state();
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let zipInput: HTMLInputElement | undefined = $state();
 	let hwInput: HTMLInputElement | undefined = $state();
@@ -103,6 +106,20 @@
 	<div class="kicker">Site admin</div>
 	<p><a href={resolve('/(app)/admin/templates')}>← Kits</a></p>
 	<h1>{data.template.name}</h1>
+
+	<!-- Temporary mount: the follow-up moves these into build onboarding and a Print tab. -->
+	<div class="card stack">
+		<KitStatus bind:this={kitStatus} templateId={data.template.id} />
+		<h3>Add MakeGood files</h3>
+		<KitFilesImport
+			templateId={data.template.id}
+			canImport={true}
+			onchange={() => {
+				kitStatus?.refresh();
+				invalidateAll();
+			}}
+		/>
+	</div>
 
 	<div class="card">
 		<h2>3D model</h2>

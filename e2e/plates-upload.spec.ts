@@ -18,7 +18,7 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 
 	// Built-in layout: 21 H plates; with the default variants the McMaster caster (8) and
 	// smaller rim (20) plates have no active parts and are left out.
-	await layout.selectOption({ label: 'MakeGood tuned profile: Bambu H2D / H2S (21 plates)' });
+	await layout.selectOption({ label: 'Bambu H2D / H2S (21 plates)' });
 	await expect(page.getByTestId('layout-name')).toHaveText(
 		'MakeGood tuned profile: Bambu H2D / H2S'
 	);

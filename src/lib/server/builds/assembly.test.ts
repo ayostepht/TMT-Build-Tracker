@@ -326,6 +326,21 @@ describe('handoff', () => {
 		);
 	});
 
+	it('hides the recipient contact from viewers everywhere it is serialized', () => {
+		updateHandoff(db, buildId, 'editor', { recipientName: 'Sam', contact: 'secret-contact-123' });
+		for (const who of ['owner', 'editor'])
+			expect(loadBuildView(db, buildId, who)!.handoff?.contact).toBe('secret-contact-123');
+		const v = loadBuildView(db, buildId, 'viewer')!;
+		expect(v.handoff).toMatchObject({ recipientName: 'Sam', contact: null });
+		expect(JSON.stringify(v)).not.toContain('secret-contact-123');
+		markHandedOff(db, buildId, 'editor', { contact: 'secret-contact-123' });
+		const acts = db.select().from(activity).where(eq(activity.buildId, buildId)).all();
+		expect(JSON.stringify(acts)).not.toContain('secret-contact-123');
+		expect(JSON.stringify(loadBuildView(db, buildId, 'viewer'))).not.toContain(
+			'secret-contact-123'
+		);
+	});
+
 	it('rejects bad input and defaults the date to today', () => {
 		expect(() => updateHandoff(db, buildId, 'owner', { handedOffOn: '03/11/2026' })).toThrow(
 			ApiError

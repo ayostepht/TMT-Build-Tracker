@@ -85,7 +85,7 @@ describe('printer catalog', () => {
 		expect([cc.bedX, cc.bedY, cc.bedZ]).toEqual([256, 256, 256]);
 		expect(cc.mm[0]).toMatchObject({ name: 'CANVAS', slots: 4 });
 		const p = printerFromCatalog(cc, 0);
-		expect(p).toMatchObject({ mmSlots: 4, margin: 5, spacing: 8, catalogId: cc.id });
+		expect(p).toMatchObject({ mmSlots: 4, margin: 1, spacing: 8, catalogId: cc.id });
 		expect(printerFromCatalog(cc, null).mmSlots).toBe(1);
 	});
 
@@ -106,8 +106,21 @@ describe('printer catalog', () => {
 		expect(parsePrinter({ name: 'My', bedX: 200, bedY: 200, bedZ: 200 })).toMatchObject({
 			catalogId: null,
 			mmSlots: 1,
-			margin: 5,
+			margin: 1,
 			spacing: 8
 		});
+	});
+});
+
+describe('bed presets', () => {
+	it('computes example printers from the catalog', async () => {
+		const { BED_PRESETS, DEFAULT_BED_PRESET, bedExamples, printerFromBed } =
+			await import('./printer.ts');
+		expect(DEFAULT_BED_PRESET).toMatchObject({ x: 256, y: 256 });
+		expect(bedExamples(256, 256)).toBe('Centauri Carbon, Bambu X1/P1/A1, SK1');
+		expect(bedExamples(220, 220)).toContain('K1');
+		for (const p of BED_PRESETS) expect(bedExamples(p.x, p.y), `${p.x}`).not.toBe('');
+		const bed = parsePrinter(printerFromBed(256, 256, 256, 4));
+		expect(bed).toMatchObject({ catalogId: null, name: '256 × 256 bed', mmSlots: 4 });
 	});
 });

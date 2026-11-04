@@ -35,9 +35,18 @@ export async function createChapter(page: Page, name: string) {
 	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
 }
 
+/** The MakeGood tuned layout the helpers pick unless a spec asks for another one. */
+export const TUNED_LAYOUT = 'Bambu X1 / P1 / A1';
+
 /** Creates a build from the chapter page; returns the build id. */
-export async function createBuild(page: Page, name: string): Promise<string> {
+export async function createBuild(
+	page: Page,
+	name: string,
+	layout: string | null = TUNED_LAYOUT
+): Promise<string> {
 	await settled(page);
+	// The New build form defaults to "Arrange for my bed"; most specs assume the MakeGood plates.
+	if (layout) await page.getByTestId('plate-layout').selectOption({ label: layout });
 	await page.getByLabel('Name', { exact: true }).fill(name);
 	await page.getByRole('button', { name: 'Create build' }).click();
 	await expect(page).toHaveURL(/\/builds\/[^/]+$/);
@@ -92,4 +101,38 @@ export async function ownerWithBuild(page: Page, label = 'owner') {
 
 export function row(page: Page, slug: string) {
 	return page.locator(`.row[data-id="${slug}"]`);
+}
+
+/** The site admin of the e2e server (`ADMIN_EMAILS` in playwright.config.ts). */
+export const ADMIN_EMAIL = 'e2e-admin@example.test';
+
+/**
+ * Signs `page` in as the fixed site admin, creating the account on first use. Works in any spec
+ * order: the account is admin through `ADMIN_EMAILS`, not by being the first user.
+ */
+export async function signInAsAdmin(page: Page) {
+	await page.goto('/login');
+	await settled(page);
+	await page.getByLabel('Email').fill(ADMIN_EMAIL);
+	await page.getByLabel(/^Password/).fill(PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	const signedIn = await page
+		.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 8_000 })
+		.then(() => true)
+		.catch(() => false);
+	if (!signedIn) {
+		await signUp(page, 'Ada Admin', ADMIN_EMAIL);
+	}
+	const res = await page.goto('/admin/templates');
+	expect(res?.status(), 'ADMIN_EMAILS must contain the e2e admin').toBe(200);
+}
+
+/** On the Plates tab: Arrange for my bed > Pick my printer > Elegoo Centauri Carbon with CANVAS. */
+export async function arrangeForCentauri(page: Page) {
+	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
+	await page.getByTestId('bed-pick-printer').click();
+	await page.getByTestId('printer-brand').selectOption('Elegoo');
+	await page.getByTestId('printer-model').selectOption({ label: 'Centauri Carbon' });
+	await page.getByTestId('printer-mm').selectOption({ index: 1 });
+	await page.getByTestId('arrange-bed').click();
 }

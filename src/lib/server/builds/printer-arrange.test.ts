@@ -75,7 +75,7 @@ describe('setPrinter', () => {
 		expect(view(id).printer).toMatchObject({
 			name: 'Elegoo Centauri Carbon',
 			bedX: 256,
-			margin: 5
+			margin: 1
 		});
 		expect(() => setPrinter(db, id, 'viewer', { printer: cc })).toThrow(ApiError);
 		try {
@@ -239,8 +239,8 @@ describe('arrangeForPrinter', () => {
 		for (const pl of info.plates)
 			if (!pl.oversize)
 				for (const i of pl.items) {
-					expect(i.x - i.w / 2).toBeGreaterThanOrEqual(4.9);
-					expect(i.x + i.w / 2).toBeLessThanOrEqual(251.1);
+					expect(i.x - i.w / 2).toBeGreaterThanOrEqual(0.9);
+					expect(i.x + i.w / 2).toBeLessThanOrEqual(255.1);
 				}
 		expect(Object.keys(info.footprints).length).toBeGreaterThan(10);
 	});

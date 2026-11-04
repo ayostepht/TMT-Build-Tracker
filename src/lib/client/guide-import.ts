@@ -61,3 +61,20 @@ export async function renderPdfPages(
 		await task.destroy();
 	}
 }
+
+/** Page count of a PDF (pdf.js, no rendering); undefined when it cannot be read. */
+export async function pdfPageCount(bytes: Uint8Array): Promise<number | undefined> {
+	try {
+		const pdfjs = await import('pdfjs-dist');
+		const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+		pdfjs.GlobalWorkerOptions.workerSrc = worker;
+		const task = pdfjs.getDocument({ data: bytes.slice() });
+		try {
+			return (await task.promise).numPages;
+		} finally {
+			await task.destroy();
+		}
+	} catch {
+		return undefined;
+	}
+}

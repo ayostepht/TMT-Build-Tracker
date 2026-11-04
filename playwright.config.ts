@@ -39,7 +39,9 @@ export default defineConfig({
 					BODY_SIZE_LIMIT: '256M',
 					PUBLIC_URL: '',
 					BETTER_AUTH_URL: '',
-					ORIGIN: ''
+					ORIGIN: '',
+					// A fixed site admin so specs do not depend on who signs up first.
+					ADMIN_EMAILS: 'e2e-admin@example.test'
 				}
 			}
 });

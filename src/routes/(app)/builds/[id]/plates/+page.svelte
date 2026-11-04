@@ -8,7 +8,6 @@
 		plateThumbnailUrl,
 		arrangePlates,
 		getArrangement,
-		setPrinter,
 		type ArrangementDto,
 		type PlateLayoutInfo
 	} from '#lib/client/api.ts';
@@ -22,9 +21,7 @@
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
-	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
 	import ExportCard from '#lib/components/ExportCard.svelte';
-	import type { BuildPrinter } from '#lib/domain/types.ts';
 
 	const ctx = getBuildCtx();
 	let uploading = $state(false);
@@ -77,26 +74,8 @@
 	const planWarnings = $derived(
 		printer && arr?.fresh && (current === 'arranged' || !current) ? arr.fresh.warnings : []
 	);
-	let editingPrinter = $state(false);
-	let draftPrinter = $state<BuildPrinter | null>(null);
-	let printerBusy = $state(false);
 	let rearranging = $state(false);
 
-	async function savePrinter() {
-		printerBusy = true;
-		const hadArranged = current === 'arranged';
-		const ok = await ctx.act(() => setPrinter(ctx.id, draftPrinter));
-		if (ok) {
-			editingPrinter = false;
-			// A first printer on a build whose plates are not arranged yet: offer the plan straight away
-			// when nothing hangs on plates.
-			if (draftPrinter && !hadArranged && !ctx.view.runs.some((r) => r.plateNumber != null)) {
-				if (await ctx.act(() => arrangePlates(ctx.id)))
-					notice = `Plates arranged for ${draftPrinter.name}.`;
-			}
-		}
-		printerBusy = false;
-	}
 	async function rearrange() {
 		rearranging = true;
 		try {
@@ -164,48 +143,16 @@
 	</div>
 	{#if layoutNote && current !== 'upload'}<p class="muted">{layoutNote}</p>{/if}
 	<div class="printer-line" data-testid="printer-line">
-		{#if printer && !editingPrinter}
+		{#if printer}
 			<span
 				><b>Printer:</b> <span data-testid="printer-name">{printer.name}</span>, bed {printer.bedX} ×
 				{printer.bedY}
 				mm{printer.mmSlots > 1 ? `, ${printer.mmSlots} filaments per plate` : ''}</span
 			>
-			{#if ctx.canEdit}
-				<button
-					class="btn sm"
-					type="button"
-					data-testid="change-printer"
-					onclick={() => ((draftPrinter = printer), (editingPrinter = true))}>Change printer</button
-				>
-			{/if}
-		{:else if !printer && !editingPrinter}
-			<span class="muted">No printer chosen. Pick yours to arrange plates for its bed.</span>
-			{#if ctx.canEdit}
-				<button
-					class="btn sm primary"
-					type="button"
-					data-testid="choose-printer"
-					onclick={() => ((draftPrinter = null), (editingPrinter = true))}>Choose printer</button
-				>
-			{/if}
+		{:else}
+			<span class="muted">No bed chosen yet. Choose "Arrange for my bed" below.</span>
 		{/if}
 	</div>
-	{#if editingPrinter && ctx.canEdit}
-		<div class="printer-edit">
-			<PrinterPicker value={printer} onchange={(p) => (draftPrinter = p)} />
-			<div class="printer-actions">
-				<button
-					class="btn primary sm"
-					type="button"
-					disabled={printerBusy || !draftPrinter}
-					data-testid="save-printer"
-					onclick={savePrinter}>Use this printer</button
-				>
-				<button class="btn sm" type="button" onclick={() => (editingPrinter = false)}>Cancel</button
-				>
-			</div>
-		</div>
-	{/if}
 	{#if arr?.stale && ctx.canEdit && printer}
 		<div class="stale" role="status" data-testid="stale-banner">
 			<span>Colors changed: re-arrange plates?</span>
@@ -235,6 +182,7 @@
 	{#if ctx.canEdit}
 		<PlateLayoutPicker
 			buildId={ctx.id}
+			orgId={ctx.view.build.organizationId}
 			{printer}
 			allowUpload
 			onchanged={() => ctx.refresh()}
@@ -453,18 +401,6 @@
 		align-items: center;
 		margin: 6px 0;
 		font-size: 14px;
-	}
-	.printer-edit {
-		display: grid;
-		gap: 10px;
-		margin: 8px 0 12px;
-		padding: 12px;
-		border: 1px solid var(--line);
-		border-radius: 8px;
-	}
-	.printer-actions {
-		display: flex;
-		gap: 8px;
 	}
 	.stale {
 		display: flex;

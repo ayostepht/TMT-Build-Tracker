@@ -1,6 +1,13 @@
 import { deflateSync } from 'node:zlib';
 import { expect, test } from './fixtures';
-import { invite, joinViaInvite, ownerWithBuild, signUp, uniqueEmail } from './helpers';
+import {
+	invite,
+	joinViaInvite,
+	ownerWithBuild,
+	signInAsAdmin,
+	signUp,
+	uniqueEmail
+} from './helpers';
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
 	let c = n;
@@ -64,15 +71,12 @@ function makePdf(n: number): Buffer {
 	return Buffer.from(pdf, 'latin1');
 }
 
-// The site admin is the first account created in the run. This test goes first in the first spec
-// file alphabetically, so its user is the admin; it skips itself when that is not the case.
+// Signs in as the fixed ADMIN_EMAILS account, so the order of specs does not matter.
 test('a site admin imports a guide PDF in the browser and maps its pages', async ({
 	page,
 	browser
 }) => {
-	await signUp(page, 'Ada Admin', uniqueEmail('admin'));
-	const res = await page.goto('/admin/templates');
-	test.skip(res?.status() === 404, 'this account is not the site admin (not the first user)');
+	await signInAsAdmin(page);
 	await page.waitForLoadState('networkidle');
 	const href = (await page.locator('a[href^="/admin/templates/"]').first().getAttribute('href'))!;
 	const templateId = href.split('/').pop()!;
@@ -222,9 +226,10 @@ test('photos are downscaled, uploaded, shown in a lightbox and deleted', async (
 });
 
 test('handoff: fill the form, mark handed off, and the summary leaves the contact out', async ({
-	page
+	page,
+	browser
 }) => {
-	const { buildId } = await ownerWithBuild(page, 'handoff');
+	const { buildId, chapterUrl } = await ownerWithBuild(page, 'handoff');
 	await page.goto(`/builds/${buildId}/handoff`);
 	await page.waitForLoadState('networkidle');
 
@@ -261,4 +266,19 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	await expect(page.getByRole('button', { name: 'Print / Save as PDF' })).toBeVisible();
 	await expect(page.locator('.summary img')).toHaveCount(1);
 	expect(await page.locator('body').innerText()).not.toContain('secret-contact@example.test');
+
+	// Contact reaches editors but never viewers (page data or API).
+	const viewerEmail = uniqueEmail('viewer');
+	await page.goto(chapterUrl);
+	const vlink = await invite(page, viewerEmail, 'viewer');
+	const viewer = await joinViaInvite(browser, vlink, 'Vera Viewer', viewerEmail);
+	const own = await page.request.get(`/api/builds/${buildId}/view`);
+	expect(await own.text()).toContain('secret-contact@example.test');
+	const theirs = await viewer.page.request.get(`/api/builds/${buildId}/view`);
+	expect(theirs.status()).toBe(200);
+	expect(await theirs.text()).not.toContain('secret-contact@example.test');
+	await viewer.page.goto(`/builds/${buildId}/handoff`);
+	await viewer.page.waitForLoadState('networkidle');
+	expect(await viewer.page.content()).not.toContain('secret-contact@example.test');
+	await viewer.context.close();
 });

@@ -161,54 +161,181 @@ export function simplifyHull(hull: readonly Pt[], max = 24): Pt[] {
 export const round1 = (n: number) => Math.round(n * 10) / 10;
 
 const EPS = 1e-6;
-const dedupeAngle = (a: number) => (((Math.round(a * 10) / 10) % 360) + 360) % 360;
+const SWEEP_STEP = 0.5;
+
+export interface BoxOrient {
+	w: number;
+	d: number;
+	rot: number;
+	ox?: number;
+	oy?: number;
+}
+
+/** The part of a piece's geometry the fitter looks at (outlines are around the box centre). */
+export interface FitPiece {
+	w: number;
+	d: number;
+	hull?: Pt[];
+	/** True top-down outline (`PrintPiece.sil`); only `profile.rings` is read. */
+	sil?: { profile?: { rings: Pt[][] } };
+}
+
+const ringSigned = (ring: readonly Pt[]) => {
+	let a = 0;
+	for (let i = 0; i < ring.length; i++) {
+		const p = ring[i];
+		const q = ring[(i + 1) % ring.length];
+		a += p[0] * q[1] - q[0] * p[1];
+	}
+	return a / 2;
+};
+
+/**
+ * The outline a piece is fitted by: the outer rings of its silhouette (holes cannot change the
+ * bounding box), else its convex hull, else the box. Reduced to the convex hull of those points,
+ * which has the same bounding box at every angle.
+ */
+export function fitOutline(pc: FitPiece): Pt[] {
+	const rings = pc.sil?.profile?.rings;
+	if (rings?.length) {
+		const pts: Pt[] = [];
+		for (const r of rings) if (r.length >= 3 && ringSigned(r) > 0) pts.push(...r);
+		if (pts.length >= 3) return convexHull(pts);
+	}
+	if (pc.hull && pc.hull.length >= 3) return pc.hull;
+	return [
+		[-pc.w / 2, -pc.d / 2],
+		[pc.w / 2, -pc.d / 2],
+		[pc.w / 2, pc.d / 2],
+		[-pc.w / 2, pc.d / 2]
+	];
+}
+
+/** Bounding box of the outline turned by `deg` degrees counter-clockwise. */
+function turnedBox(outline: readonly Pt[], deg: number) {
+	const a = (deg * Math.PI) / 180;
+	const c = Math.cos(a);
+	const s = Math.sin(a);
+	let minX = Infinity,
+		minY = Infinity,
+		maxX = -Infinity,
+		maxY = -Infinity;
+	for (const [x, y] of outline) {
+		const X = x * c - y * s;
+		const Y = x * s + y * c;
+		if (X < minX) minX = X;
+		if (X > maxX) maxX = X;
+		if (Y < minY) minY = Y;
+		if (Y > maxY) maxY = Y;
+	}
+	return { w: maxX - minX, d: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+}
+
+const ceil1 = (n: number) => Math.ceil(n * 10 - 1e-9) / 10;
+const norm360 = (d: number) => ((d % 360) + 360) % 360;
+
 /**
  * Placement candidates for one piece: the box as printed and turned 90 degrees. When
- * neither fits the empty bed and the piece has an outline, free angles whose rotated
- * bounding box does fit are offered instead (tightest first, at most 6): long thin parts
- * go diagonally. Exported for tests.
+ * neither fits the empty bed, the piece's true outline (silhouette, else hull, else box)
+ * is turned about z over a fine sweep (0.5 degrees) and refined around each local best;
+ * angles whose turned outline box fits are offered, largest clearance first (at most 6).
+ * Long or cut-corner parts go diagonally. Flat rotations only. Exported for tests.
  */
 export function boxOrients(
-	pc: { w: number; d: number; hull?: Pt[] },
+	pc: FitPiece,
 	rotate: boolean,
 	usableX: number,
 	usableY: number
-): { w: number; d: number; rot: number; ox?: number; oy?: number }[] {
-	const base: { w: number; d: number; rot: number; ox?: number; oy?: number }[] = [
-		{ w: pc.w, d: pc.d, rot: 0 }
-	];
+): BoxOrient[] {
+	const base: BoxOrient[] = [{ w: pc.w, d: pc.d, rot: 0 }];
 	if (rotate && Math.abs(pc.w - pc.d) > EPS) base.push({ w: pc.d, d: pc.w, rot: 90 });
 	const fits = (o: { w: number; d: number }) => o.w <= usableX + EPS && o.d <= usableY + EPS;
 	if (!rotate || base.some(fits)) return base;
-	const outline: Pt[] = pc.hull?.length
-		? pc.hull
-		: [
-				[-pc.w / 2, -pc.d / 2],
-				[pc.w / 2, -pc.d / 2],
-				[pc.w / 2, pc.d / 2],
-				[-pc.w / 2, pc.d / 2]
-			];
-	const angles = new Set<number>();
-	for (let deg = 0; deg < 180; deg++) angles.add(deg);
-	for (let i = 0; i < outline.length; i++) {
-		const p = outline[i];
-		const q = outline[(i + 1) % outline.length];
-		const deg = (-Math.atan2(q[1] - p[1], q[0] - p[0]) * 180) / Math.PI;
-		angles.add(dedupeAngle(deg) % 180);
+	const outline = fitOutline(pc);
+	const clearance = (deg: number) => {
+		const b = turnedBox(outline, deg);
+		return Math.min(usableX - b.w, usableY - b.d);
+	};
+	const n = Math.round(360 / SWEEP_STEP);
+	const cl: number[] = [];
+	for (let i = 0; i < n; i++) cl.push(clearance(i * SWEEP_STEP));
+	// local maxima of the clearance, best first (ties: smaller angle)
+	const peaks: number[] = [];
+	for (let i = 0; i < n; i++)
+		if (cl[i] >= cl[(i + n - 1) % n] && cl[i] > cl[(i + 1) % n]) peaks.push(i);
+	peaks.sort((a, b) => cl[b] - cl[a] || a - b);
+	const found: (BoxOrient & { clr: number })[] = [];
+	const g = (Math.sqrt(5) - 1) / 2;
+	for (const i of peaks.slice(0, 8)) {
+		if (cl[i] < -2) break;
+		// golden-section search for the clearance maximum within one step either side
+		let lo = i * SWEEP_STEP - SWEEP_STEP;
+		let hi = i * SWEEP_STEP + SWEEP_STEP;
+		let x1 = hi - g * (hi - lo);
+		let x2 = lo + g * (hi - lo);
+		let f1 = clearance(x1);
+		let f2 = clearance(x2);
+		for (let k = 0; k < 24; k++) {
+			if (f1 < f2) {
+				lo = x1;
+				x1 = x2;
+				f1 = f2;
+				x2 = lo + g * (hi - lo);
+				f2 = clearance(x2);
+			} else {
+				hi = x2;
+				x2 = x1;
+				f2 = f1;
+				x1 = hi - g * (hi - lo);
+				f1 = clearance(x1);
+			}
+		}
+		let deg = Math.round(norm360((lo + hi) / 2) * 100) / 100;
+		if (clearance(i * SWEEP_STEP) > clearance(deg)) deg = i * SWEEP_STEP;
+		const b = turnedBox(outline, deg);
+		const w = ceil1(b.w);
+		const d = ceil1(b.d);
+		if (!fits({ w, d })) continue;
+		if (found.some((f) => Math.abs(f.rot - deg) < 1e-9)) continue;
+		found.push({
+			w,
+			d,
+			rot: deg,
+			ox: Math.round(b.cx * 100) / 100,
+			oy: Math.round(b.cy * 100) / 100,
+			clr: Math.min(usableX - w, usableY - d)
+		});
 	}
-	const found: { w: number; d: number; rot: number; ox?: number; oy?: number }[] = [];
-	for (const deg of angles) {
-		const b = bounds(rotatePoints(outline, (deg * Math.PI) / 180));
-		const w = Math.round((b.w + 0.05) * 10) / 10;
-		const d = Math.round((b.d + 0.05) * 10) / 10;
-		// the rotated outline is not centred on the origin: offset of its box centre, to be removed when placing
-		const cx = Math.round(((b.minX + b.maxX) / 2) * 100) / 100;
-		const cy = Math.round(((b.minY + b.maxY) / 2) * 100) / 100;
-		if (fits({ w, d })) found.push({ w, d, rot: deg, ox: cx, oy: cy });
-		if (fits({ w: d, d: w })) found.push({ w: d, d: w, rot: (deg + 90) % 360, ox: -cy, oy: cx });
+	// more candidates for packing: the tightest other feasible angles (at least 5 degrees apart)
+	if (found.length < 6) {
+		const extra: { i: number; a: number }[] = [];
+		for (let i = 0; i < n; i++)
+			if (cl[i] >= 0) {
+				const b = turnedBox(outline, i * SWEEP_STEP);
+				extra.push({ i, a: b.w * b.d });
+			}
+		extra.sort((p, q) => p.a - q.a || p.i - q.i);
+		for (const { i } of extra) {
+			if (found.length >= 6) break;
+			const deg = i * SWEEP_STEP;
+			if (found.some((f) => Math.min(Math.abs(f.rot - deg), 360 - Math.abs(f.rot - deg)) < 5))
+				continue;
+			const b = turnedBox(outline, deg);
+			const w = ceil1(b.w);
+			const d = ceil1(b.d);
+			if (!fits({ w, d })) continue;
+			found.push({
+				w,
+				d,
+				rot: deg,
+				ox: Math.round(b.cx * 100) / 100,
+				oy: Math.round(b.cy * 100) / 100,
+				clr: -1e9
+			});
+		}
 	}
-	found.sort((x, y) => x.w * x.d - y.w * y.d || x.rot - y.rot);
-	return found.slice(0, 6);
+	found.sort((x, y) => y.clr - x.clr || x.rot - y.rot);
+	return found.slice(0, 6).map((f) => ({ w: f.w, d: f.d, rot: f.rot, ox: f.ox, oy: f.oy }));
 }
 
 /**
