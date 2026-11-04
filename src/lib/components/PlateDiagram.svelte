@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ArrangedPlate } from '#lib/domain/arrange.ts';
 	import type { LegendRow } from '#lib/domain/plate-legend.ts';
+	import { layoutBadges } from '#lib/domain/badge-layout.ts';
 	import {
 		edgeColor,
 		placeRings,
@@ -13,8 +14,10 @@
 	/**
 	 * Top view of one arranged plate, drawn like a slicer's plate preview: a textured build
 	 * plate with a grid, each part as its real outline (holes included) in its filament color
-	 * with a soft shadow, and a numbered badge at the most "inside" point of every piece. The
-	 * numbers match the legend next to it. Pieces without a known mesh are drawn as dashed
+	 * with a soft shadow, and a numbered badge on every piece. The
+	 * numbers match the legend next to it. Badges scale to their part; parts too small for one
+	 * get it beside them on a thin leader (copies close together share one), see `badge-layout`.
+	 * A dashed ring around a badge marks a re-oriented part, a small arrow arc a tilted one. Pieces without a known mesh are drawn as dashed
 	 * rounded boxes ("approximate"). Presentational; bed y points up, so the SVG flips it.
 	 */
 	let {
@@ -72,8 +75,11 @@
 			let d: string;
 			let pole: [number, number];
 			let inr: number;
+			let rings: [number, number][][];
 			if (sil) {
-				d = ringsToPath(placeRings(sil.rings, rot, dx, dy), bed.y);
+				const placed = placeRings(sil.rings, rot, dx, dy);
+				d = ringsToPath(placed, bed.y);
+				rings = placed.map((rg) => rg.map(([x, y]) => [x, bed.y - y] as [number, number]));
 				const p = placeRings([[sil.pole]], rot, dx, dy)[0][0];
 				pole = [p[0], bed.y - p[1]];
 				inr = sil.r;
@@ -83,6 +89,14 @@
 				d = roundedRectPath(it.x, bed.y - it.y, w, dd);
 				pole = [it.x, bed.y - it.y];
 				inr = Math.min(w, dd) / 2;
+				rings = [
+					[
+						[it.x - w / 2, bed.y - it.y - dd / 2],
+						[it.x + w / 2, bed.y - it.y - dd / 2],
+						[it.x + w / 2, bed.y - it.y + dd / 2],
+						[it.x - w / 2, bed.y - it.y + dd / 2]
+					]
+				];
 			}
 			const color = colorOf(it.role);
 			const row = numberOf.get(it.slug);
@@ -91,8 +105,8 @@
 				it,
 				d,
 				pole,
-				// badge radius: sits inside the shape when it can, never smaller than legible
-				rb: Math.min(8.5 * scale, Math.max(4 * scale, inr * 0.85)),
+				inr,
+				rings,
 				color,
 				edge: edgeColor(color),
 				approx: !sil,
@@ -103,6 +117,47 @@
 			};
 		})
 	);
+	const rMin = $derived(5 * scale);
+	const badges = $derived.by(() => {
+		const m = plate.oversize ? pad - 1 : 1;
+		return layoutBadges(
+			shapes.map((s) => ({
+				id: s.i,
+				slug: s.it.slug,
+				pole: s.pole,
+				inr: s.inr,
+				rings: s.rings
+			})),
+			{
+				rMin,
+				rMax: 8.5 * scale,
+				bounds: { x0: -m, y0: -m, x1: bed.x + m, y1: bed.y + m }
+			}
+		).map((b) => {
+			const its = b.ids.map((i) => shapes[i]);
+			const turned = its.find((s) => s.turned);
+			const tilted = its.find((s) => s.tilted);
+			const row = numberOf.get(b.slug);
+			return {
+				...b,
+				n: row?.n ?? 0,
+				turned: turned?.it.pose?.desc ?? null,
+				tilted: tilted ? Math.round(tilted.it.rotation) : null
+			};
+		});
+	});
+	const arc = (r: number) => {
+		// 240 degree arc with an arrow head, drawn just outside a badge of radius r
+		const R = r + 3;
+		const a0 = (-60 * Math.PI) / 180;
+		const a1 = (180 * Math.PI) / 180;
+		const p = (a: number) => `${R * Math.cos(a)} ${R * Math.sin(a)}`;
+		const ex = R * Math.cos(a1);
+		const ey = R * Math.sin(a1);
+		// head: tangent at the end points down (clockwise travel), two short barbs
+		const h = Math.max(2.2, r * 0.42);
+		return `M${p(a0)}A${R} ${R} 0 1 1 ${ex} ${ey}M${ex - h * 0.9} ${ey - h * 0.6}L${ex} ${ey}L${ex + h * 0.9} ${ey - h * 0.6}`;
+	};
 	const pick = (slug: string | null) => onactive?.(slug);
 </script>
 
@@ -221,37 +276,41 @@
 
 	<!-- badges -->
 	<g class="badges">
-		{#each shapes as s (s.i)}
+		{#each badges as b (b.ids[0])}
 			<g
 				class="badge"
-				class:on={active === s.it.slug}
-				class:dim={active != null && active !== s.it.slug}
-				data-slug={s.it.slug}
-				transform="translate({s.pole[0]} {s.pole[1]})"
+				class:on={active === b.slug}
+				class:dim={active != null && active !== b.slug}
+				data-slug={b.slug}
+				data-testid="plate-badge"
+				data-outside={b.outside ? '1' : undefined}
 				aria-hidden="true"
 			>
-				<circle r={s.rb} />
-				<text dy="0.36em" text-anchor="middle" font-size={s.rb * (s.n > 9 ? 1.05 : 1.3)}>{s.n}</text
-				>
-				{#if s.turned || s.tilted}
-					<g
-						class="flag"
-						data-testid={s.turned ? 'reoriented-badge' : 'tilted-badge'}
-						data-slug={s.it.slug}
-						transform="translate({s.rb * 0.82} {-s.rb * 0.82})"
+				{#each b.leaders as [from, to] (to[0] + ',' + to[1])}
+					<path class="lead-halo" d="M{from[0]} {from[1]}L{to[0]} {to[1]}" />
+					<path class="lead" d="M{from[0]} {from[1]}L{to[0]} {to[1]}" />
+					<circle class="anchor" cx={to[0]} cy={to[1]} r={Math.max(0.9, b.r * 0.2)} />
+				{/each}
+				<g transform="translate({b.x} {b.y})">
+					{#if b.turned}
+						<g data-testid="reoriented-badge" data-slug={b.slug}>
+							<title>Re-oriented: {b.turned}</title>
+							<circle class="ring-halo" r={b.r + 1.7} />
+							<circle class="ring-turned" r={b.r + 1.7} />
+						</g>
+					{/if}
+					{#if b.tilted != null}
+						<g data-testid="tilted-badge" data-slug={b.slug}>
+							<title>Turned {b.tilted}° to fit the bed</title>
+							<path class="ring-halo" d={arc(b.r + (b.turned ? 2.2 : 0))} />
+							<path class="ring-tilted" d={arc(b.r + (b.turned ? 2.2 : 0))} />
+						</g>
+					{/if}
+					<circle class="disc" r={b.r} />
+					<text dy="0.36em" text-anchor="middle" font-size={b.r * (b.n > 9 ? 1.05 : 1.3)}
+						>{b.n}</text
 					>
-						<title
-							>{s.turned
-								? `Re-oriented: ${s.it.pose?.desc}`
-								: `Turned ${Math.round(s.it.rotation)}° to fit the bed`}</title
-						>
-						<circle r={s.rb * 0.62} />
-						<path
-							d="M{-s.rb * 0.2} {s.rb * 0.12}A{s.rb * 0.24} {s.rb * 0.24} 0 1 1 {s.rb * 0.1} {s.rb *
-								0.2}"
-						/>
-					</g>
-				{/if}
+				</g>
 			</g>
 		{/each}
 	</g>
@@ -367,22 +426,11 @@
 		pointer-events: none;
 		transition: opacity 0.15s;
 	}
-	.badge circle {
-		fill: #fff;
-		stroke: #1b2033;
-		stroke-width: 1.1px;
-		vector-effect: non-scaling-stroke;
-	}
 	.badge text {
 		fill: #1b2033;
 		font-family: var(--f-body);
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
-	}
-	.badge.on circle {
-		fill: var(--accent);
-		stroke: #fff;
-		stroke-width: 1.6px;
 	}
 	.badge.on text {
 		fill: #fff;
@@ -390,19 +438,60 @@
 	.badge.dim {
 		opacity: 0.45;
 	}
-	.flag {
-		pointer-events: auto;
-	}
-	.flag circle {
-		fill: #f0a020;
-		stroke: #fff;
-		stroke-width: 0.9px;
-	}
-	.flag path {
-		fill: none;
+	.badge .disc {
+		fill: #fff;
 		stroke: #1b2033;
-		stroke-width: 0.9px;
+		stroke-width: 1.1px;
+		vector-effect: non-scaling-stroke;
+	}
+	.badge.on .disc {
+		fill: var(--accent);
+		stroke: #fff;
+		stroke-width: 1.6px;
+	}
+	.lead,
+	.lead-halo {
+		fill: none;
 		stroke-linecap: round;
 		vector-effect: non-scaling-stroke;
+	}
+	.lead {
+		stroke: #1b2033;
+		stroke-width: 1px;
+	}
+	.lead-halo {
+		stroke: #fff;
+		stroke-width: 2.6px;
+		opacity: 0.85;
+	}
+	.anchor {
+		fill: #1b2033;
+		stroke: #fff;
+		stroke-width: 0.9px;
+		vector-effect: non-scaling-stroke;
+	}
+	.badge.on .lead {
+		stroke: var(--accent);
+	}
+	.ring-halo,
+	.ring-turned,
+	.ring-tilted {
+		fill: none;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		vector-effect: non-scaling-stroke;
+	}
+	.ring-halo {
+		stroke: #fff;
+		stroke-width: 4.2px;
+	}
+	.ring-turned,
+	.ring-tilted {
+		stroke: #d98200;
+		stroke-width: 2.2px;
+	}
+	.ring-turned {
+		stroke-dasharray: 3.2 2.4;
+		stroke-linecap: butt;
 	}
 </style>

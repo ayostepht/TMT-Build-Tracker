@@ -1148,9 +1148,20 @@ export const tmtTemplate: TemplateSeed = {
 		// -x side (identity); the mirrored copy covers +x. The loose bodies laid out near the origin (spacers,
 		// washers, wheel pins) are clipped away by the viewer (domain/part-clips.ts) instead of floating under the footrest.
 		{ slug: 'connectors', matrix: IDENTITY, instances: [MIRROR_X], placed: true },
-		// Front caster mount REV C: box x -193.5..-156, y -39.3..17.2, z -141.6..-29.8 sits right under the right wing
-		// (wing bottom y 15, x -190..-140), so the STEP frame is the assembly frame; mirror for the left wing.
-		{ slug: 'front-caster-mount', matrix: IDENTITY, instances: [MIRROR_X], placed: true },
+		// Front caster mount REV C: a tray, a 2.6 mm plate with a pin hole and a C-shaped wall 24 mm deep, modelled
+		// tilted 53 degrees about z (plate normal (-0.8, 0.6, 0) in the STEP frame). Seated in the wing's underside
+		// recess (open towards the chair, ceiling y 40, outer wall x -176, z -139..-30): turn the plate level with the
+		// wall pointing down (x' = 0.6x + 0.8y, y' = -0.8x + 0.6y), then turn it 180 degrees about y so the rounded
+		// closed end sits against the outer wall (its chamfered corners match the recess) and the open end faces the
+		// chair, where the caster plate slides in. Hole centre (STEP w -108.8, z -85.5) lands on the pin axis
+		// (x -145, z -85.6); plate top at y 40 (hole boss touches the recess ceiling), wall bottom 13.7 (wing bottom 15).
+		// Mirrored copy for the left wing.
+		{
+			slug: 'front-caster-mount',
+			matrix: [-0.6, -0.8, 0, 0, -0.8, 0.6, 0, 0, 0, 0, -1, 0, -253.8, -100.3, -171.1, 1],
+			instances: [[0.6, -0.8, 0, 0, 0.8, 0.6, 0, 0, 0, 0, -1, 0, 253.8, -100.3, -171.1, 1]],
+			placed: true
+		},
 		// Headrest: cushion, brace and bolt share one frame (+z forward, y 0..76 up, origin at the brace's underside).
 		// Brace back face (z -12.5) against the mount's front face (z -499) gives tz -486.5; -488 lets the bolt head
 		// (z -36..-25) sit behind the stem's rear face (z -516). Top flush with the stem top (y 695): ty 619.

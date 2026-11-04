@@ -70,10 +70,12 @@ export interface CasterAnchor {
 }
 
 /**
- * Front caster: one per front-caster-mount instance. The REV C mount is a thin tilted cap
- * (about 3 mm thick) with a square pin hole; the caster's swivel plate sits against its
- * underside with the stem through the hole and the wheel hangs below it along the plate's
- * normal (`drop` = plate to the wheel's lowest point).
+ * Front caster: one per front-caster-mount instance. The REV C mount is a tray: a plate (about
+ * 3 mm thick) with a rectangular pin hole and a C-shaped wall pointing down. The caster's swivel
+ * plate sits against the plate's underside inside the wall, the stem through the hole, and the
+ * wheel hangs below along the plate's normal (vertical once the mount is seated in the wing).
+ * `drop` is the plate-to-tread distance used when no ground line is known; with one, the wheel
+ * touches that line instead.
  */
 export const FRONT_CASTER = { wheelR: 21, wheelW: 16, drop: 48 } as const;
 /**
@@ -138,9 +140,14 @@ export function fitMountFrame(
 	return { pivot: [hx, a + b * hx + c * hz, hz], up: [-b / len, 1 / len, -c / len] };
 }
 
+/** A mount fitted within this many degrees of level counts as level: the swivel axis stays vertical. */
+export const LEVEL_TOL_DEG = 6;
+
 export function frontCasterAnchors(
 	mounts: Aabb[],
-	frames: (MountFrame | null | undefined)[] = []
+	frames: (MountFrame | null | undefined)[] = [],
+	/** y of the tire bottoms: the caster tread touches it (else `FRONT_CASTER.drop` below the plate). */
+	groundY?: number
 ): CasterAnchor[] {
 	return mounts.map((b, i) => {
 		const f = frames[i];
@@ -150,11 +157,11 @@ export function frontCasterAnchors(
 			x: f ? f.pivot[0] : (b.min[0] + b.max[0]) / 2,
 			z: f ? f.pivot[2] : (b.min[2] + b.max[2]) / 2,
 			topY,
-			groundY: topY - FRONT_CASTER.drop,
+			groundY: groundY ?? topY - FRONT_CASTER.drop,
 			wheelR: FRONT_CASTER.wheelR,
 			wheelW: FRONT_CASTER.wheelW,
 			trail: 0,
-			...(f ? { up: f.up } : {})
+			...(f && f.up[1] < Math.cos((LEVEL_TOL_DEG * Math.PI) / 180) ? { up: f.up } : {})
 		};
 	});
 }

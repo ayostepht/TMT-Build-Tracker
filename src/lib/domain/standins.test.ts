@@ -28,6 +28,21 @@ describe('caster anchors', () => {
 		expect(a[0].topY - a[0].groundY).toBe(FRONT_CASTER.drop);
 		expect(a[0].topY - a[0].groundY).toBeGreaterThan(2 * a[0].wheelR);
 	});
+	it('puts the front caster tread on the given ground line', () => {
+		const a = frontCasterAnchors([mountR, mountL], [], -30);
+		expect(a.map((c) => c.groundY)).toEqual([-30, -30]);
+		const f = fitMountFrame(
+			[...Array(8).keys()].flatMap((i) => [
+				[-150 + i, 37.4, -90],
+				[-150 + i, 37.4, -80]
+			]) as [number, number, number][],
+			[[-145, -85.6]]
+		)!;
+		const [c] = frontCasterAnchors([mountR], [f], -30);
+		expect(c.up).toBeUndefined(); // seated (level) mount: the swivel axis stays vertical
+		expect(c.topY).toBeCloseTo(37.4, 6);
+		expect(c.groundY).toBe(-30);
+	});
 	it('fits the mount underside plane and hangs the caster from the pin hole', () => {
 		// Underside y = -5 - 1.2 (x - 175), sampled either side of a pin hole at (175, 10).
 		const under: [number, number, number][] = [];

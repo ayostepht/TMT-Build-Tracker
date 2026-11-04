@@ -441,12 +441,13 @@ export class ChairScene {
 
 	// ---- stand-ins (casters, harness) -------------------------------------------
 
-	private instanceBoxes(slug: string): Aabb[] {
+	/** World boxes, one per instance. `precise` boxes the vertices: a turned mesh's transformed local box is loose. */
+	private instanceBoxes(slug: string, precise = false): Aabb[] {
 		const THREE = this.THREE;
 		const out: Aabb[] = [];
 		for (const inst of this.instances.get(slug) ?? []) {
 			const box = new THREE.Box3();
-			for (const m of inst.meshes) box.expandByObject(m);
+			for (const m of inst.meshes) box.expandByObject(m, precise);
 			if (!box.isEmpty())
 				out.push({ min: box.min.toArray() as Aabb['min'], max: box.max.toArray() as Aabb['max'] });
 		}
@@ -454,9 +455,9 @@ export class ChairScene {
 	}
 
 	/**
-	 * Where a caster attaches to each visible instance of a mount: the mount is a thin tilted cap
-	 * with a pin hole, so fire rays up at it around its centre, fit the underside plane through
-	 * the first hits and take the rays that pass through as the hole.
+	 * Where a caster attaches to each visible instance of a mount: a plate with a pin hole inside a
+	 * downward wall, so fire rays up at it around its centre (inside the wall), fit the underside
+	 * plane through the first hits and take the rays that pass through as the hole.
 	 */
 	private mountFrames(slug: string): (MountFrame | null)[] {
 		const THREE = this.THREE;
@@ -515,7 +516,8 @@ export class ChairScene {
 		const known = (s: string) => this.placements.some((p) => p.slug === s);
 
 		// Casters (neutral grey, always drawn when their mounts are).
-		const wheels = this.instanceBoxes('tires');
+		// Precise: the tire segments are turned in 45 degree steps, which loosens their boxes by tens of mm.
+		const wheels = this.instanceBoxes('tires', true);
 		const ground = wheels.length ? Math.min(...wheels.map((b) => b.min[1])) : DEFAULT_GROUND_Y;
 		const rear = rearCasterAnchor(
 			boxesOf([
@@ -528,7 +530,7 @@ export class ChairScene {
 		);
 		const mountBoxes = boxesOf(['front-caster-mount']);
 		const anchors = [
-			...frontCasterAnchors(mountBoxes, this.mountFrames('front-caster-mount')),
+			...frontCasterAnchors(mountBoxes, this.mountFrames('front-caster-mount'), ground),
 			...(rear ? [rear] : [])
 		];
 		for (const a of anchors)

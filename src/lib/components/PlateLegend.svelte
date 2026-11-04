@@ -50,6 +50,8 @@
 							><span
 								class="tag"
 								title="Does not fit the bed in its usual orientation, so it is turned onto another face: {r.reoriented}. Check supports in your slicer."
+								><svg class="glyph" viewBox="-6 -6 12 12" aria-hidden="true"
+									><circle r="4.3" class="g-dash" /></svg
 								>re-oriented</span
 							>
 							{r.reoriented}</span
@@ -58,6 +60,11 @@
 					{#if r.tilted != null}
 						<span class="note"
 							><span class="tag" title="Turned {r.tilted}° so it fits the bed diagonally"
+								><svg class="glyph" viewBox="-6 -6 12 12" aria-hidden="true"
+									><path
+										class="g-arc"
+										d="M2.2 -3.7A4.3 4.3 0 1 1 -4.3 0M-6.1 -1.7L-4.3 0L-2.5 -1.7"
+									/></svg
 								>tilted {Math.round(r.tilted)}°</span
 							></span
 						>
@@ -156,6 +163,21 @@
 		font-weight: 600;
 		font-size: 11px;
 		line-height: 17px;
+	}
+	.glyph {
+		width: 12px;
+		height: 12px;
+		vertical-align: -2px;
+		margin-right: 3px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.6px;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	.g-dash {
+		stroke-dasharray: 3 2.2;
+		stroke-linecap: butt;
 	}
 	.tag.approx {
 		background: var(--line);
