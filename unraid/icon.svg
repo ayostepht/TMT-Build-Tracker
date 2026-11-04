@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+	<title>TMT Build Tracker</title>
+	<rect width="256" height="256" rx="48" fill="#1f6f78"/>
+	<g fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M72 60v82h96"/>
+		<path d="M72 100h64l24 42"/>
+	</g>
+	<circle cx="92" cy="186" r="20" fill="#fff"/>
+	<circle cx="172" cy="186" r="20" fill="#fff"/>
+	<circle cx="92" cy="186" r="7" fill="#1f6f78"/>
+	<circle cx="172" cy="186" r="7" fill="#1f6f78"/>
+</svg>

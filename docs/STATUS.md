@@ -69,6 +69,11 @@ Answered on 2026-11-04 (keep for context):
 ## Known gaps and backlog
 
 - Custom filaments (brand, type, color; reusable per workspace): in progress.
+- Queued: rename/reorder build tabs to Overview · Design · Print (was Parts: tracking, logs,
+  now printing) · Files (was Print: bed/printer, plates, own sliced file, export, kit status)
+  · Finish; wizard step "Print" → "Files"; redirects; e2e updates. Maintainer: "Print is
+  more about file generation and organization; Parts is the printing and tracking and
+  should be earlier".
 - Re-test the latest 3MF export in Elegoo Slicer (plates fit, wings, painted supports,
   cutter zone) after the margin/keep-out/group changes.
 - Live test of the printer supervisor with the Centauri Carbon during a real print
@@ -79,6 +84,10 @@ Answered on 2026-11-04 (keep for context):
 - Template copies: switching a build back to the built-in kit leaves the unused copy;
   designs from the base kit don't apply to a copy.
 - Rate limits: without a proxy a client can spoof `X-Forwarded-For`.
+- Open sign-up: anyone who can reach the app can register. Add a setting to disable it
+  (invite or SSO only).
+- GHCR images built before the `.gitignore` route fix lack `export.3mf`, `model.glb` and
+  `hardware.glb` routes (the folders were ignored); fixed and guarded in CI.
 - `BuildPrinter` has no `teamPrinterId` link back to the team printer.
 - Minor UI: 0.2–1.1 mm clearance on the Seat Center plate is geometric, not a bug.
 

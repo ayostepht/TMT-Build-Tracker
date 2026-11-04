@@ -6,19 +6,26 @@ services:
     ports:
       - '3000:3000'
     volumes:
+      # The container runs as uid 1000 (node): sudo chown 1000:1000 ./data first.
+      # On Unraid use the template in unraid/ instead (user 99:100).
       - ./data:/data
     environment:
       # Optional. Public URL users reach the app at (no trailing slash). Leave unset
       # to accept whichever address the request arrives on (http://<lan-ip>:3000 or
       # an https proxy that sends X-Forwarded-Proto). Set it when serving over https.
       # PUBLIC_URL: https://tmt.example.com
-      # Generate with: openssl rand -base64 32
+      # Required. Generate with: openssl rand -hex 32 (changing it later signs everyone
+      # out and makes saved printer access codes unreadable)
       BETTER_AUTH_SECRET: change-me
       # Optional. Comma-separated emails that are site admins (template kits, 3D models)
       # in addition to the first account created on this install.
       # ADMIN_EMAILS: you@example.com
-      # Optional OIDC single sign-on (all three required to enable)
+      # Optional OIDC single sign-on (all three required to enable; needs PUBLIC_URL)
       # OIDC_ISSUER: https://auth.example.com/application/o/tmt/
       # OIDC_CLIENT_ID: ""
       # OIDC_CLIENT_SECRET: ""
       # OIDC_PROVIDER_NAME: Authentik
+      # Optional. Largest slicer 3MF in MB (default 200); the image allows bodies up to 200 MB.
+      # MAX_3MF_MB: 200
+      # Optional. off = no background printer status connections.
+      # TMT_PRINTERS: off

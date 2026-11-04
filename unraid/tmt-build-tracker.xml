@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>tmt-build-tracker</Name>
+  <Repository>ghcr.io/ayostepht/tmt-build-tracker:latest</Repository>
+  <Registry>https://github.com/ayostepht/TMT-Build-Tracker/pkgs/container/tmt-build-tracker</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/ayostepht/TMT-Build-Tracker/issues</Support>
+  <Project>https://github.com/ayostepht/TMT-Build-Tracker</Project>
+  <Overview>Self-hosted build tracker for makers 3D-printing the MakeGood 3D TMT (toddler mobility trainer) chair. Teams ("chapters") plan, print, assemble and hand off builds together: parts and print plates, filament colors, print logs, a 3D color designer, 3MF export for Elegoo Slicer / OrcaSlicer / Bambu Studio, and optional read-only printer status.[br][br]MakeGood's CC0 kit files are bundled and install themselves on first start. The first account you create becomes the site admin.[br][br]REQUIRED before the first start: create the appdata folder and give it to the container user (Unraid terminal): mkdir -p /mnt/user/appdata/tmt-build-tracker &amp;&amp; chown 99:100 /mnt/user/appdata/tmt-build-tracker. Set BETTER_AUTH_SECRET (generate it with: openssl rand -hex 32) and keep a copy of it.[br][br]If the package is still private, run "docker login ghcr.io" in the Unraid terminal with a GitHub token that has read:packages (see the README).</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/ayostepht/TMT-Build-Tracker/main/unraid/tmt-build-tracker.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/ayostepht/TMT-Build-Tracker/main/unraid/icon.svg</Icon>
+  <ExtraParams>--user 99:100</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Create /mnt/user/appdata/tmt-build-tracker and run: chown 99:100 /mnt/user/appdata/tmt-build-tracker. The container runs as user 99:100 (nobody:users) and cannot write to a folder owned by root. Memory: about 250 MB at rest, about 650 MB while an admin converts STEP files, about 500 MB while print geometry is imported.</Requires>
+  <Config Name="WebUI port" Target="3000" Default="8420" Mode="tcp" Description="Port of the web interface on your server. The container always listens on 3000 inside; 8420 on the host is only a suggestion, pick any free port." Type="Port" Display="always" Required="true" Mask="false">8420</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/tmt-build-tracker" Mode="rw" Description="Database (tmt.db), the installed kit pack, 3D models, uploads and photos. About 150 MB after first start. The folder must be owned by 99:100 (chown 99:100 /mnt/user/appdata/tmt-build-tracker)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tmt-build-tracker</Config>
+  <Config Name="BETTER_AUTH_SECRET" Target="BETTER_AUTH_SECRET" Default="" Mode="" Description="REQUIRED. Signs sign-in sessions and encrypts stored printer access codes. Generate with: openssl rand -hex 32 (Unraid terminal). Keep it stable: changing it signs everyone out and makes saved printer access codes unreadable (re-enter them). The container stops with an error if this is empty." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="PUBLIC_URL" Target="PUBLIC_URL" Default="" Mode="" Description="Optional. The one address people use, without a trailing slash, for example https://tmt.example.com. Leave empty to use http://SERVER-IP:PORT directly (the app accepts whichever address a request arrives on). Set it when you serve the app through an https reverse proxy; required for single sign-on (OIDC). When set, any other address (such as the LAN IP) stops accepting sign-in and form posts." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="ADMIN_EMAILS" Target="ADMIN_EMAILS" Default="" Mode="" Description="Optional. Comma-separated email addresses that are site admins (kit admin and 3D model pages), in addition to the first account created on this install. Case-insensitive." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="OIDC_ISSUER" Target="OIDC_ISSUER" Default="" Mode="" Description="Optional single sign-on. Issuer URL of your OpenID Connect provider, for example https://auth.example.com/application/o/tmt/ (Authentik). OIDC_ISSUER, OIDC_CLIENT_ID and OIDC_CLIENT_SECRET must all be set to enable it, and PUBLIC_URL must be set too. Redirect URI to register: PUBLIC_URL/api/auth/callback/oidc" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="OIDC_CLIENT_ID" Target="OIDC_CLIENT_ID" Default="" Mode="" Description="Optional single sign-on. Client ID from your OpenID Connect provider." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="OIDC_CLIENT_SECRET" Target="OIDC_CLIENT_SECRET" Default="" Mode="" Description="Optional single sign-on. Client secret from your OpenID Connect provider." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="OIDC_PROVIDER_NAME" Target="OIDC_PROVIDER_NAME" Default="" Mode="" Description="Optional. Name on the sign-in button: Sign in with NAME. Empty means SSO." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="MAX_3MF_MB" Target="MAX_3MF_MB" Default="" Mode="" Description="Advanced. Largest slicer 3MF (in MB) the Plates tab accepts. Empty means 200. The image already allows request bodies up to 200 MB, so raising this above 200 also needs BODY_SIZE_LIMIT raised." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="TMT_PRINTERS" Target="TMT_PRINTERS" Default="" Mode="" Description="Advanced. Set to off to switch the background printer status connections off completely. Empty means on (the app only connects to printers you added, read-only)." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="KITPACK_DOWNLOAD" Target="KITPACK_DOWNLOAD" Default="" Mode="" Description="Advanced. Set to off to never download a kit pack from GitHub (the pack inside the image is used either way). Empty means a missing pack may be downloaded." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

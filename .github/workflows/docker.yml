@@ -18,6 +18,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Source routes must not be gitignored (e.g. export.3mf, model.glb directories)
+        run: |
+          test -n "$(git ls-files ':(literal)src/routes/api/builds/[id]/export.3mf/+server.ts')"
+          test -n "$(git ls-files ':(literal)src/routes/api/templates/[id]/model.glb/+server.ts')"
       - run: npm run check
       - run: npm run lint
       - run: npm test

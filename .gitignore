@@ -35,6 +35,10 @@ uploads/
 *.stp
 *.kitpack
 kitpacks/*.kitpack
+# Route directories whose names end in an ignored extension are source code.
+!src/routes/**/export.3mf/
+!src/routes/**/model.glb/
+!src/routes/**/hardware.glb/
 
 # Local notes
 CLAUDE.local.md
