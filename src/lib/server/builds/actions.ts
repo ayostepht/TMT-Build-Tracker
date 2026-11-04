@@ -237,6 +237,22 @@ export function addRun(db: Db, buildId: string, userId: string, body: unknown): 
 	if (!isObj(body)) bad('Invalid body');
 	let runId = '';
 	mutateBuild(db, buildId, userId, (tx, view, now) => {
+		const o = runOutcome(tx, view, now, buildId, userId, body);
+		runId = o.runId;
+		return o.outcome;
+	});
+	return runId;
+}
+
+function runOutcome(
+	tx: Db,
+	view: BuildView,
+	now: Date,
+	buildId: string,
+	userId: string | null,
+	body: Obj
+): { runId: string; outcome: Outcome } {
+	{
 		const plateNumber = optNum(body.plateNumber, 'plateNumber') ?? null;
 		if (plateNumber !== null && !view.plates.some((p) => p.number === plateNumber))
 			bad('Unknown plate');
@@ -276,21 +292,24 @@ export function addRun(db: Db, buildId: string, userId: string, body: unknown): 
 			})
 			.returning({ id: printRuns.id })
 			.get();
-		runId = row.id;
+		const runId = row.id;
 		return {
-			kind: 'run.add',
-			payload: {
-				runId,
-				plateNumber,
-				partSlug,
-				partSlugs,
-				grams: input.grams,
-				result: input.result
-			},
-			patches: applyRun(view, input, now)
+			runId,
+			outcome: {
+				kind: 'run.add',
+				payload: {
+					runId,
+					plateNumber,
+					partSlug,
+					partSlugs,
+					grams: input.grams,
+					result: input.result,
+					...(userId === null ? { auto: true } : {})
+				},
+				patches: applyRun(view, input, now)
+			}
 		};
-	});
-	return runId;
+	}
 }
 
 export function deleteRun(
@@ -679,5 +698,83 @@ export function setPrinter(db: Db, buildId: string, userId: string, body: unknow
 				? { name: printer.name, bedX: printer.bedX, bedY: printer.bedY, mmSlots: printer.mmSlots }
 				: { name: null }
 		};
+	});
+}
+
+// ---- Milestone 7: printer jobs and Spoolman (appended)
+
+/**
+ * Like `mutateBuild` for changes the server makes on its own (a printer finished a job):
+ * no permission check, the activity row has no user. `viewAs` is any member of the team and
+ * is only used to load the view. `payload.by` names the source for the activity sentence.
+ */
+export function mutateBuildSystem(
+	db: Db,
+	buildId: string,
+	viewAs: string,
+	by: string,
+	fn: (tx: Db, view: BuildView, now: Date) => Outcome
+): Outcome {
+	const now = new Date();
+	const out = db.transaction((txRaw) => {
+		const tx = txRaw as unknown as Db;
+		const view = loadBuildView(tx, buildId, viewAs);
+		if (!view) throw new ApiError(404, 'Not found');
+		const o = fn(tx, view, now);
+		if (o.patches?.length) applyPatches(tx, buildId, o.patches, now);
+		if (REARRANGE_KINDS.has(o.kind)) autoRearrangeBuild(tx, buildId, viewAs);
+		tx.insert(activity)
+			.values({
+				buildId,
+				userId: null,
+				kind: o.kind,
+				payload: { ...(o.payload ?? {}), by },
+				at: now
+			})
+			.run();
+		return o;
+	});
+	emitBuildEvent(buildId, { type: 'changed', kind: out.kind, by, at: now.toISOString() });
+	return out;
+}
+
+/** Log a run on behalf of a printer (auto-log of a finished job). Returns the run id. */
+export function addRunSystem(
+	db: Db,
+	buildId: string,
+	viewAs: string,
+	by: string,
+	body: Obj
+): string {
+	let runId = '';
+	mutateBuildSystem(db, buildId, viewAs, by, (tx, view, now) => {
+		const o = runOutcome(tx, view, now, buildId, null, body);
+		runId = o.runId;
+		return o.outcome;
+	});
+	return runId;
+}
+
+/** Link (or clear with null) a build filament slot to a Spoolman spool: `{ spoolId: number | null }`. */
+export function linkSpool(
+	db: Db,
+	buildId: string,
+	userId: string,
+	role: string,
+	body: unknown
+): void {
+	if (!isObj(body) || !('spoolId' in body))
+		bad('spoolId is required (a number, or null to unlink)');
+	const id = body.spoolId;
+	if (id !== null && (typeof id !== 'number' || !Number.isInteger(id) || id < 1))
+		bad('spoolId must be a whole number');
+	const name = optStr(body.spoolName, 'spoolName', 200) ?? null;
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		if (!view.filaments.some((f) => f.key === role)) throw new ApiError(404, 'Unknown filament');
+		tx.update(buildFilaments)
+			.set({ spoolmanSpoolId: id as number | null })
+			.where(and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, role)))
+			.run();
+		return { kind: 'filament.spool', payload: { role, spoolId: id, spoolName: name } };
 	});
 }

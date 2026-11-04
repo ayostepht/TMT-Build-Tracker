@@ -1,0 +1,242 @@
+import { createServer, type Server } from 'node:http';
+import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
+import { expect, test } from './fixtures';
+import { ownerWithBuild } from './helpers';
+
+const SHOTS = 'data/shots-m7';
+const FILE = 'Plate 1 - Handle Left.gcode';
+
+let mock: MockSdcp;
+let spoolman: Server;
+let spoolmanPort = 0;
+let used = 100;
+
+test.beforeAll(async () => {
+	mock = new MockSdcp();
+	await mock.start();
+	spoolman = createServer((req, res) => {
+		let body = '';
+		req.on('data', (c) => (body += c));
+		req.on('end', () => {
+			res.setHeader('content-type', 'application/json');
+			const spool = (id: number, name: string, hex: string, mat: string, usedG: number) => ({
+				id,
+				archived: false,
+				used_weight: usedG,
+				initial_weight: 1000,
+				remaining_weight: 1000 - usedG,
+				filament: { name, material: mat, color_hex: hex, vendor: { name: 'Overture' } }
+			});
+			if (req.url === '/api/v1/info') return res.end('{"version":"0.22.1"}');
+			if (req.url?.startsWith('/api/v1/spool?'))
+				return res.end(
+					JSON.stringify([
+						spool(1, 'Cobalt Blue', '2b3f9e', 'PETG', used),
+						spool(2, 'Signal Orange', 'f26b1d', 'PETG', 20),
+						spool(3, 'Black', '151515', 'TPU', 300)
+					])
+				);
+			if (req.method === 'GET' && req.url === '/api/v1/spool/1')
+				return res.end(JSON.stringify(spool(1, 'Cobalt Blue', '2b3f9e', 'PETG', used)));
+			if (req.method === 'PATCH' && /\/api\/v1\/spool\/1$/.test(req.url ?? ''))
+				used = JSON.parse(body).used_weight;
+			if (req.method === 'PUT' && /\/api\/v1\/spool\/1\/use$/.test(req.url ?? ''))
+				used += JSON.parse(body).use_weight;
+			res.end('{}');
+		});
+	});
+	await new Promise<void>((r) => spoolman.listen(0, '127.0.0.1', r));
+	spoolmanPort = (spoolman.address() as { port: number }).port;
+});
+test.afterAll(async () => {
+	await mock.stop();
+	await new Promise((r) => spoolman.close(() => r(null)));
+});
+
+test('printer: add, test connection, live status, job links to a plate, finish, log prompt', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'printers');
+
+	// Printers page and the add form.
+	await page.goto(`${chapterUrl}/printers`);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByRole('heading', { name: 'Printers', level: 1 })).toBeVisible();
+	await page.getByTestId('add-printer').click();
+	await page.getByLabel('Name', { exact: true }).fill('Shop Centauri');
+	await page.getByTestId('pf-host').fill('127.0.0.1');
+	await page.getByTestId('pf-port').fill(String(mock.port));
+	await page.getByLabel('Model (optional)').selectOption({ label: 'Centauri Carbon' });
+
+	// Test connection shows a live snapshot (idle printer).
+	await page.getByTestId('pf-test').click();
+	await expect(page.getByTestId('test-result')).toContainText('Connected', { timeout: 20_000 });
+	await expect(page.getByTestId('test-result').getByTestId('printer-state')).toHaveText('Idle');
+	await page.getByTestId('pf-save').click();
+	const card = page.getByTestId('printer-card').first();
+	await expect(card).toContainText('Shop Centauri');
+	await expect(card.getByTestId('printer-state')).toHaveText('Idle', { timeout: 20_000 });
+
+	// A secret never comes back: the API lists no secret fields, only that they exist.
+	const list = await (await page.request.get(`/api/printers?org=${await orgId(page)}`)).json();
+	expect(JSON.stringify(list)).not.toMatch(/secretEnc|accessCode|apiKey/);
+
+	// Printer starts the print: card goes live.
+	mock.printing(FILE, 12);
+	await expect(card.getByTestId('printer-state')).toHaveText('Printing', { timeout: 15_000 });
+	await expect(card.getByTestId('printer-progress')).toContainText('12%');
+	await expect(card.getByTestId('printer-file')).toHaveText(FILE);
+	await page.screenshot({ path: `${SHOTS}/printers-390-light.png`, fullPage: true });
+
+	// Build page: the job linked itself to plate 1 (file name) and shows live progress.
+	await page.goto(`/builds/${buildId}`);
+	const live = page.getByTestId('printer-live');
+	await expect(live).toBeVisible({ timeout: 15_000 });
+	await expect(live.getByTestId('live-pct')).toHaveText('12%');
+	await expect(live.getByTestId('live-layer')).toContainText('Layer 48 / 400');
+	mock.printing(FILE, 55);
+	await expect(live.getByTestId('live-pct')).toHaveText('55%', { timeout: 15_000 });
+	await expect(live.getByTestId('live-left')).toContainText('min left');
+	await live.scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS}/now-printing-390-light.png` });
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.screenshot({ path: `${SHOTS}/now-printing-390-dark.png` });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.screenshot({ path: `${SHOTS}/now-printing-1440-dark.png` });
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.screenshot({ path: `${SHOTS}/now-printing-1440-light.png` });
+
+	// Finish: a "Confirm print log" prompt, pre-filled; logging it creates the run.
+	mock.set({ printStatus: 9, machineStatus: [0], progress: 100 });
+	const prompt = page.getByTestId('confirm-print-log');
+	await expect(prompt).toBeVisible({ timeout: 15_000 });
+	await expect(prompt.getByTestId('confirm-result')).toHaveValue('Success');
+	await page.screenshot({ path: `${SHOTS}/confirm-log-1440-light.png` });
+	await prompt.getByTestId('confirm-grams').fill('38');
+	await prompt.getByTestId('confirm-log').click();
+	await expect(prompt).toBeHidden({ timeout: 15_000 });
+	await expect(page.locator('body')).toContainText('logged a successful print of plate 1');
+	await expect(page.locator('body')).toContainText('Shop Centauri started printing plate 1');
+
+	// Unlinked file: offers "Link to plate…".
+	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	await page.waitForTimeout(500);
+	mock.printing('benchy.gcode', 3);
+	const link = page.getByTestId('link-plate');
+	await expect(link).toBeVisible({ timeout: 15_000 });
+	await link.selectOption({ index: 2 });
+	await expect(page.getByTestId('printer-live')).toBeVisible({ timeout: 15_000 });
+	mock.set({ printStatus: 8, machineStatus: [0] }); // stopped
+	await expect(page.getByTestId('confirm-print-log')).toContainText('was stopped', {
+		timeout: 15_000
+	});
+	await page.getByRole('button', { name: 'Dismiss' }).click();
+	await expect(page.getByTestId('confirm-print-log')).toBeHidden();
+	mock.set({ printStatus: 0, machineStatus: [0], file: '' });
+
+	// Auto-log: turn it on for the team, run another plate-1 print to the end.
+	await page.goto(chapterUrl);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('autolog').check();
+	await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+	const sl = await page.request.patch(`/api/builds/${buildId}/plates/1`, {
+		data: { slicerGrams: 44 }
+	});
+	expect(sl.ok()).toBe(true);
+	mock.printing('TMT-Test-chair-plate-1.3mf', 20, { ticks: 2 * 3600, totalTicks: 7200 });
+	await page.waitForTimeout(1500);
+	mock.set({ printStatus: 9, machineStatus: [0], progress: 100 });
+	await page.goto(`/builds/${buildId}`);
+	await expect(page.locator('body')).toContainText('logged automatically', { timeout: 20_000 });
+	const runs = { view: await (await page.request.get(`/api/builds/${buildId}/view`)).json() };
+	const auto = runs.view.runs.filter((r: { note: string }) => r.note.includes('automatically'));
+	expect(auto).toHaveLength(1);
+	expect(auto[0]).toMatchObject({
+		result: 'Success',
+		grams: 44,
+		hours: 2,
+		printer: 'Shop Centauri'
+	});
+
+	// Remove the printer again (team-level cleanup).
+	await page.goto(`${chapterUrl}/printers`);
+	await page.getByRole('button', { name: 'Remove…' }).click();
+	await page.getByRole('button', { name: 'Remove for good' }).click();
+	await expect(page.getByTestId('printer-card')).toHaveCount(0);
+});
+
+test('spoolman: link a spool to a filament, see it on the tiles, grams deducted on a logged run', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	used = 100;
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'spoolman');
+
+	// Not configured yet.
+	await page.goto(`/builds/${buildId}/settings`);
+	await expect(page.getByTestId('spoolman-off')).toBeVisible();
+
+	// Team page: set the address, test, turn on auto-deduct.
+	await page.goto(chapterUrl);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('spoolman-url').fill(`127.0.0.1:${spoolmanPort}`);
+	await page.getByTestId('spoolman-save').click();
+	await expect(page.getByTestId('spoolman-deduct')).toBeEnabled();
+	await page.getByTestId('spoolman-deduct').check();
+	await page.getByRole('button', { name: 'Test Spoolman' }).click();
+	await expect(page.getByRole('status').filter({ hasText: '3 spools' })).toBeVisible();
+
+	// Build settings: link the first filament to spool "Cobalt Blue".
+	await page.goto(`/builds/${buildId}/settings`);
+	const row = page.locator('.srow').first();
+	await row.getByTestId('pick-spool').click();
+	await page.getByTestId('spool-search').fill('cobalt');
+	await page.getByTestId('spool-option').first().scrollIntoViewIfNeeded();
+	await page.getByTestId('spool-link').scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS}/spoolman-link-390-light.png` });
+	await page.getByTestId('spool-option').first().click();
+	await expect(row).toContainText('Cobalt Blue');
+	await expect(row).toContainText('900 g left');
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.getByTestId('spool-link').scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS}/spoolman-link-390-dark.png` });
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.getByTestId('spool-link').scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS}/spoolman-link-1440-light.png` });
+
+	// Overview tile shows remaining grams.
+	await page.goto(`/builds/${buildId}`);
+	await expect(page.getByTestId('spool-remaining').first()).toContainText('900 g left');
+	await page.screenshot({ path: `${SHOTS}/spoolman-tiles-1440-light.png`, fullPage: true });
+
+	// Logging a run deducts from the spool (Handle Left is on the first role).
+	const v0 = await (await page.request.get(`/api/builds/${buildId}/view`)).json();
+	const role = v0.parts.find((p: { slug: string }) => p.slug === 'handle-left').role;
+	const lk = await page.request.put(`/api/builds/${buildId}/filaments/${role}/spool`, {
+		data: { spoolId: 1, spoolName: 'Cobalt Blue' }
+	});
+	expect(lk.ok()).toBe(true);
+	const res = await page.request.post(`/api/builds/${buildId}/runs`, {
+		data: { plateNumber: 1, date: '2026-11-03', result: 'Success', grams: 60, hours: 2 }
+	});
+	expect((await res.json()).spoolmanWarning).toBeUndefined();
+	expect(used).toBeGreaterThan(100);
+	const first = used;
+	// Deleting the run puts it back.
+	const view = await (await page.request.get(`/api/builds/${buildId}/view`)).json();
+	const runId = view.runs[view.runs.length - 1].id;
+	await page.request.delete(`/api/builds/${buildId}/runs/${runId}`, {
+		headers: { origin: new URL(page.url()).origin }
+	});
+	await expect.poll(() => used).toBeLessThan(first);
+});
+
+async function orgId(page: import('@playwright/test').Page): Promise<string> {
+	const r = await page.request.get('/api/auth/organization/list');
+	const orgs = (await r.json()) as { id: string; metadata?: { personal?: boolean } }[];
+	return orgs.find((o) => !o.metadata?.personal)?.id ?? orgs[0].id;
+}

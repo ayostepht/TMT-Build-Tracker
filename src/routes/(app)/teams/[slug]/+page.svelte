@@ -6,6 +6,7 @@
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
+	import TeamIntegrations from '#lib/components/TeamIntegrations.svelte';
 
 	let { data, form }: PageProps = $props();
 	let templateId = $state('');
@@ -84,6 +85,8 @@
 			<button class="btn primary">Create build</button>
 		</form>
 	{/if}
+
+	<TeamIntegrations orgId={data.team.id} slug={data.team.slug} />
 
 	{#if data.team.personal}
 		<div class="card stack">

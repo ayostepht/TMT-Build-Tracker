@@ -19,7 +19,7 @@ export class BuildCtx {
 	/** ms timestamp, ticked every 30 s so elapsed/remaining timers move. */
 	now = $state(Date.now());
 	/** Guide viewer: null = closed; slug null = whole guide. */
-	guide = $state<{ slug: string | null } | null>(null);
+	guide = $state<{ slug: string | null; page?: number } | null>(null);
 
 	constructor(view: BuildView) {
 		this.view = view;
@@ -56,6 +56,11 @@ export class BuildCtx {
 			await this.refresh();
 			return false;
 		}
+	}
+
+	/** Open the whole guide at one of our guide page numbers. */
+	openGuidePage(page: number) {
+		this.guide = { slug: null, page };
 	}
 
 	openGuide(slug: string | null) {

@@ -45,6 +45,16 @@ these libraries ship any MakeGood data.
 - **meshoptimizer** (MIT, https://github.com/zeux/meshoptimizer): geometry compression
   (EXT_meshopt_compression).
 
+## Guide import (npm dependencies)
+
+The kit admin imports each install's own MakeGood guide PDF in the browser. Neither library ships
+any MakeGood data.
+
+- **pdf.js / pdfjs-dist** (Apache-2.0, https://github.com/mozilla/pdf.js): renders the guide PDF's
+  pages to images in the admin's browser (the worker is served by the app's own bundle).
+- **fflate** (MIT, https://github.com/101arrowz/fflate): reads the guide PDF out of a MakeGood 3MF
+  (a zip) in the browser.
+
 ## Fonts
 
 `static/fonts/` bundles latin-subset woff2 files of Barlow Condensed (500, 600,

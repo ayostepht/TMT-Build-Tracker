@@ -2,6 +2,7 @@
 	import { nowPrinting } from '#lib/domain/index.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import NowCard from './NowCard.svelte';
+	import PrinterJobs from './PrinterJobs.svelte';
 
 	const ctx = getBuildCtx();
 	const items = $derived(nowPrinting(ctx.view));
@@ -15,6 +16,7 @@
 			>{partCount ? `${partCount} part${partCount > 1 ? 's' : ''} on the printer` : ''}</span
 		>
 	</div>
+	<PrinterJobs />
 	<div class="now-cards">
 		{#each items as item (item.plate)}
 			<NowCard {item} />

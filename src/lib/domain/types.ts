@@ -131,7 +131,7 @@ export interface GuidePage {
 	page: number;
 	title: string;
 	sort: number;
-	hasImage: boolean; // false until guide images are imported (template admin, later milestone)
+	hasImage: boolean; // true once a site admin imported the guide and mapped this page to an image
 }
 
 export interface HardwareItem {
@@ -222,6 +222,66 @@ export interface BuildView {
 	members: { userId: string; name: string; role: TeamRole }[];
 	/** Printer chosen for plate planning; null until the user picks one. */
 	printer: BuildPrinter | null;
+	/** Assembly checklist: the steps that apply to this build's variant choices, plus its progress. */
+	assembly: BuildAssembly;
+	/** Photos of the build (progress, finished chair, handoff), oldest first. Files via `/api/builds/[id]/photos/[photoId]`. */
+	photos: BuildPhoto[];
+	/** Handoff record; null until someone saves the Handoff form. */
+	handoff: HandoffRecord | null;
+}
+
+/** One assembly step for a build (template step, filtered by variant choices; `parts` only lists active parts). */
+export interface AssemblyStep {
+	key: string; // '<section>.<name>'; never contains ':'
+	section: string; // display name derived from the key prefix
+	title: string;
+	description: string;
+	guidePage: number | null;
+	parts: string[]; // active part slugs
+	hardware: { name: string; qty?: number }[];
+	checks: { key: string; text: string }[];
+	safety: boolean; // the final safety-check step (its checks feed the handoff)
+}
+
+/** Progress on one item: a step (`<step>`), a check (`<step>:check:<key>`) or a hardware tick (`<step>:hw:<name>`). */
+export interface AssemblyItem {
+	done: boolean;
+	note: string;
+	doneBy: string | null; // user id
+	doneByName: string | null;
+	doneAt: string | null; // ISO
+}
+
+export interface BuildAssembly {
+	steps: AssemblyStep[]; // in kit order
+	items: Record<string, AssemblyItem>; // by item key; missing = untouched
+}
+
+export const PHOTO_KINDS = ['progress', 'finished', 'handoff'] as const;
+export type PhotoKind = (typeof PHOTO_KINDS)[number];
+
+export interface BuildPhoto {
+	id: string;
+	kind: PhotoKind;
+	caption: string;
+	width: number | null;
+	height: number | null;
+	createdBy: string | null;
+	createdByName: string | null;
+	createdAt: string; // ISO
+}
+
+/** The handoff form. `contact` is team-only: it never appears on the printable summary. */
+export interface HandoffRecord {
+	recipientName: string | null;
+	organization: string | null;
+	contact: string | null;
+	handedOffOn: string | null; // YYYY-MM-DD
+	location: string | null;
+	notes: string;
+	safetyChecked: boolean;
+	updatedBy: string | null;
+	updatedAt: string | null;
 }
 
 /** A change to one part's state produced by a domain action; the server persists it. */

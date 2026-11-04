@@ -2,8 +2,10 @@
 	import NowPrinting from '#lib/components/NowPrinting.svelte';
 	import FilamentTiles from '#lib/components/FilamentTiles.svelte';
 	import ActivityList from '#lib/components/ActivityList.svelte';
+	import PhaseSuggest from '#lib/components/PhaseSuggest.svelte';
 </script>
 
+<PhaseSuggest />
 <NowPrinting />
 <FilamentTiles />
 <ActivityList />

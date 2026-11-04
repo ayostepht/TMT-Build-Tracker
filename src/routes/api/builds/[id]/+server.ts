@@ -1,5 +1,6 @@
 import { getDb } from '#lib/server/db/index.ts';
 import { deleteBuild, updateBuild } from '#lib/server/builds/actions.ts';
+import { removeBuildPhotoFiles } from '#lib/server/builds/photos.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import type { RequestHandler } from './$types';
 
@@ -9,4 +10,7 @@ export const PATCH: RequestHandler = (event) =>
 	);
 
 export const DELETE: RequestHandler = (event) =>
-	respond(() => deleteBuild(getDb(), event.params.id, requireUserId(event)));
+	respond(async () => {
+		deleteBuild(getDb(), event.params.id, requireUserId(event));
+		await removeBuildPhotoFiles(event.params.id);
+	});

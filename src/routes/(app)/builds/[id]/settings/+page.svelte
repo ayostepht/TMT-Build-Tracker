@@ -16,6 +16,7 @@
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PrinterPicker from '#lib/components/PrinterPicker.svelte';
+	import SpoolLink from '#lib/components/SpoolLink.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
@@ -180,6 +181,7 @@
 			>
 		</div>
 	{/each}
+	<SpoolLink />
 </section>
 
 <MoveToChapter />

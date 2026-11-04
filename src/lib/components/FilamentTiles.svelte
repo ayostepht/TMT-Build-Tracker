@@ -3,6 +3,7 @@
 	import { updateFilament } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
+	import SpoolRemaining from './SpoolRemaining.svelte';
 
 	const ctx = getBuildCtx();
 	const stats = $derived(filamentStats(ctx.view));
@@ -56,6 +57,7 @@
 					onchange={(e) => saveSpools(s.role, e.currentTarget.value)}
 				/>
 			</div>
+			<SpoolRemaining role={s.role} />
 			<div class="verdict" class:ok={spare >= 0} class:short={spare < 0}>
 				{#if spare >= 0}About {fmt(spare)} g spare{:else}Short about {fmt(-spare)} g. Get {Math.ceil(
 						-spare / 1000

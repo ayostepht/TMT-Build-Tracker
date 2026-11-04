@@ -31,8 +31,8 @@ function recomputedText(v: unknown, part: (slug: unknown) => string): string {
  * generic line so old or future rows never break the list.
  */
 export function describeActivity(a: ActivityItem, view: Names): string {
-	const who = a.userName ?? 'Someone';
 	const p: Obj = a.payload ?? {};
+	const who = a.userName ?? (typeof p.by === 'string' && p.by ? p.by : 'Someone');
 	const part = (slug: unknown) => view.parts.find((x) => x.slug === slug)?.name ?? 'a part';
 	const parts = (slugs: unknown) =>
 		Array.isArray(slugs) && slugs.length ? list(slugs.map((s) => part(s))) : 'some parts';
@@ -154,6 +154,31 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			const n = num(p.convertedRuns) ?? 0;
 			return `${who} organized the plates from ${str(p.fileName) ?? 'an uploaded 3MF'} (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
 		}
+		case 'printer.job.start': {
+			const pr = str(p.printer) ?? 'the printer';
+			const plate = num(p.plateNumber);
+			return plate !== null
+				? `${pr} started printing plate ${plate}${str(p.fileName) ? ` (${str(p.fileName)})` : ''}`
+				: `${pr} started printing ${str(p.fileName) ?? 'a file'}`;
+		}
+		case 'printer.job.done': {
+			const pr = str(p.printer) ?? 'The printer';
+			const plate = num(p.plateNumber);
+			const target = plate !== null ? `plate ${plate}` : (str(p.fileName) ?? 'a print');
+			const g = num(p.grams);
+			return p.auto
+				? `${pr} finished ${target}; the print was logged automatically${g !== null ? ` (${fmt(g)} g)` : ''}`
+				: `${pr} finished ${target}`;
+		}
+		case 'printer.job.link': {
+			const plate = num(p.plateNumber);
+			return `${who} linked ${str(p.printer) ?? 'a printer'}'s print to ${plate !== null ? `plate ${plate}` : 'a plate'}`;
+		}
+		case 'filament.spool': {
+			return p.spoolId == null
+				? `${who} unlinked the Spoolman spool from ${fil(p.role)}`
+				: `${who} linked ${fil(p.role)} to Spoolman spool #${num(p.spoolId)}${str(p.spoolName) ? ` (${str(p.spoolName)})` : ''}`;
+		}
 		case 'filament.spools': {
 			const s = num(p.spools);
 			return s === null
@@ -202,7 +227,47 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 				? `An administrator imported ${what}`
 				: `${who} imported ${what}`;
 		}
+		case 'assembly.item': {
+			const step = str(p.step) ?? 'a step';
+			const text = str(p.text) ?? step;
+			const kind = str(p.item) ?? 'step';
+			const note = str(p.note);
+			const parts: string[] = [];
+			if (typeof p.done === 'boolean') {
+				if (kind === 'step')
+					parts.push(p.done ? `marked step "${step}" done` : `reopened step "${step}"`);
+				else if (kind === 'check')
+					parts.push(p.done ? `ticked "${text}" in "${step}"` : `unticked "${text}" in "${step}"`);
+				else
+					parts.push(
+						p.done ? `checked off ${text} in "${step}"` : `unchecked ${text} in "${step}"`
+					);
+			}
+			if (note)
+				parts.push(
+					note === 'cleared' ? `removed a note on "${step}"` : `added a note on "${step}"`
+				);
+			return `${who} ${parts.length ? list(parts) : `changed "${step}"`}`;
+		}
+		case 'handoff.update': {
+			const fields = Array.isArray(p.fields) ? p.fields.filter((f) => typeof f === 'string') : [];
+			return fields.length === 1 && fields[0] === 'safetyChecked'
+				? `${who} updated the safety sign-off`
+				: `${who} updated the handoff details`;
+		}
+		case 'build.handoff':
+			return str(p.organization)
+				? `${who} marked the chair as handed off to ${str(p.organization)}`
+				: `${who} marked the chair as handed off`;
+		case 'photo.add':
+			return `${who} added a ${photoKind(p.photoKind)} photo`;
+		case 'photo.delete':
+			return `${who} removed a ${photoKind(p.photoKind)} photo`;
 		default:
 			return `${who} made a change (${a.kind})`;
 	}
+}
+
+function photoKind(v: unknown): string {
+	return v === 'finished' ? 'finished-chair' : v === 'handoff' ? 'handoff' : 'progress';
 }

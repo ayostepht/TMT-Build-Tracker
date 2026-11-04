@@ -10,3 +10,6 @@ export * from './logrun.ts';
 export * from './recompute.ts';
 export * from './variants.ts';
 export * from './design.ts';
+export * from './assembly.ts';
+export * from './printer-match.ts';
+export * from './spool-split.ts';

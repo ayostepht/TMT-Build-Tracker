@@ -2460,3 +2460,239 @@ tmtTemplate.printFootprints = [
 		]
 	}
 ];
+
+// Assembly checklist: our own wording, in the kit's build order (guide page numbers follow `guidePages`).
+tmtTemplate.assemblySteps = [
+	{
+		key: 'frame.wing',
+		title: 'Wings onto the wheel mounts',
+		description:
+			'Start each side by seating the wing on its wheel mount and securing it with the frame pins. Do the left and right sides the same way.',
+		guidePage: 14,
+		parts: ['wing-left', 'wing-right', 'wheel-mount-left', 'wheel-mount-right', 'connectors'],
+		checks: [
+			{
+				key: 'pin-fit',
+				text: 'Fit test first: print one frame pin and a washer and check they slide into the joint before printing the rest'
+			},
+			{ key: 'flush', text: 'Wing sits flush against the wheel mount with no gap' }
+		]
+	},
+	{
+		key: 'frame.storage',
+		title: 'Storage onto each side',
+		description: 'Fit the storage pieces onto the sides of the frame.',
+		guidePage: 14,
+		parts: ['storage-left', 'storage-right'],
+		checks: [{ key: 'seated', text: 'Both storage pieces are fully seated' }]
+	},
+	{
+		key: 'frame.handle',
+		title: 'Handles onto the frame',
+		description:
+			'Tap each handle into place lightly; do not hammer it. Look at the front edge to be sure the print did not warp.',
+		guidePage: 14,
+		parts: ['handle-left', 'handle-right'],
+		checks: [
+			{ key: 'flat', text: 'Handle front sits flat (no warp gap)' },
+			{ key: 'gentle', text: 'Tapped in lightly, nothing cracked' }
+		]
+	},
+	{
+		key: 'frame.rear-casters',
+		title: 'Rear caster mounts',
+		description:
+			'Attach the rear caster mounts (kit or McMaster version, whichever you chose) and fit the casters.',
+		guidePage: 15,
+		parts: [
+			'rear-caster-left',
+			'rear-caster-right',
+			'rear-caster-left-mcmaster',
+			'rear-caster-right-mcmaster',
+			'connectors'
+		],
+		hardware: [{ name: 'Casters' }, { name: 'Nuts' }],
+		checks: [{ key: 'swivel', text: 'Both rear casters swivel and roll freely' }]
+	},
+	{
+		key: 'frame.front-casters',
+		title: 'Front caster mounts',
+		description:
+			'The front caster mounts go underneath the wheel mounts. Tap each caster in lightly, then lock it with its pin lock.',
+		guidePage: 16,
+		parts: ['front-caster-mount', 'connectors'],
+		hardware: [{ name: 'Casters' }],
+		checks: [
+			{ key: 'locked', text: 'Caster pin and pin lock are seated on both sides' },
+			{ key: 'swivel', text: 'Front casters swivel and roll freely' }
+		]
+	},
+	{
+		key: 'frame.footrest-one',
+		title: 'Footrest (one piece)',
+		description:
+			'Skip joining halves. Attach the one-piece footrest and tighten its bolts evenly on both sides.',
+		guidePage: 17,
+		parts: ['footrest'],
+		hardware: [{ name: 'Footrest bolts' }, { name: 'Nuts' }],
+		checks: [{ key: 'slits', text: 'Bolts tightened until visible in the indicator slits' }],
+		when: { group: 'footrest', option: 'one-piece' }
+	},
+	{
+		key: 'frame.footrest-two',
+		title: 'Footrest (two pieces)',
+		description:
+			'Join the front and rear halves, then attach the footrest to the frame and tighten the bolts.',
+		guidePage: 17,
+		parts: ['footrest-front', 'footrest-rear'],
+		hardware: [{ name: 'Footrest bolts' }, { name: 'Nuts' }],
+		checks: [
+			{ key: 'joint', text: 'The halves meet flush with no step at the joint' },
+			{ key: 'slits', text: 'Bolts tightened until visible in the indicator slits' }
+		],
+		when: { group: 'footrest', option: 'two-piece' }
+	},
+	{
+		key: 'frame.seat-back',
+		title: 'Seat back and seat center',
+		description:
+			'Assemble the seat back with its logos facing the rear of the chair, then set the seat center in and pin everything.',
+		guidePage: 18,
+		parts: ['seat-back-top', 'seat-back-bottom', 'seat-center', 'connectors'],
+		checks: [
+			{ key: 'logos', text: 'Logos face the rear' },
+			{ key: 'pins', text: 'All pins are fully seated' }
+		]
+	},
+	{
+		key: 'wheels.tires',
+		title: 'Tires onto the rim halves',
+		description:
+			'Put a tire segment on each rim half before the halves are joined. The handgrips end up on the outside of the wheel.',
+		guidePage: 19,
+		parts: ['tires', 'rims-1-4', 'rims-2-3', 'rims-small-1-4', 'rims-small-2-3'],
+		checks: [{ key: 'before-join', text: 'Tires are on every rim half before joining' }]
+	},
+	{
+		key: 'wheels.join',
+		title: 'Join the rim halves',
+		description: 'Join the two halves of each wheel with the wheel pins.',
+		guidePage: 19,
+		parts: ['rims-1-4', 'rims-2-3', 'rims-small-1-4', 'rims-small-2-3', 'connectors'],
+		checks: [
+			{ key: 'round', text: 'Each wheel is round with no gap between the halves' },
+			{ key: 'grips', text: 'Handgrips face outward' }
+		]
+	},
+	{
+		key: 'wheels.mount',
+		title: 'Mount the wheels',
+		description:
+			'Slide the wheel block, bearing spacer and washer onto each axle bolt, fit the wheel, then finish with the hub cap.',
+		guidePage: 20,
+		parts: ['hub-caps', 'connectors'],
+		hardware: [{ name: 'Axle bolts' }, { name: 'Bearings' }, { name: 'Nuts' }],
+		checks: [
+			{ key: 'spin', text: 'Each wheel spins freely without rubbing' },
+			{ key: 'caps', text: 'Hub caps are seated' }
+		]
+	},
+	{
+		key: 'seat.cushions',
+		title: 'Seat cushions',
+		description: 'Stick the base and back cushions in place with the velcro.',
+		guidePage: 23,
+		parts: ['cushion-top', 'cushion-base'],
+		hardware: [{ name: 'Sticky-back velcro' }],
+		checks: [{ key: 'stay', text: 'Cushions stay put when pressed and pulled' }],
+		when: { group: 'seat', option: 'cushions' }
+	},
+	{
+		key: 'seat.bucket',
+		title: 'Foaming bucket seat',
+		description: 'Set the printed bucket seat into the frame in place of the two cushions.',
+		parts: ['bucket-seat'],
+		checks: [{ key: 'fit', text: 'Seat sits firmly in the frame and does not rock' }],
+		when: { group: 'seat', option: 'bucket-seat' }
+	},
+	{
+		key: 'extras.headrest',
+		title: 'Headrest',
+		description:
+			'Install the headrest before the push handle if you are building both. Fix the mount with the brace and bolt, then add the soft cushion.',
+		guidePage: 22,
+		parts: ['headrest-mount', 'headrest-brace', 'headrest-bolt', 'soft-headrest'],
+		hardware: [{ name: 'Sticky-back velcro' }],
+		checks: [
+			{ key: 'bolt', text: 'Headrest bolt is tight and the mount does not wobble' },
+			{ key: 'before-push', text: 'Installed before the push handle' }
+		],
+		when: { group: 'headrest', option: 'include' }
+	},
+	{
+		key: 'extras.push-handle',
+		title: 'Push handle',
+		description:
+			'Push the handle into the chair, slide the brace around the joint and lock it with the pin. The soft grip goes on last; watch the logo direction.',
+		guidePage: 21,
+		parts: ['push-top', 'push-bottom', 'push-brace', 'push-pin', 'push-grip'],
+		checks: [
+			{ key: 'pin', text: 'Pin is fully inserted' },
+			{ key: 'firm', text: 'Handle is firm with no play at the joint' },
+			{ key: 'grip', text: 'Grip is on with the logo facing the right way' }
+		],
+		when: { group: 'push-handle', option: 'include' }
+	},
+	{
+		key: 'finish.buckles',
+		title: 'Buckles and slides',
+		description: 'Sort the buckles and slides and fit them to their holders.',
+		guidePage: 24,
+		parts: ['buckles'],
+		checks: [{ key: 'click', text: 'Every buckle clicks shut and releases cleanly' }]
+	},
+	{
+		key: 'finish.harness',
+		title: 'Harness and straps',
+		description:
+			'Fold the harness in half before you insert it, then thread the straps through their slides and buckles.',
+		guidePage: 25,
+		parts: ['harness'],
+		checks: [{ key: 'folded', text: 'Harness was folded in half before it went in' }]
+	},
+	{
+		key: 'finish.lap-footrest',
+		title: 'Lap and footrest straps',
+		description: 'Fit the lap strap and the footrest straps, routing the straps under the chair.',
+		guidePage: 27,
+		parts: ['harness', 'buckles'],
+		checks: [{ key: 'under', text: 'Straps run under the chair and are not twisted' }]
+	},
+	{
+		key: 'finish.storage-strap',
+		title: 'Storage strap',
+		description: 'Fit the storage strap and its buckle.',
+		guidePage: 29,
+		parts: ['harness', 'buckles'],
+		checks: [{ key: 'holds', text: 'Strap holds the storage in place' }]
+	},
+	{
+		key: 'finish.safety',
+		title: 'Safety checks',
+		description:
+			'Go over the whole chair before it leaves your hands. Anything you cannot tick needs fixing first.',
+		guidePage: 31,
+		checks: [
+			{ key: 'fasteners', text: 'Every bolt and nut is snug and no hardware is loose' },
+			{ key: 'wheels', text: 'Wheels spin freely and tires are firmly seated' },
+			{ key: 'casters', text: 'All four casters swivel and roll' },
+			{ key: 'stable', text: 'Chair stays upright when pushed gently from each side' },
+			{ key: 'straps', text: 'Buckles hold and release, straps are not frayed' },
+			{
+				key: 'surfaces',
+				text: 'No cracks, support leftovers or sharp edges where skin or fingers touch'
+			},
+			{ key: 'load', text: 'Seat and footrest hold firmly under gentle pressure' }
+		]
+	}
+];

@@ -1,7 +1,12 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
+import { filterSteps } from '#lib/domain/assembly.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
 	ActivityItem,
+	BuildAssembly,
+	BuildPhoto,
+	HandoffRecord,
+	PhotoKind,
 	BuildPhase,
 	BuildPrinter,
 	BuildView,
@@ -21,12 +26,16 @@ import { hardwareModelUrl } from '../models/hardware';
 import type { Db } from '../db';
 import {
 	activity,
+	buildAssembly,
 	buildFilaments,
+	buildHandoff,
+	buildPhotos,
 	buildParts,
 	buildPlates,
 	builds,
 	member,
 	printRuns,
+	templateAssemblySteps,
 	templateFilamentRoles,
 	templateGuidePages,
 	templateHardware,
@@ -294,7 +303,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			.where(eq(templateGuidePages.templateId, tpl.id))
 			.orderBy(asc(templateGuidePages.sort))
 			.all()
-			.map((g) => ({ page: g.page, title: g.title, sort: g.sort, hasImage: false })),
+			.map((g) => ({ page: g.page, title: g.title, sort: g.sort, hasImage: !!g.imagePath })),
 		hardware: db
 			.select()
 			.from(templateHardware)
@@ -303,7 +312,10 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			.map((h) => ({ name: h.name, qty: h.qty, note: h.note })),
 		activity: acts,
 		members,
-		printer: (b.printer as BuildPrinter | null) ?? null
+		printer: (b.printer as BuildPrinter | null) ?? null,
+		assembly: loadAssembly(db, buildId, tpl.id, variantChoices, parts),
+		photos: loadPhotos(db, buildId),
+		handoff: loadHandoff(db, buildId)
 	};
 }
 
@@ -322,4 +334,83 @@ export function applyPatches(db: Db, buildId: string, patches: PartPatch[], now:
 			.where(and(eq(buildParts.buildId, buildId), eq(buildParts.partSlug, slug)))
 			.run();
 	}
+}
+
+function loadAssembly(
+	db: Db,
+	buildId: string,
+	templateId: string,
+	choices: Record<string, string>,
+	activeParts: PartDef[]
+): BuildAssembly {
+	const rows = db
+		.select()
+		.from(templateAssemblySteps)
+		.where(eq(templateAssemblySteps.templateId, templateId))
+		.orderBy(asc(templateAssemblySteps.sort))
+		.all()
+		.map((r) => ({
+			key: r.key,
+			title: r.title,
+			description: r.description,
+			guidePage: r.guidePage,
+			parts: r.parts,
+			hardware: r.hardware,
+			checks: r.checks,
+			when: r.when ?? null
+		}));
+	const steps = filterSteps(rows, choices, new Set(activeParts.map((p) => p.slug)));
+	const items: BuildAssembly['items'] = {};
+	for (const { a, userName } of db
+		.select({ a: buildAssembly, userName: user.name })
+		.from(buildAssembly)
+		.leftJoin(user, eq(user.id, buildAssembly.doneBy))
+		.where(eq(buildAssembly.buildId, buildId))
+		.all()
+		.map((x) => ({ a: x.a, userName: x.userName }))) {
+		items[a.itemKey] = {
+			done: a.done,
+			note: a.note,
+			doneBy: a.doneBy,
+			doneByName: userName,
+			doneAt: a.doneAt ? a.doneAt.toISOString() : null
+		};
+	}
+	return { steps, items };
+}
+
+function loadPhotos(db: Db, buildId: string): BuildPhoto[] {
+	return db
+		.select({ p: buildPhotos, userName: user.name })
+		.from(buildPhotos)
+		.leftJoin(user, eq(user.id, buildPhotos.createdBy))
+		.where(eq(buildPhotos.buildId, buildId))
+		.orderBy(asc(buildPhotos.createdAt), asc(buildPhotos.id))
+		.all()
+		.map(({ p, userName }) => ({
+			id: p.id,
+			kind: p.kind as PhotoKind,
+			caption: p.caption,
+			width: p.width,
+			height: p.height,
+			createdBy: p.createdBy,
+			createdByName: userName,
+			createdAt: p.createdAt.toISOString()
+		}));
+}
+
+function loadHandoff(db: Db, buildId: string): HandoffRecord | null {
+	const h = db.select().from(buildHandoff).where(eq(buildHandoff.buildId, buildId)).get();
+	if (!h) return null;
+	return {
+		recipientName: h.recipientName,
+		organization: h.organization,
+		contact: h.contact,
+		handedOffOn: h.handedOffOn,
+		location: h.location,
+		notes: h.notes,
+		safetyChecked: h.safetyChecked,
+		updatedBy: h.updatedBy,
+		updatedAt: h.updatedAt ? h.updatedAt.toISOString() : null
+	};
 }

@@ -112,4 +112,23 @@ export interface TemplateSeed {
 	placements?: PlacementSeed[];
 	/** Print footprints per part (numbers only, mm), so plates can be planned without the geometry import. */
 	printFootprints?: PrintFootprintSeed[];
+	/** Assembly checklist in kit order (milestone 6). Reconciled into `template_assembly_steps` on startup. */
+	assemblySteps?: AssemblyStepSeed[];
+}
+
+/**
+ * One assembly step (our own wording, following the kit's build order). `key` is
+ * `<section>.<name>` with the section one of the domain's `ASSEMBLY_SECTIONS` prefixes and no `:`.
+ * `parts` are part slugs (inactive variant parts are filtered per build), `hardware` names must
+ * exist in the template's `hardware`, `guidePage` in `guidePages`. `when` limits the step to a variant option.
+ */
+export interface AssemblyStepSeed {
+	key: string;
+	title: string;
+	description: string;
+	guidePage?: number;
+	parts?: string[];
+	hardware?: { name: string; qty?: number }[];
+	checks?: { key: string; text: string }[];
+	when?: { group: string; option: string };
 }

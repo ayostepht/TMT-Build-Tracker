@@ -180,7 +180,11 @@ Milestones (each shippable): 1 scaffold (done) · 2 multi-build port of the
 prototype with tabs, teams and live updates (done) · 3 import from the
 original prototype (done) · 4 live color prototyper + shareable designs
 (done; 8 parts still need placing in the nudge editor) · 5 3MF upload →
-plates (done; Elegoo/Orca untested against a real sliced file) · 6 assembly
-+ handoff · 7 Spoolman + printer adapters (Elegoo Centauri Carbon/SDCP,
+plates (done; Elegoo/Orca untested against a real sliced file) · 6 assembly (done)
++ handoff · 7 Spoolman + printer adapters (done; live test pending) (Elegoo Centauri Carbon/SDCP,
 Moonraker, OctoPrint, Bambu LAN) · 8 release (Unraid template, Community
 Apps). Update this line as milestones land.
+
+Roadmap ideas: accept OctoEverywhere notification webhooks to update print
+status live (needs a publicly reachable URL, so after the release milestone
+puts the app behind a domain; verify a shared secret on every webhook).

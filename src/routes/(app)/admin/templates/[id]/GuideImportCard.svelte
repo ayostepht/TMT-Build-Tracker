@@ -1,0 +1,387 @@
+<script lang="ts">
+	import { invalidateAll } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import {
+		clearGuideImages,
+		getGuideStatus,
+		saveGuideMapping,
+		uploadedGuidePageUrl,
+		uploadGuidePage,
+		type GuideStatusDto
+	} from '#lib/client/api.ts';
+	import { pdfBytesFromFile, renderPdfPages } from '#lib/client/guide-import.ts';
+
+	let { templateId }: { templateId: string } = $props();
+
+	let status = $state<GuideStatusDto | null>(null);
+	let file = $state<File | null>(null);
+	let busy = $state(false);
+	let progress = $state('');
+	let error = $state('');
+	let report = $state('');
+	let version = $state(String(Date.now()));
+	let offset = $state(3);
+	let map = $state<Record<number, number | null>>({});
+	let selected = $state<number | null>(null);
+	let saved = $state('');
+	let cancelled = false;
+
+	async function load() {
+		try {
+			status = await getGuideStatus(templateId);
+			map = Object.fromEntries(status.pages.map((p) => [p.page, p.pdfPage]));
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not load the guide status';
+		}
+	}
+	onMount(load);
+
+	async function runImport() {
+		if (!file) return;
+		error = '';
+		report = '';
+		saved = '';
+		cancelled = false;
+		busy = true;
+		const t0 = performance.now();
+		let bytesTotal = 0;
+		try {
+			progress = 'Reading the file';
+			const { bytes, name } = await pdfBytesFromFile(file);
+			const n = await renderPdfPages(
+				bytes,
+				async ({ page, total, blob }) => {
+					progress = `Rendering and uploading page ${page} of ${total}`;
+					bytesTotal += blob.size;
+					await uploadGuidePage(templateId, page, blob);
+				},
+				{ isCancelled: () => cancelled }
+			);
+			const secs = ((performance.now() - t0) / 1000).toFixed(1);
+			report = `${cancelled ? 'Stopped. ' : ''}Imported ${n} pages from ${name} (${(bytesTotal / 1e6).toFixed(1)} MB) in ${secs} s.`;
+			version = String(Date.now());
+			await load();
+			applyOffset();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'The import failed';
+			await load();
+		} finally {
+			busy = false;
+			progress = '';
+		}
+	}
+
+	/** Our page N shows PDF page N - offset (for pages that exist in the upload). */
+	function applyOffset() {
+		if (!status) return;
+		const up = new Set(status.uploaded);
+		const next: Record<number, number | null> = {};
+		for (const p of status.pages) {
+			const pdf = p.page - offset;
+			next[p.page] = up.has(pdf) ? pdf : null;
+		}
+		map = next;
+		saved = '';
+	}
+
+	function setPdfPage(page: number, v: string) {
+		const n = Number(v);
+		map[page] = v.trim() && Number.isInteger(n) && n > 0 ? n : null;
+		saved = '';
+	}
+
+	const mappedCount = $derived(Object.values(map).filter((v) => v !== null).length);
+	const unknown = $derived(
+		Object.values(map).filter((v) => v !== null && !status?.uploaded.includes(v as number)).length
+	);
+
+	async function saveMap() {
+		error = '';
+		busy = true;
+		try {
+			await saveGuideMapping(templateId, map);
+			saved = `Saved. ${mappedCount} guide pages now show an image.`;
+			await load();
+			await invalidateAll();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not save the mapping';
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function clearAll() {
+		if (!confirm('Remove every imported guide image from this server?')) return;
+		busy = true;
+		try {
+			await clearGuideImages(templateId);
+			report = '';
+			saved = '';
+			selected = null;
+			await load();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not remove the images';
+		} finally {
+			busy = false;
+		}
+	}
+
+	const hasUploads = $derived((status?.uploaded.length ?? 0) > 0);
+	const thumb = (pdf: number) => uploadedGuidePageUrl(templateId, pdf, version);
+	const selPdf = $derived(selected !== null ? (map[selected] ?? null) : null);
+</script>
+
+<div class="card gic">
+	<h2>Build guide</h2>
+	<p class="muted">
+		Choose MakeGood's guide PDF, or the 3MF that contains it (it sits under
+		<code>Auxiliaries/Assembly Guide</code>). Your browser renders the pages and sends each one to
+		this server; nothing leaves your network.
+	</p>
+
+	<label class="field">
+		Guide PDF or 3MF
+		<input
+			type="file"
+			accept=".pdf,.3mf,.zip,application/pdf"
+			disabled={busy}
+			onchange={(e) => (file = e.currentTarget.files?.[0] ?? null)}
+		/>
+	</label>
+	<div class="arow">
+		<button type="button" class="btn primary" disabled={busy || !file} onclick={runImport}
+			>{hasUploads ? 'Import again' : 'Import the guide'}</button
+		>
+		{#if busy && progress}
+			<button type="button" class="btn" onclick={() => (cancelled = true)}>Stop</button>
+		{/if}
+		{#if hasUploads}
+			<button type="button" class="btn danger" disabled={busy} onclick={clearAll}
+				>Remove images</button
+			>
+		{/if}
+	</div>
+	{#if busy && progress}<p role="status" aria-live="polite">{progress}…</p>{/if}
+	{#if report}<p role="status" class="ok">{report}</p>{/if}
+	{#if error}<p class="error" role="alert">{error}</p>{/if}
+
+	{#if status && hasUploads}
+		<h3>Match pages</h3>
+		<p class="muted">
+			Our page numbers come from the newest guide; an older PDF can be a few pages behind. Set the
+			difference and apply it, then fix single pages by hand. {status.uploaded.length} PDF pages are uploaded.
+		</p>
+		<div class="arow">
+			<label class="inline">
+				PDF is behind by
+				<input
+					type="number"
+					min="0"
+					max="200"
+					bind:value={offset}
+					class="offset"
+					aria-label="Page offset"
+				/>
+				pages
+			</label>
+			<button type="button" class="btn" onclick={applyOffset}>Apply offset</button>
+		</div>
+
+		<div class="map" role="table" aria-label="Guide page mapping">
+			{#each status.pages as p (p.page)}
+				{@const pdf = map[p.page] ?? null}
+				<div
+					class="mrow"
+					class:sel={selected === p.page}
+					class:bad={pdf !== null && !status.uploaded.includes(pdf)}
+					role="row"
+				>
+					<button type="button" class="pick" onclick={() => (selected = p.page)}>
+						<b>p{p.page}</b>
+						{p.title}
+					</button>
+					<label class="inline">
+						<span class="sr-only">PDF page for guide page {p.page}</span>
+						PDF page
+						<input
+							type="number"
+							min="1"
+							value={pdf ?? ''}
+							oninput={(e) => setPdfPage(p.page, e.currentTarget.value)}
+							class="pdfp"
+							aria-label="PDF page for guide page {p.page}"
+						/>
+					</label>
+					{#if pdf !== null && status.uploaded.includes(pdf)}
+						<button
+							type="button"
+							class="tb"
+							onclick={() => (selected = p.page)}
+							aria-label="Preview page {p.page}"
+						>
+							<img src={thumb(pdf)} alt="" loading="lazy" />
+						</button>
+					{:else}
+						<span class="tb none">no image</span>
+					{/if}
+				</div>
+			{/each}
+		</div>
+
+		{#if selected !== null}
+			{@const sp = status.pages.find((x) => x.page === selected)}
+			<div class="compare" aria-label="Side by side preview">
+				{#each [-1, 0, 1] as d (d)}
+					{@const n = selPdf !== null ? selPdf + d : null}
+					<figure class:cur={d === 0}>
+						{#if n !== null && status.uploaded.includes(n)}
+							<img src={thumb(n)} alt="PDF page {n}" />
+						{:else}
+							<div class="blank">none</div>
+						{/if}
+						<figcaption>
+							{d === 0 ? `Our p${selected}: ${sp?.title ?? ''}` : 'Neighbour'}
+							{#if n !== null}<span class="muted">(PDF page {n})</span>{/if}
+						</figcaption>
+					</figure>
+				{/each}
+			</div>
+		{/if}
+
+		<div class="arow">
+			<button type="button" class="btn primary" disabled={busy} onclick={saveMap}
+				>Save mapping</button
+			>
+			<span class="muted">{mappedCount} of {status.pages.length} pages mapped</span>
+			{#if unknown}<span class="error">{unknown} point at pages that were not uploaded</span>{/if}
+			{#if saved}<span class="ok" role="status">{saved}</span>{/if}
+		</div>
+	{/if}
+</div>
+
+<style>
+	.gic {
+		display: grid;
+		gap: 10px;
+	}
+	.arow {
+		display: flex;
+		gap: 10px;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+	.ok {
+		color: var(--ok);
+	}
+	.inline {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 14px;
+	}
+	.offset,
+	.pdfp {
+		width: 64px;
+		padding: 6px 8px;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		background: var(--paper);
+		color: var(--ink);
+		font: inherit;
+	}
+	.map {
+		display: grid;
+		gap: 4px;
+		max-height: 420px;
+		overflow: auto;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 4px;
+	}
+	.mrow {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto 56px;
+		gap: 8px;
+		align-items: center;
+		padding: 4px 6px;
+		border-radius: 6px;
+	}
+	.mrow.sel {
+		background: var(--accent-soft);
+	}
+	.mrow.bad {
+		outline: 1px solid var(--bad);
+	}
+	.pick {
+		text-align: left;
+		border: 0;
+		background: none;
+		color: var(--ink);
+		padding: 4px 0;
+		min-width: 0;
+		font: inherit;
+		cursor: pointer;
+	}
+	.tb {
+		width: 56px;
+		height: 40px;
+		padding: 0;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		overflow: hidden;
+		background: #fff;
+		display: grid;
+		place-items: center;
+		font-size: 10px;
+		color: var(--muted);
+	}
+	.tb img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		object-position: top;
+	}
+	.compare {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 8px;
+	}
+	.compare figure {
+		margin: 0;
+		display: grid;
+		gap: 4px;
+		opacity: 0.7;
+	}
+	.compare figure.cur {
+		opacity: 1;
+	}
+	.compare img,
+	.blank {
+		width: 100%;
+		aspect-ratio: 3 / 4;
+		object-fit: contain;
+		background: #fff;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+	}
+	.blank {
+		display: grid;
+		place-items: center;
+		color: var(--muted);
+		background: var(--paper);
+	}
+	figcaption {
+		font-size: 12px;
+	}
+	@media (max-width: 560px) {
+		.compare {
+			grid-template-columns: 1fr;
+		}
+		.mrow {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+		.mrow .tb {
+			display: none;
+		}
+	}
+</style>

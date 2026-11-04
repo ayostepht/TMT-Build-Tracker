@@ -1,3 +1,9 @@
+import type {
+	PrinterJobView,
+	PrinterKind,
+	PrinterPublic,
+	PrinterStatus
+} from '#lib/printers/status.ts';
 import type { BuildPhase, BuildView, PartStatus, PrintRunInput } from '#lib/domain/types.ts';
 import type { ThreeMfPlate, ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { PartSnapshot } from '#lib/domain/logrun.ts';
@@ -458,3 +464,205 @@ export const exportPreview = (id: string, flavor: ExportFlavor, plates?: number[
 	call<ExportPreviewDto>('GET', `${b(id)}/export/preview?${exportQuery(flavor, plates)}`);
 export const exportDownloadUrl = (id: string, flavor: ExportFlavor, plates?: number[]) =>
 	`${b(id)}/export.3mf?${exportQuery(flavor, plates)}`;
+
+// ---- assembly, handoff, photos (milestone 6)
+
+/** Tick/untick an assembly item (step key, `<step>:check:<key>` or `<step>:hw:<name>`) or set its note. */
+export const setAssemblyItem = (
+	id: string,
+	itemKey: string,
+	patch: { done?: boolean; note?: string }
+) => call('PATCH', `${b(id)}/assembly`, { itemKey, ...patch });
+
+export interface HandoffInput {
+	recipientName?: string | null;
+	organization?: string | null;
+	contact?: string | null;
+	handedOffOn?: string | null;
+	location?: string | null;
+	notes?: string;
+	safetyChecked?: boolean;
+}
+export const saveHandoff = (id: string, input: HandoffInput) =>
+	call('PATCH', `${b(id)}/handoff`, input);
+export const markHandedOff = (id: string, input: HandoffInput = {}) =>
+	call('POST', `${b(id)}/handoff`, input);
+
+export const photoUrl = (id: string, photoId: string, thumb = false) =>
+	`${b(id)}/photos/${encodeURIComponent(photoId)}${thumb ? '?thumb=1' : ''}`;
+export async function uploadPhoto(
+	id: string,
+	photo: {
+		kind: 'progress' | 'finished' | 'handoff';
+		file: Blob;
+		thumb: Blob | null;
+		width: number;
+		height: number;
+		caption?: string;
+	}
+): Promise<string> {
+	const form = new FormData();
+	form.set('kind', photo.kind);
+	form.set('caption', photo.caption ?? '');
+	form.set('width', String(photo.width));
+	form.set('height', String(photo.height));
+	form.set('file', photo.file, 'photo');
+	if (photo.thumb) form.set('thumb', photo.thumb, 'thumb');
+	const res = await fetch(`${b(id)}/photos`, { method: 'POST', body: form });
+	let data: { error?: string; id?: string } = {};
+	try {
+		data = await res.json();
+	} catch {
+		/* non-JSON error body */
+	}
+	if (!res.ok || !data.id) throw new Error(data.error ?? `Upload failed (${res.status})`);
+	return data.id;
+}
+export const deletePhoto = (id: string, photoId: string) =>
+	call('DELETE', `${b(id)}/photos/${encodeURIComponent(photoId)}`);
+
+// ---- guide import (site admin, kit page)
+
+export interface GuideStatusDto {
+	uploaded: number[];
+	pages: { page: number; title: string; pdfPage: number | null }[];
+}
+export const getGuideStatus = (templateId: string) =>
+	call<GuideStatusDto>('GET', `${tpl(templateId)}/guide`);
+export const guidePageImageUrl = (templateId: string, page: number, version = '') =>
+	`${tpl(templateId)}/guide/${page}.webp${version ? `?v=${encodeURIComponent(version)}` : ''}`;
+export const uploadedGuidePageUrl = (templateId: string, pdfPage: number, version = '') =>
+	`${tpl(templateId)}/guide/pages/${pdfPage}${version ? `?v=${encodeURIComponent(version)}` : ''}`;
+export async function uploadGuidePage(templateId: string, pdfPage: number, image: Blob) {
+	const res = await fetch(`${tpl(templateId)}/guide/pages/${pdfPage}`, {
+		method: 'POST',
+		headers: { 'content-type': image.type || 'application/octet-stream' },
+		body: image
+	});
+	let data: { error?: string } = {};
+	try {
+		data = await res.json();
+	} catch {
+		/* non-JSON error body */
+	}
+	if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
+}
+export const saveGuideMapping = (templateId: string, map: Record<number, number | null>) =>
+	call<{ changed: number }>('PUT', `${tpl(templateId)}/guide`, { map });
+export const clearGuideImages = (templateId: string) => call('DELETE', `${tpl(templateId)}/guide`);
+
+// ---- printers and Spoolman (milestone 7)
+
+export interface PrinterInput {
+	organizationId?: string;
+	name?: string;
+	kind?: PrinterKind;
+	host?: string;
+	port?: number | null;
+	catalogId?: string | null;
+	enabled?: boolean;
+	/** Only the fields typed; blank clears a stored value, omitted keeps it. */
+	secrets?: Record<string, string>;
+}
+export interface DiscoveredPrinterDto {
+	host: string;
+	name: string;
+	machineName: string;
+	brand: string;
+	mainboardId: string;
+	firmware: string;
+}
+export interface SpoolDto {
+	id: number;
+	name: string;
+	vendor: string | null;
+	material: string | null;
+	colorHex: string | null;
+	remainingG: number | null;
+	usedG: number | null;
+	initialG: number | null;
+	archived: boolean;
+	location: string | null;
+}
+export interface OrgSettingsDto {
+	spoolmanUrl: string | null;
+	spoolmanAutoDeduct: boolean;
+	autoLogPrints: boolean;
+}
+
+export const listPrinters = (org: string) =>
+	call<{
+		printers: PrinterPublic[];
+		jobs: PrinterJobView[];
+		canEdit: boolean;
+		autoLogPrints: boolean;
+	}>('GET', `/api/printers?org=${encodeURIComponent(org)}`);
+export const addPrinter = (org: string, input: PrinterInput) =>
+	call<{ printer: PrinterPublic }>('POST', '/api/printers', { ...input, organizationId: org });
+export const updatePrinter = (id: string, input: PrinterInput) =>
+	call<{ printer: PrinterPublic }>('PATCH', `/api/printers/${encodeURIComponent(id)}`, input);
+export const removePrinter = (id: string) =>
+	call('DELETE', `/api/printers/${encodeURIComponent(id)}`);
+export const testPrinter = (org: string, input: PrinterInput & { id?: string }) =>
+	call<{ connected: boolean; status: PrinterStatus | null; message?: string }>(
+		'POST',
+		'/api/printers/test',
+		{ ...input, organizationId: org }
+	);
+export const discoverPrinters = (org: string) =>
+	call<{ found: DiscoveredPrinterDto[] }>('POST', '/api/printers/discover', {
+		organizationId: org
+	});
+export const buildPrinterJobs = (buildId: string) =>
+	call<{ organizationId: string; jobs: PrinterJobView[]; printers: PrinterPublic[] }>(
+		'GET',
+		`${b(buildId)}/printer-jobs`
+	);
+export const jobAction = (
+	jobId: string,
+	body:
+		| { action: 'link'; buildId: string; plateNumber: number }
+		| { action: 'unlink' | 'dismiss' }
+		| {
+				action: 'confirm';
+				result?: 'Success' | 'Failed' | 'Partial';
+				grams?: number | null;
+				hours?: number | null;
+				note?: string;
+		  }
+) =>
+	call<{ runId?: string; spoolmanWarning?: string }>(
+		'POST',
+		`/api/printers/jobs/${encodeURIComponent(jobId)}`,
+		body
+	);
+
+export const getOrgSettings = (org: string) =>
+	call<{ settings: OrgSettingsDto; canEdit: boolean }>(
+		'GET',
+		`/api/spoolman?org=${encodeURIComponent(org)}`
+	);
+export const saveOrgSettings = (org: string, patch: Partial<OrgSettingsDto>) =>
+	call<{ settings: OrgSettingsDto }>('PUT', '/api/spoolman', { ...patch, organizationId: org });
+export const testSpoolman = (org: string, spoolmanUrl?: string) =>
+	call<{ version: string | null; spoolCount: number }>('POST', '/api/spoolman/test', {
+		organizationId: org,
+		spoolmanUrl
+	});
+export const buildSpoolman = (buildId: string, all = false) =>
+	call<{
+		configured: boolean;
+		autoDeduct: boolean;
+		linked: Record<string, SpoolDto | null>;
+		spools: SpoolDto[];
+		error?: string;
+	}>('GET', `${b(buildId)}/spoolman${all ? '?all=1' : ''}`);
+export const linkFilamentSpool = (
+	buildId: string,
+	role: string,
+	spoolId: number | null,
+	spoolName?: string
+) =>
+	call('PUT', `${b(buildId)}/filaments/${encodeURIComponent(role)}/spool`, { spoolId, spoolName });
+export const expectOnPrinter = (printerId: string, buildId: string, plateNumber: number) =>
+	call('POST', `/api/printers/${encodeURIComponent(printerId)}/expect`, { buildId, plateNumber });

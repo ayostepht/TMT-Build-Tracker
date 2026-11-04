@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db';
 import {
 	colorDesigns,
+	templateAssemblySteps,
 	templateFilamentRoles,
 	templateGuidePages,
 	templateHardware,
@@ -297,6 +298,46 @@ function reconcileTemplate(tx: Tx, s: TemplateSeed, existingId: string | null): 
 			.run();
 		changed = true;
 	}
+
+	// Assembly steps (insert missing, update static fields; never deleted)
+	const steps = new Map(
+		tx
+			.select()
+			.from(templateAssemblySteps)
+			.where(eq(templateAssemblySteps.templateId, templateId))
+			.all()
+			.map((a) => [a.key, a])
+	);
+	(s.assemblySteps ?? []).forEach((a, i) => {
+		const values = {
+			sort: i,
+			title: a.title,
+			description: a.description,
+			guidePage: a.guidePage ?? null,
+			parts: a.parts ?? [],
+			hardware: a.hardware ?? [],
+			checks: a.checks ?? [],
+			when: a.when ?? null
+		};
+		const cur = steps.get(a.key);
+		if (!cur) {
+			tx.insert(templateAssemblySteps)
+				.values({ templateId, key: a.key, ...values })
+				.run();
+			changed = true;
+		} else if (JSON.stringify(pick(cur, values)) !== JSON.stringify(values)) {
+			tx.update(templateAssemblySteps)
+				.set(values)
+				.where(
+					and(
+						eq(templateAssemblySteps.templateId, templateId),
+						eq(templateAssemblySteps.key, a.key)
+					)
+				)
+				.run();
+			changed = true;
+		}
+	});
 
 	// Color designs (insert missing only; designs may be edited by users later)
 	const designs = new Set(

@@ -12,6 +12,8 @@
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import RoleChip from './RoleChip.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
+	import PrinterLive from './PrinterLive.svelte';
+	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 
 	type Item = ReturnType<typeof nowPrinting>[number];
 	let { item }: { item: Item } = $props();
@@ -21,6 +23,16 @@
 	const plate = $derived(ctx.view.plates.find((p) => p.number === item.plate));
 	const fid = $derived(`now-${item.plate}`);
 	let sheetOpen = $state(false);
+	const pstore = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
+	$effect(() => pstore.acquire());
+	const liveJobs = $derived(
+		pstore.jobs.filter(
+			(j) =>
+				j.buildId === ctx.id &&
+				j.plateNumber === item.plate &&
+				(j.status === 'printing' || j.status === 'paused')
+		)
+	);
 
 	const slicerShown = $derived(item.slicerGrams);
 	const bomRun = $derived(
@@ -95,6 +107,8 @@
 			>
 		{/each}
 	</div>
+
+	{#each liveJobs as j (j.id)}<PrinterLive job={j} store={pstore} />{/each}
 
 	<div class="now-step">
 		<div class="now-step-title">1 · Sent to printer</div>

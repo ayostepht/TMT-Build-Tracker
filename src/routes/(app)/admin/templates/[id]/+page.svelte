@@ -4,6 +4,7 @@
 	import { onDestroy } from 'svelte';
 	import PlacementEditor from '#lib/components/PlacementEditor.svelte';
 	import PrintGeometryCard from './PrintGeometryCard.svelte';
+	import GuideImportCard from './GuideImportCard.svelte';
 	import {
 		getModelJob,
 		removeHardwareGlb,
@@ -213,6 +214,7 @@
 	</div>
 
 	<PrintGeometryCard templateId={data.template.id} />
+	<GuideImportCard templateId={data.template.id} />
 </section>
 
 <style>

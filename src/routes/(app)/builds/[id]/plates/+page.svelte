@@ -17,6 +17,7 @@
 	import RoleChip from '#lib/components/RoleChip.svelte';
 	import RunTable from '#lib/components/RunTable.svelte';
 	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
+	import StartOnPrinter from '#lib/components/StartOnPrinter.svelte';
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
@@ -382,6 +383,7 @@
 						{/each}
 					{:else}
 						<button class="btn sm" type="button" onclick={() => start(idle)}>Start printing</button>
+						<StartOnPrinter slugs={idle} plateNumber={pl.number} />
 					{/if}
 				{/if}
 				<button

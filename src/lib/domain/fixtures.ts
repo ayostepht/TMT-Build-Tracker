@@ -105,7 +105,10 @@ export function makeView(
 		hardware: [],
 		activity: [],
 		members: [],
-		printer: null
+		printer: null,
+		assembly: { steps: [], items: {} },
+		photos: [],
+		handoff: null
 	};
 }
 
