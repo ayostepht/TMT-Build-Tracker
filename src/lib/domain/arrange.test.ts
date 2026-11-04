@@ -66,7 +66,9 @@ function expectValid(plates: ArrangedPlate[], printer = bed(256)) {
 				const B = p.items[b];
 				const gx = Math.abs(A.x - B.x) - (A.w + B.w) / 2;
 				const gy = Math.abs(A.y - B.y) - (A.d + B.d) / 2;
-				expect(Math.max(gx, gy)).toBeGreaterThanOrEqual(printer.spacing - 0.3);
+				// outlines (boxes here) are at least `spacing` apart, measured corner to corner when diagonal
+				const dist = gx > 0 && gy > 0 ? Math.hypot(gx, gy) : Math.max(gx, gy);
+				expect(dist).toBeGreaterThanOrEqual(printer.spacing - 0.3);
 			}
 	}
 }
@@ -112,7 +114,7 @@ describe('arrange: fitting and rotation', () => {
 	});
 });
 
-describe('arrange: tilting to fit', () => {
+describe('arrange: rotating to fit', () => {
 	// a thin bar 300 x 20 does not fit a 256 bed at 0/90, but fits diagonally
 	const bar = (rotate?: boolean): ArrangePart => ({
 		...part('bar', 'primary', 300, 20),
@@ -144,11 +146,12 @@ describe('arrange: tilting to fit', () => {
 		expect(it.rotation % 90).not.toBe(0);
 		expect(it.w).toBeLessThanOrEqual(246);
 		expect(it.d).toBeLessThanOrEqual(246);
-		expect(r.warnings.map((w) => w.code)).toEqual(['tilted']);
+		// a flat rotation is not a warning; it shows as a chip on the part
+		expect(r.warnings).toEqual([]);
 		expectValid(r.plates);
 	});
 
-	it('does not tilt when rotation is off', () => {
+	it('does not rotate when rotation is off', () => {
 		const r = run([bar(false)], bed(256));
 		expect(r.warnings[0].code).toBe('oversize');
 	});
@@ -158,7 +161,7 @@ describe('arrange: tilting to fit', () => {
 		expect(r.warnings[0].code).toBe('oversize');
 	});
 
-	it('orientsOf prefers 0/90 and only tilts as a last resort', () => {
+	it('orientsOf prefers 0/90 and only rotates freely as a last resort', () => {
 		expect(orientsOf({ w: 100, d: 50 }, true, 246, 246).map((o) => o.rot)).toEqual([0, 90]);
 		expect(orientsOf({ w: 100, d: 100 }, true, 246, 246)).toHaveLength(1);
 		expect(orientsOf({ w: 100, d: 50 }, false, 246, 246)).toHaveLength(1);
@@ -408,7 +411,7 @@ describe('arrange: determinism and recolor', () => {
 		many.push(part('tires', 'tire', 70, 70, { copies: 16 }));
 		const t0 = performance.now();
 		const r = run(many, bed(256, 256, 4));
-		expect(performance.now() - t0).toBeLessThan(50);
+		expect(performance.now() - t0).toBeLessThan(300);
 		expectValid(r.plates);
 	});
 

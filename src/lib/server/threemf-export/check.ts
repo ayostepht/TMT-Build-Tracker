@@ -4,6 +4,7 @@
  * z = 0, below the build height, and clear of the other items (bounding boxes). Catches pivot
  * mistakes that symmetric test shapes hide. Pure apart from the mesh reader it is given.
  */
+import { convexHull, polygonDistance, type Pt } from '#lib/domain/geom2d.ts';
 import type { PrintMesh } from '../print-geometry/mesh-format';
 import type { ExportWarning, ExportPlan } from './plan';
 import { itemTransform } from './writer';
@@ -17,6 +18,8 @@ export interface Placed {
 	y1: number;
 	z0: number;
 	z1: number;
+	/** Convex hull of the item's footprint on the bed. */
+	hull?: Pt[];
 }
 
 /** Bounding box of one item in the plate's own (bed) coordinates. */
@@ -48,6 +51,36 @@ export function placedBounds(mesh: PrintMesh, transform: string) {
 	return b;
 }
 
+/** Convex hull of the transformed mesh's XY footprint. */
+export function placedHull(mesh: PrintMesh, transform: string): Pt[] {
+	const t = transform.split(' ').map(Number);
+	const p = mesh.positions;
+	const pts: Pt[] = [];
+	for (let i = 0; i < p.length; i += 3)
+		pts.push([
+			p[i] * t[0] + p[i + 1] * t[3] + p[i + 2] * t[6] + t[9],
+			p[i] * t[1] + p[i + 1] * t[4] + p[i + 2] * t[7] + t[10]
+		]);
+	return convexHull(pts);
+}
+
+/** True when a mesh vertex lies inside the rectangle (shrunk by `tol` on every side). */
+export function placedInKeepOut(
+	mesh: PrintMesh,
+	transform: string,
+	z: { x: number; y: number; w: number; d: number },
+	tol: number
+): boolean {
+	const t = transform.split(' ').map(Number);
+	const p = mesh.positions;
+	for (let i = 0; i < p.length; i += 3) {
+		const X = p[i] * t[0] + p[i + 1] * t[3] + p[i + 2] * t[6] + t[9];
+		const Y = p[i] * t[1] + p[i + 1] * t[4] + p[i + 2] * t[7] + t[10];
+		if (X > z.x + tol && X < z.x + z.w - tol && Y > z.y + tol && Y < z.y + z.d - tol) return true;
+	}
+	return false;
+}
+
 export function checkPlacement(
 	plan: ExportPlan,
 	readMesh: (file: string) => PrintMesh,
@@ -75,9 +108,19 @@ export function checkPlacement(
 			if (!m) continue;
 			const o = plan.objects.find((x) => x.id === it.objectId)!;
 			const b = placedBounds(m, itemTransform(it, 0, 0));
-			const cur: Placed = { plate: pl.number, object: o.partName, ...b };
+			const cur: Placed = {
+				plate: pl.number,
+				object: o.partName,
+				...b,
+				hull: placedHull(m, itemTransform(it, 0, 0))
+			};
 			here.push(cur);
 			const problems: string[] = [];
+			for (const z of plan.printer.keepOut ?? [])
+				if (placedInKeepOut(m, itemTransform(it, 0, 0), z, 0.05))
+					problems.push(
+						`reaches into the ${z.label || 'keep-out'} area (x ${z.x}..${z.x + z.w}, y ${z.y}..${z.y + z.d} mm)`
+					);
 			if (b.x0 < -tol || b.y0 < -tol || b.x1 > bedX + tol || b.y1 > bedY + tol)
 				problems.push(
 					`reaches ${b.x0.toFixed(1)}..${b.x1.toFixed(1)} x ${b.y0.toFixed(1)}..${b.y1.toFixed(1)} mm on a ${bedX} x ${bedY} mm bed`
@@ -99,7 +142,18 @@ export function checkPlacement(
 			for (let j = i + 1; j < here.length; j++) {
 				const a = here[i];
 				const c = here[j];
-				if (a.x1 > c.x0 + 0.05 && c.x1 > a.x0 + 0.05 && a.y1 > c.y0 + 0.05 && c.y1 > a.y0 + 0.05)
+				// bounding boxes may overlap when parts nest on a diagonal: compare the real footprints (convex hulls)
+				if (
+					a.x1 > c.x0 + 0.05 &&
+					c.x1 > a.x0 + 0.05 &&
+					a.y1 > c.y0 + 0.05 &&
+					c.y1 > a.y0 + 0.05 &&
+					(!a.hull ||
+						!c.hull ||
+						a.hull.length < 3 ||
+						c.hull.length < 3 ||
+						polygonDistance(a.hull, c.hull) < 0)
+				)
 					warnings.push({
 						code: 'bed',
 						severity: 'error',

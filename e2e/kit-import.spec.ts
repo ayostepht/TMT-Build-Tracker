@@ -176,7 +176,7 @@ function makePdf(n: number): Uint8Array {
 	return Uint8Array.from(Buffer.from(pdf, 'latin1'));
 }
 
-/** Smallest GLB the server accepts (it only checks the magic): header + empty JSON chunk. */
+/** A tiny GLB: dropping one is flagged as not needed (the app includes the hardware). */
 function tinyGlb(): Uint8Array {
 	const json = Buffer.from('{"asset":{"version":"2.0"}}  ');
 	const b = Buffer.alloc(12 + 8 + json.length);
@@ -198,7 +198,6 @@ let templateId = '';
 test.afterEach(async ({ page }) => {
 	if (!templateId || !page.url().startsWith('http')) return;
 	await page.request.delete(`/api/templates/${templateId}/guide`).catch(() => {});
-	await page.request.delete(`/api/templates/${templateId}/model/hardware`).catch(() => {});
 });
 
 test.afterAll(async () => {
@@ -283,34 +282,21 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 	await expect(plan.getByText('Print geometry (profile with 1 plate)').first()).toBeVisible();
 	await expect(plan.getByText('Print geometry (zip of 1 3MF file)')).toBeVisible();
 	await expect(plan.getByText('Guide (3-page PDF inside this 3MF)')).toBeVisible();
-	await expect(plan.getByText('Hardware model', { exact: true })).toBeVisible();
-	await expect(plan.getByTestId('kit-unknown')).toContainText('Not recognised');
-
-	// The first hardware upload fails (network), the user retries.
-	let failHardware = true;
-	await page.route('**/model/hardware', (route) => {
-		if (failHardware && route.request().method() === 'POST') {
-			failHardware = false;
-			return route.fulfill({
-				status: 500,
-				contentType: 'application/json',
-				body: '{"error":"disk full (test)"}'
-			});
-		}
-		return route.continue();
-	});
+	await expect(plan.getByTestId('kit-unknown').filter({ hasText: 'Not recognised' })).toHaveCount(
+		1
+	);
+	await expect(
+		plan.getByTestId('kit-unknown').filter({ hasText: 'Not needed: the app includes the hardware' })
+	).toHaveCount(1);
 
 	const t0 = Date.now();
 	await root.getByTestId('kit-start').click();
 	const progress = root.getByTestId('kit-progress');
-	await expect(progress.getByRole('heading', { name: /Finished with 1 problem/ })).toBeVisible({
+	await expect(progress.getByRole('heading', { name: /^Done/ })).toBeVisible({
 		timeout: 150_000
 	});
 	console.log(`kit import took ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 
-	const hw = progress.getByTestId('kit-step-hardware');
-	await expect(hw).toHaveAttribute('data-status', 'error');
-	await expect(hw).toContainText('disk full (test)');
 	await expect(progress.getByTestId('kit-step-guide')).toHaveAttribute('data-status', 'done');
 	await expect(progress.getByTestId('kit-step-print').first()).toHaveAttribute(
 		'data-status',
@@ -319,9 +305,6 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 	const model = progress.getByTestId('kit-step-model');
 	// A synthetic cube is all the converter gets here; the step must at least finish cleanly.
 	await expect(model).toHaveAttribute('data-status', 'done');
-
-	await hw.getByRole('button', { name: 'Retry' }).click();
-	await expect(hw).toHaveAttribute('data-status', 'done');
 
 	// Guide page mapping is inline, prefilled (3 on a fresh install, else the last saved
 	// offset: the shared e2e DB may already hold one from a retry); save it.
@@ -333,12 +316,12 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 	await map.getByRole('button', { name: 'Save mapping' }).click();
 	await expect(map.getByText(/Saved\. [1-9]\d* guide pages/)).toBeVisible();
 
-	// Kit admin shows the full checklist: hardware ready, print geometry has the two parts, guide imported.
+	// Kit admin shows the full checklist: print geometry has the two parts, guide imported.
 	await page.goto(href);
 	await page.waitForLoadState('networkidle');
 	await expect(page.getByTestId('advanced-placement')).toBeVisible();
 	const status = page.getByTestId('kit-status');
-	await expect(status.getByTestId('kit-row-hardware')).toHaveAttribute('data-state', 'ok');
+	await expect(status.getByTestId('kit-row-hardware')).toHaveCount(0);
 	await expect(status.getByTestId('kit-row-print')).toContainText('2 of');
 	await expect(status.getByTestId('kit-row-print')).toContainText('main profile.3mf');
 	await expect(status.getByTestId('kit-row-print')).toHaveAttribute('data-state', 'partial');

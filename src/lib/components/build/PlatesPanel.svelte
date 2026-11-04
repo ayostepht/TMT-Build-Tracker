@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import { printersHrefFor } from '#lib/workspace-links.ts';
 	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
 	import {
 		printing,
@@ -132,6 +134,13 @@
 		}
 		return ctx.act(() => updatePlate(ctx.id, pl.number, { slicerGrams: v }));
 	}
+	const printersHref = $derived(
+		printersHrefFor(
+			(page.data as { teams?: { id: string; slug: string }[] }).teams,
+			ctx.view.build.organizationId
+		)
+	);
+
 	function start(slugs: string[]) {
 		return ctx.act(() => printing(ctx.id, { action: 'start', slugs }));
 	}
@@ -153,6 +162,10 @@
 		{:else}
 			<span class="muted">No bed chosen yet. Choose "Arrange for my bed" below.</span>
 		{/if}
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+		{#if printersHref}<a class="manage-printers" href={printersHref} data-testid="manage-printers"
+				>Manage printers</a
+			>{/if}
 	</div>
 	{#if arr?.stale && ctx.canEdit && printer}
 		<div class="stale" role="status" data-testid="stale-banner">
@@ -169,11 +182,7 @@
 			open={planWarnings.some((w) => w.code === 'oversize')}
 		>
 			<summary
-				>{planWarnings.filter((w) => w.code !== 'tilted').length} thing{planWarnings.filter(
-					(w) => w.code !== 'tilted'
-				).length === 1
-					? ''
-					: 's'} to check for this bed</summary
+				>{planWarnings.length} thing{planWarnings.length === 1 ? '' : 's'} to check for this bed</summary
 			>
 			<ul>
 				{#each planWarnings as w (w.code + w.slug)}<li class={w.code}>{w.message}</li>{/each}

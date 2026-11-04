@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
-import { ownerWithBuild, startBuild } from './helpers';
+import { createBuild, ownerWithBuild, signUp, startBuild, uniqueEmail } from './helpers';
 
 const SHOTS = 'data/shots-m7';
 const FILE = 'Plate 1 - Handle Left.gcode';
@@ -286,4 +286,70 @@ test('plate layout picker lists the workspace printers first and can add a new o
 	await page.screenshot({ path: `data/shots-bed/setup-team-printer-390.png`, fullPage: true });
 	await page.getByTestId('arrange-bed').click();
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Bench Centauri');
+});
+
+test('top nav Printers reaches the printers page from a build; a personal workspace can add a printer', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await signUp(page, 'Solo Maker', uniqueEmail('solo'));
+	// Personal workspace: no chapter. Members stays hidden, Integrations is there.
+	await expect(page.getByRole('heading', { level: 1, name: 'My builds' })).toBeVisible();
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.getByTestId('workspace-settings-menu').click();
+	const wsMenu = page.getByTestId('workspace-settings-panel');
+	await expect(wsMenu.getByTestId('ws-integrations')).toBeVisible();
+	await expect(wsMenu.getByTestId('ws-members')).toHaveCount(0);
+	await page.screenshot({ path: `data/shots-nav/menu-settings-1440-light.png` });
+	await page.keyboard.press('Escape');
+	// Phone: the same items live in the account menu and the header never overflows.
+	for (const w of [360, 390]) {
+		await page.setViewportSize({ width: w, height: 844 });
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
+		await page.getByTestId('account-menu').click();
+		await expect(page.getByRole('menuitem', { name: 'Integrations' })).toBeVisible();
+		await expect(page.getByRole('menuitem', { name: 'Members' })).toHaveCount(0);
+		await page.screenshot({ path: `data/shots-nav/menu-account-${w}-light.png` });
+		await page.keyboard.press('Escape');
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	const buildId = await createBuild(page, 'Solo chair');
+
+	// From the build, the top nav leads to the printers page.
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+	await page.screenshot({ path: `data/shots-nav/nav-390-light.png` });
+	await page.getByTestId('builds-menu').click();
+	await page.screenshot({ path: `data/shots-nav/menu-builds-390-light.png` });
+	await page.keyboard.press('Escape');
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.screenshot({ path: `data/shots-nav/nav-390-dark.png` });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.screenshot({ path: `data/shots-nav/nav-1440-dark.png` });
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.screenshot({ path: `data/shots-nav/nav-1440-light.png` });
+	await page.getByTestId('nav-printers').click();
+	await expect(page).toHaveURL(/\/teams\/[^/]+\/printers$/);
+	await expect(page.getByRole('heading', { name: 'Printers', level: 2 })).toBeVisible();
+
+	// Contextual links: Overview's Now printing header and the Print tab.
+	await page.goto(`/builds/${buildId}`);
+	await page.getByTestId('now-printers-link').click();
+	await expect(page).toHaveURL(/\/printers$/);
+	await page.goto(`/builds/${buildId}/print`);
+	await page.getByTestId('manage-printers').click();
+	await expect(page).toHaveURL(/\/printers$/);
+
+	// A solo maker adds a printer without creating a chapter.
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('add-printer').click();
+	await page.getByLabel('Name', { exact: true }).fill('Solo Centauri');
+	await page.getByTestId('pf-host').fill('127.0.0.1');
+	await page.getByTestId('pf-port').fill(String(mock.port));
+	await page.getByLabel('Model (optional)').selectOption({ label: 'Centauri Carbon' });
+	await page.getByTestId('pf-save').click();
+	await expect(page.getByTestId('printer-card').first()).toContainText('Solo Centauri');
+	await page.getByRole('link', { name: 'Integrations', exact: true }).click();
+	await expect(page.getByTestId('autolog')).toBeVisible();
 });

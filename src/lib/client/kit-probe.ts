@@ -8,7 +8,6 @@ import {
 	baseName,
 	guidePdfEntries,
 	is3mfName,
-	isGlbName,
 	isJunkEntry,
 	isStepName,
 	isZipName,
@@ -22,8 +21,6 @@ const MAX_NESTED = 300 * 1024 * 1024;
 const isZip = (b: Uint8Array) => b.length > 3 && b[0] === 0x50 && b[1] === 0x4b;
 const isPdf = (b: Uint8Array) =>
 	b.length > 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
-const isGlb = (b: Uint8Array) =>
-	b.length > 12 && b[0] === 0x67 && b[1] === 0x6c && b[2] === 0x54 && b[3] === 0x46;
 
 /** Entry names of a zip without inflating anything. */
 export function zipEntryNames(bytes: Uint8Array): string[] {
@@ -46,7 +43,6 @@ export function zipEntry(bytes: Uint8Array, entry: string): Uint8Array | undefin
 export function probeBytes(name: string, bytes: Uint8Array, entry?: string, depth = 0): Probe {
 	const base: Probe = { name, entry, size: bytes.length, kind: 'unknown' };
 	if (isPdf(bytes)) return { ...base, kind: 'pdf' };
-	if (isGlb(bytes) && isGlbName(name)) return { ...base, kind: 'glb' };
 	if (isZip(bytes)) {
 		let entries: string[];
 		try {

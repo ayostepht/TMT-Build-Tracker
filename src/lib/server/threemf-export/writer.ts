@@ -310,6 +310,17 @@ export function projectSettings(plan: ExportPlan): Record<string, unknown> {
 		nozzle_diameter: [String(p.nozzle || 0.4)],
 		printable_area: [`0x0`, `${num(w)}x0`, `${num(w)}x${num(d)}`, `0x${num(d)}`],
 		printable_height: num(p.bedZ),
+		// Orca/Bambu: one excluded polygon of "XxY" points (printer profile key bed_exclude_area)
+		...(p.keepOut?.length
+			? {
+					bed_exclude_area: [
+						[p.keepOut[0].x, p.keepOut[0].y],
+						[p.keepOut[0].x + p.keepOut[0].w, p.keepOut[0].y],
+						[p.keepOut[0].x + p.keepOut[0].w, p.keepOut[0].y + p.keepOut[0].d],
+						[p.keepOut[0].x, p.keepOut[0].y + p.keepOut[0].d]
+					].map(([x, y]) => `${num(x)}x${num(y)}`)
+				}
+			: {}),
 		curr_bed_type: 'Textured PEI Plate',
 		filament_colour: fils.map((f) => f.hex),
 		filament_type: fils.map((f) => f.type),
@@ -345,6 +356,32 @@ function notes(plan: ExportPlan, paint?: Map<number, number>): string {
 	if (plan.warnings.length) {
 		lines.push('', 'Warnings');
 		for (const w of plan.warnings) lines.push(`  - ${w.message}`);
+	}
+	const rotated = new Map<string, string>();
+	for (const p of plan.plates)
+		for (const it of p.items) {
+			const o = plan.objects.find((x) => x.id === it.objectId);
+			const key = `${p.index}:${o?.slug}`;
+			if (o && !it.pose && it.rotation % 90 !== 0 && !rotated.has(key))
+				rotated.set(
+					key,
+					`  - ${o.name} (plate ${p.index}): rotated ${Math.round(it.rotation)}° flat on the bed`
+				);
+		}
+	if (rotated.size)
+		lines.push(
+			'',
+			'Rotated parts (turned flat about the vertical axis; same face down)',
+			...rotated.values()
+		);
+	if (plan.printer.keepOut?.length) {
+		lines.push('', 'Keep-out areas (parts are kept clear of them)');
+		for (const k of plan.printer.keepOut)
+			lines.push(`  - ${k.label}: x ${k.x}..${k.x + k.w} mm, y ${k.y}..${k.y + k.d} mm`);
+		if (plan.printer.keepOut.length > 1)
+			lines.push(
+				`  Orca and Bambu Studio take one excluded area (bed_exclude_area) per printer, so only "${plan.printer.keepOut[0].label}" is written to the project; the other areas are kept clear here but the slicer does not know them.`
+			);
 	}
 	const turned = new Map<string, string>();
 	for (const p of plan.plates)

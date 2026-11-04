@@ -4,7 +4,7 @@
 	import { kitChecklist, type ChecklistRow, type KitStatusDto } from '#lib/domain/kit-import.ts';
 
 	/**
-	 * What this install holds for the kit: 3D chair, print geometry, guide, hardware model, each
+	 * What this install holds for the kit: 3D chair, print geometry and the optional guide, each
 	 * with a warning and a hint when something is missing. Loads itself; call `refresh()` after an import.
 	 */
 	let {
@@ -33,7 +33,12 @@
 	onMount(refresh);
 
 	const rows = $derived<ChecklistRow[]>(status ? kitChecklist(status) : []);
-	const mark = { ok: 'Ready', partial: 'Needs attention', missing: 'Missing' } as const;
+	const mark = {
+		ok: 'Ready',
+		partial: 'Needs attention',
+		missing: 'Missing',
+		info: 'Optional'
+	} as const;
 </script>
 
 <section class="ks" class:compact data-testid="kit-status" aria-label="MakeGood files status">
@@ -53,7 +58,14 @@
 				{:else if r.lines[0]}
 					<div class="meta">{r.lines[0]}</div>
 				{/if}
+				{#each r.notes as n (n)}<div class="meta" data-testid="kit-note">{n}</div>{/each}
 				{#each r.hints as h (h)}<div class="hint">{h}</div>{/each}
+				{#if r.link}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+					<a class="meta-link" href={r.link.href} target="_blank" rel="noopener noreferrer"
+						>{r.link.text}</a
+					>
+				{/if}
 			</li>
 		{/each}
 	</ul>
@@ -113,6 +125,12 @@
 	}
 	li.ok .chip {
 		color: var(--ok);
+	}
+	li.info .dot {
+		background: var(--line);
+	}
+	.meta-link {
+		font-size: 13px;
 	}
 	li.missing .chip {
 		color: var(--bad);

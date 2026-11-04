@@ -52,7 +52,7 @@ ArrangedItem { slug, piece, copy, x, y, w, d, rotation, role }
   the bed's front-left corner, x right, y away from the viewer, z up. `w` x `d` is the box
   after rotation. Items stay inside bed minus `margin`, at least `spacing` apart.
 - `rotation` is degrees counter-clockwise about z. Normally 0 or 90; any angle appears
-  only for long parts that fit the bed diagonally (`tilted` warning).
+  only for long parts that fit the bed diagonally, and where the optimiser leaves a part rotated a little more for edge clearance (the legend shows "rotated N°"; no warning).
 
 ## Transforming a mesh onto the plate
 

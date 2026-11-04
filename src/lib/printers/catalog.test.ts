@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { catalogPrinter, PRINTER_CATALOG, printerBrands, searchPrinters } from './catalog.ts';
-import { parsePrinter, printerFromCatalog } from './printer.ts';
+import { effectiveKeepOut, parsePrinter, printerFromBed, printerFromCatalog } from './printer.ts';
 
 describe('printer catalog', () => {
 	it('has a decent number of printers with unique ids', () => {
@@ -122,5 +122,45 @@ describe('bed presets', () => {
 		for (const p of BED_PRESETS) expect(bedExamples(p.x, p.y), `${p.x}`).not.toBe('');
 		const bed = parsePrinter(printerFromBed(256, 256, 256, 4));
 		expect(bed).toMatchObject({ catalogId: null, name: '256 × 256 bed', mmSlots: 4 });
+	});
+});
+
+describe('keep-out areas', () => {
+	it('every catalog keep-out names its slicer profile source and sits inside the bed', () => {
+		const withZone = PRINTER_CATALOG.filter((p) => p.keepOut?.length);
+		expect(withZone.map((p) => p.id)).toContain('elegoo-centauri-carbon');
+		for (const p of withZone) {
+			expect(p.keepOutSource, p.id).toMatch(/OrcaSlicer resources\/profiles\/.*bed_exclude_area/);
+			for (const k of p.keepOut!) {
+				expect(k.label.length).toBeGreaterThan(0);
+				expect(k.w).toBeGreaterThan(0);
+				expect(k.d).toBeGreaterThan(0);
+				expect(k.x).toBeGreaterThanOrEqual(0);
+				expect(k.y).toBeGreaterThanOrEqual(0);
+				expect(k.x + k.w).toBeLessThanOrEqual(p.bedX);
+				expect(k.y + k.d).toBeLessThanOrEqual(p.bedY);
+			}
+		}
+	});
+	it('the Centauri Carbon cutter zone is the front-right corner from its Orca profile', () => {
+		const c = catalogPrinter('elegoo-centauri-carbon')!;
+		expect(c.keepOut).toEqual([{ x: 246, y: 0, w: 10, d: 20, label: 'Filament cutter' }]);
+		expect(printerFromCatalog(c).keepOut).toEqual(c.keepOut);
+		expect(effectiveKeepOut({ catalogId: c.id })).toEqual(c.keepOut);
+	});
+	it('parsePrinter validates keep-outs', () => {
+		const base = {
+			...printerFromBed(256, 256, 256),
+			keepOut: [{ x: 246, y: 0, w: 10, d: 20, label: ' Cutter ' }]
+		};
+		expect(parsePrinter(base).keepOut).toEqual([{ x: 246, y: 0, w: 10, d: 20, label: 'Cutter' }]);
+		expect(parsePrinter({ ...base, keepOut: [] }).keepOut).toBeUndefined();
+		expect(() =>
+			parsePrinter({ ...base, keepOut: [{ x: 250, y: 0, w: 20, d: 5, label: '' }] })
+		).toThrow(/width/);
+		expect(() => parsePrinter({ ...base, keepOut: 'x' })).toThrow(/keepOut/);
+		expect(() => parsePrinter({ ...base, keepOut: Array(9).fill(base.keepOut[0]) })).toThrow(
+			/at most 8/
+		);
 	});
 });

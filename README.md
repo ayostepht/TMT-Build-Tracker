@@ -62,8 +62,10 @@ chair's 3D model from **your own copy** of MakeGood's STEP files, if you want to
 2. **Placement**: the viewer lists every part; pick one and nudge it (position in mm, rotation in
    degrees, mirror, extra copies such as the 4 rim halves or 16 tire segments). **Save** stores the
    numbers; the model itself is never reconverted.
-3. **Hardware (optional)**: casters, bolts and bearings come from the assembly STEP, which needs
-   about 1.4 GB of memory, so convert it once on a machine with enough RAM and upload the GLB:
+3. **Hardware model (maintainers only)**: casters, bolts and bearings come from the assembly STEP,
+   which needs about 1.4 GB of memory. The hardware GLB ships inside the kit pack and the app
+   draws generic stand-ins (casters, harness, buckles) when none is present; it is not
+   user-uploadable. To rebuild the pack's hardware GLB, convert it once on a machine with enough RAM:
 
    ```bash
    npm ci
@@ -73,8 +75,7 @@ chair's 3D model from **your own copy** of MakeGood's STEP files, if you want to
    node scripts/step-to-glb.mjs "TMT 3D TOP ASSEMBLY.step" hardware.glb --include 'caster|bearing' --exclude 'wheel'
    ```
 
-   then upload `hardware.glb` in the kit admin (or `curl -X POST -H 'content-type: model/gltf-binary'
---data-binary @hardware.glb -b <session cookie> <url>/api/templates/<id>/model/hardware`).
+   then put `hardware.glb` into the kit pack (see `docs/kit-pack.md`). There is no upload route.
 
 Uploads are sent as the raw file body (not multipart), so the server streams them to disk instead of
 holding 200 MB in memory. adapter-node rejects request bodies over `BODY_SIZE_LIMIT` (default 512 kB),

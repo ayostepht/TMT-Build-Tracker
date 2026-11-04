@@ -15,8 +15,11 @@
 	import SlotPanel from '#lib/components/design/SlotPanel.svelte';
 	import SwatchPicker, { type PickedFilament } from '#lib/components/design/SwatchPicker.svelte';
 
-	/** Setup wizard (Colors step): compact 3D stage, colors and palettes only. */
-	let { wizard = false }: { wizard?: boolean } = $props();
+	/**
+	 * `embedded`: shown inside the setup wizard's Colors step. Same workspace and behaviour; it
+	 * only fills the height left under the wizard's step bar (desktop) and drops the "Next" link.
+	 */
+	let { embedded = false }: { embedded?: boolean } = $props();
 	const ctx = getBuildCtx();
 
 	type Tab = 'slots' | 'palettes' | 'parts';
@@ -25,7 +28,25 @@
 		{ id: 'palettes', label: 'Palettes' },
 		{ id: 'parts', label: 'Parts' }
 	];
-	const TABS = $derived(wizard ? ALL_TABS.filter((t) => t.id !== 'parts') : ALL_TABS);
+	const TABS = ALL_TABS;
+	let root = $state<HTMLElement>();
+	/** Embedded on desktop: height left below the workspace's top edge (minus the wizard's bar). */
+	let fill = $state('');
+	$effect(() => {
+		if (!embedded || !root) return;
+		const el = root;
+		const measure = () => {
+			if (!window.matchMedia('(min-width: 900px)').matches) {
+				fill = '';
+				return;
+			}
+			const top = el.getBoundingClientRect().top + window.scrollY;
+			fill = `${Math.max(480, Math.round(window.innerHeight - top - 84))}px`;
+		};
+		measure();
+		window.addEventListener('resize', measure);
+		return () => window.removeEventListener('resize', measure);
+	});
 	let tab = $state<Tab>('slots');
 	let paletteSeen = $state(false);
 	/** Palette shown in 3D but not saved. */
@@ -135,11 +156,20 @@
 	}}
 />
 
-<svelte:head><title>Design · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
+<svelte:head
+	>{#if !embedded}<title>Design · {ctx.view.build.name} · TMT Build Tracker</title
+		>{/if}</svelte:head
+>
 
-<div class="design">
+<div
+	class="design"
+	class:embedded
+	bind:this={root}
+	data-testid="design-workspace"
+	style={fill ? `--fill:${fill}` : undefined}
+>
 	<div class="stagecol">
-		<div class="stagebox" class:compact={wizard}>
+		<div class="stagebox">
 			<ModelStage
 				bind:this={stage}
 				model={ctx.view.model}
@@ -212,7 +242,7 @@
 				editingRole={picker?.mode === 'edit' ? picker.role : null}
 				onfilter={(r) => {
 					roleFilter = r;
-					if (r && !wizard) setTab('parts');
+					if (r) setTab('parts');
 				}}
 				onedit={(role) => openPicker({ mode: 'edit', role })}
 				onadd={() => openPicker({ mode: 'new' })}
@@ -273,11 +303,11 @@
 			{/if}
 		</div>
 
-		{#if !wizard}
-			<SaveDesign
-				snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
-			/>
+		<SaveDesign
+			snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
+		/>
 
+		{#if !embedded}
 			<section class="next" aria-label="Next steps">
 				<a href={resolve('/(app)/builds/[id]/print', { id: ctx.id })} data-testid="next-plates"
 					>Next: print and export →</a
@@ -398,13 +428,46 @@
 			top: 4px;
 		}
 	}
-	.stagebox.compact {
-		height: 38vh;
-		min-height: 220px;
+	/* Inside the setup wizard: stage first (~50vh on phones), panel scrolls on its own on desktop. */
+	.design.embedded {
+		padding-bottom: 16px;
+	}
+	.design.embedded .stagebox {
+		height: 50vh;
+		height: 50dvh;
 	}
 	@media (min-width: 900px) {
-		.stagebox.compact {
-			height: min(52vh, 460px);
+		.design.embedded {
+			grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
+			height: var(--fill, 70vh);
+			padding-bottom: 0;
+			align-items: stretch;
+		}
+		.design.embedded .stagecol {
+			position: static;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+		}
+		.design.embedded .stagebox {
+			height: auto;
+			flex: 1;
+			min-height: 0;
+		}
+		.design.embedded .panel {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+			overflow-y: auto;
+			overscroll-behavior: contain;
+			padding: 0 6px 24px 0;
+			scrollbar-gutter: stable;
+		}
+		.design.embedded .panel > *:not(.never) {
+			flex: none;
+		}
+		.design.embedded .tabs {
+			margin: 0;
 		}
 	}
 </style>

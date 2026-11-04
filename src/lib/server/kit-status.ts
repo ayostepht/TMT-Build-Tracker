@@ -7,7 +7,7 @@ import { loadTemplateModelInfo } from './models/info.ts';
 import { listPrintGeometry } from './print-geometry/import.ts';
 import { kitInstallState } from './kitpack/install.ts';
 
-/** What the install holds for a template's kit files (model, print geometry, guide, hardware). */
+/** What the install holds for a template's kit files (model, print geometry, guide). */
 export async function kitStatus(db: Db, templateId: string): Promise<KitStatusDto> {
 	const parts = db
 		.select()
@@ -36,7 +36,10 @@ export async function kitStatus(db: Db, templateId: string): Promise<KitStatusDt
 			total: parts.length,
 			placed: inModel.filter((p) => placed.has(p.slug)).length,
 			unplaced: inModel.filter((p) => !placed.has(p.slug)).map((p) => p.name),
-			missing: parts.filter((p) => !has.has(p.slug)).map((p) => p.name)
+			// Only parts the kit expects in 3D (they have a placement) count as missing. Parts
+			// without one are drawn as stand-ins (harness, buckles) or simply have no STEP
+			// (foaming bucket seat): no file can add them, so they must not block "Ready".
+			missing: parts.filter((p) => !has.has(p.slug) && placed.has(p.slug)).map((p) => p.name)
 		};
 	}
 
@@ -64,7 +67,6 @@ export async function kitStatus(db: Db, templateId: string): Promise<KitStatusDt
 			pages: g.pages.length,
 			mapped: g.pages.filter((p) => p.pdfPage !== null).length
 		},
-		hardware: !!info?.hardwareUrl,
 		installing: install.installing,
 		...(install.installing ? { installMessage: install.message } : {})
 	};

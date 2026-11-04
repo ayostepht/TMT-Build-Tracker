@@ -410,3 +410,57 @@ export function minAreaRect(hull: readonly Pt[]): {
 	}
 	return best ?? { angle: 0, w: 0, d: 0, area: 0 };
 }
+
+/**
+ * Distance between two convex polygons (counter-clockwise, at least 3 points each): 0 when
+ * they touch, a negative number when they overlap. Separating-axis test first, then the
+ * closest vertex-to-edge distance.
+ */
+export function polygonDistance(a: readonly Pt[], b: readonly Pt[]): number {
+	const separated = (p: readonly Pt[], q: readonly Pt[]) => {
+		for (let i = 0; i < p.length; i++) {
+			const u = p[i];
+			const v = p[(i + 1) % p.length];
+			let allOut = true;
+			for (const w of q)
+				if (cross(u, v, w) > 0) {
+					allOut = false;
+					break;
+				}
+			if (allOut) return true; // every point of q is on the right of edge u->v (outside, CCW)
+		}
+		return false;
+	};
+	if (!separated(a, b) && !separated(b, a)) return -1;
+	const segDist = (p: Pt, u: Pt, v: Pt) => {
+		const dx = v[0] - u[0];
+		const dy = v[1] - u[1];
+		const l2 = dx * dx + dy * dy;
+		let t = l2 ? ((p[0] - u[0]) * dx + (p[1] - u[1]) * dy) / l2 : 0;
+		t = Math.max(0, Math.min(1, t));
+		const ex = p[0] - (u[0] + t * dx);
+		const ey = p[1] - (u[1] + t * dy);
+		return ex * ex + ey * ey;
+	};
+	let best = Infinity;
+	for (const p of a)
+		for (let j = 0; j < b.length; j++)
+			best = Math.min(best, segDist(p, b[j], b[(j + 1) % b.length]));
+	for (const p of b)
+		for (let j = 0; j < a.length; j++)
+			best = Math.min(best, segDist(p, a[j], a[(j + 1) % a.length]));
+	return Math.sqrt(best);
+}
+
+/** Corner points of an axis-aligned rectangle, counter-clockwise. */
+export const rectPoly = (x: number, y: number, w: number, d: number): Pt[] => [
+	[x, y],
+	[x + w, y],
+	[x + w, y + d],
+	[x, y + d]
+];
+
+/** Bounding box of an outline turned by `deg` degrees (centre and size): shared with the fitter. */
+export function turnedOutlineBox(outline: readonly Pt[], deg: number) {
+	return turnedBox(outline, deg);
+}

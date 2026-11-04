@@ -57,15 +57,17 @@
 							{r.reoriented}</span
 						>
 					{/if}
-					{#if r.tilted != null}
+					{#if r.rotated != null}
 						<span class="note"
-							><span class="tag" title="Turned {r.tilted}° so it fits the bed diagonally"
+							><span
+								class="tag"
+								title="{r.name}: rotated {r.rotated}° flat on the bed (fits better, same face down)"
 								><svg class="glyph" viewBox="-6 -6 12 12" aria-hidden="true"
 									><path
 										class="g-arc"
 										d="M2.2 -3.7A4.3 4.3 0 1 1 -4.3 0M-6.1 -1.7L-4.3 0L-2.5 -1.7"
 									/></svg
-								>tilted {Math.round(r.tilted)}°</span
+								>rotated {Math.round(r.rotated)}°</span
 							></span
 						>
 					{/if}

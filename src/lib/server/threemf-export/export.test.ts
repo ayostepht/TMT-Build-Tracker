@@ -805,3 +805,45 @@ describe('painted supports survive the export', () => {
 		expect(text(unzipSync(bytes), '3D/3dmodel.model')).not.toContain('paint_');
 	});
 });
+
+describe('keep-out areas in the export', () => {
+	it('writes bed_exclude_area in Orca point format', async () => {
+		const p = plan({ flavor: 'orca' });
+		const { bytes } = await collect(writeThreeMf(p, p.plates, io()));
+		const ps = JSON.parse(text(unzipSync(bytes), 'Metadata/project_settings.config'));
+		expect(ps.bed_exclude_area).toEqual(['246x0', '256x0', '256x20', '246x20']);
+		expect(text(unzipSync(bytes), 'Metadata/tmt_export_notes.txt')).toMatch(/Filament cutter/);
+	});
+	it('does not write it for a printer without a keep-out', async () => {
+		const view = viewFor();
+		view.printer = { ...cc, keepOut: [] };
+		const p = plan({ view });
+		const { bytes } = await collect(writeThreeMf(p, p.plates, io()));
+		const ps = JSON.parse(text(unzipSync(bytes), 'Metadata/project_settings.config'));
+		expect(ps.bed_exclude_area).toBeUndefined();
+	});
+	it('notes the one-polygon limit when there are several zones', async () => {
+		const view = viewFor();
+		view.printer = {
+			...cc,
+			keepOut: [...cc.keepOut!, { x: 0, y: 236, w: 20, d: 20, label: 'Purge corner' }]
+		};
+		const p = plan({ view });
+		const { bytes } = await collect(writeThreeMf(p, p.plates, io()));
+		expect(text(unzipSync(bytes), 'Metadata/tmt_export_notes.txt')).toMatch(/one excluded area/);
+	});
+	it('the guard accepts arranged items and flags a mesh inside the zone', () => {
+		const readMesh = (f: string) => SHAPES[f.replace(/\.bin$/, '')].mesh;
+		const p = plan({ view: viewFor(['push-pin', 'wing-left']) });
+		expect(checkPlacement(p, readMesh).warnings).toEqual([]);
+		const pin = p.plates
+			.flatMap((pl) => pl.items)
+			.find((i) => i.objectId === p.objects.find((o) => o.slug === 'push-pin')!.id)!;
+		pin.x = 250;
+		pin.y = 10;
+		const g = checkPlacement(p, readMesh);
+		expect(
+			g.warnings.some((w) => w.severity === 'error' && /Filament cutter/.test(w.message))
+		).toBe(true);
+	});
+});

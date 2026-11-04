@@ -56,6 +56,7 @@
 	let nozzle = $state(0.4);
 	let margin = $state(DEFAULT_MARGIN);
 	let spacing = $state(DEFAULT_SPACING);
+	let keepOut = $state<BuildPrinter['keepOut']>(undefined);
 	let error = $state('');
 	let lastKey = '';
 
@@ -78,6 +79,7 @@
 		nozzle = v.nozzle;
 		margin = v.margin;
 		spacing = v.spacing;
+		keepOut = v.keepOut;
 		mmIdx = c ? c.mm.findIndex((m) => m.slots === v.mmSlots) : -1;
 	}
 	// Adopt a saved value that differs from what this picker last emitted (live updates, other tabs).
@@ -100,7 +102,8 @@
 			mmSlots: slots,
 			nozzle,
 			margin,
-			spacing
+			spacing,
+			...(keepOut?.length ? { keepOut } : {})
 		};
 	}
 	const parsed = $derived.by(() => {
@@ -141,6 +144,7 @@
 		bedZ = p.bedZ;
 		nozzle = p.nozzle;
 		slots = p.mmSlots;
+		keepOut = p.keepOut;
 		mmIdx = c.mmBuiltIn ? 0 : -1;
 		emit();
 	}

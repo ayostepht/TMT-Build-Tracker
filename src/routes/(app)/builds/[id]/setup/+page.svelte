@@ -148,39 +148,33 @@
 			{/if}
 		</section>
 	{:else if step === 3}
-		<section class="card" aria-labelledby="col-h">
-			<div class="row">
-				<h2 id="col-h">Colors</h2>
-				<a
-					class="full"
-					href={resolve('/(app)/builds/[id]/design', { id: ctx.id })}
-					data-testid="open-designer">Open the full Designer</a
-				>
-			</div>
+		<div class="colorbar">
+			<h2 id="col-h">Colors</h2>
 			{#if data.designs.length}
 				<div class="designs" data-testid="design-start">
-					<label class="field"
-						>Start from a saved or shared design
-						<select bind:value={designId} aria-label="Start from a design">
-							<option value="">Keep the current colors</option>
-							{#each data.designs as d (d.id)}
-								<option value={d.id}>{d.name}{d.mine ? ' (mine)' : ''}</option>
-							{/each}
-						</select>
-					</label>
-					<button type="button" class="btn" disabled={!designId} onclick={useDesign}
-						>Use design</button
+					<select
+						bind:value={designId}
+						aria-label="Start from a saved or shared design"
+						data-testid="design-start-select"
 					>
+						<option value="">Start from a saved or shared design…</option>
+						{#each data.designs as d (d.id)}
+							<option value={d.id}>{d.name}{d.mine ? ' (mine)' : ''}</option>
+						{/each}
+					</select>
 					{#if designId}
 						{@const d = data.designs.find((x) => x.id === designId)}
 						<span class="strip" aria-hidden="true">
 							{#each d?.roles ?? [] as r (r.key)}<Swatch hex={r.hex} size="mini" />{/each}
 						</span>
 					{/if}
+					<button type="button" class="btn sm" disabled={!designId} onclick={useDesign}
+						>Use design</button
+					>
 				</div>
 			{/if}
-		</section>
-		<DesignWorkspace wizard />
+		</div>
+		<DesignWorkspace embedded />
 	{:else if step === 4}
 		<section class="card intro">
 			<h2>Print</h2>
@@ -294,21 +288,32 @@
 		background: var(--accent);
 		color: var(--card);
 	}
-	.row {
+	.colorbar {
 		display: flex;
+		align-items: center;
 		justify-content: space-between;
-		align-items: baseline;
-		gap: 12px;
+		gap: 8px 16px;
 		flex-wrap: wrap;
+	}
+	.colorbar h2 {
+		font-size: 20px;
 	}
 	.designs {
 		display: flex;
-		gap: 10px;
-		align-items: end;
-		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+		flex: 1 1 280px;
+		justify-content: flex-end;
+		min-width: 0;
 	}
-	.designs .field {
-		flex: 1 1 220px;
+	.designs select {
+		flex: 1 1 200px;
+		min-width: 0;
+		max-width: 360px;
+		min-height: 40px;
+	}
+	.designs .btn {
+		min-height: 40px;
 	}
 	.strip {
 		display: inline-flex;
@@ -323,7 +328,9 @@
 		gap: 10px;
 		position: sticky;
 		bottom: 0;
-		padding: 10px 0;
+		z-index: 30;
+		margin: 0 -16px;
+		padding: 10px 16px;
 		background: var(--paper);
 		border-top: 1px solid var(--line);
 	}
@@ -339,6 +346,16 @@
 	}
 	.done p {
 		margin: 0;
+	}
+	/* The swatch picker (z-index 1500) sits above the bar; on phones it is a bottom sheet, so the
+	   bar steps aside while it is open. Toasts rise above the bar. */
+	@media (max-width: 899px) {
+		.wizard:has(:global([data-testid='swatch-picker'])) .nav {
+			display: none;
+		}
+	}
+	:global(body:has([data-testid='setup-wizard']) .toasts) {
+		bottom: 84px;
 	}
 	@media (max-width: 520px) {
 		.lb {

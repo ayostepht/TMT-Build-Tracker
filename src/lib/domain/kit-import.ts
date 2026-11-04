@@ -1,12 +1,12 @@
 /**
  * Kit import planning, pure: given what a dropped file turned out to be (its kind and, for zips
- * and 3MFs, its entry names) decide what it can feed in the kit (3D chair, print geometry, guide,
- * hardware model) and in which order the import runs. No DOM, no network; `kit-probe.ts` does the
+ * and 3MFs, its entry names) decide what it can feed in the kit (3D chair, print geometry, guide)
+ * and in which order the import runs. No DOM, no network; `kit-probe.ts` does the
  * sniffing, `KitImportCard.svelte` runs the plan.
  */
 
-export type TargetKind = 'model' | 'print' | 'guide' | 'hardware';
-export type FileKind = 'zip' | '3mf' | 'step' | 'pdf' | 'glb' | 'unknown';
+export type TargetKind = 'model' | 'print' | 'guide';
+export type FileKind = 'zip' | '3mf' | 'step' | 'pdf' | 'unknown';
 
 /** What a file (or a zip entry, one level down) was sniffed to be. */
 export interface Probe {
@@ -126,7 +126,6 @@ function zipFeeds(p: Probe): Feed[] {
 	const steps = entries.filter(isStepName).length;
 	const mfs = entries.filter(is3mfName).length;
 	const pdfs = entries.filter(isPdfName).filter((e) => !/(^|\/)Auxiliaries\//i.test(e));
-	const glbs = entries.filter(isGlbName).length;
 	const feeds: Feed[] = [];
 	if (steps)
 		feeds.push({
@@ -155,8 +154,6 @@ function zipFeeds(p: Probe): Feed[] {
 			enabled: true,
 			label: `Guide (${pdfDesc(innerGuide.pdfPages)} inside ${innerGuide.name})`
 		});
-	if (glbs)
-		feeds.push({ kind: 'hardware', enabled: true, label: 'Hardware model (GLB in this zip)' });
 	return feeds;
 }
 
@@ -173,9 +170,6 @@ function describe(
 	switch (probe.kind) {
 		case 'step':
 			feeds = [{ kind: 'model', enabled: true, label: '3D chair (loose STEP file)' }];
-			break;
-		case 'glb':
-			feeds = [{ kind: 'hardware', enabled: true, label: 'Hardware model' }];
 			break;
 		case 'pdf':
 			feeds = [{ kind: 'guide', enabled: true, label: `Guide (${pdfDesc(probe.pdfPages)})` }];
@@ -207,8 +201,10 @@ function describe(
 	if (status === 'unknown')
 		note =
 			probe.kind === 'zip'
-				? 'Nothing in this zip looks like STEP, 3MF, PDF or GLB files'
-				: 'Not recognised (expected .zip, .step, .3mf, .pdf or .glb)';
+				? 'Nothing in this zip looks like STEP, 3MF or PDF files'
+				: isGlbName(probe.name)
+					? 'Not needed: the app includes the hardware'
+					: 'Not recognised (expected .zip, .step, .3mf or .pdf)';
 	return [
 		{
 			id,
@@ -232,13 +228,12 @@ const PRIORITY: Record<FileKind, number> = {
 	'3mf': 1,
 	zip: 2,
 	step: 3,
-	glb: 0,
 	unknown: 9
 };
 
 /**
  * Build the import plan for a set of dropped files (in drop order). Duplicates (same name and
- * size dropped twice) are switched off; where only one file can win (guide, hardware GLB) the best
+ * size dropped twice) are switched off; where only one file can win (the guide) the best
  * candidate stays on (a PDF over a 3MF over a zip, then drop order) and the rest are switched off
  * with a note.
  */
@@ -259,13 +254,13 @@ export function buildPlan(inputs: PlanInput[]): Plan {
 		} else seen.set(key, probe.name);
 		items.push(...group);
 	}
-	for (const kind of ['guide', 'hardware'] as const) {
+	for (const kind of ['guide'] as const) {
 		const cands = items
 			.flatMap((it) => it.feeds.filter((f) => f.kind === kind && f.enabled).map((f) => ({ it, f })))
 			.sort((a, b) => PRIORITY[a.it.probe.kind] - PRIORITY[b.it.probe.kind]);
 		for (const c of cands.slice(1)) {
 			c.f.enabled = false;
-			c.f.note = `Only one ${kind === 'guide' ? 'guide' : 'hardware model'} can be imported; using ${cands[0].it.name}`;
+			c.f.note = `Only one ${kind} can be imported; using ${cands[0].it.name}`;
 		}
 	}
 	// Same STEP file name arriving from two sources: the later one is ignored by the merge.
@@ -296,7 +291,7 @@ export function stepCount(it: PlanItem): number {
 	return (it.probe.entries ?? []).filter(isStepName).length;
 }
 
-/** The steps to run for the enabled feeds: 3D chair, print geometry (biggest first), hardware, guide. */
+/** The steps to run for the enabled feeds: 3D chair, print geometry (biggest first), guide. */
 export function makeSteps(plan: Plan): Step[] {
 	const on = (kind: TargetKind) =>
 		plan.items.filter((it) => it.feeds.some((f) => f.kind === kind && f.enabled));
@@ -318,14 +313,6 @@ export function makeSteps(plan: Plan): Step[] {
 			kind: 'print',
 			title: `Print geometry: ${it.name}`,
 			itemIds: [it.id]
-		});
-	const hw = on('hardware')[0];
-	if (hw)
-		steps.push({
-			id: 'hardware',
-			kind: 'hardware',
-			title: `Hardware model: ${hw.name}`,
-			itemIds: [hw.id]
 		});
 	const guide = on('guide')[0];
 	if (guide)
@@ -376,7 +363,7 @@ export interface KitStatusDto {
 		placed: number;
 		/** Names of parts the GLB has but nobody placed yet. */
 		unplaced: string[];
-		/** Names of parts missing from the GLB. */
+		/** Names of parts the kit places in 3D but the GLB lacks (parts without any STEP, such as stand-ins, are not listed). */
 		missing: string[];
 	} | null;
 	print: {
@@ -388,22 +375,58 @@ export interface KitStatusDto {
 		sources: string[];
 	};
 	guide: { uploaded: number; pages: number; mapped: number };
-	hardware: boolean;
 	/** True while the bundled MakeGood kit pack is being downloaded or installed (start-up, background). */
 	installing?: boolean;
 	/** What the install is doing ("Installing MakeGood files…"); only while `installing`. */
 	installMessage?: string;
 }
 
-export type RowState = 'ok' | 'partial' | 'missing';
+import { MAKEGOOD_GUIDE_URL } from '../makegood.ts';
+/** Where MakeGood publishes the model and maker guide (it is not bundled); one source of truth. */
+export { MAKEGOOD_GUIDE_URL };
+
+export type KitReadiness = 'ready' | 'installing' | 'partial' | 'missing';
+
+/**
+ * The overall state of a kit for the setup wizard. The guide never counts (it is not bundled);
+ * parts without 3D that no file can add are not in `model.missing`, so they do not either.
+ */
+export function kitReadiness(s: KitStatusDto): { state: KitReadiness; note: string } {
+	if (s.installing) return { state: 'installing', note: s.installMessage ?? '' };
+	const hasPrint = s.print.withGeometry > 0;
+	if (!s.model && !hasPrint) return { state: 'missing', note: '' };
+	if (!s.model) return { state: 'partial', note: 'There is no 3D preview yet.' };
+	if (!hasPrint) return { state: 'partial', note: 'Print geometry is missing.' };
+	if (s.print.missing.length)
+		return {
+			state: 'partial',
+			note: `${plural(s.print.missing.length, 'part')} without print geometry.`
+		};
+	if (s.model.missing.length)
+		return {
+			state: 'partial',
+			note: `${plural(s.model.missing.length, 'part')} missing from the 3D model.`
+		};
+	return { state: 'ready', note: '' };
+}
+
+/** Kit parts that have no 3D preview and none is expected (stand-ins, no STEP). */
+export const partsWithoutPreview = (m: NonNullable<KitStatusDto['model']>) =>
+	Math.max(0, m.total - m.rendered - m.missing.length);
+
+/** `info` is a neutral, optional row: it never needs attention. */
+export type RowState = 'ok' | 'partial' | 'missing' | 'info';
 export interface ChecklistRow {
 	id: TargetKind;
 	title: string;
 	state: RowState;
 	/** Facts, one per line. */
 	lines: string[];
+	/** Neutral notes (no warning styling). */
+	notes: string[];
 	/** What to add when missing or partial. */
 	hints: string[];
+	link?: { href: string; text: string };
 }
 
 const names = (list: string[], max = 4) =>
@@ -421,10 +444,12 @@ export function kitChecklist(s: KitStatusDto): ChecklistRow[] {
 			title: '3D chair',
 			state: 'missing',
 			lines: ['No 3D model yet'],
+			notes: [],
 			hints: ['Add the STEP files (a zip of them, or loose .step files).']
 		});
 	else {
 		const hints: string[] = [];
+		const notes: string[] = [];
 		if (m.missing.length)
 			hints.push(
 				`${names(m.missing)} ${m.missing.length === 1 ? 'has' : 'have'} no 3D geometry: add the STEP file for ${m.missing.length === 1 ? 'it' : 'them'}.`
@@ -432,6 +457,11 @@ export function kitChecklist(s: KitStatusDto): ChecklistRow[] {
 		if (m.unplaced.length)
 			hints.push(
 				`${names(m.unplaced)} ${m.unplaced.length === 1 ? 'is' : 'are'} not placed yet: nudge in Advanced: part placement.`
+			);
+		const none = partsWithoutPreview(m);
+		if (none)
+			notes.push(
+				`${plural(none, 'part')} ${none === 1 ? 'has' : 'have'} no 3D preview: drawn as stand-ins or no STEP`
 			);
 		rows.push({
 			id: 'model',
@@ -442,6 +472,7 @@ export function kitChecklist(s: KitStatusDto): ChecklistRow[] {
 				`Version ${m.version.slice(0, 8)}${m.createdAt ? `, ${m.createdAt.slice(0, 10)}` : ''}`,
 				`Source: ${m.source || 'unknown'}`
 			],
+			notes,
 			hints
 		});
 	}
@@ -463,36 +494,33 @@ export function kitChecklist(s: KitStatusDto): ChecklistRow[] {
 						`${p.paintedFaces.toLocaleString()} painted support faces, settings on ${p.withSettings} parts`,
 						`Source: ${p.sources.join(', ') || 'unknown'}`
 					],
+		notes: [],
 		hints:
 			p.withGeometry === 0
 				? ['Add the 3MF profile (or a zip of profiles such as the harness pack).']
 				: hints
 	});
+	// The guide is not bundled (MakeGood's page numbers are referenced instead): informational only.
 	const g = s.guide;
 	rows.push({
 		id: 'guide',
 		title: 'Guide',
-		state: g.uploaded === 0 ? 'missing' : g.mapped < g.pages ? 'partial' : 'ok',
+		state: g.uploaded > 0 && g.mapped >= g.pages ? 'ok' : 'info',
 		lines:
 			g.uploaded === 0
-				? ['No guide pages yet']
+				? ["Optional: MakeGood's maker guide is not included"]
 				: [
 						`${g.uploaded} PDF pages imported`,
 						`${g.mapped} of ${g.pages} guide pages mapped to an image`
 					],
+		notes: [],
 		hints:
-			g.uploaded === 0
-				? ['Add the guide PDF, or the 3MF that contains it.']
-				: g.mapped < g.pages
-					? ['Set the page offset below and save the mapping.']
-					: []
-	});
-	rows.push({
-		id: 'hardware',
-		title: 'Hardware model',
-		state: s.hardware ? 'ok' : 'missing',
-		lines: [s.hardware ? 'Hardware GLB added' : 'Optional, not added'],
-		hints: s.hardware ? [] : ['Add the hardware .glb to show casters, bolts and bearings.']
+			g.uploaded > 0 && g.mapped < g.pages
+				? ['Set the page offset below and save the mapping.']
+				: [],
+		...(g.uploaded === 0
+			? { link: { href: MAKEGOOD_GUIDE_URL, text: "MakeGood's maker guide" } }
+			: {})
 	});
 	return rows;
 }

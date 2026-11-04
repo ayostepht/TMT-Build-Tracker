@@ -297,6 +297,15 @@ export type PartPatch = { slug: string } & Partial<Omit<PartState, 'slug' | 'upd
  * The plate arranger (`arrange.ts`) uses bed, margin, spacing and `mmSlots`.
  * All lengths in mm.
  */
+/** A rectangle of the bed that parts must keep clear of (filament cutter, purge area). Bed mm, origin front-left, y toward the back. */
+export interface KeepOut {
+	x: number;
+	y: number;
+	w: number;
+	d: number;
+	label: string;
+}
+
 export interface BuildPrinter {
 	catalogId: string | null;
 	name: string;
@@ -310,4 +319,6 @@ export interface BuildPrinter {
 	margin: number;
 	/** Gap between parts on a plate. Default 8. */
 	spacing: number;
+	/** Areas of the bed parts must stay out of (from the catalog or added by hand). */
+	keepOut?: KeepOut[];
 }

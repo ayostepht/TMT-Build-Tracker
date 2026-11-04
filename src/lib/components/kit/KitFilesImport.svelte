@@ -2,7 +2,6 @@
 	import {
 		getModelJob,
 		uploadGuidePage,
-		uploadHardwareGlb,
 		uploadPrintGeometry,
 		uploadStepZip,
 		type ModelJobInfo
@@ -22,7 +21,7 @@
 
 	/**
 	 * One place to add the MakeGood files: STEP zip(s) or loose STEP files, 3MF profiles, a zip of
-	 * 3MFs, the guide PDF (or the 3MF holding it) and the hardware GLB, in any mix. Each file is
+	 * 3MFs, the guide PDF (or the 3MF holding it) in any mix. Each file is
 	 * sniffed in the browser, the plan shows what it will feed, and one run does the lot.
 	 * Imports are install-wide, so only site admins get the drop zone (`canImport`).
 	 */
@@ -196,14 +195,6 @@
 		s.msg = `Imported geometry for ${r.imported} part${r.imported === 1 ? '' : 's'}${warn.length ? `. ${warn[0]}` : ''}`;
 	}
 
-	async function runHardware(s: RunStep) {
-		const it = itemById(s.itemIds[0]);
-		s.msg = 'Uploading';
-		await uploadHardwareGlb(templateId, await asFile(it), (f) => (s.frac = f));
-		s.frac = null;
-		s.msg = 'Hardware model added';
-	}
-
 	async function runGuide(s: RunStep) {
 		const it = itemById(s.itemIds[0]);
 		const g = findGuidePdf(await itemBytes(fileOf(it), it));
@@ -233,7 +224,6 @@
 		try {
 			if (s.kind === 'model') await runModel(s);
 			else if (s.kind === 'print') await runPrint(s);
-			else if (s.kind === 'hardware') await runHardware(s);
 			else await runGuide(s);
 			s.status = 'done';
 		} catch (e) {
@@ -299,7 +289,7 @@
 				<strong>Drop the MakeGood files here</strong>
 				<span class="muted"
 					>Any mix: the STEP zip or loose .step files, 3MF profiles, a zip of 3MFs, the guide PDF
-					(or the 3MF it came in), the hardware .glb. Nothing leaves your network.</span
+					(or the 3MF it came in). Nothing leaves your network.</span
 				>
 				<button type="button" class="btn primary" onclick={() => input?.click()}
 					>Choose files</button
@@ -309,7 +299,7 @@
 					type="file"
 					multiple
 					hidden
-					accept=".zip,.step,.stp,.3mf,.pdf,.glb"
+					accept=".zip,.step,.stp,.3mf,.pdf"
 					data-testid="kit-file-input"
 					aria-label="MakeGood files"
 					onchange={(e) => addFiles(e.currentTarget.files)}

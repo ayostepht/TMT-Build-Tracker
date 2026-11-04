@@ -2,6 +2,8 @@
 	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { untrack } from 'svelte';
+	import { PrinterStore } from '#lib/client/printer-store.svelte.ts';
 	import { authClient } from '#lib/auth-client.ts';
 	import type { LayoutProps } from './$types';
 
@@ -40,9 +42,47 @@
 	// Pages that are not part of a build carry `?from=<id>` so they can lead back to it.
 	const fromQuery = $derived(current ? `?from=${current.id}` : '');
 
-	let open = $state<'builds' | 'account' | null>(null);
+	// The workspace the nav acts on: the build being looked at, else the active workspace.
+	const buildOrg = $derived(
+		(page.data as { view?: { build: { organizationId: string } } }).view?.build.organizationId
+	);
+	const workspace = $derived(
+		data.teams.find((t) => t.id === buildOrg) ??
+			data.teams.find((t) => t.id === data.activeTeamId) ??
+			data.teams[0] ??
+			null
+	);
+	const printersHref = $derived(
+		workspace ? resolve('/(app)/teams/[slug]/printers', { slug: workspace.slug }) : null
+	);
+	const membersHref = $derived(
+		workspace && !workspace.personal
+			? resolve('/(app)/teams/[slug]/members', { slug: workspace.slug })
+			: null
+	);
+	const integrationsHref = $derived(
+		workspace ? resolve('/(app)/teams/[slug]/integrations', { slug: workspace.slug }) : null
+	);
+
+	// Live "n printing" next to Printers, from the workspace's printer stream.
+	let store = $state<PrinterStore | null>(null);
+	$effect(() => {
+		const id = workspace?.id;
+		if (!id) {
+			store = null;
+			return;
+		}
+		const s = new PrinterStore(id);
+		store = s;
+		return untrack(() => s.acquire());
+	});
+	const printingCount = $derived(
+		store?.printers.filter((p) => p.enabled && p.status?.state === 'printing').length ?? 0
+	);
+
+	let open = $state<'builds' | 'account' | 'settings' | null>(null);
 	afterNavigate(() => (open = null));
-	function toggle(which: 'builds' | 'account') {
+	function toggle(which: 'builds' | 'account' | 'settings') {
 		open = open === which ? null : which;
 	}
 	function onWindowClick(e: MouseEvent) {
@@ -116,6 +156,17 @@
 				</div>
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 				<a class="navlink" href={resolve('/(app)/designs') + fromQuery}>Designs</a>
+				{#if printersHref}
+					<a
+						class="navlink"
+						href={printersHref}
+						data-testid="nav-printers"
+						aria-current={page.url.pathname === printersHref ? 'page' : undefined}
+						>Printers{#if printingCount}<span class="live" data-testid="nav-printing"
+								><span class="dot" aria-hidden="true"></span>{printingCount} printing</span
+							>{/if}</a
+					>
+				{/if}
 			</nav>
 		</div>
 		<div class="who">
@@ -132,6 +183,30 @@
 				</label>
 			{:else}
 				<a class="muted" href={resolve('/(app)/onboarding')}>Create a chapter</a>
+			{/if}
+			{#if workspace}
+				<div class="menu-wrap ws-settings">
+					<button
+						type="button"
+						class="navlink"
+						aria-haspopup="true"
+						aria-expanded={open === 'settings'}
+						data-testid="workspace-settings-menu"
+						onclick={() => toggle('settings')}
+						>Workspace settings <span aria-hidden="true">▾</span></button
+					>
+					{#if open === 'settings'}
+						<div class="menu account" role="menu" data-testid="workspace-settings-panel">
+							<div class="menu-h">{workspace.name}</div>
+							{#if membersHref}
+								<a role="menuitem" href={membersHref} data-testid="ws-members">Members</a>
+							{/if}
+							<a role="menuitem" href={integrationsHref} data-testid="ws-integrations"
+								>Integrations</a
+							>
+						</div>
+					{/if}
+				</div>
 			{/if}
 			<div class="menu-wrap">
 				<button
@@ -150,6 +225,11 @@
 						{#if data.siteAdmin}
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 							<a role="menuitem" href={resolve('/(app)/admin/templates') + fromQuery}>Kit admin</a>
+						{/if}
+						{#if workspace}
+							{#if membersHref}<a role="menuitem" class="phone-only" href={membersHref}>Members</a
+								>{/if}
+							<a role="menuitem" class="phone-only" href={integrationsHref}>Integrations</a>
 						{/if}
 						<button type="button" role="menuitem" onclick={signOut}>Sign out</button>
 					</div>
@@ -204,6 +284,20 @@
 	}
 	.navlink:hover {
 		background: var(--accent-soft);
+	}
+	.live {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		margin-left: 4px;
+		font: 600 12px/1 var(--f-body);
+		color: var(--muted);
+	}
+	.dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--ok);
 	}
 	.acct .who-name {
 		max-width: 14ch;
@@ -327,7 +421,19 @@
 		min-height: 40px;
 		align-items: center;
 	}
+	.phone-only {
+		display: none !important;
+	}
+	.who select {
+		max-width: 150px;
+	}
 	@media (max-width: 760px) {
+		.ws-settings {
+			display: none;
+		}
+		.phone-only {
+			display: grid !important;
+		}
 		.crumb {
 			display: flex;
 		}

@@ -18,7 +18,8 @@
  * underfilled plates are merged whenever the printer's multi-material slots allow
  * and the materials are compatible (PETG never shares a plate with TPU).
  */
-import { boxOrients, rotatePoints, type Pt } from './geom2d.ts';
+import { boxOrients, fitOutline, rotatePoints, turnedOutlineBox, type Pt } from './geom2d.ts';
+import { findFreePosition, optimizeLayout, type OptItem } from './plate-optimize.ts';
 import { chooseOrientation, describePose, type OrientData, type PrintPose } from './orient.ts';
 import type { PrintFootprint } from './print-footprint.ts';
 import type { PieceSilhouettes, Silhouette } from './silhouette.ts';
@@ -71,11 +72,15 @@ export interface ArrangePrinter {
 	spacing: number;
 	/** Filaments one plate may use. */
 	mmSlots: number;
+	/** Rectangles of the bed parts must stay out of (bed mm, origin front-left); the margin is kept around them too. */
+	keepOut?: { x: number; y: number; w: number; d: number; label?: string }[];
 }
 
 export interface ArrangeOptions {
 	/** Merge phase only touches plates below this utilisation (0..1). Default 0.6. */
 	mergeBelow?: number;
+	/** Move and turn items on their plate for edge clearance after packing (plate-optimize.ts). Default true. */
+	optimize?: boolean;
 	/** Override which roles may share a plate (still limited by mmSlots). */
 	compatible?: (a: ArrangeRole, b: ArrangeRole) => boolean;
 }
@@ -110,7 +115,7 @@ export interface ArrangedItem {
 	/** Placed box size after rotation. */
 	w: number;
 	d: number;
-	/** Degrees counter-clockwise about z, applied to the mesh before moving it to (x, y). 0 or 90 normally; any angle when the part only fits the bed tilted (hull-based). */
+	/** Degrees counter-clockwise about z, applied to the mesh before moving it to (x, y). 0 or 90 normally; any angle when the part only fits the bed turned (hull-based). */
 	rotation: number;
 	role: string;
 	/** Where the turned mesh's box centre lies relative to its origin; the mesh is moved to (x - ox, y - oy). Absent for 0/90 degrees. */
@@ -137,11 +142,15 @@ export interface ArrangedPlate {
 	utilisation: number;
 	/** True when a part is bigger than the bed; its items are centred and overhang. */
 	oversize?: boolean;
-	bed: { x: number; y: number; margin: number };
+	bed: {
+		x: number;
+		y: number;
+		margin: number;
+		keepOut?: { x: number; y: number; w: number; d: number; label?: string }[];
+	};
 }
 
-export type ArrangeWarningCode =
-	'oversize' | 'split' | 'unsized' | 'unknown-role' | 'tilted' | 'reoriented';
+export type ArrangeWarningCode = 'oversize' | 'split' | 'unsized' | 'unknown-role' | 'reoriented';
 export interface ArrangeWarning {
 	code: ArrangeWarningCode;
 	slug: string;
@@ -208,6 +217,14 @@ class MaxRects {
 		this.place(best);
 		this.used += best.w * best.h;
 		return best;
+	}
+	/** Reserve a rectangle that no item may overlap (keep-out areas). */
+	block(r: Rect) {
+		const x0 = Math.max(0, r.x);
+		const y0 = Math.max(0, r.y);
+		const x1 = Math.min(this.W, r.x + r.w);
+		const y1 = Math.min(this.H, r.y + r.h);
+		if (x1 > x0 && y1 > y0) this.place({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
 	}
 	private place(r: Rect) {
 		const out: Rect[] = [];
@@ -357,7 +374,7 @@ const HEIGHT_MARGIN = 2;
 const ALLOW_3D_REORIENT = false;
 
 /**
- * Placement candidates for one piece: its profile orientation (0/90 degrees, or tilted in
+ * Placement candidates for one piece: its profile orientation (0/90 degrees, or turned in
  * the plane when only that fits); when none fits and the piece carries orientation data
  * (imported geometry), the best fitting resting pose instead. Exported for tests.
  */
@@ -378,7 +395,7 @@ export function pieceOrients(
 	const base: Orient[] = boxOrients(pc, rotate, usableX, usableY);
 	// HARD RULE (maintainer, 2026-11-04): parts keep the face-down orientation from their
 	// source file; only flat rotations about Z are allowed. Never change which face is down,
-	// stand a part on an edge, or tilt it off the bed. 3D resting poses are disabled.
+	// stand a part on an edge, or lift it off the bed. 3D resting poses are disabled.
 	if (!ALLOW_3D_REORIENT) return base;
 	const fits = (o: { w: number; d: number }) => o.w <= usableX + EPS && o.d <= usableY + EPS;
 	if (!rotate || !pc.orient?.poses.length || base.some(fits)) return base;
@@ -472,43 +489,22 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 		itemsOf.set(p.slug, list);
 	}
 
-	const fitsEmpty = (it: Item): boolean =>
-		it.orients.some((o) => o.w <= usableX + 1e-6 && o.d <= usableY + 1e-6);
-
-	// 2. oversize parts get their own plate
-	const plates: PlateState[] = [];
-	const oversizePlates: { part: ArrangePart; items: Item[] }[] = [];
-	const normal: ArrangePart[] = [];
-	for (const p of parts) {
-		const items = itemsOf.get(p.slug)!;
-		const bad = items.find((i) => !fitsEmpty(i));
-		if (bad || !items.length) {
-			if (bad) {
-				const big = items.reduce((a, b) => (area(b) > area(a) ? b : a));
-				const hasOutline =
-					!!p.footprint.pieces[bad.piece]?.sil || !!p.footprint.pieces[bad.piece]?.hull;
-				const advice =
-					p.rotate === false
-						? ''
-						: ` No flat angle of its ${hasOutline ? 'outline' : 'box'} fits. Print it from another profile, on a bigger bed, or as a smaller variant (for example a two-piece version).`;
-				warnings.push({
-					code: 'oversize',
-					slug: p.slug,
-					message:
-						`${p.name} ${Math.round(Math.max(big.w, big.d))}×${Math.round(Math.min(big.w, big.d))} mm doesn't fit a ` +
-						`${printer.bedX}×${printer.bedY} mm bed${p.rotate === false ? '' : ' even rotated'}.` +
-						advice +
-						(p.hint ? ` ${p.hint}` : '')
-				});
-				oversizePlates.push({ part: p, items });
-			}
-			continue;
+	/** Empty bin with the keep-out areas (plus the edge margin around them) reserved. */
+	const emptyBin = (): MaxRects => {
+		const bin = new MaxRects(binW, binH);
+		for (const z of zones) {
+			// item box [x, x + w] (bin coordinates = bed - margin) must end before zone.x - 2 * margin or start after zone.x + zone.w
+			const x0 = z.x - 2 * margin + spacing;
+			const y0 = z.y - 2 * margin + spacing;
+			const x1 = z.x + z.w;
+			const y1 = z.y + z.d;
+			bin.block({ x: x0, y: y0, w: Math.max(x1 - x0, 0.01), h: Math.max(y1 - y0, 0.01) });
 		}
-		normal.push(p);
-	}
-
+		return bin;
+	};
+	const zones = (printer.keepOut ?? []).filter((z) => z.w > 0 && z.d > 0);
 	const newPlate = (runs: number): PlateState => ({
-		bin: new MaxRects(binW, binH),
+		bin: emptyBin(),
 		items: [],
 		roles: new Set(),
 		runs
@@ -540,6 +536,123 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 			next.roles.add(it.role);
 		}
 		return next;
+	}
+
+	const fitsEmptyBed = (it: Item): boolean =>
+		it.orients.some((o) => o.w <= usableX + 1e-6 && o.d <= usableY + 1e-6);
+	// with keep-out areas a box that fits the bed may still have no free spot
+	const fitsEmpty = (it: Item): boolean =>
+		zones.length ? tryPlace(newPlate(1), [it]) !== null : fitsEmptyBed(it);
+
+	// 2. oversize parts get their own plate
+	const plates: PlateState[] = [];
+	const oversizePlates: { part: ArrangePart; items: Item[] }[] = [];
+	const normal: ArrangePart[] = [];
+	/** Outline-based spot for an item whose box has none around the keep-out areas (diagonal wings). */
+	const soloSpot = (it: Item) => {
+		const outline = fitOutline(partOf.get(it.slug)!.footprint.pieces[it.piece]);
+		const setup = { bedX: printer.bedX, bedY: printer.bedY, margin, spacing, keepOut: zones };
+		let best: { o: Orient; x: number; y: number; clearance: number } | null = null;
+		for (const o of it.orients) {
+			const pos = findFreePosition(
+				outline,
+				o.rot,
+				setup,
+				o.ox !== undefined || o.oy !== undefined ? { ox: o.ox ?? 0, oy: o.oy ?? 0 } : undefined
+			);
+			if (pos && (!best || pos.clearance > best.clearance)) best = { o, ...pos };
+		}
+		if (best) return best;
+		// the fitter's few candidate angles have no spot: sweep every 0.25 degrees for angles whose
+		// box fits the bed, tightest slack last, and look for a spot around the keep-out areas
+		const cand: { deg: number; slack: number }[] = [];
+		for (let k = 0; k < 1440; k++) {
+			const deg = k * 0.25;
+			const b = turnedOutlineBox(outline, deg);
+			const slack = Math.min(usableX - b.w, usableY - b.d);
+			if (slack >= -1e-6) cand.push({ deg, slack });
+		}
+		cand.sort((a, b) => b.slack - a.slack || a.deg - b.deg);
+		for (const { deg } of cand.slice(0, 120)) {
+			const b = turnedOutlineBox(outline, deg);
+			const axis = deg % 90 === 0;
+			const o: Orient = {
+				w: Math.ceil(b.w * 10 - 1e-9) / 10,
+				d: Math.ceil(b.d * 10 - 1e-9) / 10,
+				rot: deg,
+				...(axis ? {} : { ox: Math.round(b.cx * 100) / 100, oy: Math.round(b.cy * 100) / 100 })
+			};
+			const pos = findFreePosition(
+				outline,
+				deg,
+				setup,
+				axis ? undefined : { ox: o.ox!, oy: o.oy! }
+			);
+			if (pos && (!best || pos.clearance > best.clearance + 1e-9)) best = { o, ...pos };
+		}
+		return best;
+	};
+	for (const p of parts) {
+		let items = itemsOf.get(p.slug)!;
+		if (zones.length) {
+			const keep: Item[] = [];
+			for (const it of items) {
+				const spot = fitsEmpty(it) ? null : soloSpot(it);
+				if (!spot) {
+					keep.push(it);
+					continue;
+				}
+				// own plate: placed by its outline, the keep-out corner is inside the box but not the part
+				const bin = emptyBin();
+				bin.used = usableX * usableY;
+				plates.push({
+					bin,
+					items: [
+						{
+							...it,
+							x: spot.x - margin - spot.o.w / 2,
+							y: spot.y - margin - spot.o.d / 2,
+							pw: spot.o.w,
+							pd: spot.o.d,
+							rot: spot.o.rot,
+							ox: spot.o.ox,
+							oy: spot.o.oy
+						}
+					],
+					roles: new Set([it.role]),
+					runs: runsOf(p)
+				});
+			}
+			items = keep;
+			itemsOf.set(p.slug, keep);
+		}
+		const bad = items.find((i) => !fitsEmpty(i));
+		if (bad || !items.length) {
+			if (bad) {
+				const big = items.reduce((a, b) => (area(b) > area(a) ? b : a));
+				const hasOutline =
+					!!p.footprint.pieces[bad.piece]?.sil || !!p.footprint.pieces[bad.piece]?.hull;
+				const zoneOnly = zones.length > 0 && fitsEmptyBed(bad);
+				const zoneNames = [...new Set(zones.map((z) => z.label || 'keep-out area'))].join(', ');
+				const advice = zoneOnly
+					? ` It fits the bed but not around the ${zoneNames} area that parts must keep clear of. Print it from another profile, on a bigger bed, or as a smaller variant.`
+					: p.rotate === false
+						? ''
+						: ` No flat angle of its ${hasOutline ? 'outline' : 'box'} fits. Print it from another profile, on a bigger bed, or as a smaller variant (for example a two-piece version).`;
+				warnings.push({
+					code: 'oversize',
+					slug: p.slug,
+					message:
+						`${p.name} ${Math.round(Math.max(big.w, big.d))}×${Math.round(Math.min(big.w, big.d))} mm doesn't fit a ` +
+						`${printer.bedX}×${printer.bedY} mm bed${zoneOnly ? ' with its keep-out area' : p.rotate === false ? '' : ' even rotated'}.` +
+						advice +
+						(p.hint ? ` ${p.hint}` : '')
+				});
+				oversizePlates.push({ part: p, items });
+			}
+			continue;
+		}
+		normal.push(p);
 	}
 
 	// 3. pack each (runs, role) pool
@@ -662,7 +775,58 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 	});
 
 	const result: ArrangedPlate[] = [];
-	const bedInfo = { x: printer.bedX, y: printer.bedY, margin };
+	const bedInfo = {
+		x: printer.bedX,
+		y: printer.bedY,
+		margin,
+		...(zones.length ? { keepOut: zones.map((z) => ({ ...z })) } : {})
+	};
+	/** Post-packing pass: same items on the same plate, better positions and angles (see plate-optimize.ts). */
+	const optimizeItems = (
+		items: ArrangedItem[],
+		raw: { orients: Orient[]; slug: string; piece: number }[]
+	) => {
+		const byKey = new Map(raw.map((r) => [`${r.slug}|${r.piece}`, r]));
+		const opt: OptItem[] = items.map((i) => {
+			const pc = partOf.get(i.slug)!.footprint.pieces[i.piece];
+			const free = i.rotation % 90 !== 0;
+			return {
+				outline: fitOutline(pc),
+				rotatable: free && partOf.get(i.slug)!.rotate !== false,
+				angles: byKey.get(`${i.slug}|${i.piece}`)?.orients.map((o) => o.rot),
+				rot: i.rotation,
+				x: i.x,
+				y: i.y,
+				ox: i.ox,
+				oy: i.oy,
+				w: i.w,
+				d: i.d
+			};
+		});
+		const out = optimizeLayout(opt, {
+			bedX: printer.bedX,
+			bedY: printer.bedY,
+			margin,
+			spacing,
+			keepOut: zones
+		});
+		out.forEach((o, k) => {
+			const it = items[k];
+			if (it.pose) return;
+			it.x = round1(o.x);
+			it.y = round1(o.y);
+			it.w = round1(o.w);
+			it.d = round1(o.d);
+			it.rotation = o.rot;
+			if (o.ox || o.oy) {
+				it.ox = o.ox;
+				it.oy = o.oy;
+			} else {
+				delete it.ox;
+				delete it.oy;
+			}
+		});
+	};
 	const toPlate = (
 		pl: PlateState | null,
 		fallback?: { part: ArrangePart; items: Item[] }
@@ -671,24 +835,14 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 			? pl.items
 			: fallback!.items.map((i) => ({ ...i, x: 0, y: 0, pw: i.w, pd: i.d, rot: 0 }));
 		const runs = pl ? pl.runs : runsOf(fallback!.part);
-		// a tilted part that is alone on its plate (it only fits by itself) sits centred on the bed
-		const alone = !!pl && rawItems.length === 1 && rawItems[0].rot % 90 !== 0;
 		const items: ArrangedItem[] = rawItems
 			.sort((a, b) => a.order - b.order || a.piece - b.piece || a.copy - b.copy)
 			.map((i) => ({
 				slug: i.slug,
 				piece: i.piece,
 				copy: i.copy,
-				x: pl
-					? alone
-						? round1(printer.bedX / 2)
-						: round1(margin + i.x + i.pw / 2)
-					: round1(printer.bedX / 2),
-				y: pl
-					? alone
-						? round1(printer.bedY / 2)
-						: round1(margin + i.y + i.pd / 2)
-					: round1(printer.bedY / 2),
+				x: pl ? round1(margin + i.x + i.pw / 2) : round1(printer.bedX / 2),
+				y: pl ? round1(margin + i.y + i.pd / 2) : round1(printer.bedY / 2),
 				w: round1(i.pw),
 				d: round1(i.pd),
 				rotation: i.rot,
@@ -696,6 +850,7 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 				...(i.ox || i.oy ? { ox: i.ox, oy: i.oy } : {}),
 				...(i.pose ? { pose: i.pose } : {})
 			}));
+		if (pl && input.options?.optimize !== false) optimizeItems(items, rawItems);
 		const slugs: string[] = [];
 		for (const i of items) if (!slugs.includes(i.slug)) slugs.push(i.slug);
 		slugs.sort((a, b) => partIndex.get(a)! - partIndex.get(b)!);
@@ -772,16 +927,6 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 				slug,
 				message: `${partOf.get(slug)?.name ?? slug} is split over plates ${nums.length > 2 ? `${nums.slice(0, -1).join(', ')} and ${nums[nums.length - 1]}` : nums.join(' and ')} because its copies do not fit one plate.`
 			});
-	const tilted = new Map<string, number>();
-	for (const p of result)
-		for (const i of p.items)
-			if (i.rotation % 90 !== 0 && !tilted.has(i.slug)) tilted.set(i.slug, i.rotation);
-	for (const [slug, deg] of tilted)
-		warnings.push({
-			code: 'tilted',
-			slug,
-			message: `${partOf.get(slug)?.name ?? slug} only fits when turned ${Math.round(deg)}° on the bed.`
-		});
 	const turned = new Map<string, string>();
 	for (const p of result)
 		for (const i of p.items) if (i.pose && !turned.has(i.slug)) turned.set(i.slug, i.pose.desc);

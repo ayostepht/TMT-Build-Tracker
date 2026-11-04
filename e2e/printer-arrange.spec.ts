@@ -58,6 +58,16 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	await expect(warnings).toBeVisible();
 	await expect(warnings).toContainText('Wing Left');
 	await expect(warnings).toContainText("doesn't fit a 256×256 mm bed");
+	// The header counts exactly what the list shows (a flat rotation is not a warning).
+	const listed = await warnings.locator('li').count();
+	await expect(warnings.locator('summary')).toContainText(`${listed} thing`);
+	await expect(warnings).not.toContainText(/tilt|turned \d+°/i);
+
+	// The Centauri Carbon filament cutter (front right) is drawn as a keep-out area on every plate.
+	const zone = page.getByTestId('keep-out').first();
+	await expect(zone).toBeAttached();
+	await expect(zone).toHaveAttribute('aria-label', 'Keep-out area: Filament cutter');
+	await expect(page.getByTestId('keep-out')).toHaveCount(n);
 
 	// The layout picker offers the arrangement and the kit author's profiles.
 	const picker = page.getByTestId('plate-layout');

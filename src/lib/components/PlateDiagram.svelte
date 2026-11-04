@@ -17,7 +17,7 @@
 	 * with a soft shadow, and a numbered badge on every piece. The
 	 * numbers match the legend next to it. Badges scale to their part; parts too small for one
 	 * get it beside them on a thin leader (copies close together share one), see `badge-layout`.
-	 * A dashed ring around a badge marks a re-oriented part, a small arrow arc a tilted one. Pieces without a known mesh are drawn as dashed
+	 * A dashed ring around a badge marks a re-oriented part, a small arrow arc a rotated one. Pieces without a known mesh are drawn as dashed
 	 * rounded boxes ("approximate"). Presentational; bed y points up, so the SVG flips it.
 	 */
 	let {
@@ -113,7 +113,7 @@
 				n: row?.n ?? 0,
 				name: row?.name ?? it.slug,
 				turned: !!it.pose,
-				tilted: it.rotation % 90 !== 0
+				rotated: it.rotation % 90 !== 0
 			};
 		})
 	);
@@ -136,13 +136,13 @@
 		).map((b) => {
 			const its = b.ids.map((i) => shapes[i]);
 			const turned = its.find((s) => s.turned);
-			const tilted = its.find((s) => s.tilted);
+			const rotated = its.find((s) => s.rotated);
 			const row = numberOf.get(b.slug);
 			return {
 				...b,
 				n: row?.n ?? 0,
 				turned: turned?.it.pose?.desc ?? null,
-				tilted: tilted ? Math.round(tilted.it.rotation) : null
+				rotated: rotated ? Math.round(rotated.it.rotation) : null
 			};
 		});
 	});
@@ -174,6 +174,16 @@
 			<circle cx="0.6" cy="0.7" r="0.22" class="pei-dot" />
 			<circle cx="1.8" cy="1.9" r="0.18" class="pei-dot" />
 			<circle cx="1.5" cy="0.3" r="0.14" class="pei-dot" />
+		</pattern>
+		<pattern
+			id="{uid}-hatch"
+			width="5"
+			height="5"
+			patternUnits="userSpaceOnUse"
+			patternTransform="rotate(45)"
+		>
+			<rect width="5" height="5" class="ko-fill" />
+			<path d="M0 0V5" class="ko-line" />
 		</pattern>
 		<linearGradient id="{uid}-bedglow" x1="0" y1="0" x2="0" y2="1">
 			<stop offset="0" class="glow-hi" />
@@ -220,6 +230,19 @@
 		height={bed.y - bed.margin * 2}
 		rx="3"
 	/>
+	<!-- keep-out areas (filament cutter, ...): parts stay clear of these -->
+	{#each bed.keepOut ?? [] as z, zi (zi)}
+		<g
+			class="keepout"
+			data-testid="keep-out"
+			role="img"
+			aria-label="Keep-out area: {z.label || 'keep-out'}"
+		>
+			<title>{z.label || 'Keep-out'}: parts stay out of this area</title>
+			<rect x={z.x} y={bed.y - z.y - z.d} width={z.w} height={z.d} fill="url(#{uid}-hatch)" />
+			<rect class="ko-edge" x={z.x} y={bed.y - z.y - z.d} width={z.w} height={z.d} />
+		</g>
+	{/each}
 	<!-- origin axes (front-left) -->
 	<g class="origin" aria-hidden="true">
 		<path class="ax-x" d="M3.5 {bed.y - 3.5}H17" />
@@ -299,11 +322,11 @@
 							<circle class="ring-turned" r={b.r + 1.7} />
 						</g>
 					{/if}
-					{#if b.tilted != null}
-						<g data-testid="tilted-badge" data-slug={b.slug}>
-							<title>Turned {b.tilted}° to fit the bed</title>
+					{#if b.rotated != null}
+						<g data-testid="rotated-badge" data-slug={b.slug}>
+							<title>{numberOf.get(b.slug)?.name ?? b.slug}: rotated {b.rotated}° on the bed</title>
 							<path class="ring-halo" d={arc(b.r + (b.turned ? 2.2 : 0))} />
-							<path class="ring-tilted" d={arc(b.r + (b.turned ? 2.2 : 0))} />
+							<path class="ring-rotated" d={arc(b.r + (b.turned ? 2.2 : 0))} />
 						</g>
 					{/if}
 					<circle class="disc" r={b.r} />
@@ -314,6 +337,17 @@
 			</g>
 		{/each}
 	</g>
+	{#each bed.keepOut ?? [] as z, zi (zi)}
+		{#if z.label}
+			<text
+				class="ko-label"
+				x={z.x + z.w / 2 > bed.x / 2 ? Math.min(bed.x - 1, z.x + z.w) : Math.max(1, z.x)}
+				y={Math.max(9, bed.y - z.y - z.d - 3)}
+				text-anchor={z.x + z.w / 2 > bed.x / 2 ? 'end' : 'start'}
+				aria-hidden="true">{z.label}</text
+			>
+		{/if}
+	{/each}
 </svg>
 
 <style>
@@ -358,6 +392,30 @@
 		stroke: var(--bed-edge);
 		stroke-width: 1.4px;
 		vector-effect: non-scaling-stroke;
+	}
+	.ko-fill {
+		fill: color-mix(in srgb, var(--bed-text) 16%, transparent);
+	}
+	.ko-line {
+		stroke: var(--bed-text);
+		stroke-width: 1.1;
+		opacity: 0.55;
+	}
+	.ko-edge {
+		fill: none;
+		stroke: var(--bed-text);
+		stroke-width: 1px;
+		opacity: 0.7;
+		vector-effect: non-scaling-stroke;
+	}
+	.ko-label {
+		fill: var(--bed-text);
+		stroke: var(--bed);
+		stroke-width: 2.4px;
+		paint-order: stroke;
+		font-size: 7px;
+		font-weight: 600;
+		pointer-events: none;
 	}
 	.margin {
 		fill: none;
@@ -475,7 +533,7 @@
 	}
 	.ring-halo,
 	.ring-turned,
-	.ring-tilted {
+	.ring-rotated {
 		fill: none;
 		stroke-linecap: round;
 		stroke-linejoin: round;
@@ -486,7 +544,7 @@
 		stroke-width: 4.2px;
 	}
 	.ring-turned,
-	.ring-tilted {
+	.ring-rotated {
 		stroke: #d98200;
 		stroke-width: 2.2px;
 	}

@@ -24,6 +24,8 @@ export interface MultiMaterialOption {
 	note?: string;
 }
 
+import type { KeepOut } from '#lib/domain/types.ts';
+
 export interface CatalogPrinter {
 	/** Stable id: `<brand>-<model>` in kebab case. Never reuse an id. */
 	id: string;
@@ -44,6 +46,10 @@ export interface CatalogPrinter {
 	/** Diameter in mm when the bed is round (bedX/bedY then hold the inscribed square). */
 	round?: number;
 	notes?: string;
+	/** Parts keep off these bed rectangles (the slicer's `bed_exclude_area`). */
+	keepOut?: KeepOut[];
+	/** Where the keep-out came from (the slicer profile file). */
+	keepOutSource?: string;
 	/** Specs we could not confirm; the UI asks the user to verify. */
 	check?: string;
 }
@@ -75,6 +81,17 @@ const ACE = mmo('ACE Pro', 4);
 const IFS = mmo('IFS', 4);
 const QIDI_BOX = mmo('QIDI Box', 4);
 
+// Keep-out rectangles come from the slicers' own machine profiles (`bed_exclude_area`, points
+// "XxY", origin front-left). Only printers whose profile defines one get an entry.
+const ORCA_ECC =
+	'OrcaSlicer resources/profiles/Elegoo/machine/ECC/Elegoo Centauri Carbon 0.4 nozzle.json: bed_exclude_area ["246x0","256x0","256x20","246x20"]';
+const ORCA_BBL =
+	'OrcaSlicer resources/profiles/BBL/machine/Bambu Lab <model> 0.4 nozzle.json: bed_exclude_area ["0x0","18x0","18x28","0x28"]';
+const BBL_KEEP: Partial<CatalogPrinter> = {
+	keepOut: [{ x: 0, y: 0, w: 18, d: 28, label: 'Front-left corner' }],
+	keepOutSource: ORCA_BBL
+};
+
 const kebab = (s: string) =>
 	s
 		.toLowerCase()
@@ -91,7 +108,11 @@ const rows: Row[] = [
 		256,
 		320,
 		[CANVAS],
-		{ notes: 'CANVAS is the optional 4-color multi-material add-on.' }
+		{
+			notes: 'CANVAS is the optional 4-color multi-material add-on.',
+			keepOut: [{ x: 246, y: 0, w: 10, d: 20, label: 'Filament cutter' }],
+			keepOutSource: ORCA_ECC
+		}
 	],
 	['Elegoo', 'Neptune 4', 225, 225, 265, 300],
 	['Elegoo', 'Neptune 4 Pro', 225, 225, 265, 300],
@@ -99,10 +120,10 @@ const rows: Row[] = [
 	['Elegoo', 'Neptune 4 Max', 420, 420, 480, 300],
 	['Elegoo', 'Neptune 3 Pro', 225, 225, 280, 260],
 	// Bambu Lab (bambulab.com)
-	['Bambu Lab', 'X1 Carbon', 256, 256, 256, 300, [AMS]],
-	['Bambu Lab', 'X1E', 256, 256, 256, 320, [AMS]],
-	['Bambu Lab', 'P1S', 256, 256, 256, 300, [AMS]],
-	['Bambu Lab', 'P1P', 256, 256, 256, 300, [AMS]],
+	['Bambu Lab', 'X1 Carbon', 256, 256, 256, 300, [AMS], BBL_KEEP],
+	['Bambu Lab', 'X1E', 256, 256, 256, 320, [AMS], BBL_KEEP],
+	['Bambu Lab', 'P1S', 256, 256, 256, 300, [AMS], BBL_KEEP],
+	['Bambu Lab', 'P1P', 256, 256, 256, 300, [AMS], BBL_KEEP],
 	[
 		'Bambu Lab',
 		'P2S',

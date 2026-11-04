@@ -2,7 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
 	import { chooseTemplate, getKitStatus } from '#lib/client/api.ts';
-	import type { KitStatusDto } from '#lib/domain/kit-import.ts';
+	import { kitReadiness, type KitStatusDto } from '#lib/domain/kit-import.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import KitCredit from '#lib/components/kit/KitCredit.svelte';
 	import KitFilesImport from '#lib/components/kit/KitFilesImport.svelte';
@@ -51,18 +51,8 @@
 		void loadOwn();
 	});
 
-	type State = 'ready' | 'installing' | 'partial' | 'missing';
-	const stateOf = (s: KitStatusDto): State =>
-		s.installing
-			? 'installing'
-			: s.model && s.print.withGeometry > 0
-				? s.model.missing.length || s.print.missing.length
-					? 'partial'
-					: 'ready'
-				: s.model || s.print.withGeometry > 0
-					? 'partial'
-					: 'missing';
-	const baseState = $derived(base ? stateOf(base.status) : null);
+	const baseReady = $derived(base ? kitReadiness(base.status) : null);
+	const baseState = $derived(baseReady?.state ?? null);
 	const label = $derived({
 		ready: 'Ready',
 		installing: base?.status.installMessage || 'Installing MakeGood files…',
@@ -122,7 +112,7 @@
 				{:else if base}
 					<p class="muted" data-testid="makegood-missing">
 						{baseState === 'partial'
-							? 'Some of the MakeGood files are missing.'
+							? `Some of the MakeGood files are missing. ${baseReady?.note ?? ''}`
 							: 'The MakeGood files are not installed yet.'}
 						You can carry on: plates use rough part sizes and there is no 3D preview until they are added.
 					</p>

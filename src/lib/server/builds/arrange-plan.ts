@@ -9,6 +9,7 @@
 import { and, eq } from 'drizzle-orm';
 import {
 	arrange,
+	type ArrangeOptions,
 	type ArrangePart,
 	type ArrangeResult,
 	type ArrangeRole,
@@ -16,6 +17,7 @@ import {
 } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { BuildView } from '#lib/domain/types.ts';
+import { effectiveKeepOut } from '#lib/printers/printer.ts';
 import type { Db } from '../db';
 import { buildPlates, builds, templatePlateLayouts, templatePrintGeometry } from '../db/schema';
 import { loadBuildView } from './view';
@@ -62,7 +64,8 @@ function roleLabel(f: BuildView['filaments'][number]): string {
 export function planArrangement(
 	view: BuildView,
 	footprints: Map<string, PrintFootprint>,
-	layoutHint: string | null = null
+	layoutHint: string | null = null,
+	options?: ArrangeOptions
 ): Plan | null {
 	const p = view.printer;
 	if (!p) return null;
@@ -113,8 +116,12 @@ export function planArrangement(
 			bedZ: p.bedZ,
 			margin: effectiveMargin(p.margin),
 			spacing: p.spacing,
+			keepOut: effectiveKeepOut(p),
 			mmSlots: p.mmSlots
-		}
+		},
+		// TMT_ARRANGE_OPTIMIZE=off: diagnostic switch to compare with the packer-only layout (screenshots, bug reports)
+		options:
+			options ?? (process.env.TMT_ARRANGE_OPTIMIZE === 'off' ? { optimize: false } : undefined)
 	});
 	return { result, unsized: unsized.map((u) => u.slug) };
 }

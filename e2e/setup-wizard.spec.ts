@@ -52,13 +52,25 @@ test('new build walks the setup wizard: template, options, colors, print, export
 	await expect(page).toHaveURL(/step=2/);
 	await page.getByTestId('wizard-next').click();
 
-	// Step 3: colors, with a palette; the full Designer is one link away.
+	// Step 3: colors. The full design workspace is embedded (no link out to the Design tab).
 	await expect(heading(page, 'Colors').first()).toBeVisible();
-	await expect(page.getByTestId('open-designer')).toBeVisible();
+	await expect(page.getByTestId('open-designer')).toHaveCount(0);
+	await expect(page.getByTestId('design-workspace')).toBeVisible();
+	await expect(page.getByTestId('no-model').or(page.locator('canvas').first())).toBeVisible();
 	await page.waitForLoadState('networkidle');
 	await page.getByRole('tab', { name: 'Palettes' }).click();
 	await page.locator('[data-palette="fire-truck"]').getByRole('button', { name: 'Apply' }).click();
 	await expect(page.getByText('Applied Fire Truck')).toBeVisible();
+	// Move a part between slots right here, then save-as-design is on offer too.
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const wingBefore = await wing.innerText();
+	await wing.click();
+	const sheet = page.getByTestId('part-sheet');
+	await expect(sheet).toContainText('Wing Left');
+	await sheet.locator('button[data-role="primary"]:not([aria-pressed="true"])').click();
+	await expect(page.locator('button.row[data-slug="wing-left"]')).not.toHaveText(wingBefore);
+	await expect(page.getByTestId('wizard-next')).toBeVisible();
 	await page.getByTestId('wizard-next').click();
 
 	// Step 4: print. Choose the 256 mm bed preset and arrange.
@@ -193,6 +205,7 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 	await expect(menu.getByTestId('menu-new-build')).toBeVisible();
 	await page.screenshot({ path: `${SHOTS}/nav-builds-menu-390.png` });
 	await page.keyboard.press('Escape');
+	await expect(page.getByRole('banner').getByTestId('nav-printers')).toBeVisible();
 	await expect(menu).toHaveCount(0);
 
 	// On a phone the build's name leads back to its Overview from other tabs and from Designs.

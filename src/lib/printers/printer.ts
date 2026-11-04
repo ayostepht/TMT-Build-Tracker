@@ -2,7 +2,7 @@
  * Helpers for `BuildPrinter` (the printer a build is planned for): defaults,
  * building one from the catalog and validating user input. Browser-safe.
  */
-import type { BuildPrinter } from '#lib/domain/types.ts';
+import type { BuildPrinter, KeepOut } from '#lib/domain/types.ts';
 import { catalogPrinter, PRINTER_CATALOG, type CatalogPrinter } from './catalog.ts';
 
 export const DEFAULT_MARGIN = 1;
@@ -25,7 +25,8 @@ export function printerFromCatalog(
 		mmSlots: mm?.slots ?? 1,
 		nozzle: c.nozzle,
 		margin: DEFAULT_MARGIN,
-		spacing: DEFAULT_SPACING
+		spacing: DEFAULT_SPACING,
+		...(c.keepOut?.length ? { keepOut: c.keepOut.map((k) => ({ ...k })) } : {})
 	};
 }
 
@@ -50,17 +51,39 @@ export function parsePrinter(v: unknown): BuildPrinter {
 	if (!name) throw new Error('Give the printer a name');
 	const slots = num(o.mmSlots ?? 1, 1, 16, 'Filament slots');
 	if (!Number.isInteger(slots)) throw new Error('Filament slots must be a whole number');
+	const bedX = num(o.bedX, BED_LIMITS.min, BED_LIMITS.max, 'Bed X');
+	const bedY = num(o.bedY, BED_LIMITS.min, BED_LIMITS.max, 'Bed Y');
+	const keepOut = parseKeepOut(o.keepOut, bedX, bedY);
 	return {
 		catalogId,
 		name,
-		bedX: num(o.bedX, BED_LIMITS.min, BED_LIMITS.max, 'Bed X'),
-		bedY: num(o.bedY, BED_LIMITS.min, BED_LIMITS.max, 'Bed Y'),
+		bedX,
+		bedY,
 		bedZ: num(o.bedZ ?? 250, BED_LIMITS.min, 2000, 'Bed Z'),
 		mmSlots: slots,
 		nozzle: num(o.nozzle ?? 0.4, 0.1, 2, 'Nozzle'),
 		margin: num(o.margin ?? DEFAULT_MARGIN, 0, 50, 'Margin'),
-		spacing: num(o.spacing ?? DEFAULT_SPACING, 0, 50, 'Spacing')
+		spacing: num(o.spacing ?? DEFAULT_SPACING, 0, 50, 'Spacing'),
+		...(keepOut.length ? { keepOut } : {})
 	};
+}
+
+/** Keep-out rectangles from untrusted input: at most 8, positive size, inside the bed. */
+export function parseKeepOut(v: unknown, bedX: number, bedY: number): KeepOut[] {
+	if (v === undefined || v === null) return [];
+	if (!Array.isArray(v) || v.length > 8)
+		throw new Error('keepOut must be a list of at most 8 areas');
+	return v.map((z, i) => {
+		if (typeof z !== 'object' || z === null) throw new Error(`Keep-out ${i + 1} is not an area`);
+		const o = z as Record<string, unknown>;
+		const f = `Keep-out ${i + 1}`;
+		const x = num(o.x, 0, bedX, `${f} x`);
+		const y = num(o.y, 0, bedY, `${f} y`);
+		const w = num(o.w, 1, bedX - x, `${f} width`);
+		const d = num(o.d, 1, bedY - y, `${f} depth`);
+		const label = typeof o.label === 'string' ? o.label.trim().slice(0, 40) : '';
+		return { x, y, w, d, label: label || 'Keep-out' };
+	});
 }
 
 /** Standard bed sizes (XY, mm) offered as one-tap presets, with a typical height. */
@@ -118,7 +141,7 @@ export function printerFromBed(
 	y: number,
 	z: number,
 	mmSlots = 1,
-	base?: Pick<BuildPrinter, 'nozzle' | 'margin' | 'spacing'>
+	base?: Pick<BuildPrinter, 'nozzle' | 'margin' | 'spacing' | 'keepOut'>
 ): BuildPrinter {
 	return {
 		catalogId: null,
@@ -129,6 +152,12 @@ export function printerFromBed(
 		mmSlots,
 		nozzle: base?.nozzle ?? 0.4,
 		margin: base?.margin ?? DEFAULT_MARGIN,
-		spacing: base?.spacing ?? DEFAULT_SPACING
+		spacing: base?.spacing ?? DEFAULT_SPACING,
+		...(base?.keepOut?.length ? { keepOut: base.keepOut } : {})
 	};
+}
+
+/** The printer's keep-out areas: its own list, else the catalog model's (builds saved before keep-outs existed). */
+export function effectiveKeepOut(p: Pick<BuildPrinter, 'catalogId' | 'keepOut'>): KeepOut[] {
+	return p.keepOut ?? catalogPrinter(p.catalogId)?.keepOut ?? [];
 }

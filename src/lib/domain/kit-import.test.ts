@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildPlan,
 	guessOffset,
+	kitChecklist,
+	kitReadiness,
 	makeSteps,
 	plateCount,
 	type FileKind,
+	type KitStatusDto,
 	type Probe
 } from '#lib/domain/kit-import.ts';
 
@@ -53,20 +56,13 @@ describe('buildPlan', () => {
 			probe('harness.zip', 'zip', ['a.3mf', 'b.3mf'], { size: 500 }),
 			probe('chair.zip', 'zip', ['x.step']),
 			probe('profile.3mf', '3mf', MF, { size: 9000 }),
-			probe('hw.glb', 'glb'),
 			probe('loose.step', 'step'),
 			probe('notes.txt', 'unknown')
 		);
 		expect(p.items.find((i) => i.name === 'notes.txt')?.status).toBe('unknown');
-		expect(makeSteps(p).map((s) => s.id)).toEqual([
-			'model',
-			'print:4',
-			'print:2',
-			'hardware',
-			'guide'
-		]);
+		expect(makeSteps(p).map((s) => s.id)).toEqual(['model', 'print:4', 'print:2', 'guide']);
 		expect(makeSteps(p)[0].title).toBe('3D chair (2 STEP files)');
-		expect(makeSteps(p)[0].itemIds).toEqual(['3', '6']);
+		expect(makeSteps(p)[0].itemIds).toEqual(['3', '5']);
 	});
 
 	it('flags a zip with a mix of STEP and 3MF files for both targets', () => {
@@ -133,5 +129,82 @@ describe('guessOffset', () => {
 				{ page: 5, pdfPage: null }
 			])
 		).toBe(5);
+	});
+});
+
+describe('kit readiness and checklist', () => {
+	const kit = (over: Partial<KitStatusDto> = {}): KitStatusDto => ({
+		model: {
+			version: 'abcdef012345',
+			createdAt: null,
+			source: 'kit pack',
+			rendered: 37,
+			total: 40,
+			placed: 37,
+			unplaced: [],
+			missing: []
+		},
+		print: {
+			withGeometry: 40,
+			total: 40,
+			missing: [],
+			paintedFaces: 1,
+			withSettings: 40,
+			sources: ['kit pack']
+		},
+		guide: { uploaded: 0, pages: 0, mapped: 0 },
+		...over
+	});
+
+	it('kit pack install (no guide) is ready', () => {
+		expect(kitReadiness(kit()).state).toBe('ready');
+	});
+	it('missing print geometry for a part is partial', () => {
+		const r = kitReadiness(kit({ print: { ...kit().print, withGeometry: 39, missing: ['Seat'] } }));
+		expect(r.state).toBe('partial');
+		expect(r.note).toMatch(/1 part without print geometry/);
+	});
+	it('no model is partial with a no 3D preview note', () => {
+		const r = kitReadiness(kit({ model: null }));
+		expect(r.state).toBe('partial');
+		expect(r.note).toMatch(/no 3D preview/);
+	});
+	it('installing wins', () => {
+		const r = kitReadiness(kit({ model: null, installing: true, installMessage: 'Installing…' }));
+		expect(r).toEqual({ state: 'installing', note: 'Installing…' });
+	});
+	it('nothing at all is missing', () => {
+		expect(
+			kitReadiness(kit({ model: null, print: { ...kit().print, withGeometry: 0 } })).state
+		).toBe('missing');
+	});
+	it('the absent guide is informational and parts without 3D are a neutral note', () => {
+		const rows = kitChecklist(kit());
+		expect(rows.map((r) => r.id)).toEqual(['model', 'print', 'guide']);
+		const guide = rows.find((r) => r.id === 'guide')!;
+		expect(guide.state).toBe('info');
+		expect(guide.lines[0]).toMatch(/^Optional: MakeGood's maker guide is not included/);
+		expect(guide.link?.href).toBeTruthy();
+		const model = rows.find((r) => r.id === 'model')!;
+		expect(model.state).toBe('ok');
+		expect(model.hints).toEqual([]);
+		expect(model.notes).toEqual(['3 parts have no 3D preview: drawn as stand-ins or no STEP']);
+	});
+	it('a part the kit places but the model lacks is a hint, not a note', () => {
+		const m = { ...kit().model!, rendered: 36, missing: ['Seat'] };
+		const row = kitChecklist(kit({ model: m }))[0];
+		expect(row.state).toBe('partial');
+		expect(row.notes[0]).toMatch(/^3 parts/);
+	});
+});
+
+describe('hardware GLB drops', () => {
+	it('is not needed and skipped', () => {
+		const p = buildPlan([
+			{ fileId: 1, probe: { name: 'hardware.glb', size: 10, kind: 'unknown' } }
+		]);
+		expect(p.items[0].status).toBe('unknown');
+		expect(p.items[0].note).toBe('Not needed: the app includes the hardware');
+		expect(makeSteps(p)).toEqual([]);
 	});
 });

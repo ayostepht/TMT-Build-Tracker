@@ -370,21 +370,6 @@ export const getModelJob = (templateId: string, jobId: string) =>
 		`${tpl(templateId)}/model/jobs/${encodeURIComponent(jobId)}`
 	).then((r) => r.job);
 
-export const uploadHardwareGlb = (
-	templateId: string,
-	file: File,
-	onProgress?: (fraction: number) => void
-) =>
-	uploadFile<{ hardwareUrl: string | null }>(
-		`${tpl(templateId)}/model/hardware`,
-		file,
-		'model/gltf-binary',
-		onProgress
-	);
-
-export const removeHardwareGlb = (templateId: string) =>
-	call('DELETE', `${tpl(templateId)}/model/hardware`);
-
 export const savePlacement = (
 	templateId: string,
 	slug: string,

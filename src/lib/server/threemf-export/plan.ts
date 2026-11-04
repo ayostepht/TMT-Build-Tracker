@@ -7,6 +7,7 @@ import type { ArrangedPlate, ItemPose } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { BuildPrinter, BuildView } from '#lib/domain/types.ts';
 import { materialFamily } from '#lib/filament-catalog.ts';
+import { effectiveKeepOut } from '#lib/printers/printer.ts';
 import type { ExportWarning, Flavor } from '#lib/domain/export-types.ts';
 import { plateOrigin } from './plate-grid';
 
@@ -127,7 +128,7 @@ export class PlanError extends Error {
 
 export function buildExportPlan(input: PlanInput): ExportPlan {
 	const { view, footprints, flavor } = input;
-	const printer = view.printer;
+	const printer = view.printer && { ...view.printer, keepOut: effectiveKeepOut(view.printer) };
 	if (!printer)
 		throw new PlanError('Choose a printer first (Print tab) so the export knows your bed.');
 	const warnings: ExportWarning[] = [...(input.notes ?? [])];

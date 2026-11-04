@@ -19,7 +19,7 @@ export interface LegendRow {
 	/** Why it is turned onto another face ("stands on its edge, 248 mm tall"), when it is. */
 	reoriented: string | null;
 	/** Angle of a part that only fits the bed turned diagonally. */
-	tilted: number | null;
+	rotated: number | null;
 	/** True when at least one copy is drawn as a box (no mesh outline known). */
 	approx: boolean;
 }
@@ -43,7 +43,7 @@ export function legendRows(
 					? `${name}: ${its.length} pieces`
 					: `${name} ×${its.length}`;
 		const turned = its.find((i) => i.pose);
-		const tilt = its.find((i) => i.rotation % 90 !== 0);
+		const rot = its.find((i) => i.rotation % 90 !== 0);
 		return {
 			slug,
 			n: idx + 1,
@@ -53,7 +53,7 @@ export function legendRows(
 			pieces,
 			label,
 			reoriented: turned?.pose?.desc ?? null,
-			tilted: tilt ? Math.round(tilt.rotation * 10) / 10 : null,
+			rotated: rot ? Math.round(rot.rotation * 10) / 10 : null,
 			approx: its.some((i) => !hasOutline(i))
 		};
 	});

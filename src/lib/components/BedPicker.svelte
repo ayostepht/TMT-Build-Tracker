@@ -56,7 +56,12 @@
 	let slots = $state(1);
 	let customName = $state('');
 	let picked = $state<BuildPrinter | null>(null); // printer from the catalog picker
-	let keep = $state({ nozzle: 0.4, margin: 1, spacing: 8 });
+	let keep = $state<Pick<BuildPrinter, 'nozzle' | 'margin' | 'spacing' | 'keepOut'>>({
+		nozzle: 0.4,
+		margin: 1,
+		spacing: 8,
+		keepOut: []
+	});
 	let error = $state('');
 	let lastKey = '';
 	let current = $state<BuildPrinter | null>(null);
@@ -70,7 +75,12 @@
 			mode = null;
 			return;
 		}
-		keep = { nozzle: v.nozzle, margin: v.margin, spacing: v.spacing };
+		keep = {
+			nozzle: v.nozzle,
+			margin: v.margin,
+			spacing: v.spacing,
+			keepOut: (v.keepOut ?? []).map((k) => ({ ...k }))
+		};
 		bedX = v.bedX;
 		bedY = v.bedY;
 		bedZ = v.bedZ;
@@ -109,6 +119,17 @@
 		} catch (e) {
 			error = (e as Error).message;
 		}
+	}
+	function addKeepOut() {
+		keep.keepOut = [
+			...(keep.keepOut ?? []),
+			{ x: Math.max(0, bedX - 20), y: 0, w: 20, d: 20, label: 'Keep-out' }
+		];
+		emitBed();
+	}
+	function removeKeepOut(i: number) {
+		keep.keepOut = (keep.keepOut ?? []).filter((_, k) => k !== i);
+		emitBed();
 	}
 	function pickPreset(i: number) {
 		mode = 'preset';
@@ -293,6 +314,54 @@
 				/>
 			</label>
 		</div>
+		<details class="adv" open={!!keep.keepOut?.length}>
+			<summary>Advanced: keep-out areas</summary>
+			<p class="hint">
+				Parts stay out of these rectangles (a filament cutter, a purge area). Millimetres from the
+				front-left corner; y grows toward the back.
+			</p>
+			{#each keep.keepOut ?? [] as z, i (i)}
+				<div class="ko-row" data-testid="keepout-row">
+					<input
+						aria-label="Keep-out {i + 1} label"
+						maxlength="40"
+						bind:value={z.label}
+						{disabled}
+						onchange={emitBed}
+					/>
+					{#each [['x', 'x'], ['y', 'y'], ['w', 'width'], ['d', 'depth']] as [k, lbl] (k)}
+						<label class="ko-num"
+							>{lbl}
+							<input
+								type="number"
+								min="0"
+								step="1"
+								bind:value={z[k as 'x' | 'y' | 'w' | 'd']}
+								{disabled}
+								onchange={emitBed}
+								aria-label="Keep-out {i + 1} {lbl} (mm)"
+							/></label
+						>
+					{/each}
+					<button
+						type="button"
+						class="btn sm"
+						{disabled}
+						onclick={() => removeKeepOut(i)}
+						aria-label="Remove keep-out {i + 1}">Remove</button
+					>
+				</div>
+			{/each}
+			{#if (keep.keepOut?.length ?? 0) < 8}
+				<button
+					type="button"
+					class="btn sm"
+					{disabled}
+					onclick={addKeepOut}
+					data-testid="keepout-add">Add keep-out area</button
+				>
+			{/if}
+		</details>
 	{/if}
 
 	{#if mode === 'preset' || mode === 'custom'}
@@ -360,6 +429,31 @@
 {/if}
 
 <style>
+	.adv {
+		margin-top: 0.5rem;
+	}
+	.adv summary {
+		cursor: pointer;
+		font-size: 0.85rem;
+		color: var(--muted, inherit);
+	}
+	.ko-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: end;
+		margin: 0.4rem 0;
+	}
+	.ko-row > input {
+		flex: 1 1 8rem;
+		min-width: 0;
+	}
+	.ko-num {
+		display: flex;
+		flex-direction: column;
+		font-size: 0.7rem;
+		width: 4.2rem;
+	}
 	.bed-picker {
 		grid-template-columns: minmax(0, 1fr);
 		display: grid;
