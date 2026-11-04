@@ -50,20 +50,25 @@ with ~0.1 mm clearance; footrest and harness each on one plate.
 
 ## Open questions for the maintainer
 
-1. Confirm the MakerWorld page used for credit and guide links:
-   https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer
-2. Front caster mount pose (orientation of the open end) was set with ~70% confidence:
-   check under the front of the wing in the 3D view.
-3. Grant the GitHub token **Actions: Read** so CI logs can be read. The e2e job failed on
-   GitHub for `7d40f61` (passes locally); never diagnosed because logs were unreadable.
-4. Release milestone inputs: "Unraid Boot Config" Read/Write (for the Unraid template),
-   the domain name for Nginx Proxy Manager, Authentik OIDC client details, when to make
-   the repo public.
-5. Real sliced Elegoo 3MF (".gcode.3mf" / "export plate sliced file") to test reading
-   print times and grams per plate.
+1. Sliced file to test reading print times and grams: an export **from the app**, sliced in
+   Elegoo Slicer and saved with File → Export → "Export plate sliced file" (one or two
+   plates is enough). Pending.
+
+Answered on 2026-11-04 (keep for context):
+
+- The MakerWorld page for credit and guide links is correct:
+  https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer
+- The front caster mount pose is correct.
+- The GitHub token already has Actions read/write (an earlier "no access" was a scripting
+  mistake); CI logs are readable via the REST API.
+- The maintainer will install on Unraid themselves: no "Unraid Boot Config" Read/Write for
+  this container. The README must be a complete, accurate Unraid install guide (template
+  XML in the repo, Docker tab steps, settings, Nginx Proxy Manager + Authentik). Domain and
+  Authentik details stay with the maintainer.
 
 ## Known gaps and backlog
 
+- Custom filaments (brand, type, color; reusable per workspace): in progress.
 - Re-test the latest 3MF export in Elegoo Slicer (plates fit, wings, painted supports,
   cutter zone) after the margin/keep-out/group changes.
 - Live test of the printer supervisor with the Centauri Carbon during a real print

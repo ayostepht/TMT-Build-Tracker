@@ -601,3 +601,28 @@ export const organizationSettings = sqliteTable('organization_settings', {
 		.default(sql`'{}'`),
 	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
 });
+
+/** A team's own filaments (brand, type, color), reusable across its builds and shown first in pickers. */
+export const customFilaments = sqliteTable(
+	'custom_filaments',
+	{
+		id: id(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		brand: text('brand').notNull(),
+		/** Material/type as makers write it: PETG, PETG HF, TPU 95A, PLA+… (drives slot compatibility). */
+		material: text('material').notNull(),
+		colorName: text('color_name').notNull(),
+		hex: text('hex').notNull(),
+		/** Optional: finish (matte | silk | glossy | translucent …), hardness (e.g. 95A), product URL, notes. */
+		finish: text('finish'),
+		hardness: text('hardness'),
+		url: text('url'),
+		notes: text('notes').notNull().default(''),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [index('custom_filaments_org_idx').on(t.organizationId)]
+);
