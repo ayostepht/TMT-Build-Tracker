@@ -702,60 +702,25 @@ describe('re-oriented parts', () => {
 	fps.get('wing-left')!.pieces[0].orient = computePoses(slab);
 	const view = viewFor(['wing-left']);
 
-	it('puts the stood-up item inside the bed, on z = 0, below the build height', async () => {
+	// Hard rule (maintainer, 2026-11-04): never change which face is down; only flat rotations.
+	it('never tips a part: the transform only rotates about z and the part stays flat', async () => {
 		const p = plan({ view, footprints: fps });
 		expect(p.plates).toHaveLength(1);
 		const item = p.plates[0].items[0];
-		expect(item.pose).toBeTruthy();
-		expect(p.warnings.some((w) => w.code === 'oversize' || w.code === 'bed')).toBe(false);
-		const note = p.warnings.find((w) => w.code === 'reoriented')!;
-		expect(note.severity).toBe('info');
+		expect(item.pose).toBeUndefined();
+		expect(p.warnings.some((w) => w.code === 'reoriented')).toBe(false);
 		const { bytes } = await collect(writeThreeMf(p, p.plates, io(shapes)));
 		const z = unzipSync(bytes);
 		const model = text(z, '3D/3dmodel.model');
 		const t = /<item objectid="1" transform="([^"]+)"/.exec(model)![1].split(' ').map(Number);
-		const b = {
-			x0: Infinity,
-			x1: -Infinity,
-			y0: Infinity,
-			y1: -Infinity,
-			z0: Infinity,
-			z1: -Infinity
-		};
-		for (let i = 0; i < slab.positions.length; i += 3) {
-			const [x, y, zz] = [slab.positions[i], slab.positions[i + 1], slab.positions[i + 2]];
-			// row-vector transform: [x y z 1] * M
-			const X = x * t[0] + y * t[3] + zz * t[6] + t[9];
-			const Y = x * t[1] + y * t[4] + zz * t[7] + t[10];
-			const Z = x * t[2] + y * t[5] + zz * t[8] + t[11];
-			b.x0 = Math.min(b.x0, X);
-			b.x1 = Math.max(b.x1, X);
-			b.y0 = Math.min(b.y0, Y);
-			b.y1 = Math.max(b.y1, Y);
-			b.z0 = Math.min(b.z0, Z);
-			b.z1 = Math.max(b.z1, Z);
-		}
-		const e = 0.02;
-		expect(b.z0).toBeGreaterThan(-e);
-		expect(b.z0).toBeLessThan(e);
-		expect(b.z1).toBeCloseTo(190, 0);
-		expect(b.z1).toBeLessThanOrEqual(cc.bedZ);
-		expect(b.x0).toBeGreaterThanOrEqual(-e);
-		expect(b.y0).toBeGreaterThanOrEqual(-e);
-		expect(b.x1).toBeLessThanOrEqual(cc.bedX + e);
-		expect(b.y1).toBeLessThanOrEqual(cc.bedY + e);
-		// the winding stays right-handed: the 3x3 part is a pure rotation
-		const det =
-			t[0] * (t[4] * t[8] - t[5] * t[7]) -
-			t[1] * (t[3] * t[8] - t[5] * t[6]) +
-			t[2] * (t[3] * t[7] - t[4] * t[6]);
-		expect(det).toBeCloseTo(1, 3);
-		// notes name the part and our parser reads the file back
+		// row-vector 3x4: the z axis maps to z and nothing else feeds z (no tilt, no flip)
+		expect(t[2]).toBeCloseTo(0, 6);
+		expect(t[5]).toBeCloseTo(0, 6);
+		expect(t[6]).toBeCloseTo(0, 6);
+		expect(t[7]).toBeCloseTo(0, 6);
+		expect(t[8]).toBeCloseTo(1, 6);
 		const notes = text(z, 'Metadata/tmt_export_notes.txt');
-		expect(notes).toContain('Re-oriented parts');
-		expect(notes).toContain('stands on its edge');
-		const back = await parseThreeMfBytes(bytes);
-		expect(back.plates.length).toBeGreaterThan(0);
+		expect(notes).not.toContain('Re-oriented parts');
 	});
 });
 

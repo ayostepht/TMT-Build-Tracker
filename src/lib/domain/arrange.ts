@@ -353,6 +353,9 @@ export const orientsOf = boxOrients;
 /** Headroom kept below the build volume when a part is stood up. */
 const HEIGHT_MARGIN = 2;
 
+/** Must stay false: see the hard rule in pieceOrients and CLAUDE.md. */
+const ALLOW_3D_REORIENT = false;
+
 /**
  * Placement candidates for one piece: its profile orientation (0/90 degrees, or tilted in
  * the plane when only that fits); when none fits and the piece carries orientation data
@@ -366,6 +369,10 @@ export function pieceOrients(
 	maxH = Infinity
 ): Orient[] {
 	const base: Orient[] = boxOrients(pc, rotate, usableX, usableY);
+	// HARD RULE (maintainer, 2026-11-04): parts keep the face-down orientation from their
+	// source file; only flat rotations about Z are allowed. Never change which face is down,
+	// stand a part on an edge, or tilt it off the bed. 3D resting poses are disabled.
+	if (!ALLOW_3D_REORIENT) return base;
 	const fits = (o: { w: number; d: number }) => o.w <= usableX + EPS && o.d <= usableY + EPS;
 	if (!rotate || !pc.orient?.poses.length || base.some(fits)) return base;
 	const ch = chooseOrientation(

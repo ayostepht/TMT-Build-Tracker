@@ -457,19 +457,15 @@ describe('arrange: re-orientation', () => {
 	};
 	const printer: ArrangePrinter = { ...bed(256), bedZ: 256 };
 
-	it('uses a standing pose instead of overhanging, with an informational warning', () => {
+	// Hard rule (maintainer, 2026-11-04): never change which face is down; only flat rotations.
+	it('never re-orients in 3D: a part that only fits stood up stays flat and is oversize', () => {
 		const r = run([slab(true)], printer);
 		expect(r.plates).toHaveLength(1);
-		expect(r.plates[0].oversize).toBeUndefined();
 		const it = r.plates[0].items[0];
-		expect(it.pose).toBeTruthy();
-		expect(it.pose!.h).toBeCloseTo(190, 0);
-		expectValid(r.plates, printer);
-		const w = r.warnings.find((x) => x.code === 'reoriented')!;
-		expect(w.message).toContain('Wing Left re-oriented to fit 256×256');
-		expect(w.message).toContain('stands on its edge, 190 mm tall');
-		expect(w.message).toContain('check supports');
-		expect(r.warnings.some((x) => x.code === 'oversize')).toBe(false);
+		expect(it.pose).toBeUndefined();
+		expect(r.plates[0].oversize).toBe(true);
+		expect(r.warnings.some((x) => x.code === 'reoriented')).toBe(false);
+		expect(r.warnings.some((x) => x.code === 'oversize')).toBe(true);
 	});
 
 	it('keeps the profile orientation whenever it fits', () => {

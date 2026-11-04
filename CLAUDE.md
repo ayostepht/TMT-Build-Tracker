@@ -6,6 +6,14 @@ and hand off builds together.
 
 ## Ground rules
 
+- **HARD RULE: never re-orient parts in 3D.** Parts keep the face-down
+  orientation from their source file (the slicer profile). The arranger and
+  the 3MF export may only rotate parts flat about Z (0/90° or a free in-plane
+  angle). Never change which face is down, stand a part on an edge, or tilt it
+  off the bed (`ALLOW_3D_REORIENT = false` in `src/lib/domain/arrange.ts`).
+  A part that doesn't fit flat is reported as oversize, with advice (other
+  profile, two-piece variant, bigger bed).
+
 - **No MakeGood files in the repo.** Guide page images, assembled chair models,
   STEP/3MF/GLB files and the guide PDF are imported by each install through
   the app (template admin) and live in the `/data` volume. Seed files carry

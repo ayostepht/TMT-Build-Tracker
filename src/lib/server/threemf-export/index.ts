@@ -73,7 +73,10 @@ export function prepareExport(
 	const info = buildArrangement(db, buildId, userId);
 	const notes: ExportWarning[] = [];
 	let plates: ArrangedPlate[] = info.plates;
-	if (info.layout !== 'arranged' || !plates.length || info.stale) {
+	// Arrangements stored before 3D re-orientation was disabled may contain tipped/tilted
+	// parts: never export those, re-arrange flat instead (hard rule, see CLAUDE.md).
+	const hasPose = plates.some((pl) => pl.items.some((i) => i.pose));
+	if (info.layout !== 'arranged' || !plates.length || info.stale || hasPose) {
 		const plan = planArrangement(view, footprints, null);
 		if (!plan) throw new ApiError(400, 'Choose a printer first.');
 		plates = plan.result.plates;
