@@ -6,6 +6,7 @@ import {
 	ownerWithBuild,
 	signInAsAdmin,
 	signUp,
+	startBuild,
 	uniqueEmail
 } from './helpers';
 
@@ -72,7 +73,7 @@ function makePdf(n: number): Buffer {
 }
 
 // Signs in as the fixed ADMIN_EMAILS account, so the order of specs does not matter.
-test('a site admin imports a guide PDF in the browser and maps its pages', async ({
+test('a site admin imports a guide PDF in the browser (Print settings) and maps its pages', async ({
 	page,
 	browser
 }) => {
@@ -80,18 +81,28 @@ test('a site admin imports a guide PDF in the browser and maps its pages', async
 	await page.waitForLoadState('networkidle');
 	const href = (await page.locator('a[href^="/admin/templates/"]').first().getAttribute('href'))!;
 	const templateId = href.split('/').pop()!;
-	await page.goto(href);
+	await page.goto('/');
 	await page.waitForLoadState('networkidle');
+	const adminBuild = await startBuild(page, 'Guide import build');
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('skip-setup').click();
+	await page.goto(`/builds/${adminBuild}/print`);
+	await page.waitForLoadState('networkidle');
+	await page.getByText('Add or replace files').click();
 
 	try {
-		const card = page.locator('.gic');
-		await card.getByLabel('Guide PDF or 3MF').setInputFiles({
+		const imp = page.getByTestId('kit-import');
+		await imp.getByTestId('kit-file-input').setInputFiles({
 			name: 'guide.pdf',
 			mimeType: 'application/pdf',
 			buffer: makePdf(3)
 		});
-		await card.getByRole('button', { name: 'Import the guide' }).click();
-		await expect(card.getByText(/^Imported 3 pages/)).toBeVisible({ timeout: 45_000 });
+		await imp.getByTestId('kit-start').click();
+		await expect(
+			imp.getByTestId('kit-progress').getByRole('heading', { name: /^Done/ })
+		).toBeVisible({ timeout: 45_000 });
+		const card = imp.getByTestId('kit-guide-mapping');
+		await expect(card).toHaveJSProperty('open', true);
 
 		// Seed page 8 = PDF page 3 with an offset of 5; page 12 is set by hand to PDF page 1.
 		await card.getByLabel('Page offset').fill('5');
@@ -149,14 +160,14 @@ test('assembly progress and checks update live for a second user', async ({ page
 	const link = await invite(page, email, 'editor');
 	const editor = await joinViaInvite(browser, link, 'Eddie Editor', email);
 
-	await page.goto(`${buildUrl}/assembly`);
+	await page.goto(`${buildUrl}/finish`);
 	await page.waitForLoadState('networkidle');
 	const progress = page.getByTestId('asm-progress');
 	await expect(progress).toContainText('0 of');
 	await expect(page.locator('.sync')).toContainText('Live');
 	await expect(page.getByText("isn't printed yet").first()).toBeVisible();
 
-	await editor.page.goto(`/builds/${buildId}/assembly`);
+	await editor.page.goto(`/builds/${buildId}/finish`);
 	await editor.page.waitForLoadState('networkidle');
 	const step = (p: typeof page) => p.locator('.astep[data-step="frame.handle"]');
 	await step(editor.page).getByLabel('Handle front sits flat (no warp gap)').check();
@@ -173,7 +184,7 @@ test('assembly progress and checks update live for a second user', async ({ page
 	);
 
 	// The step list follows the footrest variant.
-	await page.goto(`${buildUrl}/assembly`);
+	await page.goto(`${buildUrl}/finish`);
 	await expect(page.locator('.astep[data-step="frame.footrest-one"]')).toBeVisible();
 	await expect(page.locator('.astep[data-step="frame.footrest-two"]')).toHaveCount(0);
 	expect(
@@ -188,9 +199,10 @@ test('assembly progress and checks update live for a second user', async ({ page
 
 test('photos are downscaled, uploaded, shown in a lightbox and deleted', async ({ page }) => {
 	const { buildId } = await ownerWithBuild(page, 'photo');
-	await page.goto(`/builds/${buildId}/assembly`);
+	await page.goto(`/builds/${buildId}/finish`);
 	await page.waitForLoadState('networkidle');
 	await page
+		.locator('#photos')
 		.getByTestId('photo-input')
 		.setInputFiles({ name: 'chair.png', mimeType: 'image/png', buffer: PNG_64 });
 	const thumb = page.locator('.gallery .thumb img');
@@ -230,7 +242,7 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	browser
 }) => {
 	const { buildId, chapterUrl } = await ownerWithBuild(page, 'handoff');
-	await page.goto(`/builds/${buildId}/handoff`);
+	await page.goto(`/builds/${buildId}/finish#handoff`);
 	await page.waitForLoadState('networkidle');
 
 	await page.getByLabel('Recipient name').fill('Sam Rivera');
@@ -242,8 +254,8 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 
 	await page
+		.locator('.card', { has: page.getByRole('heading', { name: 'Finished chair' }) })
 		.getByTestId('photo-input')
-		.first()
 		.setInputFiles({ name: 'done.png', mimeType: 'image/png', buffer: PNG_64 });
 	await expect(page.locator('.gallery .thumb img')).toHaveCount(1);
 
@@ -277,7 +289,7 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	const theirs = await viewer.page.request.get(`/api/builds/${buildId}/view`);
 	expect(theirs.status()).toBe(200);
 	expect(await theirs.text()).not.toContain('secret-contact@example.test');
-	await viewer.page.goto(`/builds/${buildId}/handoff`);
+	await viewer.page.goto(`/builds/${buildId}/finish#handoff`);
 	await viewer.page.waitForLoadState('networkidle');
 	expect(await viewer.page.content()).not.toContain('secret-contact@example.test');
 	await viewer.context.close();

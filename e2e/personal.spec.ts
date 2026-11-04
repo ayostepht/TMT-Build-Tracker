@@ -30,7 +30,7 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	const chapterName = `Pia chapter ${Date.now().toString(36)}`;
 	await createChapter(page, chapterName);
 	await expect(page.getByRole('combobox', { name: 'Workspace' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Members', exact: true })).toBeVisible();
 
 	// Move the build.
 	await page.goto(`/builds/${buildId}/settings`);

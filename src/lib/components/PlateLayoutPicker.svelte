@@ -17,7 +17,7 @@
 	 * - "Arrange for my bed" (primary): the app packs the parts onto the bed you choose (standard
 	 *   size, custom size or a printer from the catalog). The bed is stored as the build's printer.
 	 * - "MakeGood's tuned profiles (Bambu)": the kit author's hand-tuned layouts.
-	 * - "Upload my sliced 3MF" (existing builds with `allowUpload`).
+	 * - "Use my own sliced file" (existing builds with `allowUpload`).
 	 *
 	 * New build form: pass `templateId`. Renders hidden inputs `plateLayout` ('' = arrange for the
 	 * bed) and `printer` (the bed as JSON, only while arranging) so a plain form post carries it.
@@ -212,7 +212,7 @@
 			{/if}
 			{#if buildId && current === 'upload'}<option value="upload" disabled>Your uploaded 3MF</option
 				>{/if}
-			{#if buildId && allowUpload}<option value={UPLOAD}>Upload my sliced 3MF…</option>{/if}
+			{#if buildId && allowUpload}<option value={UPLOAD}>Use my own sliced file…</option>{/if}
 		</select>
 		{#if tunedHint}<span class="hint">{tunedHint}</span>{/if}
 		{#if note && !buildId && value !== ARRANGE}<span class="hint">{note}</span>{/if}

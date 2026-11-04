@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { page } from '$app/state';
 	import { subscribeBuild } from '#lib/client/live.ts';
 	import { BuildCtx, setBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import BuildHeader from '#lib/components/BuildHeader.svelte';
@@ -40,6 +41,7 @@
 		return () => clearInterval(t);
 	});
 
+	const inSetup = $derived(page.route.id === '/(app)/builds/[id]/setup');
 	const chapter = $derived(
 		(data as { teams?: { id: string; name: string }[] }).teams?.find(
 			(t) => t.id === data.view.build.organizationId
@@ -49,7 +51,9 @@
 
 <svelte:head><title>{ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
-<BuildHeader {chapter} />
+{#if !inSetup}
+	<BuildHeader {chapter} />
+{/if}
 {#if !ctx.canEdit}
 	<div class="banner" role="note">
 		You have view-only access to this build. Ask a chapter owner for editor access to make changes.
@@ -58,7 +62,9 @@
 {#if ctx.error}
 	<div class="banner bad" role="alert">{ctx.error}</div>
 {/if}
-<TabBar id={ctx.id} />
+{#if !inSetup}
+	<TabBar id={ctx.id} />
+{/if}
 {@render children()}
 <GuideViewer />
 <Toast />

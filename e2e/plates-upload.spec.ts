@@ -6,8 +6,8 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test('switch to the H2D layout, then organize plates from an uploaded 3MF', async ({ page }) => {
 	await ownerWithBuild(page, 'plates');
-	await page.getByRole('link', { name: 'Plates', exact: true }).click();
-	await expect(page).toHaveURL(/\/plates$/);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await expect(page).toHaveURL(/\/print$/);
 
 	const cards = page.locator('section.plate-card');
 	const layout = page.getByTestId('plate-layout');
@@ -48,7 +48,7 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 			}
 		]
 	});
-	await layout.selectOption({ label: 'Upload my sliced 3MF…' });
+	await layout.selectOption({ label: 'Use my own sliced file…' });
 	const panel = page.getByRole('region', { name: 'Upload a 3MF' });
 	await expect(panel).toBeVisible();
 	await panel.getByTestId('3mf-file').setInputFiles({

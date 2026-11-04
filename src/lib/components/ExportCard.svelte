@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import {
 		exportDownloadUrl,
 		exportPreview,
@@ -11,7 +10,6 @@
 	import Swatch from '#lib/components/Swatch.svelte';
 
 	const ctx = getBuildCtx();
-	const siteAdmin = $derived(page.data.siteAdmin === true);
 
 	const FLAVORS: { key: ExportFlavor; label: string }[] = [
 		{ key: 'orca', label: 'Elegoo Slicer / OrcaSlicer' },
@@ -148,16 +146,16 @@
 			<div class="empty" data-testid="export-no-geometry">
 				<strong>No print geometry yet</strong>
 				<p class="muted">
-					The export builds the file from MakeGood's models, which this install has not imported
-					yet. A site admin imports the MakeGood profile 3MF on the kit page.
+					The export builds the file from MakeGood's models, which are not installed yet. They are
+					added under Print settings.
 				</p>
-				{#if siteAdmin}
-					<a
-						class="btn sm"
-						href={resolve('/(app)/admin/templates/[id]', { id: ctx.view.build.templateId })}
-						>Open Kit admin</a
-					>
-				{/if}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
+				<a
+					class="btn sm"
+					href={resolve('/(app)/builds/[id]/print', { id: ctx.id }) + '#settings'}
+					data-testid="export-open-settings">Open Print settings</a
+				>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</div>
 		{:else if pv}
 			<div class="slots" data-testid="export-filaments">

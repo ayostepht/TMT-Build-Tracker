@@ -33,6 +33,8 @@ uploads/
 *.glb
 *.step
 *.stp
+*.kitpack
+kitpacks/*.kitpack
 
 # Local notes
 CLAUDE.local.md

@@ -21,8 +21,9 @@
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
-	import ExportCard from '#lib/components/ExportCard.svelte';
 
+	/** Setup wizard: plate pictures only, no print log or slicer grams. */
+	let { wizard = false }: { wizard?: boolean } = $props();
 	const ctx = getBuildCtx();
 	let uploading = $state(false);
 	let notice = $state<string | null>(null);
@@ -196,8 +197,6 @@
 	{#if notice}<p class="ok-note" role="status">{notice}</p>{/if}
 </section>
 
-<ExportCard />
-
 {#if uploading && ctx.canEdit}
 	<PlateUpload
 		view={ctx.view}
@@ -301,7 +300,7 @@
 			{/each}
 		</div>
 
-		{#if ctx.canEdit}
+		{#if ctx.canEdit && !wizard}
 			<div class="slicer-row">
 				{#if pl.perPartRuns}
 					{#each pl.parts as slug (slug)}
@@ -350,7 +349,7 @@
 			</div>
 		{/if}
 
-		{#if runs.length}
+		{#if runs.length && !wizard}
 			<div class="plate-log">
 				<RunTable
 					{runs}

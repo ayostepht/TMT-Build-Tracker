@@ -90,3 +90,24 @@ export function adminEmails(): string[] {
 		.map((e) => e.trim().toLowerCase())
 		.filter(Boolean);
 }
+
+/** Where baked-in kit packs live (`index.json` plus `*.kitpack`): `/app/kitpacks` in the image, `./kitpacks` in dev. */
+export function kitpackDir(): string {
+	return env.KITPACK_DIR || (isProd ? '/app/kitpacks' : './kitpacks');
+}
+
+/**
+ * Download location for a pack that is not in `kitpackDir()`. May contain `{slug}`, `{version}`
+ * and `{file}`; without placeholders it is a base URL and `/<file>` is appended. `file://` works.
+ */
+export function kitpackUrl(): string {
+	return (
+		env.KITPACK_URL ||
+		'https://github.com/ayostepht/TMT-Build-Tracker/releases/download/kitpack-{slug}-{version}/{file}'
+	);
+}
+
+/** `KITPACK_DOWNLOAD=off` turns the download fallback off (tests, offline installs). */
+export function kitpackDownloadEnabled(): boolean {
+	return !/^(off|0|false|no)$/i.test((env.KITPACK_DOWNLOAD ?? '').trim());
+}

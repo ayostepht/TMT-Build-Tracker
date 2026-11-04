@@ -8,6 +8,8 @@ on:
 
 jobs:
   test:
+    env:
+      KITPACK_DOWNLOAD: 'off'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +25,8 @@ jobs:
   # Runs in parallel with `test`. The image job does not wait for it so a flaky
   # browser run cannot block publishing; PRs still show the result.
   e2e:
+    env:
+      KITPACK_DOWNLOAD: 'off'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -72,6 +76,10 @@ jobs:
             type=sha
       - uses: docker/build-push-action@v6
         with:
+          # The repo is private for now: the Dockerfile reads the kit pack release asset through the
+          # GitHub API with this token (used by the download step only). Once public, the plain URL works.
+          secrets: |
+            gh_token=${{ secrets.GITHUB_TOKEN }}
           context: .
           platforms: linux/amd64,linux/arm64
           push: true

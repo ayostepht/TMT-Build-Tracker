@@ -389,6 +389,10 @@ export interface KitStatusDto {
 	};
 	guide: { uploaded: number; pages: number; mapped: number };
 	hardware: boolean;
+	/** True while the bundled MakeGood kit pack is being downloaded or installed (start-up, background). */
+	installing?: boolean;
+	/** What the install is doing ("Installing MakeGood files…"); only while `installing`. */
+	installMessage?: string;
 }
 
 export type RowState = 'ok' | 'partial' | 'missing';

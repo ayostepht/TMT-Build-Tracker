@@ -1,5 +1,5 @@
 import { expect, newClientContext, test } from './fixtures';
-import { signInAsAdmin, signUp, uniqueEmail } from './helpers';
+import { signInAsAdmin, signUp, startBuild, uniqueEmail } from './helpers';
 import Database from 'better-sqlite3';
 import { strToU8, zipSync } from 'fflate';
 import { makeProjectThreeMf } from '../src/lib/server/threemf/fixtures';
@@ -234,8 +234,15 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 	} finally {
 		db.close();
 	}
-	await page.goto(href);
+	// The one drop zone for the built-in kit: a build's Print tab, Print settings.
+	await page.goto('/');
 	await page.waitForLoadState('networkidle');
+	const buildId = await startBuild(page, 'Kit files build');
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('skip-setup').click();
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	await page.getByText('Add or replace files').click();
 
 	const cube = strToU8(cubeStep());
 	const files = [
@@ -316,16 +323,6 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 	await hw.getByRole('button', { name: 'Retry' }).click();
 	await expect(hw).toHaveAttribute('data-status', 'done');
 
-	// Checklist: hardware ready, print geometry has the two parts, guide imported.
-	const status = page.getByTestId('kit-status');
-	await expect(status.getByTestId('kit-row-hardware')).toHaveAttribute('data-state', 'ok');
-	await expect(status.getByTestId('kit-row-print')).toContainText('2 of');
-	await expect(status.getByTestId('kit-row-print')).toContainText('main profile.3mf');
-	await expect(status.getByTestId('kit-row-print')).toHaveAttribute('data-state', 'partial');
-	await expect(status.getByTestId('kit-row-print')).toContainText('no print geometry');
-	await expect(status.getByTestId('kit-row-guide')).toContainText('3 PDF pages imported');
-	await expect(status.getByTestId('kit-row-model')).toContainText('parts rendered');
-
 	// Guide page mapping is inline, prefilled (3 on a fresh install, else the last saved
 	// offset: the shared e2e DB may already hold one from a retry); save it.
 	const map = root.getByTestId('kit-guide-mapping');
@@ -335,6 +332,19 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 	await map.getByRole('button', { name: 'Apply offset' }).click();
 	await map.getByRole('button', { name: 'Save mapping' }).click();
 	await expect(map.getByText(/Saved\. [1-9]\d* guide pages/)).toBeVisible();
+
+	// Kit admin shows the full checklist: hardware ready, print geometry has the two parts, guide imported.
+	await page.goto(href);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByTestId('advanced-placement')).toBeVisible();
+	const status = page.getByTestId('kit-status');
+	await expect(status.getByTestId('kit-row-hardware')).toHaveAttribute('data-state', 'ok');
+	await expect(status.getByTestId('kit-row-print')).toContainText('2 of');
+	await expect(status.getByTestId('kit-row-print')).toContainText('main profile.3mf');
+	await expect(status.getByTestId('kit-row-print')).toHaveAttribute('data-state', 'partial');
+	await expect(status.getByTestId('kit-row-print')).toContainText('no print geometry');
+	await expect(status.getByTestId('kit-row-guide')).toContainText('3 PDF pages imported');
+	await expect(status.getByTestId('kit-row-model')).toContainText('parts rendered');
 
 	const res = await page.request.get(`/api/templates/${templateId}/kit-status`);
 	expect(res.status()).toBe(200);

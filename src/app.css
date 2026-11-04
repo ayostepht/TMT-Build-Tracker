@@ -132,6 +132,7 @@ body {
 	margin: 0 auto;
 	padding: 20px 16px 64px;
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	gap: 18px;
 }
 h1,
@@ -173,6 +174,7 @@ button {
 	margin: 0 auto;
 	padding: 20px 16px 64px;
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	gap: 18px;
 }
 .topbar {
@@ -475,6 +477,30 @@ label.field input {
 	min-height: 40px;
 	display: inline-flex;
 	align-items: center;
+}
+.tabs.fade-end {
+	-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+	mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+.tabs.fade-start {
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 36px);
+	mask-image: linear-gradient(to right, transparent, #000 36px);
+}
+.tabs.fade-start.fade-end {
+	-webkit-mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 36px,
+		#000 calc(100% - 36px),
+		transparent
+	);
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 36px,
+		#000 calc(100% - 36px),
+		transparent
+	);
 }
 .tabs a:hover {
 	color: var(--ink);
@@ -1357,7 +1383,7 @@ label.field select {
 		grid-template-columns: 1fr 1fr;
 	}
 	.form-grid {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 	.fil-edit {
 		grid-template-columns: auto 1fr 1fr;
@@ -1432,4 +1458,17 @@ label.field select {
 	border-radius: 6px;
 	background: var(--paper);
 	max-width: 100%;
+}
+
+@media (max-width: 520px) {
+	.tabs a {
+		padding: 10px 9px;
+		font-size: 16px;
+	}
+}
+
+/* Native file inputs must not widen the page on narrow phones (360px). */
+label.field input[type='file'] {
+	max-width: 100%;
+	min-width: 0;
 }

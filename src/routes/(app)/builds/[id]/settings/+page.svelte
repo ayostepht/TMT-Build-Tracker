@@ -2,20 +2,11 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { BUILD_PHASES, type BuildPhase, type FilamentRole } from '#lib/domain/types.ts';
-	import {
-		updateBuild,
-		updateFilament,
-		deleteBuild,
-		setVariant,
-		setPrinter
-	} from '#lib/client/api.ts';
+	import { updateBuild, updateFilament, deleteBuild } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import FilamentPicker from '#lib/components/FilamentPicker.svelte';
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
 	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
-	import VariantChooser from '#lib/components/VariantChooser.svelte';
-	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
-	import BedPicker from '#lib/components/BedPicker.svelte';
 	import SpoolLink from '#lib/components/SpoolLink.svelte';
 
 	const ctx = getBuildCtx();
@@ -51,15 +42,6 @@
 		ctx.act(() => updateFilament(ctx.id, f.key, patch));
 	}
 
-	let printerDraft = $state<import('#lib/domain/types.ts').BuildPrinter | null | undefined>();
-	let printerSaved = $state('');
-	async function savePrinter() {
-		if (printerDraft === undefined) return;
-		const ok = await ctx.act(() => setPrinter(ctx.id, printerDraft!));
-		printerSaved = ok ? 'Saved' : '';
-		setTimeout(() => (printerSaved = ''), 2000);
-	}
-
 	let confirming = $state(false);
 	let confirmText = $state('');
 	async function remove() {
@@ -91,64 +73,6 @@
 		</div>
 	{/if}
 </form>
-
-{#if ctx.view.variantGroups.length}
-	<section class="card">
-		<h2>Options</h2>
-		<p class="muted">
-			Pick the parts this build uses. Progress on the other option is kept if you switch back.
-		</p>
-		<VariantChooser
-			groups={ctx.view.variantGroups}
-			choices={ctx.view.variantChoices}
-			partNames={Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name]))}
-			disabled={!ctx.canEdit}
-			onselect={(group, option) => ctx.act(() => setVariant(ctx.id, group, option))}
-		/>
-	</section>
-{/if}
-
-<section class="card" data-testid="printer-settings">
-	<h2>Bed and printer</h2>
-	<p class="muted">
-		The printer you plan to print on. Plates are arranged for its bed, and its multi-material system
-		decides which colors can share a plate.
-	</p>
-	<BedPicker
-		value={ctx.view.printer}
-		disabled={!ctx.canEdit}
-		orgId={ctx.view.build.organizationId}
-		preselectSingle={!ctx.view.printer}
-		onchange={(p) => (printerDraft = p)}
-	/>
-	{#if ctx.canEdit}
-		<div>
-			<button
-				class="btn primary"
-				type="button"
-				disabled={printerDraft === undefined}
-				data-testid="save-printer-settings"
-				onclick={savePrinter}>Save printer</button
-			>
-			<span class="muted" role="status">{printerSaved}</span>
-		</div>
-	{/if}
-</section>
-
-<section class="card">
-	<h2>Plate layout</h2>
-	<p class="muted">
-		Arrange the parts for your bed, or follow one of MakeGood's tuned Bambu profiles. Upload a
-		sliced 3MF on the Plates tab to use your own.
-	</p>
-	<PlateLayoutPicker
-		buildId={ctx.id}
-		bedPanel={false}
-		printer={ctx.view.printer}
-		disabled={!ctx.canEdit}
-		onchanged={() => ctx.refresh()}
-	/>
-</section>
 
 <section class="card">
 	<h2>Filament</h2>
@@ -185,6 +109,18 @@
 		</div>
 	{/each}
 	<SpoolLink />
+</section>
+
+<section class="card">
+	<h2>Setup</h2>
+	<p class="muted">Choose the kit files, options, colors and printer again, step by step.</p>
+	<div>
+		<a
+			class="btn"
+			href={resolve('/(app)/builds/[id]/setup', { id: ctx.id })}
+			data-testid="rerun-setup">Open the setup steps</a
+		>
+	</div>
 </section>
 
 <MoveToChapter />

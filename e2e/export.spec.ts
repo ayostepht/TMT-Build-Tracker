@@ -18,8 +18,8 @@ test('export for a slicer: no geometry, then a project 3MF per color and a plain
 	test.setTimeout(120_000);
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { buildId } = await ownerWithBuild(page, 'export');
-	await page.getByRole('link', { name: 'Plates', exact: true }).click();
-	await expect(page).toHaveURL(/\/plates$/);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await expect(page).toHaveURL(/\/print$/);
 
 	// Without a printer the card asks for one.
 	await expect(page.getByTestId('export-no-printer')).toBeVisible();

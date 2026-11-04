@@ -66,7 +66,7 @@ export interface PlannedItem {
 export interface PlannedPlate {
 	/** 1-based position in the exported file. */
 	index: number;
-	/** The plate's number in the build (Plates tab). */
+	/** The plate's number in the build (Print tab). */
 	number: number;
 	name: string;
 	runs: number;
@@ -129,7 +129,7 @@ export function buildExportPlan(input: PlanInput): ExportPlan {
 	const { view, footprints, flavor } = input;
 	const printer = view.printer;
 	if (!printer)
-		throw new PlanError('Choose a printer first (Plates tab) so the export knows your bed.');
+		throw new PlanError('Choose a printer first (Print tab) so the export knows your bed.');
 	const warnings: ExportWarning[] = [...(input.notes ?? [])];
 
 	let source = [...input.plates].sort((a, b) => a.number - b.number);

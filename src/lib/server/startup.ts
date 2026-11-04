@@ -4,6 +4,7 @@ import { getDb, runMigrations } from './db';
 import { templateSeeds } from './seed';
 import { seedTemplates } from './seed/run';
 import { startSupervisor } from './printers/supervisor';
+import { installKitPacks } from './kitpack/install';
 
 let done = false;
 
@@ -20,6 +21,8 @@ export function startup(): void {
 	const stale = failStaleModelJobs(db);
 	if (stale) console.log(`[tmt] marked ${stale} interrupted 3D model job(s) as failed`);
 	kickQueue(db);
+	// MakeGood's kit (CC0) from the baked-in or downloaded kit pack; in the background, never blocks start.
+	installKitPacks(db).catch((e) => console.error('[tmt] kit pack install error', e));
 	if (process.env.TMT_PRINTERS !== 'off') startSupervisor(db);
 	done = true;
 }

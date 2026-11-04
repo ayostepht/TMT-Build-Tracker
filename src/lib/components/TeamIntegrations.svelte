@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import {
 		getOrgSettings,
 		saveOrgSettings,
@@ -7,8 +6,8 @@
 		type OrgSettingsDto
 	} from '#lib/client/api.ts';
 
-	/** Team page section: printers link, "log finished prints automatically", Spoolman address and auto-deduct. */
-	let { orgId, slug }: { orgId: string; slug: string } = $props();
+	/** Integrations tab: "log finished prints automatically", Spoolman address and auto-deduct. */
+	let { orgId }: { orgId: string } = $props();
 
 	let s = $state<OrgSettingsDto | null>(null);
 	let canEdit = $state(false);
@@ -57,14 +56,7 @@
 </script>
 
 <section class="card" data-testid="team-integrations">
-	<h2>Printers and Spoolman</h2>
-	<div>
-		<a
-			class="btn"
-			href={resolve('/(app)/teams/[slug]/printers', { slug })}
-			data-testid="printers-link">Printers</a
-		>
-	</div>
+	<h2>Auto-log and Spoolman</h2>
 	{#if s}
 		<label class="chk">
 			<input

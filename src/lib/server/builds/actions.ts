@@ -778,3 +778,24 @@ export function linkSpool(
 		return { kind: 'filament.spool', payload: { role, spoolId: id, spoolName: name } };
 	});
 }
+
+/** Setup wizard progress: the step (1 to 5) the build is on, or null once setup is finished. No activity row. */
+export function setSetupStep(db: Db, buildId: string, userId: string, body: unknown): void {
+	if (!isObj(body)) bad('Invalid body');
+	const step = body.step;
+	if (step !== null && !(Number.isInteger(step) && (step as number) >= 1 && (step as number) <= 5))
+		bad('step must be 1 to 5, or null');
+	const access = buildAccess(db, buildId, userId);
+	if (!access) throw new ApiError(404, 'Not found');
+	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
+	db.update(builds)
+		.set({ setupStep: step as number | null })
+		.where(eq(builds.id, buildId))
+		.run();
+	emitBuildEvent(buildId, {
+		type: 'changed',
+		kind: 'build.setup',
+		by: null,
+		at: new Date().toISOString()
+	});
+}

@@ -51,7 +51,7 @@
 
 <article class="summary">
 	<div class="no-print bar-actions">
-		<a href={resolve('/(app)/builds/[id]/handoff', { id: ctx.id })}>← Handoff</a>
+		<a href={resolve('/(app)/builds/[id]/finish', { id: ctx.id })}>← Finish</a>
 		<button type="button" class="btn primary" onclick={() => window.print()}
 			>Print / Save as PDF</button
 		>

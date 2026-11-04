@@ -34,7 +34,7 @@ export { plateColumns, plateOrigin } from './plate-grid';
 
 export interface ExportOptions {
 	flavor: Flavor;
-	/** Plate numbers (as on the Plates tab); default all. */
+	/** Plate numbers (as on the Print tab); default all. */
 	plates?: number[];
 }
 
@@ -68,7 +68,7 @@ export function prepareExport(
 	const view = loadBuildView(db, buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
 	if (!view.printer)
-		throw new ApiError(400, 'Choose a printer first (Plates tab) so the export knows your bed.');
+		throw new ApiError(400, 'Choose a printer first (Print tab) so the export knows your bed.');
 	const footprints = loadFootprints(db, view.build.templateId);
 	const info = buildArrangement(db, buildId, userId);
 	const notes: ExportWarning[] = [];
@@ -85,8 +85,8 @@ export function prepareExport(
 			severity: 'info',
 			message:
 				info.layout !== 'arranged'
-					? `The build's plates are not arranged for ${view.printer.name} yet, so the file uses a fresh arrangement (plate numbers may differ from the Plates tab).`
-					: `The colors changed since the plates were arranged, so the file uses a fresh arrangement (plate numbers may differ). Re-arrange on the Plates tab to match.`
+					? `The build's plates are not arranged for ${view.printer.name} yet, so the file uses a fresh arrangement (plate numbers may differ from the Print tab).`
+					: `The colors changed since the plates were arranged, so the file uses a fresh arrangement (plate numbers may differ). Re-arrange on the Print tab to match.`
 		});
 	}
 	try {

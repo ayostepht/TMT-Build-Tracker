@@ -62,3 +62,18 @@ any MakeGood data.
 IBM Plex Mono (400, 500) (Copyright IBM Corp.), downloaded from Google Fonts so
 the app has no runtime dependency on it. All three are licensed under the SIL
 Open Font License 1.1 (<https://openfontlicense.org>).
+
+## MakeGood 3D TMT (kit pack)
+
+The 3D model and print files of the MakeGood 3D TMT (toddler mobility trainer) are by **MakeGood**,
+released as **Creative Commons Public Domain (CC0 1.0)** (confirmed by the maintainer from the
+model's MakerWorld page). Credit: 3D model and print files by MakeGood.
+
+They are not in this git repository. TMT Build Tracker converts them (STEP to a web 3D model, slicer
+projects to compact print geometry with the per-object print settings and painted supports) and
+ships the result as a kit pack, a release asset that the Docker image includes and installs on first
+start (see `docs/kit-pack.md`; `CREDITS.md` and the license in `manifest.json` are inside every
+pack). The design is unchanged, the data is only reformatted (print meshes are quantized to 0.01 mm).
+
+The maker guide (PDF) is **not** bundled. The app refers to MakeGood's guide page numbers and links
+to their guide; get it from MakeGood.

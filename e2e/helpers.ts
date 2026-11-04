@@ -36,25 +36,51 @@ export async function createChapter(page: Page, name: string) {
 }
 
 /** The MakeGood tuned layout the helpers pick unless a spec asks for another one. */
-export const TUNED_LAYOUT = 'Bambu X1 / P1 / A1';
+export const TUNED_LAYOUT = 'Bambu X1 / P1 / A1 (24 plates)';
 
-/** Creates a build from the chapter page; returns the build id. */
+/**
+ * From a workspace page: New build > name > Create build. Lands in the setup wizard; returns the
+ * build id. Specs for the wizard itself use this and walk the steps.
+ */
+export async function startBuild(page: Page, name: string): Promise<string> {
+	await settled(page);
+	await page.getByTestId('new-build').click();
+	await expect(page).toHaveURL(/\/builds\/new/);
+	await settled(page);
+	await page.getByLabel('Name', { exact: true }).fill(name);
+	await page.getByRole('button', { name: 'Create build' }).click();
+	await expect(page).toHaveURL(/\/builds\/[^/]+\/setup/);
+	return new URL(page.url()).pathname.split('/')[2];
+}
+
+/**
+ * Creates a build from the workspace page and gets past the setup wizard (Skip setup), then picks
+ * the MakeGood tuned plates (most specs assume them; `layout` null keeps the template default).
+ * Ends on the build's Overview. Returns the build id.
+ */
 export async function createBuild(
 	page: Page,
 	name: string,
 	layout: string | null = TUNED_LAYOUT
 ): Promise<string> {
+	const id = await startBuild(page, name);
 	await settled(page);
-	// The New build form defaults to "Arrange for my bed"; most specs assume the MakeGood plates.
-	if (layout) await page.getByTestId('plate-layout').selectOption({ label: layout });
-	await page.getByLabel('Name', { exact: true }).fill(name);
-	await page.getByRole('button', { name: 'Create build' }).click();
-	await expect(page).toHaveURL(/\/builds\/[^/]+$/);
-	return new URL(page.url()).pathname.split('/')[2];
+	await page.getByTestId('skip-setup').click();
+	await expect(page).toHaveURL(new RegExp(`/builds/${id}$`));
+	if (layout) {
+		await page.goto(`/builds/${id}/print`);
+		await settled(page);
+		await page.getByTestId('plate-layout').selectOption({ label: layout });
+		await expect(page.getByTestId('layout-name')).toContainText('MakeGood tuned profile');
+		await page.goto(`/builds/${id}`);
+	}
+	return id;
 }
 
 /** Owner on a chapter page creates an invite and returns its link. */
 export async function invite(page: Page, email: string, role: 'viewer' | 'editor') {
+	await page.getByRole('link', { name: 'Members', exact: true }).click();
+	await expect(page).toHaveURL(/\/members$/);
 	await settled(page);
 	const form = page.locator('form[action="?/invite"]');
 	await form.getByLabel('Email').fill(email);
@@ -135,4 +161,14 @@ export async function arrangeForCentauri(page: Page) {
 	await page.getByTestId('printer-model').selectOption({ label: 'Centauri Carbon' });
 	await page.getByTestId('printer-mm').selectOption({ index: 1 });
 	await page.getByTestId('arrange-bed').click();
+}
+
+/** In the setup wizard: press Continue until `step` is showing (steps 2 to 5). */
+export async function toSetupStep(page: Page, step: number) {
+	for (let n = 1; n < step; n++) {
+		await settled(page);
+		await page.getByTestId('wizard-next').click();
+		await expect(page).toHaveURL(new RegExp(`step=${n + 1}`));
+	}
+	await settled(page);
 }

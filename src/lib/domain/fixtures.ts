@@ -64,7 +64,9 @@ export function makeView(
 			templateName: seed.name,
 			templateVersion: seed.version,
 			globalSettings: seed.globalSettings,
-			sections: seed.sections
+			sections: seed.sections,
+			setupStep: null,
+			templateOwned: false
 		},
 		role: 'owner',
 		canEdit: true,

@@ -1,10 +1,11 @@
 import { eq } from 'drizzle-orm';
 import type { KitStatusDto } from '#lib/domain/kit-import.ts';
 import type { Db } from './db/index.ts';
-import { templateModels, templateParts } from './db/schema.ts';
+import { templateModels, templateParts, templates } from './db/schema.ts';
 import { guideStatus } from './guide.ts';
 import { loadTemplateModelInfo } from './models/info.ts';
 import { listPrintGeometry } from './print-geometry/import.ts';
+import { kitInstallState } from './kitpack/install.ts';
 
 /** What the install holds for a template's kit files (model, print geometry, guide, hardware). */
 export async function kitStatus(db: Db, templateId: string): Promise<KitStatusDto> {
@@ -39,6 +40,12 @@ export async function kitStatus(db: Db, templateId: string): Promise<KitStatusDt
 		};
 	}
 
+	const slug = db
+		.select({ slug: templates.slug })
+		.from(templates)
+		.where(eq(templates.id, templateId))
+		.get()?.slug;
+	const install = slug ? kitInstallState(slug) : { installing: false, message: '' };
 	const rows = listPrintGeometry(db, templateId);
 	const imported = rows.filter((r) => r.source !== 'seed');
 	const g = await guideStatus(db, templateId);
@@ -57,6 +64,8 @@ export async function kitStatus(db: Db, templateId: string): Promise<KitStatusDt
 			pages: g.pages.length,
 			mapped: g.pages.filter((p) => p.pdfPage !== null).length
 		},
-		hardware: !!info?.hardwareUrl
+		hardware: !!info?.hardwareUrl,
+		installing: install.installing,
+		...(install.installing ? { installMessage: install.message } : {})
 	};
 }

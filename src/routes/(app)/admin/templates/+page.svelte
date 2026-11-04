@@ -1,22 +1,35 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+	const back = $derived(page.data.backBuild as { id: string; name: string } | null);
+	const from = $derived(back ? `?from=${back.id}` : '');
 </script>
 
 <section class="stack">
-	<div class="kicker">Site admin</div>
+	<div class="kicker">Kit admin</div>
+	{#if back}
+		<p>
+			<a href={resolve('/(app)/builds/[id]', { id: back.id })} data-testid="back-to-build-link"
+				>← Back to {back.name}</a
+			>
+		</p>
+	{/if}
 	<h1>Kits</h1>
 	<p class="muted">
-		Templates installed on this server. Open a kit to import its 3D model and adjust where each part
-		sits.
+		Templates installed on this server and which MakeGood files each one has. Part placement for the
+		3D chair is under Advanced.
 	</p>
 	<ul class="tpl-list">
 		{#each data.templates as t (t.id)}
 			<li class="tpl">
-				<h3><a href={resolve('/(app)/admin/templates/[id]', { id: t.id })}>{t.name}</a></h3>
-				<div class="muted">{t.version}</div>
+				<h3>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+					<a href={resolve('/(app)/admin/templates/[id]', { id: t.id }) + from}>{t.name}</a>
+				</h3>
+				<div class="muted">{t.version}{t.owned ? ' · workspace copy' : ''}</div>
 				<div class="counts">
 					<span class="set">{t.parts} parts</span>
 					<span class="set">{t.plates} plates</span>

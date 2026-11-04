@@ -49,10 +49,7 @@
 <svelte:head><title>Printers · {data.team.name}</title></svelte:head>
 
 <section class="stack">
-	<div class="kicker">
-		<a href={resolve('/(app)/teams/[slug]', { slug: data.team.slug })}>{data.team.name}</a>
-	</div>
-	<h1>Printers</h1>
+	<h2>Printers</h2>
 	<p class="muted">
 		Connect the printers your chapter prints on to see live progress next to each plate, and to log
 		finished prints without typing. Status is read-only: this app never starts, stops or moves a

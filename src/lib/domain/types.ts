@@ -154,6 +154,10 @@ export interface BuildSummary {
 	templateVersion: string;
 	globalSettings: string;
 	sections: string[];
+	/** Setup wizard step (1 to 5) the build is on; null = setup finished or never started. */
+	setupStep: number | null;
+	/** The build uses a workspace-owned copy of the kit ("Upload your own files"), not the built-in one. */
+	templateOwned: boolean;
 }
 
 /**
@@ -288,7 +292,7 @@ export interface HandoffRecord {
 export type PartPatch = { slug: string } & Partial<Omit<PartState, 'slug' | 'updatedAt'>>;
 
 /**
- * The printer a build is planned for (set in New build, Settings or the Plates tab).
+ * The printer a build is planned for (set in New build, Settings or the Print tab).
  * `catalogId` points into `src/lib/printers/catalog.ts` (null = custom printer).
  * The plate arranger (`arrange.ts`) uses bed, margin, spacing and `mmSlots`.
  * All lengths in mm.

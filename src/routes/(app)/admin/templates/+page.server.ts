@@ -28,7 +28,8 @@ export const load: PageServerLoad = ({ locals }) => {
 					parts: n(templateParts, t.id),
 					plates: n(templatePlates, t.id),
 					variantGroups: t.variantGroups.length,
-					model: model ?? null
+					model: model ?? null,
+					owned: t.ownerOrgId !== null
 				};
 			})
 	};

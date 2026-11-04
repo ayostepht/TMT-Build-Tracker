@@ -11,6 +11,7 @@
 	import type { AssemblyStep } from '#lib/domain/types.ts';
 	import { ago, getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import PhotoGallery from '#lib/components/PhotoGallery.svelte';
+	import { MAKEGOOD_GUIDE_URL } from '#lib/makegood.ts';
 
 	const ctx = getBuildCtx();
 	const view = $derived(ctx.view);
@@ -63,6 +64,15 @@
 						and {ready.missing.length - 8} more
 					</li>{/if}
 			</ul>
+		{/if}
+		{#if !view.guidePages.some((g) => g.hasImage)}
+			<p class="muted" data-testid="guide-note">
+				Guide pages below are MakeGood maker guide page numbers.
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a href={MAKEGOOD_GUIDE_URL} target="_blank" rel="noopener noreferrer"
+					>Open MakeGood's guide</a
+				>
+			</p>
 		{/if}
 		<div class="prog">
 			<div
@@ -212,7 +222,7 @@
 		<p class="muted">This kit has no assembly checklist yet.</p>
 	{/each}
 
-	<div class="card">
+	<div class="card" id="photos">
 		<h2>Progress photos</h2>
 		<PhotoGallery
 			kinds={['progress']}

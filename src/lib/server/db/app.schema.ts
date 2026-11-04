@@ -15,24 +15,32 @@ const createdAt = () =>
 
 // ---- Templates (printable kits). Data only: no vendor models, images or files.
 
-export const templates = sqliteTable('templates', {
-	id: id(),
-	slug: text('slug').notNull().unique(),
-	name: text('name').notNull(),
-	version: text('version').notNull(),
-	description: text('description').notNull().default(''),
-	sourceUrl: text('source_url'),
-	globalSettings: text('global_settings').notNull().default(''),
-	sections: text('sections', { mode: 'json' })
-		.$type<string[]>()
-		.notNull()
-		.default(sql`'[]'`),
-	variantGroups: text('variant_groups', { mode: 'json' })
-		.$type<VariantGroup[]>()
-		.notNull()
-		.default(sql`'[]'`),
-	createdAt: createdAt()
-});
+export const templates = sqliteTable(
+	'templates',
+	{
+		id: id(),
+		slug: text('slug').notNull().unique(),
+		name: text('name').notNull(),
+		version: text('version').notNull(),
+		description: text('description').notNull().default(''),
+		sourceUrl: text('source_url'),
+		globalSettings: text('global_settings').notNull().default(''),
+		sections: text('sections', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		variantGroups: text('variant_groups', { mode: 'json' })
+			.$type<VariantGroup[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		/** Workspace that owns this copy (a fork made from the user's own files); null = global, shown to everyone. */
+		ownerOrgId: text('owner_org_id').references(() => organization.id, { onDelete: 'cascade' }),
+		/** The global template this fork was copied from. */
+		baseTemplateId: text('base_template_id'),
+		createdAt: createdAt()
+	},
+	(t) => [index('templates_owner_org_idx').on(t.ownerOrgId)]
+);
 
 const templateId = () =>
 	text('template_id')
@@ -303,6 +311,8 @@ export const builds = sqliteTable(
 		plateLayout: text('plate_layout'),
 		/** Printer the build is planned for (BuildPrinter json); null = not chosen. */
 		printer: text('printer', { mode: 'json' }).$type<BuildPrinter>(),
+		/** Setup wizard: the step (1-5) the build is on; null = setup finished (or never started, for older builds). */
+		setupStep: integer('setup_step'),
 		createdBy: text('created_by')
 			.notNull()
 			.references(() => user.id),

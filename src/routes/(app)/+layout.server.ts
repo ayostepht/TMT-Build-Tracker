@@ -1,7 +1,10 @@
 import { redirect } from '@sveltejs/kit';
-import { isSiteAdmin } from '#lib/server/access.ts';
+import { eq } from 'drizzle-orm';
+import { buildAccess, isSiteAdmin } from '#lib/server/access.ts';
+import { recentBuilds } from '#lib/server/builds/list.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { getDb } from '#lib/server/db/index.ts';
+import { builds } from '#lib/server/db/schema.ts';
 import {
 	ensurePersonalWorkspace,
 	findPersonalWorkspace,
@@ -37,12 +40,38 @@ export const load: LayoutServerLoad = async ({ locals, url, request }) => {
 	}
 	// A personal workspace is shown as "My builds"; its stored name is only a fallback.
 	const teams = raw.map((t) => (t.personal ? { ...t, name: 'My builds' } : t));
+	// A page reached from a build (`?from=<buildId>`) offers a way back to it.
+	const fromId = url.searchParams.get('from');
+	let backBuild: { id: string; name: string } | null = null;
+	if (fromId && buildAccess(db, fromId, locals.user.id)) {
+		const row = db
+			.select({ id: builds.id, name: builds.name })
+			.from(builds)
+			.where(eq(builds.id, fromId))
+			.get();
+		if (row) backBuild = row;
+	}
+	const nameOf = new Map(teams.map((t) => [t.id, t.name]));
 	return {
 		user: { id: locals.user.id, name: locals.user.name, email: locals.user.email },
 		teams,
 		activeTeamId,
 		/** Install-wide admin (first user or ADMIN_EMAILS): shows the "Kit admin" link. */
 		siteAdmin: isSiteAdmin(db, locals.user),
-		invitationCount: pendingInvitationCount(db, locals.user.email)
+		invitationCount: pendingInvitationCount(db, locals.user.email),
+		/** Builds touched most recently across all workspaces, for the Builds menu. */
+		recentBuilds: recentBuilds(
+			db,
+			teams.map((t) => t.id)
+		).map((b) => ({
+			id: b.id,
+			name: b.name,
+			progress: b.progress,
+			printed: b.printed,
+			total: b.total,
+			setupStep: b.setupStep,
+			workspace: nameOf.get(b.organizationId) ?? ''
+		})),
+		backBuild
 	};
 };

@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { filamentLabel } from '#lib/domain/labels.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
+	const back = $derived(page.data.backBuild as { id: string; name: string } | null);
 	let scope = $state<'all' | 'mine'>('all');
 	let q = $state('');
 
@@ -24,6 +26,13 @@
 <svelte:head><title>Designs · TMT Build Tracker</title></svelte:head>
 
 <section class="stack">
+	{#if back}
+		<p>
+			<a href={resolve('/(app)/builds/[id]', { id: back.id })} data-testid="back-to-build-link"
+				>← Back to {back.name}</a
+			>
+		</p>
+	{/if}
 	<div class="kicker">Color designs</div>
 	<h1>Designs</h1>
 	<p class="muted">

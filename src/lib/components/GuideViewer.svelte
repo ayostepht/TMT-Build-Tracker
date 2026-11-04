@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { guidePageImageUrl } from '#lib/client/api.ts';
+	import { MAKEGOOD_GUIDE_URL } from '#lib/makegood.ts';
 
 	const ctx = getBuildCtx();
 	let index = $state(0);
@@ -171,10 +172,13 @@
 					{:else}
 						<p class="muted">No guide pages for this {part ? 'part' : 'template'}.</p>
 					{/if}
-					<p class="muted">
-						The guide page images have not been imported on this server. A site admin can import the
-						guide PDF from Admin, Kits. Until then this shows the page titles and which pages cover
-						the part.
+					<p class="muted" data-testid="guide-makegood">
+						MakeGood maker guide, page {tab?.page ?? ''}.
+						<!-- eslint-disable svelte/no-navigation-without-resolve -->
+						<a href={MAKEGOOD_GUIDE_URL} target="_blank" rel="noopener noreferrer"
+							>Open MakeGood's guide</a
+						>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					</p>
 				</div>
 			{/if}

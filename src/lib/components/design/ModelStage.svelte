@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import ChairViewer from '#lib/components/ChairViewer.svelte';
+	import KitCredit from '#lib/components/kit/KitCredit.svelte';
 	import type { PartPlacement, TemplateModelInfo } from '#lib/domain/types.ts';
 
 	/**
@@ -19,6 +20,7 @@
 		onready,
 		autoRotate = false,
 		siteAdmin = false,
+		addFilesHref = undefined,
 		label = 'Chair preview'
 	}: {
 		model: TemplateModelInfo | null;
@@ -31,6 +33,8 @@
 		onready?: (info: { rendered: string[]; unplaced: string[] }) => void;
 		autoRotate?: boolean;
 		siteAdmin?: boolean;
+		/** Where the 3D files get added (the build's Print settings); shown in the empty state. */
+		addFilesHref?: string;
 		label?: string;
 	} = $props();
 
@@ -76,14 +80,17 @@
 		<button type="button" class="reset btn sm" onclick={() => viewer?.resetView()}>
 			Reset view
 		</button>
+		<KitCredit class="credit" />
 	{:else}
 		<div class="empty" data-testid="no-model">
 			<strong>No 3D model yet</strong>
 			<p class="muted">
-				A kit admin can import MakeGood's STEP files to turn this on. Until then, pick colors from
-				the part list.
+				The 3D chair comes with the kit files. Until they are added, pick colors from the part list.
 			</p>
-			{#if siteAdmin}
+			{#if addFilesHref}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a class="btn sm" href={addFilesHref}>See the kit files</a>
+			{:else if siteAdmin}
 				<a class="btn sm" href={resolve('/(app)/admin/templates')}>Open kit admin</a>
 			{/if}
 		</div>
@@ -113,6 +120,13 @@
 	.empty p {
 		margin: 0;
 		max-width: 38ch;
+	}
+	.stage :global(.credit) {
+		position: absolute;
+		left: 10px;
+		bottom: 8px;
+		max-width: calc(100% - 120px);
+		pointer-events: none;
 	}
 	.reset {
 		position: absolute;

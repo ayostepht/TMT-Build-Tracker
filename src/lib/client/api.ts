@@ -675,3 +675,13 @@ export const getKitStatus = (templateId: string) =>
 		'GET',
 		`${tpl(templateId)}/kit-status`
 	);
+
+// ---- setup wizard
+
+/** Remember the setup step (1 to 5) a build is on; null = setup finished. */
+export const setSetupStep = (buildId: string, step: number | null) =>
+	call('PATCH', `${b(buildId)}/setup`, { step });
+
+/** Step 1: `own: true` points the build at a workspace-owned copy of its kit (for your own files). */
+export const chooseTemplate = (buildId: string, own: boolean) =>
+	call<{ templateId: string }>('POST', `${b(buildId)}/template`, { own });

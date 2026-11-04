@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
-import { ownerWithBuild } from './helpers';
+import { ownerWithBuild, startBuild } from './helpers';
 
 const SHOTS = 'data/shots-m7';
 const FILE = 'Plate 1 - Handle Left.gcode';
@@ -63,7 +63,7 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	// Printers page and the add form.
 	await page.goto(`${chapterUrl}/printers`);
 	await page.waitForLoadState('networkidle');
-	await expect(page.getByRole('heading', { name: 'Printers', level: 1 })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Printers', level: 2 })).toBeVisible();
 	await page.getByTestId('add-printer').click();
 	await page.getByLabel('Name', { exact: true }).fill('Shop Centauri');
 	await page.getByTestId('pf-host').fill('127.0.0.1');
@@ -137,7 +137,7 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	mock.set({ printStatus: 0, machineStatus: [0], file: '' });
 
 	// Auto-log: turn it on for the team, run another plate-1 print to the end.
-	await page.goto(chapterUrl);
+	await page.goto(`${chapterUrl}/integrations`);
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('autolog').check();
 	await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
@@ -180,7 +180,7 @@ test('spoolman: link a spool to a filament, see it on the tiles, grams deducted 
 	await expect(page.getByTestId('spoolman-off')).toBeVisible();
 
 	// Team page: set the address, test, turn on auto-deduct.
-	await page.goto(chapterUrl);
+	await page.goto(`${chapterUrl}/integrations`);
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('spoolman-url').fill(`127.0.0.1:${spoolmanPort}`);
 	await page.getByTestId('spoolman-save').click();
@@ -248,8 +248,8 @@ test('plate layout picker lists the workspace printers first and can add a new o
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { chapterUrl, buildId } = await ownerWithBuild(page, 'picker-printers');
 
-	// No printer yet: only "New printer…" (and a hint). Add one inline from the Plates tab.
-	await page.goto(`/builds/${buildId}/plates`);
+	// No printer yet: only "New printer…" (and a hint). Add one inline from the Print tab.
+	await page.goto(`/builds/${buildId}/print`);
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	const sel = page.getByTestId('team-printer');
@@ -270,17 +270,20 @@ test('plate layout picker lists the workspace printers first and can add a new o
 	await page.getByTestId('arrange-bed').click();
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Bench Centauri');
 
-	// One printer in the workspace: the New build form preselects it.
+	// One printer in the workspace: the setup wizard's Print step preselects it.
 	await page.goto(chapterUrl);
 	await page.waitForLoadState('networkidle');
-	const form = page.locator('form[action="?/newBuild"]');
-	await expect(form.getByTestId('team-printer').locator('option:checked')).toContainText(
+	await startBuild(page, 'Printer chair');
+	for (let i = 0; i < 3; i++) {
+		await page.waitForLoadState('networkidle');
+		await page.getByTestId('wizard-next').click();
+	}
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
+	await expect(page.getByTestId('team-printer').locator('option:checked')).toContainText(
 		'Bench Centauri'
 	);
-	await page.screenshot({ path: `data/shots-bed/newbuild-team-printer-390.png`, fullPage: true });
-	await form.getByLabel('Name', { exact: true }).fill('Printer chair');
-	await form.getByRole('button', { name: 'Create build' }).click();
-	await expect(page).toHaveURL(/\/builds\/[^/]+$/);
-	await page.getByRole('link', { name: 'Plates', exact: true }).click();
+	await page.screenshot({ path: `data/shots-bed/setup-team-printer-390.png`, fullPage: true });
+	await page.getByTestId('arrange-bed').click();
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Bench Centauri');
 });

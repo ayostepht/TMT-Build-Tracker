@@ -14,11 +14,15 @@ and hand off builds together.
   A part that doesn't fit flat is reported as oversize, with advice (other
   profile, two-piece variant, bigger bed).
 
-- **No MakeGood files in the repo.** Guide page images, assembled chair models,
-  STEP/3MF/GLB files and the guide PDF are imported by each install through
-  the app (template admin) and live in the `/data` volume. Seed files carry
-  _data only_ (part names, grams, settings, plate layout, guide page titles).
-  `.gitignore` blocks `*.3mf`, `*.glb`, `*.step`, `uploads/`; keep it that way.
+- **MakeGood files: CC0, shipped as a kit pack, never in git.** MakeGood's 3D
+  TMT files are Creative Commons Public Domain (confirmed 2026-11-04). The
+  converted 3D model and print geometry ship as a versioned kit pack (GitHub
+  release asset, baked into the Docker image, `kitpacks/index.json` holds the
+  sha256) and are installed on first start. Always credit MakeGood. Raw
+  MakeGood files and derived binaries stay out of git (size): `.gitignore`
+  blocks `*.3mf`, `*.glb`, `*.step`, `*.kitpack`, `uploads/`; keep it that way.
+  The maker guide PDF is **not** bundled: reference MakeGood's page numbers
+  and link to their guide. Seed files carry data only.
 - **Template vs design vs build.** A _template_ is a printable kit (parts,
   plates, guide, hardware) with generic filament roles (`primary`, `accent`,
   `soft`, `tire`). A _color design_ maps roles to real filaments and parts to

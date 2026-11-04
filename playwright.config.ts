@@ -41,7 +41,10 @@ export default defineConfig({
 					BETTER_AUTH_URL: '',
 					ORIGIN: '',
 					// A fixed site admin so specs do not depend on who signs up first.
-					ADMIN_EMAILS: 'e2e-admin@example.test'
+					ADMIN_EMAILS: 'e2e-admin@example.test',
+					// The suite runs without the bundled MakeGood kit (specs cover the "missing" state).
+					KITPACK_DIR: `${DB_DIR}/no-kitpacks`,
+					KITPACK_DOWNLOAD: 'off'
 				}
 			}
 });

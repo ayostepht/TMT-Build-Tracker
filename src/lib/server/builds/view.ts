@@ -284,7 +284,9 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			templateName: tpl.name,
 			templateVersion: tpl.version,
 			globalSettings: tpl.globalSettings,
-			sections: tpl.sections
+			sections: tpl.sections,
+			setupStep: b.setupStep,
+			templateOwned: tpl.ownerOrgId !== null
 		},
 		role: access.role,
 		canEdit: access.canEdit,

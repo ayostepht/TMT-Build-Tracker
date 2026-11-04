@@ -23,7 +23,7 @@
 		{:else}
 			<p class="empty">
 				Nothing on the printer. Set a part to Printing, or use Start printing on a plate in the
-				Plates tab, and it pins here.
+				Print tab, and it pins here.
 			</p>
 		{/each}
 	</div>

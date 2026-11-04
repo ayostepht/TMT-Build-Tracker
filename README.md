@@ -4,9 +4,11 @@ A self-hostable web app for makers 3D-printing MakeGood 3D TMT (toddler mobility
 
 > **Status:** Milestone 1 (scaffold). Sign-in, database, migrations and the TMT template seed are in place. The build screens arrive in later milestones.
 
-## MakeGood files are not included
+## MakeGood files and credit
 
-This repository contains only data about the kit (part names, settings, plate groupings). It does **not** contain any MakeGood 3D models, 3MF/STEP files, guide pages or images. Each install imports those files itself from MakeGood / MakerWorld, and uploads stay in your own `/data` volume.
+The MakeGood 3D TMT 3D model and print files are by MakeGood, released as Creative Commons Public Domain (CC0); bundled as a kit pack. The maker guide is not included: get it from MakeGood.
+
+The git repository itself contains only data about the kit (part names, settings, plate groupings). The converted 3D model and print geometry ship separately as a versioned **kit pack** (a GitHub release asset, about 30 MB), which the Docker image downloads at build time and installs into your `/data` volume on first start, so the standard kit works with nothing to upload. See [docs/kit-pack.md](docs/kit-pack.md) for the format, the environment variables (`KITPACK_DIR`, `KITPACK_URL`, `KITPACK_DOWNLOAD=off`) and how a maintainer builds a pack. Files you import yourself in the kit admin always win over the pack.
 
 ## Self-hosting with Docker
 
@@ -24,17 +26,18 @@ Add a container with repository `ghcr.io/ayostepht/tmt-build-tracker:latest`, po
 
 ## Environment variables
 
-| Variable                                              | Description                                                                                                                                       |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev.                                                                   |
-| `BETTER_AUTH_SECRET`                                  | Required in production. Generate with `openssl rand -base64 32`.                                                                                  |
-| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work.                                                    |
-| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button.                                                           |
-| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                                                                          |
-| `ADMIN_EMAILS`                                        | Optional comma-separated emails that are site admins (kit and 3D model management), besides the first user.                                       |
-| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image.                                                                               |
-| `BODY_SIZE_LIMIT`                                     | Largest request body adapter-node accepts. The image sets `200M` for STEP zip uploads (see 3D model).                                             |
-| `MAX_3MF_MB`                                          | Largest slicer 3MF the Plates tab accepts (default `200`); it is streamed to disk, parsed and deleted. Needs `BODY_SIZE_LIMIT` at least as large. |
+| Variable                                              | Description                                                                                                                                                                          |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev.                                                                                                      |
+| `BETTER_AUTH_SECRET`                                  | Required in production. Generate with `openssl rand -base64 32`.                                                                                                                     |
+| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work.                                                                                       |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button.                                                                                              |
+| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                                                                                                             |
+| `ADMIN_EMAILS`                                        | Optional comma-separated emails that are site admins (kit and 3D model management), besides the first user.                                                                          |
+| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image.                                                                                                                  |
+| `BODY_SIZE_LIMIT`                                     | Largest request body adapter-node accepts. The image sets `200M` for STEP zip uploads (see 3D model).                                                                                |
+| `MAX_3MF_MB`                                          | Largest slicer 3MF the Plates tab accepts (default `200`); it is streamed to disk, parsed and deleted. Needs `BODY_SIZE_LIMIT` at least as large.                                    |
+| `KITPACK_DIR`, `KITPACK_URL`, `KITPACK_DOWNLOAD`      | Kit pack location (default `/app/kitpacks` in the image), download URL pattern (`{slug}` `{version}` `{file}`) and `KITPACK_DOWNLOAD=off` to never download. See `docs/kit-pack.md`. |
 
 For OIDC, register the redirect URI `<PUBLIC_URL>/api/auth/callback/oidc` with your provider.
 
@@ -50,8 +53,7 @@ Do not expose the container port directly to the internet when `PUBLIC_URL` is u
 ## 3D model (site admin)
 
 The kit admin (`/admin/templates`, visible to the first user and to `ADMIN_EMAILS`) builds the
-chair's 3D model from **your own copy** of MakeGood's STEP files. Nothing from MakeGood is in this
-repository or the image; the model lives in the `/data` volume.
+chair's 3D model from **your own copy** of MakeGood's STEP files, if you want to replace the bundled kit pack (the standard kit needs no upload). The bundled files are in the image (kit pack, see above); imports stay in the `/data` volume.
 
 1. Open **Kit admin**, pick the kit, choose MakeGood's STEP zip (up to 200 MB) and press **Import
    the model**. A background job converts the files in a separate process (heap capped at 768 MB,

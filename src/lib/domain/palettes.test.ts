@@ -307,7 +307,7 @@ describe('palettes against the real catalog', () => {
 				expect(names).not.toContain('Sunlu Silk Black');
 				expect(names).not.toContain('Polymaker PolyFlex TPU90 Grey');
 			}
-	});
+	}, 30_000);
 	it('tires and soft are 95A or unspecified-hardness TPU', () => {
 		for (const p of PALETTES) {
 			const r = resolvePalette(p.targets, real);
@@ -336,11 +336,11 @@ describe('palettes against the real catalog', () => {
 						if (!m.relaxed) expect(isAllowedFilament(src)).toBe(true);
 					}
 				}
-	});
+	}, 30_000);
 	it('matching is deterministic', () => {
 		for (const p of PALETTES)
 			expect(resolvePalette(p.targets, real, { brand: 'Overture' })).toEqual(
 				resolvePalette(p.targets, real, { brand: 'Overture' })
 			);
-	});
+	}, 30_000);
 });

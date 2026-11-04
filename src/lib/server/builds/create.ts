@@ -33,6 +33,8 @@ export interface CreateBuildInput {
 	plateLayout?: string | null;
 	/** Printer to plan plates for (BuildPrinter, validated). With one set, plates are arranged right away unless a layout is chosen. */
 	printer?: BuildPrinter | null;
+	/** Start the setup wizard at step 1 (the New build form); API-created builds skip it. */
+	setup?: boolean;
 }
 
 /** Create a build from a template (and optional color design) in one transaction. Returns the new id. */
@@ -93,6 +95,7 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 				variantChoices: resolveChoices(tpl.variantGroups, choices),
 				plateLayout: layout?.key ?? null,
 				printer: input.printer ?? null,
+				setupStep: input.setup ? 1 : null,
 				createdBy: userId
 			})
 			.returning({ id: builds.id })
