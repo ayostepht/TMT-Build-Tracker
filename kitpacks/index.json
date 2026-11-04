@@ -7,6 +7,13 @@
 			"file": "makegood-tmt-revb-1.0.0.kitpack",
 			"sha256": "93d772ac9d961c35f4a87a405576d3b374fed8f7d8cbb3907e79d8d57901124e",
 			"size": 32595589
+		},
+		{
+			"slug": "makegood-tmt-revb",
+			"version": "1.0.1",
+			"file": "makegood-tmt-revb-1.0.1.kitpack",
+			"sha256": "02142e8b6af76e84df49c8318b9a747db6f2885ea4d689478d7602962f839729",
+			"size": 31904374
 		}
 	]
 }

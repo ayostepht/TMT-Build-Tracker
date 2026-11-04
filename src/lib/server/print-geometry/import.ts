@@ -107,10 +107,12 @@ export async function importPrintGeometry(
 			for (const p of res.parts) {
 				const cur = batch.get(p.slug);
 				if (!cur) batch.set(p.slug, { ...p, pieces: [...p.pieces] });
-				else
+				else {
 					for (const pc of p.pieces)
 						if (!cur.pieces.some((x) => x.name.toLowerCase() === pc.name.toLowerCase()))
 							cur.pieces.push(pc);
+					if (p.groups?.length) cur.groups = [...(cur.groups ?? []), ...p.groups];
+				}
 			}
 		} else imported += storeExtractedParts(db, templateId, res.parts, fileName);
 		report.push({

@@ -20,6 +20,8 @@ export interface Placed {
 	z1: number;
 	/** Convex hull of the item's footprint on the bed. */
 	hull?: Pt[];
+	/** Rigid source group on the plate, if any. */
+	group?: number;
 }
 
 /** Bounding box of one item in the plate's own (bed) coordinates. */
@@ -112,7 +114,8 @@ export function checkPlacement(
 				plate: pl.number,
 				object: o.partName,
 				...b,
-				hull: placedHull(m, itemTransform(it, 0, 0))
+				hull: placedHull(m, itemTransform(it, 0, 0)),
+				...(it.group !== undefined ? { group: it.group } : {})
 			};
 			here.push(cur);
 			const problems: string[] = [];
@@ -142,6 +145,8 @@ export function checkPlacement(
 			for (let j = i + 1; j < here.length; j++) {
 				const a = here[i];
 				const c = here[j];
+				// pieces of one source group keep the kit author's layout, which may nest them (convex hulls overlap)
+				if (a.group !== undefined && a.group === c.group) continue;
 				// bounding boxes may overlap when parts nest on a diagonal: compare the real footprints (convex hulls)
 				if (
 					a.x1 > c.x0 + 0.05 &&

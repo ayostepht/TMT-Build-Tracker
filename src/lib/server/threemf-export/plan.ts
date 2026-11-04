@@ -62,6 +62,8 @@ export interface PlannedItem {
 	oy?: number;
 	/** 3D re-orientation of the stored mesh (applied before the rotation about z); absent = as stored. */
 	pose?: ItemPose;
+	/** Items with the same number on a plate are pieces of one rigid source group (they nest by design). */
+	group?: number;
 }
 
 export interface PlannedPlate {
@@ -203,7 +205,8 @@ export function buildExportPlan(input: PlanInput): ExportPlan {
 				d: it.d,
 				rotation: it.rotation,
 				...(it.ox || it.oy ? { ox: it.ox, oy: it.oy } : {}),
-				...(it.pose ? { pose: it.pose } : {})
+				...(it.pose ? { pose: it.pose } : {}),
+				...(it.group !== undefined ? { group: it.group } : {})
 			});
 		}
 		if (!items.length) continue;

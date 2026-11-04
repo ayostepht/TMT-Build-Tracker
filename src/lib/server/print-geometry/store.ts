@@ -7,12 +7,17 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { and, eq } from 'drizzle-orm';
-import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
+import {
+	GROUP_VERSION,
+	type PrintFootprint,
+	type SourceGroup
+} from '#lib/domain/print-footprint.ts';
+import { bounds, convexHull, type Pt } from '#lib/domain/geom2d.ts';
 import { uploadsDir } from '../config';
 import type { Db } from '../db';
 import { templatePrintGeometry } from '../db/schema';
 import { SEED_NOTE } from '../seed/run';
-import type { ExtractedPart } from './extract';
+import type { ExtractedGroup, ExtractedPart } from './extract';
 import { computePoses, ORIENT_VERSION } from '#lib/domain/orient.ts';
 import { computePieceSilhouettes, SIL_VERSION } from '#lib/domain/silhouette.ts';
 import { decodeMesh, encodeMesh, type PrintMesh } from './mesh-format';
@@ -96,6 +101,8 @@ export function storeExtractedParts(
 				};
 			})
 		};
+		const groups = buildGroups(part.groups, fp, part.unitsPerPlate);
+		if (groups.length) fp.groups = groups;
 		const main = fp.pieces[0];
 		const row = {
 			footprint: fp as unknown as Record<string, unknown>,
@@ -117,6 +124,76 @@ export function storeExtractedParts(
 		n++;
 	}
 	return n;
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Source groups of a footprint: piece names become indices, positions are taken relative to the
+ * centre of the combined outline's box, and the outline is the pieces' silhouettes (hull when a
+ * piece has none) at those positions. Returns none unless the groups hold no more objects than
+ * the part's pieces call for (copies x units per plate), so a group is never used twice over.
+ */
+export function buildGroups(
+	groups: ExtractedGroup[] | undefined,
+	fp: PrintFootprint,
+	unitsPerPlate: number
+): SourceGroup[] {
+	if (!groups?.length) return [];
+	const index = new Map(fp.pieces.map((p, i) => [p.name.toLowerCase(), i]));
+	const used = new Map<number, number>();
+	for (const g of groups)
+		for (const it of g.items) {
+			const i = index.get(it.piece);
+			if (i === undefined) return [];
+			used.set(i, (used.get(i) ?? 0) + 1);
+		}
+	for (const [i, n] of used)
+		if (n > Math.max(1, fp.pieces[i].copies) * Math.max(1, unitsPerPlate)) return [];
+	const out: SourceGroup[] = [];
+	for (const g of groups) {
+		const rings: Pt[][] = [];
+		for (const it of g.items) {
+			const pc = fp.pieces[index.get(it.piece)!];
+			const src: Pt[][] = pc.sil?.profile.rings?.length
+				? pc.sil.profile.rings
+				: pc.hull?.length
+					? [pc.hull]
+					: [
+							[
+								[-pc.w / 2, -pc.d / 2],
+								[pc.w / 2, -pc.d / 2],
+								[pc.w / 2, pc.d / 2],
+								[-pc.w / 2, pc.d / 2]
+							]
+						];
+			const a = (it.rot * Math.PI) / 180;
+			const c = Math.cos(a);
+			const sn = Math.sin(a);
+			for (const ring of src)
+				rings.push(ring.map(([x, y]) => [c * x - sn * y + it.x, sn * x + c * y + it.y] as Pt));
+		}
+		const b = bounds(rings.flat());
+		const ox = (b.minX + b.maxX) / 2;
+		const oy = (b.minY + b.maxY) / 2;
+		const outline = rings.map((ring) => ring.map(([x, y]) => [r2(x - ox), r2(y - oy)] as Pt));
+		out.push({
+			v: GROUP_VERSION,
+			plate: g.plate,
+			...(g.bed ? { bed: g.bed } : {}),
+			items: g.items.map((it) => ({
+				piece: index.get(it.piece)!,
+				x: r2(it.x - ox),
+				y: r2(it.y - oy),
+				rot: Math.round(it.rot * 1000) / 1000
+			})),
+			w: Math.ceil(b.w * 10) / 10,
+			d: Math.ceil(b.d * 10) / 10,
+			outline,
+			hull: convexHull(outline.flat())
+		});
+	}
+	return out;
 }
 
 /** Poses plus true outlines for one mesh (profile orientation and each pose). */

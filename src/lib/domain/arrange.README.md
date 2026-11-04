@@ -109,6 +109,17 @@ TPU never share a plate).
 - Hulls are used to draw outlines and to find a free angle for long parts; packing itself
   uses bounding boxes.
 
+## Rigid source groups
+
+A footprint with `groups` (pieces laid out on one plate of the kit author's profile, see
+`docs/kit-pack.md`) is arranged group by group: the whole group is one packing item (its combined
+outline, turned flat about z by 0/90 or a free angle) and its pieces come out as ordinary
+`ArrangedItem`s at group transform x piece offset (`rotation`, `x`/`y` box centre, `ox`/`oy` pivot as
+for free angles), tagged with the same `group` number. Spacing applies between items, not inside a
+group. Pieces are packed one by one first (densest); a part's group is used only when that would split the part
+over plates and the group gives fewer plates (or fewer split parts). A group that does not fit the bed
+(margin, keep-outs) is packed piece by piece, and only then does the part get the `split` note. Groups are ignored when they hold more objects than the part's copies call for.
+
 ## Re-orientation (parts bigger than the bed)
 
 When a piece does not fit in its profile orientation (0/90 degrees or a free in-plane angle),

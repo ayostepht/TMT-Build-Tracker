@@ -552,6 +552,7 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 			if (fp)
 				used[s] = {
 					...fp,
+					groups: undefined,
 					pieces: fp.pieces.map((pc) => ({ ...pc, orient: undefined, sil: undefined }))
 				};
 		}

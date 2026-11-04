@@ -34,6 +34,8 @@ export interface ObjectMatch {
 export interface MatchContext {
 	/** Filament type of the object ("PETG", "TPU"), used to tell apart parts with similar names. */
 	filamentType?: string | null;
+	/** Name of the plate the object sits on ("TPU - PUSH HANDLE GRIP"): names the part when the object's own name is generic. */
+	plateName?: string | null;
 }
 
 export const MATCH_THRESHOLD = 0.45;
@@ -110,6 +112,15 @@ export function matchObject(name: string, parts: MatchPart[], ctx: MatchContext 
 	if (!o.tokens.length) return { slug: null, confidence: 0, reason: 'No usable name' };
 	const type = (ctx.filamentType ?? '').toUpperCase();
 	const cands: Cand[] = [];
+	const plateTokens = ctx.plateName ? normalizeName(ctx.plateName).tokens : [];
+	/** Words of a part's own name, file and components. */
+	const ownWords = (p: MatchPart) =>
+		new Set([
+			...normalizeName(p.name).tokens,
+			...normalizeName(p.sourceFile).tokens,
+			...(p.components ?? []).flatMap((c) => normalizeName(c.name).tokens)
+		]);
+	const words = new Map(parts.map((p) => [p.slug, ownWords(p)]));
 
 	parts.forEach((p) => {
 		const file = normalizeName(p.sourceFile);
@@ -142,8 +153,28 @@ export function matchObject(name: string, parts: MatchPart[], ctx: MatchContext 
 			const name2 = normalizeName(p.name);
 			let s = Math.max(overlap(o.tokens, file.tokens), overlap(o.tokens, name2.tokens));
 			if (!sideOk(file) || !sideOk(name2)) s = 0;
+			// A word of the object that another part claims (as a component) and this part never uses
+			// ("strap" in "Footrest Strap": the harness's, not the footrest's) makes a word-overlap match weak.
+			const own = words.get(p.slug)!;
+			if (
+				o.tokens.some(
+					(t) => !own.has(t) && parts.some((q) => q.slug !== p.slug && words.get(q.slug)!.has(t))
+				)
+			)
+				s *= 0.5;
 			if (o.code && file.code) s *= o.code === file.code ? 1.15 : 0.6;
 			if (s > 0) bump(Math.min(0.85, s * 0.9), `Similar to ${p.name}`);
+		}
+		// the plate is named after the part ("TPU - PUSH HANDLE GRIP") and the object is a generic name for it
+		if (best.score < 0.8 && plateTokens.length) {
+			const mine = normalizeName(p.name).tokens;
+			if (
+				mine.length >= 2 &&
+				mine.every((t) => plateTokens.includes(t)) &&
+				o.tokens.every((t) => mine.includes(t)) &&
+				sideOk(normalizeName(p.name))
+			)
+				bump(0.8, `Plate "${ctx.plateName}" is named after ${p.name}`);
 		}
 		if (best.score < MATCH_THRESHOLD && p.notes?.length && o.tokens.length >= 2) {
 			const corpus = normalizeName(p.notes.join(' ')).tokens;
@@ -154,7 +185,10 @@ export function matchObject(name: string, parts: MatchPart[], ctx: MatchContext 
 			const mats = (p.allowedMaterials ?? []).map((m) => m.toUpperCase());
 			if (mats.length) {
 				const fits = mats.some((m) => m.startsWith(type) || type.startsWith(m));
-				best.score = Math.min(1, Math.max(0, best.score + (fits ? 0.05 : -0.3)));
+				// The file's filament slot can be wrong (a TPU plate sliced with a PETG slot): a match by
+				// file or component name stays, only word-overlap guesses are pushed down.
+				const named = best.score >= 0.8;
+				best.score = Math.min(1, Math.max(0, best.score + (fits ? 0.05 : named ? 0 : -0.3)));
 			}
 		}
 		if (best.score > 0) cands.push(best);
@@ -177,6 +211,7 @@ export function matchObject(name: string, parts: MatchPart[], ctx: MatchContext 
 
 export interface MatchPlateInput {
 	index: number;
+	name?: string;
 	objects: { id: string; name: string; filamentIndex: number | null }[];
 }
 
@@ -193,7 +228,8 @@ export function matchPlates(
 	for (const pl of plates)
 		for (const o of pl.objects)
 			out[objectKey(pl.index, o.id)] = matchObject(o.name, parts, {
-				filamentType: o.filamentIndex ? typeOf.get(o.filamentIndex) : null
+				filamentType: o.filamentIndex ? typeOf.get(o.filamentIndex) : null,
+				plateName: pl.name
 			});
 	return out;
 }

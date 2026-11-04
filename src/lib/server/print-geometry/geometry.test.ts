@@ -314,3 +314,65 @@ describe('ModelScanner paint', () => {
 		]);
 	});
 });
+
+describe('source groups', () => {
+	it('keeps the layout of a part with several objects on one plate', async () => {
+		// two copies of one bar: one turned 90 degrees at (500, 300), one as is at (560, 300)
+		const bytes = threeMf({ instances: 1 });
+		const two = makeProjectThreeMf({
+			plates: [
+				{
+					name: 'Wings',
+					objects: [{ name: '3DTMT C1 WING LEFT REV B.STEP', instances: 2 }]
+				}
+			],
+			extra: {
+				'3D/3dmodel.model': strToU8(
+					`<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06"><metadata name="Application">BambuStudio-02.06.00.51</metadata><resources><object id="2" type="model"><components><component p:path="/3D/Objects/object_1.model" objectid="1" transform="1 0 0 0 1 0 0 0 1 0 0 0"/></components></object></resources><build><item objectid="2" transform="${rotZ90} 500 300 7" printable="1"/><item objectid="2" transform="1 0 0 0 1 0 0 0 1 560 300 7" printable="1"/></build></model>`
+				),
+				'3D/Objects/object_1.model': strToU8(boxModel(1, 100, 20, 10)),
+				'Metadata/project_settings.config': strToU8(
+					JSON.stringify({ printable_area: ['0x0', '256x0', '256x256', '0x256'] })
+				)
+			}
+		});
+		void bytes;
+		const res = await extractPartGeometry(open(two), parts);
+		const g = res.parts[0].groups;
+		expect(g).toHaveLength(1);
+		expect(g![0].bed).toEqual({ x: 256, y: 256 });
+		expect(g![0].items).toHaveLength(2);
+
+		const db = openDb(':memory:');
+		runMigrations(db);
+		seedTemplates(db, templateSeeds);
+		const templateId = db.select({ id: templates.id }).from(templates).get()!.id;
+		const p = join(mkdtempSync(join(tmpdir(), 'tmt-grp-')), 'g.3mf');
+		writeFileSync(p, two);
+		await importPrintGeometry(db, templateId, p, 'g.3mf');
+		const fp = loadFootprints(db, templateId).get('wing-left')!;
+		expect(fp.pieces).toHaveLength(1);
+		expect(fp.groups).toHaveLength(1);
+		const grp = fp.groups![0];
+		expect(Math.abs(grp.w - 180)).toBeLessThan(1.5);
+		expect(Math.abs(grp.d - 100)).toBeLessThan(1.5);
+		expect(grp.bed).toEqual({ x: 256, y: 256 });
+		// world bars: x 480..500 / y 300..400 and x 560..660 / y 300..320; group origin = centre of 480..660 x 300..400
+		const centres = grp.items
+			.map((i) => {
+				const a = (i.rot * Math.PI) / 180;
+				const m = fp.pieces[i.piece];
+				// the piece box centre is its mesh origin, so the item position is the box centre
+				void a;
+				void m;
+				return [Math.round(i.x) + 0, Math.round(i.y) + 0];
+			})
+			.sort((x, y) => x[0] - y[0]);
+		expect(centres).toEqual([
+			[-80, 0],
+			[40, -40]
+		]);
+		// two rings of the outline, 4 corners at least each
+		expect(grp.outline.length).toBeGreaterThanOrEqual(2);
+	});
+});

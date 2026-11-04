@@ -21,7 +21,12 @@
 import { boxOrients, fitOutline, rotatePoints, turnedOutlineBox, type Pt } from './geom2d.ts';
 import { findFreePosition, optimizeLayout, type OptItem } from './plate-optimize.ts';
 import { chooseOrientation, describePose, type OrientData, type PrintPose } from './orient.ts';
-import type { PrintFootprint } from './print-footprint.ts';
+import {
+	GROUP_VERSION,
+	groupFit,
+	type PrintFootprint,
+	type SourceGroup
+} from './print-footprint.ts';
 import type { PieceSilhouettes, Silhouette } from './silhouette.ts';
 import type { BuildPrinter } from './types.ts';
 
@@ -125,6 +130,11 @@ export interface ArrangedItem {
 	pose?: ItemPose;
 	/** Response only (GET /arrangement): key into ArrangementInfo.silhouettes for this item's outline. */
 	sil?: string;
+	/**
+	 * Set on items that belong to a rigid source group (pieces laid out as in the kit author's profile):
+	 * items with the same number on a plate were placed, turned and moved together.
+	 */
+	group?: number;
 }
 
 export interface ArrangedPlate {
@@ -288,6 +298,10 @@ interface Item {
 	ox?: number;
 	oy?: number;
 	pose?: ItemPose;
+	/** A rigid group of pieces (source layout): one packing item standing for all `members`. */
+	grp?: { g: SourceGroup; members: Item[] };
+	/** Source group this item came from (also when the group had to be broken up), for the split note. */
+	src?: string;
 }
 
 interface PlateState {
@@ -422,8 +436,34 @@ export function pieceOrients(
 		.map((o) => ({ ...o, pose: info }));
 }
 
-/** Arrange parts onto plates for a printer. */
+/**
+ * Arrange parts onto plates for a printer. Pieces are packed one by one (densest); the rigid source
+ * group of a part (pieces laid out as in the kit author's profile) is used only for parts that
+ * per-piece packing would split over plates, and only when that gives fewer plates, or the same
+ * number with fewer split parts. Ties keep the per-piece layout. Two deterministic passes at most.
+ */
 export function arrange(input: ArrangeInput): ArrangeResult {
+	const withGroups = input.parts.filter((p) => p.footprint.groups?.length);
+	if (!withGroups.length) return arrangeCore(input);
+	const strip = (parts: ArrangePart[], keep: Set<string>) =>
+		parts.map((p) =>
+			p.footprint.groups && !keep.has(p.slug)
+				? { ...p, footprint: { ...p.footprint, groups: undefined } }
+				: p
+		);
+	const base = arrangeCore({ ...input, parts: strip(input.parts, new Set()) });
+	const split = new Set(base.warnings.filter((w) => w.code === 'split').map((w) => w.slug));
+	const need = new Set(withGroups.map((p) => p.slug).filter((s) => split.has(s)));
+	if (!need.size) return base;
+	const alt = arrangeCore({ ...input, parts: strip(input.parts, need) });
+	const splits = (r: ArrangeResult) => r.warnings.filter((w) => w.code === 'split').length;
+	return alt.plates.length < base.plates.length ||
+		(alt.plates.length === base.plates.length && splits(alt) < splits(base))
+		? alt
+		: base;
+}
+
+function arrangeCore(input: ArrangeInput): ArrangeResult {
 	const { printer } = input;
 	const warnings: ArrangeWarning[] = [];
 	const spacing = Math.max(0, printer.spacing);
@@ -548,9 +588,13 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 	const plates: PlateState[] = [];
 	const oversizePlates: { part: ArrangePart; items: Item[] }[] = [];
 	const normal: ArrangePart[] = [];
+	const itemOutline = (it: Item): Pt[] =>
+		it.grp
+			? fitOutline(groupFit(it.grp.g))
+			: fitOutline(partOf.get(it.slug)!.footprint.pieces[it.piece]);
 	/** Outline-based spot for an item whose box has none around the keep-out areas (diagonal wings). */
 	const soloSpot = (it: Item) => {
-		const outline = fitOutline(partOf.get(it.slug)!.footprint.pieces[it.piece]);
+		const outline = itemOutline(it);
 		const setup = { bedX: printer.bedX, bedY: printer.bedY, margin, spacing, keepOut: zones };
 		let best: { o: Orient; x: number; y: number; clearance: number } | null = null;
 		for (const o of it.orients) {
@@ -592,6 +636,59 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 		}
 		return best;
 	};
+	// 2a. parts whose pieces shared a plate in the kit author's profile stay together: the stored
+	// group goes in as one rigid item when it fits the bed; otherwise its pieces are packed one by one
+	const partsWithGroups = new Set<string>();
+	for (const p of parts) {
+		const list = itemsOf.get(p.slug)!;
+		const groups = (p.footprint.groups ?? []).filter(
+			(g) => g.v === GROUP_VERSION && g.items.length >= 2
+		);
+		if (!groups.length) continue;
+		// every group object must be one the part calls for (copies x units per run); else ignore the data
+		const want = new Map<number, number>();
+		for (const it of list) want.set(it.piece, (want.get(it.piece) ?? 0) + 1);
+		const have = new Map<number, number>();
+		let valid = true;
+		for (const g of groups)
+			for (const m of g.items) {
+				if (!p.footprint.pieces[m.piece]) valid = false;
+				have.set(m.piece, (have.get(m.piece) ?? 0) + 1);
+			}
+		for (const [pc, n] of have) if (n > (want.get(pc) ?? 0)) valid = false;
+		if (!valid) continue;
+		partsWithGroups.add(p.slug);
+		const taken = new Set<Item>();
+		const added: Item[] = [];
+		groups.forEach((g, gi) => {
+			const members: Item[] = g.items.map((m) => {
+				const it = list.find((x) => x.piece === m.piece && !taken.has(x))!;
+				taken.add(it);
+				return it;
+			});
+			members.forEach((m) => (m.src = `g${gi}`));
+			const gItem: Item = {
+				slug: p.slug,
+				piece: -1,
+				copy: gi,
+				w: g.w,
+				d: g.d,
+				orients: boxOrients(groupFit(g), p.rotate !== false, usableX, usableY),
+				role: p.role,
+				order: partIndex.get(p.slug)!,
+				grp: { g, members },
+				src: `g${gi}`
+			};
+			if (fitsEmpty(gItem) || (zones.length > 0 && soloSpot(gItem))) {
+				members.forEach((m) => taken.add(m));
+				added.push(gItem);
+			} else members.forEach((m) => taken.delete(m));
+		});
+		const brokenOut = new Set<Item>();
+		for (const a of added) for (const m of a.grp!.members) brokenOut.add(m);
+		itemsOf.set(p.slug, [...added, ...list.filter((x) => !brokenOut.has(x))]);
+	}
+
 	for (const p of parts) {
 		let items = itemsOf.get(p.slug)!;
 		if (zones.length) {
@@ -628,6 +725,7 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 		}
 		const bad = items.find((i) => !fitsEmpty(i));
 		if (bad || !items.length) {
+			if (bad) items = items.flatMap((i) => (i.grp ? i.grp.members : [i]));
 			if (bad) {
 				const big = items.reduce((a, b) => (area(b) > area(a) ? b : a));
 				const hasOutline =
@@ -782,18 +880,14 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 		...(zones.length ? { keepOut: zones.map((z) => ({ ...z })) } : {})
 	};
 	/** Post-packing pass: same items on the same plate, better positions and angles (see plate-optimize.ts). */
-	const optimizeItems = (
-		items: ArrangedItem[],
-		raw: { orients: Orient[]; slug: string; piece: number }[]
-	) => {
-		const byKey = new Map(raw.map((r) => [`${r.slug}|${r.piece}`, r]));
-		const opt: OptItem[] = items.map((i) => {
-			const pc = partOf.get(i.slug)!.footprint.pieces[i.piece];
+	const optimizeItems = (items: ArrangedItem[], raw: Item[]) => {
+		// `raw` is aligned with `items`; a rigid group moves and turns as one item (its outline is the hull of all its pieces)
+		const opt: OptItem[] = items.map((i, k) => {
 			const free = i.rotation % 90 !== 0;
 			return {
-				outline: fitOutline(pc),
+				outline: itemOutline(raw[k]),
 				rotatable: free && partOf.get(i.slug)!.rotate !== false,
-				angles: byKey.get(`${i.slug}|${i.piece}`)?.orients.map((o) => o.rot),
+				angles: raw[k].orients.map((o) => o.rot),
 				rot: i.rotation,
 				x: i.x,
 				y: i.y,
@@ -827,6 +921,8 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 			}
 		});
 	};
+	/** Which source group (or single object) an arranged item came from: for the split note. */
+	const srcOf = new WeakMap<ArrangedItem, string>();
 	const toPlate = (
 		pl: PlateState | null,
 		fallback?: { part: ArrangePart; items: Item[] }
@@ -835,7 +931,7 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 			? pl.items
 			: fallback!.items.map((i) => ({ ...i, x: 0, y: 0, pw: i.w, pd: i.d, rot: 0 }));
 		const runs = pl ? pl.runs : runsOf(fallback!.part);
-		const items: ArrangedItem[] = rawItems
+		const units: ArrangedItem[] = rawItems
 			.sort((a, b) => a.order - b.order || a.piece - b.piece || a.copy - b.copy)
 			.map((i) => ({
 				slug: i.slug,
@@ -850,7 +946,48 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 				...(i.ox || i.oy ? { ox: i.ox, oy: i.oy } : {}),
 				...(i.pose ? { pose: i.pose } : {})
 			}));
-		if (pl && input.options?.optimize !== false) optimizeItems(items, rawItems);
+		if (pl && input.options?.optimize !== false) optimizeItems(units, rawItems);
+		const items: ArrangedItem[] = [];
+		units.forEach((u, k) => {
+			const r = rawItems[k];
+			if (!r.grp) {
+				items.push(u);
+				srcOf.set(u, `${r.slug}|${r.src ?? `i${k}`}`);
+				return;
+			}
+			// group origin = where the group's frame sits; every piece goes to origin + Rz(rotation) * offset
+			const ang = (u.rotation * Math.PI) / 180;
+			const c = Math.cos(ang);
+			const sn = Math.sin(ang);
+			const ox0 = u.x - (u.ox ?? 0);
+			const oy0 = u.y - (u.oy ?? 0);
+			const fp = partOf.get(u.slug)!.footprint;
+			r.grp.g.items.forEach((gi, n) => {
+				const m = r.grp!.members[n];
+				const mx = ox0 + c * gi.x - sn * gi.y;
+				const my = oy0 + sn * gi.x + c * gi.y;
+				const rot = Math.round(((((u.rotation + gi.rot) % 360) + 360) % 360) * 1000) / 1000;
+				const b = turnedOutlineBox(fitOutline(fp.pieces[gi.piece]), rot);
+				const px = Math.round(b.cx * 100) / 100;
+				const py = Math.round(b.cy * 100) / 100;
+				const off = Math.abs(px) > 0.05 || Math.abs(py) > 0.05;
+				const it: ArrangedItem = {
+					slug: u.slug,
+					piece: gi.piece,
+					copy: m.copy,
+					x: round1(mx + (off ? px : 0)),
+					y: round1(my + (off ? py : 0)),
+					w: round1(Math.ceil(b.w * 10 - 1e-9) / 10),
+					d: round1(Math.ceil(b.d * 10 - 1e-9) / 10),
+					rotation: rot,
+					role: u.role,
+					...(off ? { ox: px, oy: py } : {}),
+					group: k
+				};
+				items.push(it);
+				srcOf.set(it, `${u.slug}|${m.src ?? 'g'}`);
+			});
+		});
 		const slugs: string[] = [];
 		for (const i of items) if (!slugs.includes(i.slug)) slugs.push(i.slug);
 		slugs.sort((a, b) => partIndex.get(a)! - partIndex.get(b)!);
@@ -920,8 +1057,21 @@ export function arrange(input: ArrangeInput): ArrangeResult {
 	const where = new Map<string, number[]>();
 	for (const p of result)
 		if (!p.oversize) for (const s of p.parts) where.set(s, [...(where.get(s) ?? []), p.number]);
+	// A part built from source groups (its pieces came from different plates of the profile) may sit on
+	// several plates; it is only "split" when one source group had to be broken up.
+	const brokenGroups = new Set<string>();
+	{
+		const sources = new Map<string, Set<number>>();
+		for (const p of result)
+			for (const i of p.items) {
+				const k = srcOf.get(i);
+				if (!k || !k.includes('|g')) continue;
+				sources.set(k, (sources.get(k) ?? new Set()).add(p.number));
+			}
+		for (const [k, nums] of sources) if (nums.size > 1) brokenGroups.add(k.split('|')[0]);
+	}
 	for (const [slug, nums] of where)
-		if (nums.length > 1)
+		if (nums.length > 1 && (!partsWithGroups.has(slug) || brokenGroups.has(slug)))
 			warnings.push({
 				code: 'split',
 				slug,

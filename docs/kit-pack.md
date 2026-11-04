@@ -25,6 +25,23 @@ pack. The pack is too big for git (about 30 MB), so it is a **release asset**
 
 `license`: `{ name: 'CC0 1.0 (Creative Commons Public Domain)', holder: 'MakeGood', url?, note: 'Credit: 3D model and print files by MakeGood' }`.
 
+### Source groups (since 1.0.1)
+
+A part whose pieces share a plate in the kit author's profile (connectors, buckles, harness, tires, rims)
+carries `footprint.groups` in `print/geometry.json`: one group per source plate with at least two of the
+part's objects. A group stores each object's position and flat rotation relative to the group origin (the
+centre of the combined outline's box), the source printer's bed size (`printable_area`), the combined true
+outline (the pieces' silhouettes at those positions) and its box. The arranger packs pieces one by one first (densest) and uses a part's group, as one rigid item (moved and
+turned flat about z only, keeping the source's own gaps), only when per-piece packing would split that part
+over plates and the group gives fewer plates or fewer split parts. A group that does not fit the bed is never
+used. Pieces on different source plates are different groups. No schema
+change: the data lives in the existing footprint JSON. Pack 1.0.1 also fixes the part matching of the
+footrest straps (they belong to the harness, not the footrest).
+
+**Installs that imported a profile themselves** (kit admin, or `scripts/import-print-geometry.mjs`) hold rows
+without groups; the installer never touches admin rows, and groups cannot be rebuilt without the source
+file. Re-importing the profile 3MF (kit drop zone or the CLI) stores groups and the corrected matching.
+
 ### What is dropped or reduced
 
 - **Poses** (`orient.poses`) are unused and left out; `orient` stays as an empty stub of the current
@@ -52,7 +69,7 @@ For each template with an index entry:
 2. Find the pack: `KITPACK_DIR/<file>` (default `/app/kitpacks` in the image, `./kitpacks` in dev), else download
    from `KITPACK_URL` (default `https://github.com/ayostepht/TMT-Build-Tracker/releases/download/kitpack-{slug}-{version}/{file}`;
    `{slug}`, `{version}`, `{file}` placeholders, or a base URL; `file://` works) unless `KITPACK_DOWNLOAD=off`.
-3. Install per item:
+3. Install per item (a pack newer than the installed pack data, e.g. 1.0.1 over 1.0.0, replaces rows with `kitpack:<older>`):
    - **Model** (+ hardware GLB, placements): when there is none, or only older pack data. A model an admin imported is kept.
    - **Placements**: only together with a model install; rows with `updated_by` set are never changed.
    - **Print geometry**: per part, replacing the seed row or older pack data (`source_note = kitpack:<version>`).
@@ -74,7 +91,7 @@ node --max-old-space-size=4096 scripts/step-to-glb.mjs "TMT 3D TOP ASSEMBLY - RE
 node --max-old-space-size=4096 scripts/build-kit-pack.mjs --db data/kitpack-work/tmt.db --init \
   --model "STEP FILES.zip" --hardware hardware.glb \
   --print h-profile.3mf --print bucket-seat.3mf --print harness.zip --print xpa-project.3mf \
-  --pack-version 1.0.0 --out data/kitpack
+  --pack-version 1.0.1 --out data/kitpack
 ```
 
 It prints the size and sha256. Then: attach the file to a GitHub release tagged

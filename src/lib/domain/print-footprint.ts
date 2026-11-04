@@ -3,7 +3,7 @@
  * orientation the kit author prints it. Numbers only (the meshes live in the data
  * volume, see src/lib/server/print-geometry/). Pure, browser-safe.
  */
-import type { Pt } from './geom2d.ts';
+import type { FitPiece, Pt } from './geom2d.ts';
 import type { OrientData } from './orient.ts';
 import type { PieceSilhouettes } from './silhouette.ts';
 
@@ -33,12 +33,55 @@ export interface PrintPiece {
 	sil?: PieceSilhouettes;
 }
 
+/** Version of the `groups` data; arrangers ignore groups of another version. */
+export const GROUP_VERSION = 1;
+
+/** One printed object of a source group: a piece's stored mesh placed in the group's frame. */
+export interface GroupItem {
+	/** Index into `PrintFootprint.pieces`. */
+	piece: number;
+	/** Where the stored mesh's origin sits relative to the group origin, mm. */
+	x: number;
+	y: number;
+	/** Degrees counter-clockwise about z applied to the stored mesh: `p' = Rz(rot) * p + (x, y)` (group frame). */
+	rot: number;
+}
+
+/**
+ * Pieces of a part that share a plate of the kit author's profile, kept as they were laid out:
+ * the arranger places the whole group as one rigid item (move and turn flat about z, never tilt).
+ * The group frame has its origin at the centre of the outline's bounding box, axes as in the
+ * source file, so a group placed with rotation 0 reproduces the author's orientation.
+ */
+export interface SourceGroup {
+	v: number;
+	/** Plate number in the source file (informational). */
+	plate: number;
+	/** Bed of the source profile in mm (from `printable_area`), when known. */
+	bed?: { x: number; y: number };
+	items: GroupItem[];
+	/** Bounding box of the outline at rotation 0, mm. */
+	w: number;
+	d: number;
+	/** Combined true outline: the pieces' silhouettes at their positions (outer rings counter-clockwise, holes clockwise). */
+	outline: Pt[][];
+	/** Convex hull of the outline around the group origin. */
+	hull: Pt[];
+}
+
+/** The part of a group the fitter looks at (see `boxOrients`): its box, hull and outer rings. */
+export function groupFit(g: SourceGroup): FitPiece {
+	return { w: g.w, d: g.d, hull: g.hull, sil: { profile: { rings: g.outline } } };
+}
+
 /** Everything the arranger needs to know about one part's geometry. */
 export interface PrintFootprint {
 	slug: string;
 	pieces: PrintPiece[];
 	/** Units of the part printed in one plate run (rims: 1, hub caps: 2). Default: all units. */
 	unitsPerPlate?: number;
+	/** Pieces as laid out on the plates of the source profile; absent for seed footprints and older imports. */
+	groups?: SourceGroup[];
 }
 
 /** Seed form (numbers only): a single box or several pieces. */

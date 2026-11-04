@@ -6,13 +6,16 @@
 import { MATCH_THRESHOLD, matchPlates, type MatchPart } from '#lib/domain/plates-match.ts';
 import { deriveUnits } from '#lib/domain/print-footprint.ts';
 import type { Pt } from '#lib/domain/geom2d.ts';
+import type { ThreeMfObject, ThreeMfPlate } from '#lib/domain/threemf.ts';
 import { parseThreeMf } from '../threemf/index';
 import {
 	extractGeometry,
 	readStructure,
 	type Geometry,
+	type InstanceRef,
 	type ObjectSettings,
-	type SourceFactory
+	type SourceFactory,
+	type Structure
 } from './reader';
 
 export interface ExtractedPiece {
@@ -29,9 +32,29 @@ export interface ExtractedPiece {
 	geometry: Geometry;
 }
 
+/** One printed object of a source plate: which piece, and where its stored mesh sits on that plate (file coordinates). */
+export interface ExtractedGroupItem {
+	/** Lower-case piece name. */
+	piece: string;
+	x: number;
+	y: number;
+	/** Degrees counter-clockwise about z, applied to the stored (normalised) mesh. */
+	rot: number;
+}
+/** The objects of one part that share a plate of the source file. */
+export interface ExtractedGroup {
+	/** Plate number in the source file. */
+	plate: number;
+	/** Bed of the source profile (from `printable_area`), when it says. */
+	bed?: { x: number; y: number };
+	items: ExtractedGroupItem[];
+}
+
 export interface ExtractedPart {
 	slug: string;
 	pieces: ExtractedPiece[];
+	/** Pieces laid out as in the source file, one group per source plate with at least two objects. */
+	groups?: ExtractedGroup[];
 	unitsPerPlate: number;
 	/** Plate number in the file where the part's busiest plate is, for the source note. */
 	plate: number;
@@ -69,7 +92,27 @@ export async function extractPartGeometry(
 		objectId: string;
 		filamentIndex: number | null;
 		perPlate: Map<number, number>;
+		/** Build items of the piece per plate; null when the file does not say which objects they are. */
+		refs: Map<number, InstanceRef[] | null>;
 	}
+	const used = new Map<string, number>(); // object id -> items handed out so far
+	const instances = (pl: ThreeMfPlate, o: ThreeMfObject): InstanceRef[] | null => {
+		let ids: string[];
+		if (summary.kind === 'project') {
+			ids = (structure.plates.get(pl.index) ?? []).filter((id) => {
+				const os = structure.objects.get(id);
+				if (!os || os.name !== o.name) return false;
+				const ex = Number(os.settings.extruder);
+				return !Number.isFinite(ex) || o.filamentIndex === null || ex === o.filamentIndex;
+			});
+		} else ids = structure.model.items.filter((i) => i.objectId === o.id).map((i) => i.objectId);
+		if (ids.length !== o.count) return null;
+		return ids.map((objectId) => {
+			const index = used.get(objectId) ?? 0;
+			used.set(objectId, index + 1);
+			return { objectId, index };
+		});
+	};
 	const bySlug = new Map<string, Map<string, Agg>>();
 	const unmatched: string[] = [];
 	let objects = 0;
@@ -88,14 +131,35 @@ export async function extractPartGeometry(
 				name: o.name,
 				objectId: o.id,
 				filamentIndex: o.filamentIndex,
-				perPlate: new Map()
+				perPlate: new Map(),
+				refs: new Map()
 			};
 			agg.perPlate.set(pl.index, (agg.perPlate.get(pl.index) ?? 0) + o.count);
+			const refs = instances(pl, o);
+			const had = agg.refs.get(pl.index);
+			agg.refs.set(pl.index, refs === null || had === null ? null : [...(had ?? []), ...refs]);
 			pieces.set(key, agg);
 		}
 
+	// Objects that share a plate with another object of their part are measured against each other's
+	// copies, so the part's layout on the plate can be kept (see `ExtractedPart.groups`).
+	const crowded = (m: Map<string, Agg>) => {
+		const total = new Map<number, number>();
+		for (const a of m.values())
+			for (const [p, c] of a.perPlate) total.set(p, (total.get(p) ?? 0) + c);
+		return [...total.values()].some((c) => c >= 2);
+	};
 	const requests = [...bySlug.values()].flatMap((m) =>
-		[...m.values()].map((a) => ({ objectId: a.objectId }))
+		[...m.values()].map((a) => {
+			const refs = [...a.refs.values()].flatMap((r) => r ?? []);
+			// an empty list still asks for the object's own placement
+			return crowded(m)
+				? {
+						objectId: a.objectId,
+						copies: refs.filter((r) => !(r.objectId === a.objectId && r.index === 0))
+					}
+				: { objectId: a.objectId };
+		})
 	);
 	const { geometry, warnings } = await extractGeometry(open, structure, requests);
 
@@ -111,8 +175,12 @@ export async function extractPartGeometry(
 		const counts = aggs.map((a) => a.perPlate.get(bestPlate) ?? Math.max(...a.perPlate.values()));
 		const { unitsPerPlate, copies } = deriveUnits(qtyOf.get(slug) ?? null, counts);
 		const plate = summary.plates.find((p) => p.index === bestPlate);
+		const groups = crowded(pieces)
+			? sourceGroups(aggs, counts, bestPlate, geometry, structure.bed)
+			: undefined;
 		out.push({
 			slug,
+			...(groups?.length ? { groups } : {}),
 			plate: bestPlate,
 			unitsPerPlate,
 			runsHint: plate?.runsHint ?? 1,
@@ -153,6 +221,55 @@ export async function extractPartGeometry(
 			ms: Date.now() - t0
 		}
 	};
+}
+
+/**
+ * The part's objects as the source file lays them out: one group per source plate that holds at
+ * least two of them. Only when the plates used account for exactly the piece counts the part is
+ * made of (a part printed on several plates keeps the busiest one) and every object could be
+ * measured; otherwise there is no group and the pieces are packed one by one.
+ */
+function sourceGroups(
+	aggs: {
+		name: string;
+		objectId: string;
+		perPlate: Map<number, number>;
+		refs: Map<number, InstanceRef[] | null>;
+	}[],
+	counts: number[],
+	bestPlate: number,
+	geometry: Map<string, Geometry>,
+	bed: Structure['bed']
+): ExtractedGroup[] | undefined {
+	// the busiest plate, plus the plate of any piece that is not on it
+	const plates = new Set([bestPlate]);
+	aggs.forEach((a) => {
+		if (a.perPlate.has(bestPlate)) return;
+		const best = [...a.perPlate.entries()].sort((x, y) => y[1] - x[1] || x[0] - y[0])[0];
+		if (best) plates.add(best[0]);
+	});
+	for (let i = 0; i < aggs.length; i++) {
+		let n = 0;
+		for (const p of plates) n += aggs[i].perPlate.get(p) ?? 0;
+		if (n !== counts[i]) return undefined;
+	}
+	const groups: ExtractedGroup[] = [];
+	for (const plate of [...plates].sort((a, b) => a - b)) {
+		const items: ExtractedGroupItem[] = [];
+		for (const a of aggs) {
+			const refs = a.refs.get(plate);
+			if (refs === undefined) continue;
+			if (refs === null) return undefined;
+			const placements = geometry.get(a.objectId)?.placements;
+			for (const r of refs) {
+				const pl = placements?.find((q) => q.objectId === r.objectId && q.index === r.index);
+				if (!pl?.ok) return undefined;
+				items.push({ piece: a.name.toLowerCase(), x: pl.x, y: pl.y, rot: pl.rot });
+			}
+		}
+		if (items.length >= 2) groups.push({ plate, ...(bed ? { bed } : {}), items });
+	}
+	return groups;
 }
 
 /** Everything the author set on the object, minus bookkeeping keys. */

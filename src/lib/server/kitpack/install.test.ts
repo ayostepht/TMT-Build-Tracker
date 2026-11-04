@@ -365,6 +365,90 @@ describe('kit pack install', () => {
 		);
 	});
 
+	it('upgrades 1.0.0 pack data to 1.0.1 with source groups and leaves admin rows alone', async () => {
+		const { db, tid } = freshInstall();
+		await installKitPacks(db, { dir: packs, download: false, log: quiet });
+		expect(rowOf(db, tid, 'tires').sourceNote).toBe('kitpack:1.0.0');
+		expect(
+			(rowOf(db, tid, 'push-grip').footprint as unknown as PrintFootprint).groups
+		).toBeUndefined();
+		// an admin re-imported one part since
+		db.update(templatePrintGeometry)
+			.set({ sourceNote: 'mine.3mf', height: 99 })
+			.where(
+				and(eq(templatePrintGeometry.templateId, tid), eq(templatePrintGeometry.slug, 'tires'))
+			)
+			.run();
+		// pack 1.0.1: the same kit, push-grip with a source group
+		const src = sourceKit();
+		const row = rowOf(src.db, src.tid, 'push-grip');
+		const fp = structuredClone(row.footprint) as unknown as PrintFootprint;
+		fp.pieces[0].copies = 2;
+		fp.groups = [
+			{
+				v: 1,
+				plate: 4,
+				bed: { x: 256, y: 256 },
+				items: [
+					{ piece: 0, x: -20, y: 0, rot: 0 },
+					{ piece: 0, x: 20, y: 0, rot: 90 }
+				],
+				w: 50,
+				d: 10,
+				outline: [
+					[
+						[-25, -5],
+						[25, -5],
+						[25, 5],
+						[-25, 5]
+					]
+				],
+				hull: [
+					[-25, -5],
+					[25, -5],
+					[25, 5],
+					[-25, 5]
+				]
+			}
+		];
+		src.db
+			.update(templatePrintGeometry)
+			.set({ footprint: fp as never })
+			.where(
+				and(
+					eq(templatePrintGeometry.templateId, src.tid),
+					eq(templatePrintGeometry.slug, 'push-grip')
+				)
+			)
+			.run();
+		const outFile = join(packs, `${SLUG}-1.0.1.kitpack`);
+		buildKitPack(src.db, { templateSlug: SLUG, version: '1.0.1', outFile, log: quiet });
+		const bytes = readFileSync(outFile);
+		writeIndex(packs, [
+			pack.entry,
+			{
+				slug: SLUG,
+				version: '1.0.1',
+				file: `${SLUG}-1.0.1.kitpack`,
+				sha256: sha256Hex(bytes),
+				size: bytes.length
+			}
+		]);
+		const out = await installKitPacks(db, { dir: packs, download: false, log: quiet });
+		expect(out[0]).toMatchObject({
+			status: 'installed',
+			version: '1.0.1',
+			geometry: 2,
+			keptAdmin: 1
+		});
+		expect(rowOf(db, tid, 'tires')).toMatchObject({ sourceNote: 'mine.3mf', height: 99 });
+		const up = rowOf(db, tid, 'push-grip');
+		expect(up.sourceNote).toBe('kitpack:1.0.1');
+		const groups = (up.footprint as unknown as PrintFootprint).groups!;
+		expect(groups).toHaveLength(1);
+		expect(groups[0].items).toHaveLength(2);
+	});
+
 	it('refuses a pack whose sha256 does not match the index', async () => {
 		const { db, tid } = freshInstall();
 		writeIndex(packs, [{ ...pack.entry, sha256: 'b'.repeat(64) }]);

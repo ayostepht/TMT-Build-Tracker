@@ -303,6 +303,48 @@ export interface ObjectSettings {
 	extraSubtypes: string[];
 }
 
+/** Objects on each plate (`plater_id`), one entry per instance, in file order (Bambu/Orca `model_settings.config`). */
+export function parsePlateInstances(bytes: Uint8Array): Map<number, string[]> {
+	const doc = xml.parse(strFromU8(bytes)) as XNode;
+	const out = new Map<number, string[]>();
+	for (const p of asArr<XNode>(((doc.config ?? {}) as XNode).plate as XNode[])) {
+		const meta: Record<string, string> = {};
+		for (const m of asArr<XNode>(p.metadata as XNode[]))
+			if (typeof m['@key'] === 'string') meta[m['@key']] = String(m['@value'] ?? '');
+		const index = Number(meta.plater_id);
+		if (!Number.isFinite(index)) continue;
+		const ids: string[] = [];
+		for (const mi of asArr<XNode>(p.model_instance as XNode[]))
+			for (const m of asArr<XNode>(mi.metadata as XNode[]))
+				if (m['@key'] === 'object_id') ids.push(String(m['@value']));
+		out.set(index, ids);
+	}
+	return out;
+}
+
+/** Bed size in mm from `printable_area` of `project_settings.config` ("0x0", "256x0", ...). */
+export function parseBedSize(bytes: Uint8Array): { x: number; y: number } | undefined {
+	try {
+		const ps = JSON.parse(strFromU8(bytes)) as { printable_area?: unknown };
+		const area = Array.isArray(ps.printable_area) ? ps.printable_area : [];
+		const xs: number[] = [];
+		const ys: number[] = [];
+		for (const a of area) {
+			const m = /^\s*(-?[\d.]+)\s*x\s*(-?[\d.]+)\s*$/.exec(String(a));
+			if (m) {
+				xs.push(+m[1]);
+				ys.push(+m[2]);
+			}
+		}
+		if (xs.length < 3) return undefined;
+		const x = Math.max(...xs) - Math.min(...xs);
+		const y = Math.max(...ys) - Math.min(...ys);
+		return x > 0 && y > 0 ? { x: round1(x), y: round1(y) } : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 export function parseModelSettings(bytes: Uint8Array): Map<string, ObjectSettings> {
 	const doc = xml.parse(strFromU8(bytes)) as XNode;
 	const out = new Map<string, ObjectSettings>();
@@ -325,7 +367,12 @@ export function parseModelSettings(bytes: Uint8Array): Map<string, ObjectSetting
 		const subs = asArr<XNode>((o.part ?? o.volume) as XNode[])
 			.map((p) => String(p['@subtype'] ?? 'normal_part'))
 			.filter((s) => s !== 'normal_part');
-		const name = settings.name ?? `Object ${o['@id']}`;
+		let partName = '';
+		for (const m of asArr<XNode>(
+			(asArr<XNode>((o.part ?? o.volume) as XNode[])[0]?.metadata ?? []) as XNode[]
+		))
+			if (m['@key'] === 'name') partName = decodeEntities(String(m['@value'] ?? ''));
+		const name = settings.name || partName || `Object ${o['@id']}`;
 		delete settings.name;
 		out.set(String(o['@id']), { name, settings, partSettings, extraSubtypes: subs });
 	}
@@ -337,26 +384,36 @@ export function parseModelSettings(bytes: Uint8Array): Map<string, ObjectSetting
 export interface Structure {
 	model: ModelScan;
 	objects: Map<string, ObjectSettings>;
+	/** Object ids per plate number, one per instance (project files only). */
+	plates: Map<number, string[]>;
+	/** Bed size of the file's printer profile, when it says. */
+	bed?: { x: number; y: number };
 	warnings: string[];
 }
 
 export async function readStructure(open: SourceFactory): Promise<Structure> {
 	const model = new ModelScanner(true);
 	let ms: Uint8Array | null = null;
+	let ps: Uint8Array | null = null;
 	await streamEntries(
 		open(),
 		(name) => {
 			if (name === '3D/3dmodel.model') return model;
 			if (name === 'Metadata/model_settings.config') return [];
+			if (name === 'Metadata/project_settings.config') return [];
 			return null;
 		},
 		(name, data) => {
 			if (name === 'Metadata/model_settings.config') ms = data as Uint8Array;
+			if (name === 'Metadata/project_settings.config') ps = data as Uint8Array;
 		}
 	);
+	const bed = ps ? parseBedSize(ps) : undefined;
 	return {
 		model: model.scan,
 		objects: ms ? parseModelSettings(ms) : new Map(),
+		plates: ms ? parsePlateInstances(ms) : new Map(),
+		...(bed ? { bed } : {}),
 		warnings: []
 	};
 }
@@ -366,6 +423,30 @@ export async function readStructure(open: SourceFactory): Promise<Structure> {
 export interface ExtractRequest {
 	/** Build item / model_settings object id. */
 	objectId: string;
+	/**
+	 * Further build items that show the same geometry (copies on a plate). Their placement
+	 * relative to this object is measured (`Geometry.placements`); their meshes are not kept.
+	 */
+	copies?: InstanceRef[];
+}
+
+/** One build item: object id plus which of that object's items (0-based, in file order). */
+export interface InstanceRef {
+	objectId: string;
+	index: number;
+}
+
+/**
+ * Where a copy of the stored (normalised) mesh sits in the file's own coordinates: the stored
+ * mesh point p goes to `Rz(rot) * p + (x, y)`. `ok` is false when the copy is not the same
+ * shape turned flat about z (different mesh, mirrored or tilted).
+ */
+export interface Placement extends InstanceRef {
+	x: number;
+	y: number;
+	/** Degrees counter-clockwise, 0..360. */
+	rot: number;
+	ok: boolean;
 }
 
 export interface Geometry {
@@ -385,6 +466,8 @@ export interface Geometry {
 	tris: number;
 	/** Slicer paint per triangle (kept verbatim; triangle order is unchanged). */
 	paint?: PaintEntry[];
+	/** The object itself (index 0) and each requested copy in the file's coordinates; only with `copies`. */
+	placements?: Placement[];
 }
 
 const norm = (v: number) => (Math.abs(v) < 1e-12 ? 0 : v);
@@ -461,8 +544,69 @@ function worldMesh(
 	return { pos, idx, paint, paintDropped };
 }
 
+/**
+ * The flat motion (turn about z by phi, then move by (tx, ty)) that takes the xy of mesh `a` onto
+ * mesh `b`, when they are the same vertices in the same order (copies of one object) and z agrees.
+ * Null when the shapes differ by more than `tol` mm anywhere.
+ */
+export function alignFlat(
+	a: Float64Array,
+	b: Float64Array,
+	tol = 0.05
+): { phi: number; tx: number; ty: number } | null {
+	if (a.length !== b.length || a.length < 9) return null;
+	const n = a.length / 3;
+	let ax = 0,
+		ay = 0,
+		bx = 0,
+		by = 0;
+	for (let i = 0; i < n; i++) {
+		ax += a[i * 3];
+		ay += a[i * 3 + 1];
+		bx += b[i * 3];
+		by += b[i * 3 + 1];
+	}
+	ax /= n;
+	ay /= n;
+	bx /= n;
+	by /= n;
+	let sc = 0,
+		ss = 0;
+	for (let i = 0; i < n; i++) {
+		const x = a[i * 3] - ax;
+		const y = a[i * 3 + 1] - ay;
+		const u = b[i * 3] - bx;
+		const v = b[i * 3 + 1] - by;
+		sc += x * u + y * v;
+		ss += x * v - y * u;
+	}
+	const phi = Math.atan2(ss, sc);
+	const c = Math.cos(phi);
+	const s = Math.sin(phi);
+	const tx = bx - (c * ax - s * ay);
+	const ty = by - (s * ax + c * ay);
+	let dz = 0;
+	let za = Infinity;
+	let zb = Infinity;
+	for (let i = 0; i < n; i++) {
+		za = Math.min(za, a[i * 3 + 2]);
+		zb = Math.min(zb, b[i * 3 + 2]);
+	}
+	for (let i = 0; i < n; i++) {
+		const x = c * a[i * 3] - s * a[i * 3 + 1] + tx - b[i * 3];
+		const y = s * a[i * 3] + c * a[i * 3 + 1] + ty - b[i * 3 + 1];
+		if (Math.hypot(x, y) > tol) return null;
+		dz = Math.max(dz, Math.abs(a[i * 3 + 2] - za - (b[i * 3 + 2] - zb)));
+	}
+	return dz > tol ? null : { phi, tx, ty };
+}
+
 /** Drop to z = 0, turn to the minimum-area box about z and centre; compute footprint and hull. */
-export function normalizeMesh(pos: Float64Array, idx: Uint32Array, objectId: string): Geometry {
+export function normalizeMesh(
+	pos: Float64Array,
+	idx: Uint32Array,
+	objectId: string
+): Geometry & { turn: { ang: number; cx: number; cy: number } } {
 	const n = pos.length / 3;
 	let minZ = Infinity,
 		maxZ = -Infinity;
@@ -505,7 +649,8 @@ export function normalizeMesh(pos: Float64Array, idx: Uint32Array, objectId: str
 		placedD: Math.ceil(placed.d * 10) / 10,
 		angleDeg: Math.round(((ang * 180) / Math.PI) * 10) / 10,
 		hull,
-		tris: idx.length / 3
+		tris: idx.length / 3,
+		turn: { ang, cx, cy }
 	};
 }
 
@@ -521,22 +666,28 @@ export async function extractGeometry(
 ): Promise<{ geometry: Map<string, Geometry>; warnings: string[] }> {
 	const warnings: string[] = [];
 	const { model } = structure;
-	const itemOf = new Map(model.items.map((i) => [i.objectId, i]));
+	const itemsOf = new Map<string, BuildItem[]>();
+	for (const i of model.items) itemsOf.set(i.objectId, [...(itemsOf.get(i.objectId) ?? []), i]);
+	const itemFor = (ref: InstanceRef) => itemsOf.get(ref.objectId)?.[ref.index];
 	const need = new Map<string, string[]>(); // path -> object ids
 	const todo: { req: ExtractRequest; obj: RawObject; item: BuildItem }[] = [];
+	const wantPaths = (objectId: string) => {
+		for (const c of model.objects.get(objectId)?.components ?? [])
+			if (c.path) {
+				const p = c.path.replace(/^\//, '');
+				need.set(p, [...(need.get(p) ?? []), objectId]);
+			}
+	};
 	for (const r of requests) {
 		const obj = model.objects.get(r.objectId);
-		const item = itemOf.get(r.objectId);
+		const item = itemFor({ objectId: r.objectId, index: 0 });
 		if (!obj || !item) {
 			warnings.push(`Object ${r.objectId} has no build item; skipped`);
 			continue;
 		}
 		todo.push({ req: r, obj, item });
-		for (const c of obj.components)
-			if (c.path) {
-				const p = c.path.replace(/^\//, '');
-				need.set(p, [...(need.get(p) ?? []), r.objectId]);
-			}
+		wantPaths(r.objectId);
+		for (const c of r.copies ?? []) wantPaths(c.objectId);
 	}
 	const files = new Map<string, Map<string, RawObject>>(); // path -> objects
 	if (need.size) {
@@ -551,20 +702,51 @@ export async function extractGeometry(
 		);
 	}
 	const geometry = new Map<string, Geometry>();
+	const meshOf = (c: Component) => {
+		const objs = c.path ? files.get(c.path.replace(/^\//, '')) : model.objects;
+		const o = objs?.get(c.objectId);
+		return o?.positions && o.indices
+			? { positions: o.positions, indices: o.indices, paint: o.paint }
+			: null;
+	};
 	for (const { req, obj, item } of todo) {
-		const m = worldMesh(obj, item, (c) => {
-			const objs = c.path ? files.get(c.path.replace(/^\//, '')) : model.objects;
-			const o = objs?.get(c.objectId);
-			return o?.positions && o.indices
-				? { positions: o.positions, indices: o.indices, paint: o.paint }
-				: null;
-		});
+		const m = worldMesh(obj, item, meshOf);
 		if (!m || m.pos.length < 9) {
 			warnings.push(`Object ${req.objectId} has no readable mesh; skipped`);
 			continue;
 		}
-		const g = normalizeMesh(m.pos, m.idx, req.objectId);
+		const { turn, ...g } = normalizeMesh(m.pos, m.idx, req.objectId);
 		if (m.paint.length) g.paint = m.paint;
+		if (req.copies) {
+			// the stored mesh p is the file's xy turned by `ang` and moved by -c: world = R(-ang) (p + c)
+			const rot0 = -turn.ang;
+			const c0 = Math.cos(rot0);
+			const s0 = Math.sin(rot0);
+			const px = c0 * turn.cx - s0 * turn.cy;
+			const py = s0 * turn.cx + c0 * turn.cy;
+			const deg = (r: number) => ((((r * 180) / Math.PI) % 360) + 360) % 360;
+			g.placements = [{ objectId: req.objectId, index: 0, x: px, y: py, rot: deg(rot0), ok: true }];
+			for (const ref of req.copies) {
+				const o2 = model.objects.get(ref.objectId);
+				const it2 = itemFor(ref);
+				const m2 = o2 && it2 ? worldMesh(o2, it2, meshOf) : null;
+				const rel = m2 ? alignFlat(m.pos, m2.pos) : null;
+				if (!rel) {
+					g.placements.push({ ...ref, x: 0, y: 0, rot: 0, ok: false });
+					continue;
+				}
+				// world2 = R(phi) world + t, so p goes to R(phi - ang) p + R(phi) (R(-ang) c) + t
+				const cp = Math.cos(rel.phi);
+				const sp = Math.sin(rel.phi);
+				g.placements.push({
+					...ref,
+					x: cp * px - sp * py + rel.tx,
+					y: sp * px + cp * py + rel.ty,
+					rot: deg(rot0 + rel.phi),
+					ok: true
+				});
+			}
+		}
 		if (m.paintDropped)
 			warnings.push(
 				`Object ${req.objectId}: ${m.paintDropped} painted triangles were dropped because the object is mirrored in the profile`
