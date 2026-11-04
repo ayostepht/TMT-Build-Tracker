@@ -114,9 +114,42 @@ export const templateGuidePages = sqliteTable(
 		templateId: templateId(),
 		page: integer('page').notNull(),
 		title: text('title').notNull(),
-		sort: integer('sort').notNull().default(0)
+		sort: integer('sort').notNull().default(0),
+		/** Rendered page image under the uploads dir (milestone 6); null until a site admin imports the guide. */
+		imagePath: text('image_path')
 	},
 	(t) => [primaryKey({ columns: [t.templateId, t.page] })]
+);
+
+/** Assembly checklist steps for a kit (milestone 6). Seeded data; editable by site admins later. */
+export const templateAssemblySteps = sqliteTable(
+	'template_assembly_steps',
+	{
+		templateId: templateId(),
+		key: text('key').notNull(),
+		sort: integer('sort').notNull().default(0),
+		title: text('title').notNull(),
+		description: text('description').notNull().default(''),
+		guidePage: integer('guide_page'),
+		/** Part slugs used in this step (filtered by the build's variant choices). */
+		parts: text('parts', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		/** Kit hardware used: [{ name, qty? }] */
+		hardware: text('hardware', { mode: 'json' })
+			.$type<{ name: string; qty?: number }[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		/** Fit tests / checks to tick: [{ key, text }] */
+		checks: text('checks', { mode: 'json' })
+			.$type<{ key: string; text: string }[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		/** Only shown when a variant option is chosen: { group, option } */
+		when: text('when', { mode: 'json' }).$type<{ group: string; option: string }>()
+	},
+	(t) => [primaryKey({ columns: [t.templateId, t.key] })]
 );
 
 export const templateHardware = sqliteTable(
@@ -440,3 +473,121 @@ export const templatePrintGeometry = sqliteTable(
 	},
 	(t) => [primaryKey({ columns: [t.templateId, t.slug] })]
 );
+
+// ---- Assembly and handoff (milestone 6)
+
+/** Per-build progress on assembly steps, their checks and hardware ticks. */
+export const buildAssembly = sqliteTable(
+	'build_assembly',
+	{
+		buildId: buildId(),
+		/** template_assembly_steps.key, or '<stepKey>:check:<checkKey>' / '<stepKey>:hw:<name>' */
+		itemKey: text('item_key').notNull(),
+		done: integer('done', { mode: 'boolean' }).notNull().default(false),
+		note: text('note').notNull().default(''),
+		doneBy: text('done_by').references(() => user.id, { onDelete: 'set null' }),
+		doneAt: integer('done_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [primaryKey({ columns: [t.buildId, t.itemKey] })]
+);
+
+/** Photos attached to a build (progress, finished chair, handoff). Files live under the uploads dir. */
+export const buildPhotos = sqliteTable(
+	'build_photos',
+	{
+		id: id(),
+		buildId: buildId(),
+		kind: text('kind').notNull().default('progress'), // progress | finished | handoff
+		path: text('path').notNull(),
+		thumbPath: text('thumb_path'),
+		caption: text('caption').notNull().default(''),
+		width: integer('width'),
+		height: integer('height'),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt()
+	},
+	(t) => [index('build_photos_build_idx').on(t.buildId, t.createdAt)]
+);
+
+/** Handoff record for a finished chair: one row per build. */
+export const buildHandoff = sqliteTable('build_handoff', {
+	buildId: text('build_id')
+		.primaryKey()
+		.references(() => builds.id, { onDelete: 'cascade' }),
+	recipientName: text('recipient_name'),
+	organization: text('organization'), // hospital / clinic / family
+	contact: text('contact'), // free text; never shown to viewers outside the team
+	handedOffOn: text('handed_off_on'), // YYYY-MM-DD
+	location: text('location'),
+	notes: text('notes').notNull().default(''),
+	safetyChecked: integer('safety_checked', { mode: 'boolean' }).notNull().default(false),
+	updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+});
+
+// ---- Printers and Spoolman (milestone 7)
+
+/** A printer a team connects to (LAN). Secrets (access codes, API keys) are stored encrypted. */
+export const printers = sqliteTable(
+	'printers',
+	{
+		id: id(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		/** elegoo-sdcp | moonraker | octoprint | bambu-lan */
+		kind: text('kind').notNull(),
+		host: text('host').notNull(),
+		port: integer('port'),
+		/** printer catalog id (src/lib/printers/catalog.ts) */
+		catalogId: text('catalog_id'),
+		/** AES-GCM encrypted JSON of secrets (API key, access code, serial); never sent to the browser. */
+		secretEnc: text('secret_enc'),
+		enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+		lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
+		/** Last normalised status snapshot (state, progress, file, temps, remaining). */
+		lastStatus: text('last_status', { mode: 'json' }).$type<Record<string, unknown>>(),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt()
+	},
+	(t) => [index('printers_org_idx').on(t.organizationId)]
+);
+
+/** A print job seen on a printer, optionally linked to a build plate; drives Now printing and auto-logged runs. */
+export const printerJobs = sqliteTable(
+	'printer_jobs',
+	{
+		id: id(),
+		printerId: text('printer_id')
+			.notNull()
+			.references(() => printers.id, { onDelete: 'cascade' }),
+		buildId: text('build_id').references(() => builds.id, { onDelete: 'set null' }),
+		plateNumber: integer('plate_number'),
+		partSlugs: text('part_slugs', { mode: 'json' }).$type<string[]>(),
+		fileName: text('file_name').notNull().default(''),
+		status: text('status').notNull().default('printing'), // printing | paused | done | failed | cancelled
+		progress: real('progress'),
+		startedAt: integer('started_at', { mode: 'timestamp_ms' }),
+		finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+		/** print_runs.id once the finished job has been logged (auto or confirmed). */
+		runId: text('run_id'),
+		createdAt: createdAt()
+	},
+	(t) => [index('printer_jobs_printer_idx').on(t.printerId, t.startedAt)]
+);
+
+/** Team-level integration settings (Spoolman URL etc.). */
+export const organizationSettings = sqliteTable('organization_settings', {
+	organizationId: text('organization_id')
+		.primaryKey()
+		.references(() => organization.id, { onDelete: 'cascade' }),
+	spoolmanUrl: text('spoolman_url'),
+	/** Deduct logged grams from linked Spoolman spools automatically. */
+	spoolmanAutoDeduct: integer('spoolman_auto_deduct', { mode: 'boolean' }).notNull().default(false),
+	settings: text('settings', { mode: 'json' })
+		.$type<Record<string, unknown>>()
+		.notNull()
+		.default(sql`'{}'`),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+});

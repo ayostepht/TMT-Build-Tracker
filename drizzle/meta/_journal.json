@@ -43,6 +43,13 @@
       "when": 1793722645620,
       "tag": "0005_woozy_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793757865352,
+      "tag": "0006_m6_m7_assembly_printers",
+      "breakpoints": true
     }
   ]
 }
