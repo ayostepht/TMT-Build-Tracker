@@ -38,13 +38,14 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await page.goto(`/builds/${buildId}`);
 	await expect(page.locator('.tile').first()).not.toHaveText(beforeTile);
 
-	// Add a color through the swatch picker (a custom color here, a catalog swatch below).
+	// Add a color through the swatch picker (a custom filament here, a catalog swatch below).
 	await page.goto(`/builds/${buildId}/design`);
 	await page.getByRole('button', { name: 'Add a color' }).click();
 	const picker = page.getByTestId('swatch-picker');
-	await picker.getByText('Add custom color').click();
-	await picker.getByLabel('Custom color name').fill('E2E Red');
-	await picker.getByRole('button', { name: 'Use this color' }).click();
+	await picker.getByTestId('add-filament').click();
+	await picker.getByLabel('Brand', { exact: true }).fill('E2E');
+	await picker.getByLabel('Color name').fill('E2E Red');
+	await picker.getByRole('button', { name: 'Save and use' }).click();
 	await expect(picker).toHaveCount(0);
 	const slot = page.locator('li.slot[data-role="e2e-red"]');
 	await expect(slot).toContainText('E2E Red');

@@ -68,7 +68,7 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
-- Custom filaments (brand, type, color; reusable per workspace): in progress.
+- Custom filaments: done (workspace-scoped "My filaments" in the swatch picker, Settings picker and palette matcher; `src/lib/server/filaments/custom.ts`, `/api/filaments/custom`). Not yet deployed to the test copy.
 - Queued: rename/reorder build tabs to Overview · Design · Print (was Parts: tracking, logs,
   now printing) · Files (was Print: bed/printer, plates, own sliced file, export, kit status)
   · Finish; wizard step "Print" → "Files"; redirects; e2e updates. Maintainer: "Print is

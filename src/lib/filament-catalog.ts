@@ -13,8 +13,8 @@ export type MaterialFamily = 'tpu' | 'petg' | 'other';
 
 export function materialFamily(material: string): MaterialFamily {
 	const m = material.trim().toLowerCase();
-	if (/^(tpu|tpe|tpc)/.test(m)) return 'tpu';
-	if (/^(petg|pctg|htpet|pet-?g)/.test(m)) return 'petg';
+	if (/^(tpu|tpe|tpc)/.test(m) || /\b(tpu|tpe)\b/.test(m)) return 'tpu';
+	if (/^(petg|pctg|htpet|pet-?g)/.test(m) || /\b(petg|pctg)\b/.test(m)) return 'petg';
 	return 'other';
 }
 

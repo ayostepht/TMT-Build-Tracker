@@ -68,7 +68,7 @@
 		brand = loadPreferredBrand();
 		const p = view.filaments.find((f) => f.key === 'primary');
 		if (p && isHex(p.hex)) base = normHex(p.hex);
-		loadCatalog().then(
+		loadCatalog(view.build.organizationId).then(
 			(c) => (catalog = c),
 			() => (failed = true)
 		);

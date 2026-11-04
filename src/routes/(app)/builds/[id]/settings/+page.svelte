@@ -85,6 +85,7 @@
 			<FilamentPicker
 				value={{ name: f.name, material: f.material, hex: f.hex }}
 				preferMaterial={f.tpu ? 'TPU 95A' : 'PETG'}
+				organizationId={ctx.view.build.organizationId}
 				disabled={!ctx.canEdit}
 				onchange={(v) => saveFil(f, v)}
 			/>

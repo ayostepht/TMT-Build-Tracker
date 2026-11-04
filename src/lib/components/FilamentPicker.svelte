@@ -25,15 +25,20 @@
 	import { onMount } from 'svelte';
 	import { preferMaterials, suggestName } from '#lib/filament-catalog.ts';
 	import Swatch from './Swatch.svelte';
+	import { customMaterialLabel, type CustomFilament } from '#lib/domain/custom-filaments.ts';
+	import { listCustomFilaments } from '#lib/client/custom-filaments.ts';
 
 	let {
 		value,
 		preferMaterial,
+		organizationId = '',
 		disabled = false,
 		onchange
 	}: {
 		value: FilamentValue;
 		preferMaterial?: string;
+		/** The workspace whose custom filaments are offered first. */
+		organizationId?: string;
 		disabled?: boolean;
 		onchange: (v: FilamentValue) => void;
 	} = $props();
@@ -52,7 +57,15 @@
 	let quick = $state('');
 	let hits = $state<SearchHit[]>([]);
 
+	let mine = $state<CustomFilament[]>([]);
+	const myList = $derived(preferMaterials(mine, preferMaterial, (f) => f.material));
+
 	onMount(() => {
+		if (organizationId)
+			listCustomFilaments(organizationId).then(
+				(l) => (mine = l),
+				() => {}
+			);
 		loadBrands().then(
 			(b) => (brands = b),
 			() => (failed = true)
@@ -141,6 +154,30 @@
 	{#if !disabled}
 		<details class="fp-cat">
 			<summary>Pick from the filament catalog</summary>
+			{#if myList.length}
+				<h4 class="fp-mine">My filaments</h4>
+				<ul class="fp-list" aria-label="My filaments" data-testid="fp-my-filaments">
+					{#each myList as f (f.id)}
+						<li>
+							<button
+								type="button"
+								onclick={() =>
+									emit({
+										name: suggestName(f.brand, f.colorName),
+										material: customMaterialLabel(f),
+										hex: f.hex
+									})}
+							>
+								<Swatch hex={f.hex} size="mini" />
+								<span
+									>{suggestName(f.brand, f.colorName)}
+									<span class="muted">{customMaterialLabel(f)}</span></span
+								>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 			{#if failed}
 				<p class="muted">The catalog could not be loaded. You can still type the values below.</p>
 			{:else}
@@ -321,6 +358,10 @@
 	.fp-list button:hover,
 	.fp-list button:focus-visible {
 		background: var(--paper);
+	}
+	.fp-mine {
+		margin: 8px 0 4px;
+		font-size: 13px;
 	}
 	.fp-none,
 	.fp-custom {

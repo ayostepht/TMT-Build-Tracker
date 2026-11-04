@@ -32,6 +32,7 @@ export const FLAG_TRANSLUCENT = 'translucent';
 export const FLAG_GLOW = 'glow';
 export const FLAG_MULTI = 'multi';
 export const FLAG_SILK = 'silk';
+export const FLAG_SPARKLE = 'sparkle';
 
 export const SLOTS = ['primary', 'accent', 'soft', 'tire'] as const;
 export type SlotKey = (typeof SLOTS)[number];
@@ -281,6 +282,7 @@ export const EXCLUDED_FILAMENTS: readonly {
 	{
 		id: 'sparkle',
 		pattern: /sparkl|glitter|galaxy|starry|stardust/i,
+		flag: FLAG_SPARKLE,
 		reason: 'glitter and galaxy fillers weaken the part'
 	},
 	{

@@ -1,5 +1,7 @@
 // Browser side of the swatch catalog: cached fetches and the per-user "recently used" list.
 import type { CatalogSwatches, SwatchTuple } from '#lib/domain/palettes.ts';
+import { customFamily, customToTuple, type CustomFilament } from '#lib/domain/custom-filaments.ts';
+import { listCustomFilaments } from './custom-filaments.ts';
 
 export type Family = 'petg' | 'tpu';
 
@@ -19,9 +21,17 @@ export function loadSwatches(family: Family): Promise<SwatchTuple[]> {
 	return cache[family]!;
 }
 
-export async function loadCatalog(): Promise<CatalogSwatches> {
-	const [petg, tpu] = await Promise.all([loadSwatches('petg'), loadSwatches('tpu')]);
-	return { petg, tpu };
+/** Catalog colors plus the workspace's own filaments (custom ones first), for the palette matcher. */
+export async function loadCatalog(organizationId?: string): Promise<CatalogSwatches> {
+	const [petg, tpu, custom] = await Promise.all([
+		loadSwatches('petg'),
+		loadSwatches('tpu'),
+		organizationId
+			? listCustomFilaments(organizationId).catch(() => [] as CustomFilament[])
+			: Promise.resolve([] as CustomFilament[])
+	]);
+	const mine = (fam: Family) => custom.filter((f) => customFamily(f) === fam).map(customToTuple);
+	return { petg: [...mine('petg'), ...petg], tpu: [...mine('tpu'), ...tpu] };
 }
 
 const RECENT_KEY = 'tmt.recentFilaments.v1';

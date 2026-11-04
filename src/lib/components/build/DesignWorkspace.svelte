@@ -323,12 +323,14 @@
 		family={pickerSlot.tpu ? 'tpu' : 'petg'}
 		current={{ name: pickerSlot.name, material: pickerSlot.material, hex: pickerSlot.hex }}
 		slotMaterial={pickerSlot.material}
+		organizationId={ctx.view.build.organizationId}
 		onpick={(v) => pickFilament(pickerSlot.key, v)}
 		onclose={() => (picker = null)}
 	/>
 {:else if picker?.mode === 'new'}
 	<SwatchPicker
 		title="Add a color"
+		organizationId={ctx.view.build.organizationId}
 		mode="new"
 		onpick={(v) => addSlot(v)}
 		onclose={() => (picker = null)}
