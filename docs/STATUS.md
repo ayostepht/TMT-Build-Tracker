@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-06, after commit ae8497f (print time estimates, Start printing on Print). Keep this file
+_Last updated: 2026-11-06, after commit fb92a45 (large sliced 3MF uploads, deployed as r16). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
