@@ -5,7 +5,8 @@
  * the plate's BOM grams, and parts that are on no X/P/A plate (variants) are estimated
  * from their grams at the kit-wide seconds-per-gram ratio and marked "rough".
  *
- * Precedence everywhere: slicer time > MakeGood profile time > this estimate.
+ * Precedence everywhere: slicer time > learned per-part time ("from your slice", see
+ * `part-profile.ts`) > MakeGood profile time > this estimate.
  * Pure: no DB, no Svelte.
  */
 
@@ -29,6 +30,19 @@ export interface PartTime {
 	totalSec: number;
 	/** True when estimated from grams rather than taken from a MakeGood plate. */
 	rough: boolean;
+	/** Taken from the build's print template (the user's own sliced file). */
+	learned?: boolean;
+	/** Grams by filament role for every copy of the part, learned parts only. */
+	gramsByRole?: Record<string, number>;
+}
+
+/** What the build learned about one part (already mapped to the part's current role). */
+export interface LearnedTime {
+	secondsPerCopy: number | null;
+	/** Grams per copy by role. */
+	gramsByRole: Record<string, number>;
+	/** Copies of the part the sliced file printed; the multiplier for parts with no quantity of their own. */
+	copies?: number | null;
 }
 
 export interface TimeModel {
@@ -50,7 +64,8 @@ export interface TimeVariantGroup {
 export function buildTimeModel(
 	parts: TimePartInput[],
 	layout: TimeLayoutPlate[],
-	groups: TimeVariantGroup[] = []
+	groups: TimeVariantGroup[] = [],
+	learned?: ReadonlyMap<string, LearnedTime>
 ): TimeModel {
 	const info = new Map(parts.map((p) => [p.slug, p]));
 	const byPart = new Map<string, PartTime>();
@@ -96,6 +111,18 @@ export function buildTimeModel(
 			if (!byPart.has(p.slug) && g) byPart.set(p.slug, { totalSec: g * secPerGram, rough: true });
 		}
 	}
+	// The user's own slice beats MakeGood's numbers for every part it covers.
+	for (const p of parts) {
+		const l = learned?.get(p.slug);
+		if (!l || !(l.secondsPerCopy && l.secondsPerCopy > 0)) continue;
+		const n = Math.max(1, p.qty ?? l.copies ?? 1);
+		byPart.set(p.slug, {
+			totalSec: l.secondsPerCopy * n,
+			rough: false,
+			learned: true,
+			gramsByRole: Object.fromEntries(Object.entries(l.gramsByRole).map(([r, g]) => [r, g * n]))
+		});
+	}
 	// Variant parts with neither a plate nor grams (bucket seat, two-piece footrest, ...): assume the
 	// option takes about as long as the other option(s) of its group, shared evenly over its parts.
 	for (const g of groups) {
@@ -127,6 +154,10 @@ export interface PlateTimeEstimate {
 	estSeconds: number | null;
 	/** Includes a grams-only guess for a part that is on no X/P/A plate. */
 	rough: boolean;
+	/** Every timed item comes from the build's print template. */
+	learned?: boolean;
+	/** Grams per run by role, when every item on the plate has learned grams. */
+	gramsByRole?: Record<string, number>;
 }
 
 /**
@@ -145,15 +176,37 @@ export function estimateArranged(
 		let sec = 0;
 		let any = false;
 		let rough = false;
+		let allLearned = true;
+		let allGrams = pl.items.length > 0;
+		const grams: Record<string, number> = {};
 		for (const s of pl.items) {
 			const t = model.byPart.get(s);
 			const n = itemsOf.get(s);
-			if (!t || !n) continue;
+			if (!t || !n) {
+				allLearned = false;
+				allGrams = false;
+				continue;
+			}
 			any = true;
 			sec += t.totalSec / n;
 			if (t.rough) rough = true;
+			if (!t.learned) allLearned = false;
+			if (t.gramsByRole && Object.keys(t.gramsByRole).length) {
+				for (const [r, g] of Object.entries(t.gramsByRole)) grams[r] = (grams[r] ?? 0) + g / n;
+			} else allGrams = false;
 		}
-		out.set(pl.number, { estSeconds: any ? Math.round(sec) : null, rough });
+		out.set(pl.number, {
+			estSeconds: any ? Math.round(sec) : null,
+			rough,
+			...(any && allLearned ? { learned: true } : {}),
+			...(allGrams && allLearned
+				? {
+						gramsByRole: Object.fromEntries(
+							Object.entries(grams).map(([r, g]) => [r, Math.round(g * 100) / 100])
+						)
+					}
+				: {})
+		});
 	}
 	return out;
 }

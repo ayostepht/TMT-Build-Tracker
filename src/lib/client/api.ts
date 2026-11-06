@@ -280,13 +280,23 @@ export const applyPlateUpload = (
 		filamentMap: Record<string, string | null>;
 		variantChoices?: Record<string, string>;
 		convertRuns?: boolean;
+		/** 'plates' (default): the file's plates become the build's plates. 'template': keep my plates, learn per-part data. */
+		mode?: 'plates' | 'template';
+		/** Template mode: arrange the plates for the build's printer right away with the learned data. */
+		arrange?: boolean;
 	}
 ) =>
-	call<{ plates: number; skipped: number; convertedRuns: number }>(
-		'POST',
-		`${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}/apply`,
-		body
-	);
+	call<{
+		plates: number;
+		skipped: number;
+		convertedRuns: number;
+		mode: 'plates' | 'template';
+		learned: number;
+		arranged: boolean;
+	}>('POST', `${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}/apply`, body);
+/** Forget the per-part data learned from a sliced file (plates stay). */
+export const forgetPrintTemplate = (buildId: string) =>
+	call<{ removed: number }>('DELETE', `${b(buildId)}/print-template`);
 export const discardPlateUpload = (buildId: string, uploadId: string) =>
 	call('DELETE', `${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}`);
 export const plateThumbnailUrl = (buildId: string, number: number, v = '') =>

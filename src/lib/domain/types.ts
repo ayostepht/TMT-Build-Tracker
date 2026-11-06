@@ -93,8 +93,8 @@ export interface Plate {
 	thumbnailPath: string | null; // served via GET /api/builds/[id]/plates/[number]/thumbnail when set
 	filamentGrams: Record<string, number>; // grams per run by filament role key, from a sliced 3MF; {} when unknown
 	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>' | 'arranged'
-	/** Where `estSeconds` comes from: the slicer, MakeGood's profile, or our estimate from MakeGood's X/P/A times. Absent/null = unknown. */
-	estSource?: 'slicer' | 'profile' | 'estimate' | null;
+	/** Where `estSeconds` comes from: the slicer (uploaded plates as-is), the build's print template ("from your slice", per-part data learned from a sliced file), MakeGood's profile, or our estimate from MakeGood's X/P/A times. Absent/null = unknown. */
+	estSource?: 'slicer' | 'learned' | 'profile' | 'estimate' | null;
 	/** The estimate includes a gram-based guess for a part that is on no MakeGood plate. */
 	estRough?: boolean;
 }
@@ -236,6 +236,42 @@ export interface BuildView {
 	photos: BuildPhoto[];
 	/** Handoff record; null until someone saves the Handoff form. */
 	handoff: HandoffRecord | null;
+	/** What the build learned about each part from a sliced file (the "print template"), by slug, mapped to the parts' current roles. */
+	partProfiles?: Record<string, PartProfileInfo>;
+	/** Summary of the print template; null/absent when nothing was learned. */
+	printTemplate?: PrintTemplateInfo | null;
+}
+
+/** Per-part data learned from a sliced file, as it applies to the build's current colors. */
+export interface PartProfileInfo {
+	/** Seconds to print one copy of the part. */
+	secondsPerCopy: number | null;
+	/** Grams per copy by CURRENT role. */
+	gramsByRole: Record<string, number>;
+	method: 'exact' | 'volume-split';
+	/** The part was recolored since learning: its grams moved to the new role, the time did not. */
+	remapped: boolean;
+	/** Role the part had when it was learned. */
+	learnedRole: string | null;
+	/** Copies of the part the file printed (its multiplier when the kit gives no quantity). */
+	copies: number | null;
+	/** 'upload:<id>' | 'printer' | 'manual' */
+	source: string;
+}
+
+export interface PrintTemplateInfo {
+	source: string;
+	fileName: string | null;
+	/** Sliced plates in the file. */
+	plates: number | null;
+	printer: string | null;
+	learnedAt: string; // ISO
+	/** 'mixed': some parts were measured per object, others shared by volume. */
+	method: 'exact' | 'volume-split' | 'mixed';
+	/** Parts with learned data. */
+	parts: number;
+	/** Parts whose grams moved to a new role since learning. */
+	remapped: number;
 }
 
 /** One assembly step for a build (template step, filtered by variant choices; `parts` only lists active parts). */

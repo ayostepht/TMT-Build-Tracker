@@ -78,13 +78,29 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
-- In progress (2026-11-06): sliced files as a data source, separate from the plate layout.
-  After upload: "Use these plates as-is" (unchanged) or "Learn from this file" (per-part
-  slicer time and grams stored in `build_part_profiles`, plate totals shared by mesh volume
-  unless exact per-object data exists). Arranging and totals prefer learned data; recoloring
-  offers a re-arrange that keeps orientations/supports and uses the learned times. Maintainer:
-  "use my file so it knows slice times, then use the designer to recolor, which means
-  re-arranging, with the backend knowledge of orientation/timing"; keep the as-is path.
+- Done 2026-11-06 (not yet committed): sliced files as a data source ("print template"). After upload the review
+  screen asks "Use these plates" (file's plates as sliced, today's behaviour) or "Use as print template" (keep my plates,
+  optionally re-arrange now; learn per-part data). Default: template when the build has a printer or arranged plates, else
+  plates. Both store per-part data in `build_part_profiles` (no schema change): `src/lib/domain/part-profile.ts`
+  (`learnPartProfiles`, `resolveProfile`, `meshVolume`), DB glue `src/lib/server/builds/part-profiles.ts`, apply in
+  `applyUpload` (`mode`, `arrange`), `DELETE /api/builds/[id]/print-template` ("Remove"). Methods: **exact** when the plate's
+  G-code names its objects (`EXCLUDE_OBJECT_START` or Orca "; printing object"): `src/lib/domain/gcode-objects.ts` scans bytes
+  incrementally (extrusion per object and tool, nominal move times rescaled by the `M73 R` minutes), run from the upload
+  (`threemf/gcode-stats.ts`, 4 min budget) while the file is on disk; else **volume-split** by mesh volume. Real file: all 24
+  plates in 20 s, peak RSS 111 MB (flat). Learned seconds per copy (copies = what the file prints; kit qty used as multiplier,
+  file copies when the kit has none) and grams by role; a part's main filament always counts under its current role, so a
+  recolor moves its grams (time unchanged); parts from the same source file as a learned part (rim pairs) get the same data.
+  Used by: arranged plates (time, grams by role, label "from your slice", `estSource: 'learned'`), MakeGood layout plates whose
+  parts are all learned, header/tiles/Ready to print/Now card; uploaded plates keep the slicer's own numbers. Stale prompt for
+  non-arranged plates when a part's color changed since learning (`templateColorsChanged`); banner names the file. Files tab:
+  "Print template" card (file, plates, printer, date, method, Replace, Remove). Real check (Centauri Carbon 256, keep-out):
+  33 parts learned (32 + rim twin), arranged total **457.5 h = the file's 457.5 h** (exact and volume-split alike; they differ
+  per part only on multi-object plates, e.g. connectors 11.83 vs 11.48 h); recolor wing-left accent -> primary re-arranges
+  (21 plates), wing keeps 12.59 h and its 359 g move to Primary. Tests: `gcode-objects`, `part-profile`,
+  `time-estimate.learned`, `print-template` (server), real tests (`gcode-stats.real`, `sliced.real`), e2e
+  `print-template.spec.ts`; screenshots `data/shots-printtemplate/`. Open: the maintainer's file only slices one rim and
+  prints tires twice; kit quantities differ from the file in those two places (handled as above). Not yet wired: "printer" and
+  "manual" profile sources.
 - Done 2026-11-06 (not yet committed): Files tab UX. (1) "Use my own sliced file" is a visible card at the top
   of Files -> Printer and plates (and the wizard's Files step); it, the select option and a 3MF dropped anywhere on
   the page (drop overlay; the kit drop zone keeps its own drops) open the existing `PlateUpload` flow as a modal

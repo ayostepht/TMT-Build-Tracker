@@ -16,6 +16,7 @@ import {
 	type ArrangedPlate
 } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
+import type { LearnedTime } from '#lib/domain/time-estimate.ts';
 import type { BuildView } from '#lib/domain/types.ts';
 import { effectiveKeepOut } from '#lib/printers/printer.ts';
 import type { Db } from '../db';
@@ -55,6 +56,18 @@ export interface Plan {
 	result: ArrangeResult;
 	/** Slugs without a footprint. */
 	unsized: string[];
+	/** The build's print template, as time model input (per-part seconds and grams from the user's slice). */
+	learned?: Map<string, LearnedTime>;
+}
+
+/** Learned per-part data of a build view as time model input. */
+export function learnedOf(view: BuildView): Map<string, LearnedTime> {
+	return new Map(
+		Object.entries(view.partProfiles ?? {}).map(([slug, pr]) => [
+			slug,
+			{ secondsPerCopy: pr.secondsPerCopy, gramsByRole: pr.gramsByRole, copies: pr.copies }
+		])
+	);
 }
 
 /** Role labels for plate names: the kit's own slots by key ("Accent"), added colors by name. */
@@ -80,7 +93,16 @@ export function planArrangement(
 	const unsized: { slug: string; name: string; role: string; grams: number | null }[] = [];
 	for (const part of view.parts) {
 		const units = Math.max(1, part.qty ?? 1);
-		const grams = part.bomGrams != null ? Math.round((part.bomGrams / units) * 10) / 10 : null;
+		const learnedGrams = Object.values(view.partProfiles?.[part.slug]?.gramsByRole ?? {}).reduce(
+			(a, b) => a + b,
+			0
+		);
+		const grams =
+			learnedGrams > 0
+				? Math.round(learnedGrams * 10) / 10
+				: part.bomGrams != null
+					? Math.round((part.bomGrams / units) * 10) / 10
+					: null;
 		const fp = footprints.get(part.slug);
 		if (!fp) {
 			unsized.push({ slug: part.slug, name: part.name, role: part.role, grams: part.bomGrams });
@@ -124,7 +146,7 @@ export function planArrangement(
 		options:
 			options ?? (process.env.TMT_ARRANGE_OPTIMIZE === 'off' ? { optimize: false } : undefined)
 	});
-	return { result, unsized: unsized.map((u) => u.slug) };
+	return { result, unsized: unsized.map((u) => u.slug), learned: learnedOf(view) };
 }
 
 /** Stable identity of a plate set: what is on each plate in which color, no positions. */
@@ -148,7 +170,7 @@ export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 	// MakeGood's X/P/A times, spread over the plate's items (an estimate; the view recomputes it too)
 	const est = tplId
 		? estimateArrangedPlates(
-				loadTimeModel(tx, tplId),
+				loadTimeModel(tx, tplId, plan.learned),
 				plan.result.plates.map((pl) => ({
 					number: pl.number,
 					runs: pl.runs,

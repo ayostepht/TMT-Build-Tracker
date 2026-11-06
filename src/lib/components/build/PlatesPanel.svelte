@@ -9,6 +9,7 @@
 		buildPlateLayouts,
 		plateThumbnailUrl,
 		arrangePlates,
+		forgetPrintTemplate,
 		getArrangement,
 		type ArrangementDto,
 		type PlateLayoutInfo
@@ -111,6 +112,35 @@
 		printer && arr?.fresh && (current === 'arranged' || !current) ? arr.fresh.warnings : []
 	);
 	let rearranging = $state(false);
+	const tpl = $derived(ctx.view.printTemplate ?? null);
+	const tplWhen = $derived(
+		tpl
+			? new Date(tpl.learnedAt).toLocaleDateString(undefined, {
+					year: 'numeric',
+					month: 'short',
+					day: 'numeric'
+				})
+			: ''
+	);
+	let removingTpl = $state(false);
+	async function removeTemplate() {
+		if (
+			!confirm(
+				'Forget the print times and grams learned from this file? Your plates stay as they are; times go back to estimates.'
+			)
+		)
+			return;
+		removingTpl = true;
+		try {
+			await forgetPrintTemplate(ctx.id);
+			notice = 'Print template removed.';
+			await ctx.refresh();
+		} catch (e) {
+			ctx.error = e instanceof Error ? e.message : 'Could not remove the print template.';
+		} finally {
+			removingTpl = false;
+		}
+	}
 
 	async function rearrange() {
 		rearranging = true;
@@ -201,8 +231,9 @@
 		<div class="sliced-text">
 			<h2>Use my own sliced file</h2>
 			<p class="muted">
-				A .3mf or .gcode.3mf from your slicer: real print times and grams per plate. You can also
-				drop the file anywhere on this page.
+				A .3mf or .gcode.3mf from your slicer: real print times and grams. Use its plates as they
+				are, or use it as a print template for your own plates. You can also drop the file anywhere
+				on this page.
 			</p>
 		</div>
 		<button
@@ -211,6 +242,47 @@
 			data-testid="use-own-sliced"
 			onclick={() => ((uploading = true), (notice = null))}>Choose a sliced file…</button
 		>
+	</section>
+{/if}
+
+{#if tpl}
+	<section class="card tpl-card" aria-label="Print template" data-testid="print-template">
+		<div class="tpl-text">
+			<h2>Print template</h2>
+			<p class="meta" data-testid="print-template-line">
+				<b>{tpl.fileName ?? 'Your sliced file'}</b>
+				{#if tpl.plates}· {tpl.plates} sliced plate{tpl.plates === 1 ? '' : 's'}{/if}
+				{#if tpl.printer}· {tpl.printer}{/if}
+				· {tplWhen} ·
+				{tpl.method === 'exact'
+					? 'measured per object'
+					: tpl.method === 'mixed'
+						? 'partly measured, partly shared by volume'
+						: 'shared by part volume'}
+				· {tpl.parts} part{tpl.parts === 1 ? '' : 's'}
+				{#if tpl.remapped}· {tpl.remapped} recolored since{/if}
+			</p>
+			<p class="meta">
+				Print times and grams for arranged plates come from your slice, not from estimates.
+			</p>
+		</div>
+		{#if ctx.canEdit}
+			<div class="tpl-actions">
+				<button
+					class="btn sm"
+					type="button"
+					data-testid="template-replace"
+					onclick={() => ((uploading = true), (notice = null))}>Replace…</button
+				>
+				<button
+					class="btn sm"
+					type="button"
+					data-testid="template-remove"
+					disabled={removingTpl}
+					onclick={removeTemplate}>Remove</button
+				>
+			</div>
+		{/if}
 	</section>
 {/if}
 
@@ -237,7 +309,14 @@
 	</div>
 	{#if arr?.stale && ctx.canEdit && printer}
 		<div class="stale" role="status" data-testid="stale-banner">
-			<span>Colors changed: re-arrange plates?</span>
+			<span data-testid="stale-text">
+				{#if arr.template}
+					Colors changed: re-arrange for your new colors using your print template (times and
+					orientations from {arr.template.fileName ?? 'your sliced file'})?
+				{:else}
+					Colors changed: re-arrange plates?
+				{/if}
+			</span>
 			<button class="btn sm primary" type="button" disabled={rearranging} onclick={rearrange}
 				>Re-arrange plates</button
 			>
@@ -315,7 +394,9 @@
 						? pl.estRough
 							? ' (rough estimate)'
 							: ' (estimate)'
-						: ''}</span
+						: pl.estSource === 'learned'
+							? ' (from your slice)'
+							: ''}</span
 				>
 			{/if}
 			{#if pl.runNote || pl.runs > 1}
@@ -490,6 +571,26 @@
 		align-items: center;
 		margin: 6px 0;
 		font-size: 14px;
+	}
+	.tpl-card {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px 16px;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.tpl-text {
+		min-width: 0;
+		flex: 1 1 280px;
+		overflow-wrap: anywhere;
+	}
+	.tpl-text h2,
+	.tpl-text p {
+		margin: 0;
+	}
+	.tpl-actions {
+		display: flex;
+		gap: 8px;
 	}
 	.stale {
 		display: flex;

@@ -274,7 +274,14 @@ describe('uploading a 3MF', () => {
 			filamentMap: { '1': 'accent', '2': 'tire' },
 			variantChoices: up.suggestions.variantChoices
 		});
-		expect(r).toEqual({ plates: 2, skipped: 1, convertedRuns: 0 });
+		expect(r).toEqual({
+			plates: 2,
+			skipped: 1,
+			convertedRuns: 0,
+			mode: 'plates',
+			learned: 5,
+			arranged: false
+		});
 		const v = view(id);
 		expect(v.variantChoices.rim).toBe('smaller');
 		expect(v.plates.map((p) => p.number)).toEqual([1, 2]);

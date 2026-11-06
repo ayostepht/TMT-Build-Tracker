@@ -30,6 +30,8 @@ export interface ThreeMfPlate {
 	grams: number | null; // per run, sliced files only
 	/** Grams per run by 1-based filament index (as a string key), sliced files only. */
 	filamentGrams: Record<string, number>;
+	/** Per-object cost measured from the plate's G-code, when it names its objects (see `attachGcodeObjectStats`). */
+	exact?: ExactObject[];
 	thumbnail?: Uint8Array; // PNG; absent when the file has none or after `toStoredSummary`
 	objects: ThreeMfObject[];
 }
@@ -106,4 +108,14 @@ export function runsHintFromName(name: string): number {
 		}
 	}
 	return 1;
+}
+
+/**
+ * What one object name cost on a plate, measured from the plate's G-code (all copies of the object added
+ * up): seconds on the slicer's time scale and extruded mm by 1-based filament index (as a string key).
+ */
+export interface ExactObject {
+	name: string;
+	seconds: number;
+	mm: Record<string, number>;
 }

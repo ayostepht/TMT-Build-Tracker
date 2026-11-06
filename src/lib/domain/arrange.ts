@@ -1114,6 +1114,8 @@ export interface ArrangementInfo {
 	stale: boolean;
 	/** Whether print logs hang on plates (re-arranging then needs a confirm). */
 	hasPlateRuns: boolean;
+	/** The build's print template (learned from a sliced file), when it has one: arranging uses its times and grams. */
+	template?: { fileName: string | null; printer: string | null } | null;
 	/** Footprints (with hulls) of the parts on arranged plates, for drawing. */
 	footprints: Record<string, PrintFootprint>;
 	/** True outlines of the pieces on the plates by ArrangedItem.sil key (absent for seed footprints). */

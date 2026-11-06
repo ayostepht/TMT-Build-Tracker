@@ -36,7 +36,11 @@
 							<span>{pl.parts.map((s) => partOf(s)?.name ?? s).join(', ')}</span>
 							{#if pl.estSeconds}
 								<span class="num"
-									>~{fmtH(pl.estSeconds)}{pl.estSource === 'estimate' ? ' (est.)' : ''}</span
+									>~{fmtH(pl.estSeconds)}{pl.estSource === 'estimate'
+										? ' (est.)'
+										: pl.estSource === 'learned'
+											? ' (from your slice)'
+											: ''}</span
 								>
 							{/if}
 						</div>

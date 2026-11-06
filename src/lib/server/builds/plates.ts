@@ -5,6 +5,11 @@
  * - `createUpload` / `applyUpload` / `discardUpload`: parse a sliced or unsliced
  *   3MF, let the user map its objects to parts, and replace the plates.
  *
+ * A sliced file can be used two ways (`mode` in the apply body): `plates` (default) makes the file's plates
+ * the build's plates exactly as sliced, `template` keeps the build's own plates and only learns per-part
+ * print time and grams from the file (the build's "print template", see `part-profiles.ts`). `plates`
+ * learns the per-part data too, so a later recolor can re-arrange with it.
+ *
  * Replacing plates detaches print logs from the old plates. Logs attached to a
  * plate (`plateNumber`) would point at plates that no longer exist, so the caller
  * must pass `convertRuns: true` (else 409): each such log becomes part logs, one
@@ -47,6 +52,7 @@ import {
 	writePlan
 } from './arrange-plan';
 import { loadBuildView } from './view';
+import { clearProfiles, learnFromSummary, storeProfiles } from './part-profiles';
 import { ensureOrientations, ensureSilhouettes } from '../print-geometry/store';
 
 type Obj = Record<string, unknown>;
@@ -371,6 +377,11 @@ export interface ApplyResult {
 	plates: number;
 	skipped: number;
 	convertedRuns: number;
+	mode: 'plates' | 'template';
+	/** Parts the file taught the build about (print template). */
+	learned: number;
+	/** Plates were re-arranged right away (template mode with `arrange: true`). */
+	arranged: boolean;
 }
 
 export function applyUpload(
@@ -383,7 +394,15 @@ export function applyUpload(
 	if (!isObj(body)) bad('Invalid body');
 	const b = body as Obj;
 	const convertRuns = b.convertRuns === true;
-	let result: ApplyResult = { plates: 0, skipped: 0, convertedRuns: 0 };
+	const mode = b.mode === 'template' ? 'template' : 'plates';
+	let result: ApplyResult = {
+		plates: 0,
+		skipped: 0,
+		convertedRuns: 0,
+		mode,
+		learned: 0,
+		arranged: false
+	};
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		const up = getUpload(tx, buildId, uploadId);
 		if (up.status !== 'parsed')
@@ -402,7 +421,7 @@ export function applyUpload(
 			}
 		}
 		let choices = view.variantChoices;
-		if (b.variantChoices !== undefined) {
+		if (mode === 'plates' && b.variantChoices !== undefined) {
 			if (!isObj(b.variantChoices)) bad('variantChoices must be an object');
 			const err = validateChoices(view.variantGroups, b.variantChoices as Obj);
 			if (err) bad(err);
@@ -424,6 +443,78 @@ export function applyUpload(
 			})
 			.filter((r) => r.slugs.length > 0);
 		if (!rows.length) bad('Map at least one object to a part first');
+
+		// What the file teaches about each part (both modes).
+		const learnedProfiles = learnFromSummary(tx, {
+			templateId: view.build.templateId,
+			summary,
+			mapping,
+			filamentMap,
+			allParts: view.allParts,
+			fileName: up.fileName,
+			uploadId
+		});
+		const storeLearned = () =>
+			learnedProfiles.length
+				? storeProfiles(tx, buildId, learnedProfiles, {
+						source: `upload:${uploadId}`,
+						fileName: up.fileName,
+						plates: summary.plates.length,
+						printer: summary.printer
+					})
+				: 0;
+		const finishUpload = () => {
+			tx.update(buildUploads)
+				.set({
+					status: 'applied',
+					summary: { ...(up.summary as Obj), mapping, filamentMap, variantChoices: choices }
+				})
+				.where(eq(buildUploads.id, uploadId))
+				.run();
+			rmSync(uploadDir(uploadId), { recursive: true, force: true });
+		};
+
+		if (mode === 'template') {
+			if (!summary.sliced || !learnedProfiles.length)
+				bad(
+					'This file has no print times or grams for the mapped parts, so there is nothing to learn. Slice it first, or use its plates.'
+				);
+			let arranged = false;
+			let convertedRuns = 0;
+			if (b.arrange === true) {
+				if (!view.printer) bad('Choose a printer first to arrange plates');
+				requireConversion(view, convertRuns);
+			}
+			const learned = storeLearned();
+			if (b.arrange === true) {
+				// re-read the view so the arrangement sees the new data
+				const fresh = loadBuildView(tx, buildId, userId)!;
+				const plan = planArrangement(
+					fresh,
+					loadFootprints(tx, fresh.build.templateId),
+					layoutHintFor(tx, fresh.build.templateId)
+				);
+				if (plan) {
+					convertedRuns = convertPlateRuns(tx, buildId, fresh);
+					clearBuildThumbs(buildId);
+					writePlan(tx, buildId, plan);
+					arranged = true;
+				}
+			}
+			finishUpload();
+			result = { plates: 0, skipped: 0, convertedRuns, mode, learned, arranged };
+			return {
+				kind: 'plates.template',
+				payload: {
+					uploadId,
+					fileName: up.fileName,
+					parts: learned,
+					method: learnedProfiles.every((l) => l.method === 'exact') ? 'exact' : 'volume-split',
+					arranged,
+					convertedRuns
+				}
+			};
+		}
 		requireConversion(view, convertRuns);
 
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
@@ -458,21 +549,32 @@ export function applyUpload(
 			.set({ plateLayout: 'upload', variantChoices: choices })
 			.where(eq(builds.id, buildId))
 			.run();
-		tx.update(buildUploads)
-			.set({
-				status: 'applied',
-				summary: { ...(up.summary as Obj), mapping, filamentMap, variantChoices: choices }
-			})
-			.where(eq(buildUploads.id, uploadId))
-			.run();
-		rmSync(uploadDir(uploadId), { recursive: true, force: true });
-		result = { plates: rows.length, skipped: summary.plates.length - rows.length, convertedRuns };
+		const learned = storeLearned();
+		finishUpload();
+		result = {
+			plates: rows.length,
+			skipped: summary.plates.length - rows.length,
+			convertedRuns,
+			mode,
+			learned,
+			arranged: false
+		};
 		return {
 			kind: 'plates.upload',
 			payload: { uploadId, fileName: up.fileName, ...result, sliced: summary.sliced }
 		};
 	});
 	return result;
+}
+
+/** "Remove" on the Files tab: forget what the build learned from a sliced file. Plates stay as they are. */
+export function forgetPrintTemplate(db: Db, buildId: string, userId: string): number {
+	let n = 0;
+	mutateBuild(db, buildId, userId, (tx) => {
+		n = clearProfiles(tx, buildId);
+		return { kind: 'plates.template.forget', payload: { parts: n } };
+	});
+	return n;
 }
 
 /** Absolute path of a build plate's thumbnail, or null. */
@@ -532,6 +634,30 @@ export function arrangeForPrinter(
 		};
 	});
 	return result;
+}
+
+/**
+ * Plates that are not arranged (a MakeGood layout, or the file's plates as sliced) no longer match when a
+ * part was recolored since the print template was learned and its plate now has other colors than it was
+ * sliced with. Only meaningful with a printer (re-arranging needs one).
+ */
+export function templateColorsChanged(view: BuildView): boolean {
+	if (!view.printer || !view.printTemplate) return false;
+	const profiles = view.partProfiles ?? {};
+	const roleOf = new Map(view.parts.map((p) => [p.slug, p.role]));
+	for (const pl of view.plates) {
+		const now = new Set<string>();
+		const was = new Set<string>();
+		for (const slug of pl.parts) {
+			const pr = profiles[slug];
+			const role = roleOf.get(slug);
+			if (!pr || !role) continue;
+			now.add(role);
+			was.add(pr.learnedRole ?? role);
+		}
+		if (now.size !== was.size || [...now].some((r) => !was.has(r))) return true;
+	}
+	return false;
 }
 
 export function buildArrangement(db: Db, buildId: string, userId: string): ArrangementInfo {
@@ -595,9 +721,13 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 				}
 			: null,
 		stale:
-			row?.plateLayout === ARRANGED_LAYOUT &&
-			!!plan &&
-			signature(plan.result.plates) !== signature(stored),
+			(row?.plateLayout === ARRANGED_LAYOUT &&
+				!!plan &&
+				signature(plan.result.plates) !== signature(stored)) ||
+			(row?.plateLayout !== ARRANGED_LAYOUT && !!plan && templateColorsChanged(view)),
+		template: view.printTemplate
+			? { fileName: view.printTemplate.fileName, printer: view.printTemplate.printer }
+			: null,
 		hasPlateRuns: hasPlateRuns(view),
 		footprints: used
 	};

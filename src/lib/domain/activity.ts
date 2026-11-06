@@ -154,6 +154,11 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			const n = num(p.convertedRuns) ?? 0;
 			return `${who} organized the plates from ${str(p.fileName) ?? 'an uploaded 3MF'} (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
 		}
+		case 'plates.template': {
+			return `${who} used ${str(p.fileName) ?? 'a sliced 3MF'} as the print template (${num(p.parts) ?? 0} parts learned, ${str(p.method) === 'exact' ? 'measured per object' : 'shared by volume'})`;
+		}
+		case 'plates.template.forget':
+			return `${who} removed the print template`;
 		case 'printer.job.start': {
 			const pr = str(p.printer) ?? 'the printer';
 			const plate = num(p.plateNumber);

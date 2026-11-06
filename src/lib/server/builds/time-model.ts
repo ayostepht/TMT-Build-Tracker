@@ -5,13 +5,18 @@ import {
 	buildTimeModel,
 	estimateArranged,
 	type PlateTimeEstimate,
+	type LearnedTime,
 	type TimeLayoutPlate,
 	type TimeModel
 } from '#lib/domain/time-estimate.ts';
 import type { Db } from '../db';
 import { templateParts, templatePlateLayouts, templatePlates, templates } from '../db/schema';
 
-export function loadTimeModel(db: Db, templateId: string): TimeModel {
+export function loadTimeModel(
+	db: Db,
+	templateId: string,
+	learned?: ReadonlyMap<string, LearnedTime>
+): TimeModel {
 	const parts = db
 		.select({ slug: templateParts.slug, bomGrams: templateParts.bomGrams, qty: templateParts.qty })
 		.from(templateParts)
@@ -35,7 +40,7 @@ export function loadTimeModel(db: Db, templateId: string): TimeModel {
 		.from(templates)
 		.where(eq(templates.id, templateId))
 		.get()?.g;
-	return buildTimeModel(parts, plates, groups ?? []);
+	return buildTimeModel(parts, plates, groups ?? [], learned);
 }
 
 /** Estimates (per run) for arranged plates, by plate number. */

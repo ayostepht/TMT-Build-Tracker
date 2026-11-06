@@ -26,6 +26,7 @@ import { buildAccess } from '../access';
 import { hardwareModelUrl } from '../models/hardware';
 import type { Db } from '../db';
 import { estimateArrangedPlates, loadTimeModel } from './time-model';
+import { loadProfileRows, resolveProfiles } from './part-profiles';
 import {
 	activity,
 	buildAssembly,
@@ -185,26 +186,54 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		.all();
 	// Time precedence: slicer (uploaded sliced 3MF) > MakeGood's profile time > our estimate.
 	// Arranged plates carry no time of their own; estimate it from MakeGood's X/P/A times.
+	// The build's print template (per-part data learned from a sliced file) comes before MakeGood's numbers.
+	const { profiles: partProfiles, template: printTemplate } = resolveProfiles(
+		loadProfileRows(db, buildId),
+		allParts,
+		filaments.map((f) => f.key)
+	);
+	const learned = new Map(
+		Object.entries(partProfiles).map(([slug, pr]) => [
+			slug,
+			{ secondsPerCopy: pr.secondsPerCopy, gramsByRole: pr.gramsByRole, copies: pr.copies }
+		])
+	);
 	const arrangedRows = rawPlates.filter((p) => p.source === 'arranged');
-	const arrangedEst = arrangedRows.length
-		? estimateArrangedPlates(
-				loadTimeModel(db, tpl.id),
-				arrangedRows.map((p) => ({
-					number: p.number,
-					runs: p.runs,
-					arrangement: p.arrangement,
-					parts: p.parts.filter((s) => !inactive.has(s))
-				}))
+	// MakeGood layout plates whose every part was learned also take the learned time (not uploaded plates:
+	// those are the slicer's own numbers; not per-part-run plates, whose unit is a single part).
+	const learnedRows = learned.size
+		? rawPlates.filter(
+				(p) => p.source !== 'arranged' && !p.source?.startsWith('upload:') && !p.perPartRuns
 			)
-		: new Map<number, PlateTimeEstimate>();
+		: [];
+	const arrangedEst =
+		arrangedRows.length || learnedRows.length
+			? estimateArrangedPlates(
+					loadTimeModel(db, tpl.id, learned),
+					[...arrangedRows, ...learnedRows].map((p) => ({
+						number: p.number,
+						runs: p.runs,
+						arrangement: p.arrangement,
+						parts: p.parts.filter((s) => !inactive.has(s))
+					}))
+				)
+			: new Map<number, PlateTimeEstimate>();
+	const learnedPlate = (p: { number: number; source: string | null }) =>
+		p.source !== 'arranged' &&
+		arrangedEst.get(p.number)?.learned &&
+		learnedRows.some((r) => r.number === p.number);
 	const plates: Plate[] = rawPlates
 		.map((p) => ({
 			number: p.number,
 			name: p.name,
-			...(p.source === 'arranged'
+			...(p.source === 'arranged' || learnedPlate(p)
 				? {
 						estSeconds: arrangedEst.get(p.number)?.estSeconds ?? null,
-						estSource: arrangedEst.get(p.number)?.estSeconds ? ('estimate' as const) : null,
+						estSource: arrangedEst.get(p.number)?.estSeconds
+							? arrangedEst.get(p.number)?.learned
+								? ('learned' as const)
+								: ('estimate' as const)
+							: null,
 						estRough: !!arrangedEst.get(p.number)?.rough
 					}
 				: {
@@ -223,7 +252,10 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			slicerGrams: p.slicerGrams,
 			slicerByPart: p.slicerByPart,
 			thumbnailPath: p.thumbnailPath,
-			filamentGrams: p.filamentGrams ?? {},
+			filamentGrams:
+				p.source === 'arranged' || learnedPlate(p)
+					? (arrangedEst.get(p.number)?.gramsByRole ?? {})
+					: (p.filamentGrams ?? {}),
 			source: p.source ?? 'template'
 		}))
 		.map((p) => ({ ...p, parts: p.parts.filter((s) => !inactive.has(s)) }))
@@ -328,6 +360,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		variantChoices,
 		allParts,
 		model,
+		partProfiles,
+		printTemplate,
 		plates,
 		runs,
 		guidePages: db

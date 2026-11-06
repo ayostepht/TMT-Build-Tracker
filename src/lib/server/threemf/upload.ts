@@ -12,7 +12,8 @@
  * (shared with the model and print-geometry imports); this module enforces its own per-upload limit
  * (`MAX_3MF_MB`, default 1024: a project sliced with G-code for all plates is several hundred MB),
  * so a larger `BODY_SIZE_LIMIT` is needed to raise it. The body is only ever streamed to disk, and the
- * parser inflates just `Metadata/` configs and thumbnails (never `plate_N.gcode` or `3D/Objects/*`).
+ * parser inflates just `Metadata/` configs and thumbnails; `plate_N.gcode` is only stream-scanned afterwards
+ * for per-object cost (`gcode-stats.ts`, nothing kept in memory) and `3D/Objects/*` is never read.
  */
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, mkdirSync, rmSync } from 'node:fs';
@@ -21,6 +22,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ApiError } from '../access';
 import { maxThreeMfBytes, uploadsDir } from '../config';
+import { attachGcodeObjectStats } from './gcode-stats';
 import { parseThreeMfFile, ThreeMfError } from './index';
 import type { ThreeMfSummary } from '#lib/domain/threemf.ts';
 
@@ -69,6 +71,11 @@ export async function receiveThreeMf(
 		let summary: ThreeMfSummary;
 		try {
 			summary = await parseThreeMfFile(path);
+			// Per-object time and extrusion from the plates' G-code, while the file is still on disk.
+			if (summary.sliced) {
+				const rep = await attachGcodeObjectStats(path, summary);
+				if (rep.note) summary.warnings.push(rep.note);
+			}
 		} catch (e) {
 			if (e instanceof ThreeMfError) throw new ApiError(422, e.message);
 			throw e;

@@ -168,9 +168,12 @@
 					)} estimate{/if}
 			{/if}
 		{:else}
-			Estimate {item.estSource === 'slicer' ? 'from your slicer' : "from the template's profile"}: ~{fmtH(
-				estMs / 1000
-			)}. Set the start time to see a countdown.
+			Estimate {item.estSource === 'slicer'
+				? 'from your slicer'
+				: item.estSource === 'learned'
+					? 'from your slice'
+					: "from the template's profile"}: ~{fmtH(estMs / 1000)}. Set the start time to see a
+			countdown.
 		{/if}
 	</div>
 

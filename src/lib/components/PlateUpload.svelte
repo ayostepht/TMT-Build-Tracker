@@ -41,6 +41,12 @@
 	let filamentMap = $state<Record<string, string | null>>({});
 	let accept = $state<Record<string, boolean>>({});
 	let drag = $state(false);
+	/** What to do with the file: take its plates as sliced, or learn per-part data and keep my plates. */
+	let outcome = $state<'plates' | 'template'>('plates');
+	let arrangeNow = $state(false);
+	const hasArranged = $derived(view.plates.some((p) => p.source === 'arranged'));
+	const defaultOutcome = (sliced: boolean): 'plates' | 'template' =>
+		sliced && (hasArranged || view.printer) ? 'template' : 'plates';
 
 	const sections = $derived.by(() => {
 		const out: { section: string; parts: PartDef[] }[] = [];
@@ -51,14 +57,23 @@
 		}
 		return out;
 	});
-	const attachedRuns = $derived(view.runs.filter((r) => r.plateNumber != null).length);
+	const attachedRuns = $derived(
+		outcome === 'template' && !arrangeNow
+			? 0
+			: view.runs.filter((r) => r.plateNumber != null).length
+	);
 	const groupName = (k: string) => view.variantGroups.find((g) => g.key === k)?.name ?? k;
 	const optionName = (g: string, o: string) =>
 		view.variantGroups.find((x) => x.key === g)?.options.find((x) => x.key === o)?.name ?? o;
 	const variantChanges = $derived(
-		Object.entries(up?.suggestions.variantChoices ?? {}).filter(
-			([g, o]) => view.variantChoices[g] !== o
-		)
+		outcome === 'template'
+			? []
+			: Object.entries(up?.suggestions.variantChoices ?? {}).filter(
+					([g, o]) => view.variantChoices[g] !== o
+				)
+	);
+	const measured = $derived(
+		up ? up.summary.plates.filter((p) => (p.exact?.length ?? 0) > 0).length : 0
 	);
 
 	const objectTotal = $derived(
@@ -83,6 +98,8 @@
 			up = await uploadThreeMf(view.build.id, file, (f) => (progress = f));
 			mapping = { ...up.suggestions.mapping };
 			filamentMap = { ...up.suggestions.filamentMap };
+			outcome = defaultOutcome(up.summary.sliced);
+			arrangeNow = false;
 			accept = Object.fromEntries(variantChanges.map(([g]) => [g, true]));
 			phase = 'review';
 		} catch (e) {
@@ -123,10 +140,14 @@
 				mapping,
 				filamentMap,
 				variantChoices: Object.fromEntries(variantChanges.filter(([g]) => accept[g])),
-				convertRuns: attachedRuns > 0
+				convertRuns: attachedRuns > 0,
+				mode: outcome,
+				arrange: outcome === 'template' && arrangeNow
 			});
 			ondone(
-				`Plates organized from ${fileName}: ${r.plates} plate${r.plates === 1 ? '' : 's'}${r.skipped ? `, ${r.skipped} without mapped parts skipped` : ''}.`
+				r.mode === 'template'
+					? `Print template learned from ${fileName}: print time and grams for ${r.learned} part${r.learned === 1 ? '' : 's'}${r.arranged ? '; plates re-arranged with it' : '; your plates are unchanged'}.`
+					: `Plates organized from ${fileName}: ${r.plates} plate${r.plates === 1 ? '' : 's'}${r.skipped ? `, ${r.skipped} without mapped parts skipped` : ''}.`
 			);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not apply the plates.';
@@ -215,6 +236,56 @@
 		{/if}
 		{#each s.warnings as w (w)}<p class="note">{w}</p>{/each}
 
+		<h3>What should this file do?</h3>
+		<div class="outcome" role="radiogroup" aria-label="What this file is used for">
+			<label class="opt" class:on={outcome === 'plates'}>
+				<input
+					type="radio"
+					name="outcome"
+					value="plates"
+					bind:group={outcome}
+					data-testid="outcome-plates"
+				/>
+				<span>
+					<b>Use these plates</b>
+					<span class="meta">Your file's plates become this build's plates, exactly as sliced.</span
+					>
+				</span>
+			</label>
+			<label class="opt" class:on={outcome === 'template'} class:off={!s.sliced}>
+				<input
+					type="radio"
+					name="outcome"
+					value="template"
+					bind:group={outcome}
+					disabled={!s.sliced}
+					data-testid="outcome-template"
+				/>
+				<span>
+					<b>Use as print template</b>
+					<span class="meta"
+						>Keep your own plates (or arrange new ones); learn print times, grams, orientations and
+						supports from your file for every part.{#if !s.sliced}
+							Needs a sliced file.{/if}</span
+					>
+				</span>
+			</label>
+		</div>
+		{#if outcome === 'template'}
+			<p class="meta" data-testid="template-note">
+				{measured
+					? `Per-object time and grams were measured from the G-code of ${measured} plate${measured === 1 ? '' : 's'}; the others are shared by part volume.`
+					: "Each plate's time and grams are shared among its parts by part volume."}
+				Orientations and painted supports stay as in the kit; parts are only turned flat on the bed.
+			</p>
+			{#if view.printer}
+				<label class="chk">
+					<input type="checkbox" bind:checked={arrangeNow} data-testid="arrange-now" />
+					Re-arrange my plates for {view.printer.name} now, using this data
+				</label>
+			{/if}
+		{/if}
+
 		{#if s.filaments.length}
 			<h3>Filaments</h3>
 			<div class="fil-map">
@@ -249,7 +320,7 @@
 			</div>
 		{/if}
 
-		<h3>Plates ({s.plates.length})</h3>
+		<h3>Plates in the file ({s.plates.length})</h3>
 		<p class="meta">
 			{mappedTotal} of {objectTotal} objects matched to parts. Objects left on “No match” are ignored;
 			plates with no matched part are skipped.
@@ -317,7 +388,12 @@
 				type="button"
 				onclick={apply}
 				disabled={phase === 'applying' || mappedTotal === 0}
-				data-testid="apply-upload">{phase === 'applying' ? 'Applying…' : 'Apply plates'}</button
+				data-testid="apply-upload"
+				>{phase === 'applying'
+					? 'Applying…'
+					: outcome === 'template'
+						? 'Use as print template'
+						: 'Use these plates'}</button
 			>
 		</div>
 	{/if}
@@ -384,6 +460,33 @@
 	}
 	.sum {
 		overflow-wrap: anywhere;
+	}
+	.outcome {
+		display: grid;
+		gap: 8px;
+	}
+	.opt {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 10px;
+		align-items: start;
+		padding: 10px 12px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--paper);
+		cursor: pointer;
+	}
+	.opt.on {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.opt.off {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.opt > span {
+		display: grid;
+		gap: 2px;
 	}
 	.fil-map,
 	.variants,

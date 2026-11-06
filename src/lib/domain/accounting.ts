@@ -178,6 +178,8 @@ export interface TimeStats {
 	rough: boolean;
 	/** Parts remain to be printed. */
 	partsLeft: boolean;
+	/** Part of the total comes from the build's print template ("from your slice"). */
+	learned: boolean;
 }
 
 function plateTotalRuns(pl: Plate): number {
@@ -205,8 +207,10 @@ export function timeStats(view: BuildView): TimeStats {
 	let leftSec = 0;
 	let estimated = false;
 	let rough = false;
+	let learned = false;
 	for (const pl of view.plates) {
 		const est = pl.estSeconds || 0;
+		if (est && pl.estSource === 'learned') learned = true;
 		totalSec += est * plateTotalRuns(pl);
 		leftSec += est * plateRunsLeft(view, pl);
 		if (est && pl.estSource === 'estimate') {
@@ -238,6 +242,7 @@ export function timeStats(view: BuildView): TimeStats {
 		known: totalSec > 0,
 		estimated,
 		rough,
+		learned,
 		partsLeft: view.parts.some((p) => view.state[p.slug]?.status !== 'Printed')
 	};
 }
@@ -291,7 +296,9 @@ export function timeLeftText(t: TimeStats): TimeLeftText {
 			? t.rough
 				? 'rough estimate from MakeGood’s plate times'
 				: 'estimate from MakeGood’s plate times'
-			: null,
+			: t.learned
+				? 'from your slice'
+				: null,
 		kind: t.estimated ? 'estimate' : 'known'
 	};
 }

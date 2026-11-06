@@ -13,7 +13,7 @@ export interface NowCard {
 	slicerGrams: number | null; // what the slicer field shows, if set
 	startedAt: string | null;
 	estSeconds: number | null;
-	estSource: 'slicer' | 'template' | 'estimate' | null;
+	estSource: 'slicer' | 'learned' | 'template' | 'estimate' | null;
 	run: { run: number; of: number } | null;
 }
 
@@ -68,7 +68,9 @@ export function nowPrinting(view: BuildView): NowCard[] {
 					: plate.estSeconds
 						? plate.estSource === 'estimate'
 							? 'estimate'
-							: 'template'
+							: plate.estSource === 'learned'
+								? 'learned'
+								: 'template'
 						: null,
 				run: multiColor
 					? here.length === 1

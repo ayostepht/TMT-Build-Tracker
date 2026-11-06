@@ -79,7 +79,9 @@
 				<b>{tl.text}</b>left{time.adjustedLeftSec && time.known ? ' at your pace' : ''}{tl.kind ===
 				'estimate'
 					? ' (est.)'
-					: ''}
+					: time.learned
+						? ' (from your slice)'
+						: ''}
 			</div>
 			<div>
 				<b>{time.loggedHours ? Math.round(time.loggedHours * 10) / 10 : 0} h</b>logged so far
