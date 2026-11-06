@@ -626,3 +626,33 @@ export const customFilaments = sqliteTable(
 	},
 	(t) => [index('custom_filaments_org_idx').on(t.organizationId)]
 );
+
+/**
+ * What a build has learned about each part from a sliced file (or the printer): real print time and
+ * grams, used by arranging and totals instead of estimates. Independent of the build's plate layout.
+ */
+export const buildPartProfiles = sqliteTable(
+	'build_part_profiles',
+	{
+		buildId: buildId(),
+		partSlug: text('part_slug').notNull(),
+		/** Seconds to print one copy of this part (all its pieces), as sliced. */
+		secondsPerCopy: real('seconds_per_copy'),
+		/** Grams per copy by filament role key, as sliced. */
+		gramsByRole: text('grams_by_role', { mode: 'json' })
+			.$type<Record<string, number>>()
+			.notNull()
+			.default(sql`'{}'`),
+		/** 'upload:<build_uploads.id>' | 'printer' | 'manual' */
+		source: text('source').notNull(),
+		/** 'exact' (per-object data) | 'volume-split' (plate total shared by mesh volume) */
+		method: text('method').notNull().default('volume-split'),
+		/** Snapshot of the filament role and printer the slice was made for (to flag stale data). */
+		context: text('context', { mode: 'json' })
+			.$type<Record<string, unknown>>()
+			.notNull()
+			.default(sql`'{}'`),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [primaryKey({ columns: [t.buildId, t.partSlug] })]
+);

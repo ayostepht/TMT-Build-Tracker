@@ -78,6 +78,13 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
+- In progress (2026-11-06): sliced files as a data source, separate from the plate layout.
+  After upload: "Use these plates as-is" (unchanged) or "Learn from this file" (per-part
+  slicer time and grams stored in `build_part_profiles`, plate totals shared by mesh volume
+  unless exact per-object data exists). Arranging and totals prefer learned data; recoloring
+  offers a re-arrange that keeps orientations/supports and uses the learned times. Maintainer:
+  "use my file so it knows slice times, then use the designer to recolor, which means
+  re-arranging, with the backend knowledge of orientation/timing"; keep the as-is path.
 - Done 2026-11-06 (not yet committed): Files tab UX. (1) "Use my own sliced file" is a visible card at the top
   of Files -> Printer and plates (and the wizard's Files step); it, the select option and a 3MF dropped anywhere on
   the page (drop overlay; the kit drop zone keeps its own drops) open the existing `PlateUpload` flow as a modal
