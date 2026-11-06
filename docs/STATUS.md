@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-06, after commit 87b6fc3 (Files tab UX, deployed as r17). Keep this file
+_Last updated: 2026-11-06, after commit 33b02ac (print template, deployed as r18). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
