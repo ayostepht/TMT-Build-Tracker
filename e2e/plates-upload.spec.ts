@@ -11,17 +11,13 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 
 	const cards = page.locator('section.plate-card');
 	const layout = page.getByTestId('plate-layout');
-	await expect(page.getByTestId('layout-name')).toHaveText(
-		'MakeGood tuned profile: Bambu X1 / P1 / A1'
-	);
+	await expect(page.getByTestId('layout-name')).toHaveText("MakeGood's Bambu X1 / P1 / A1 profile");
 	await expect(cards).toHaveCount(24);
 
 	// Built-in layout: 21 H plates; with the default variants the McMaster caster (8) and
 	// smaller rim (20) plates have no active parts and are left out.
 	await layout.selectOption({ label: 'Bambu H2D / H2S (21 plates)' });
-	await expect(page.getByTestId('layout-name')).toHaveText(
-		'MakeGood tuned profile: Bambu H2D / H2S'
-	);
+	await expect(page.getByTestId('layout-name')).toHaveText("MakeGood's Bambu H2D / H2S profile");
 	await expect(cards).toHaveCount(19);
 	await expect(page.getByRole('region', { name: 'Plate 12' })).toContainText(
 		'Print 4 times: 2 in the Accent color'

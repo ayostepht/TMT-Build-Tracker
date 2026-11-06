@@ -161,3 +161,27 @@ export function printerFromBed(
 export function effectiveKeepOut(p: Pick<BuildPrinter, 'catalogId' | 'keepOut'>): KeepOut[] {
 	return p.keepOut ?? catalogPrinter(p.catalogId)?.keepOut ?? [];
 }
+
+/**
+ * One-line description of a build's printer for the compact Files tab:
+ * "CC1 · Elegoo Centauri Carbon · 256 × 256 × 256 · CANVAS 4 filaments · filament cutter keep-out".
+ */
+export function printerSummary(p: BuildPrinter): string {
+	const c = catalogPrinter(p.catalogId);
+	const model = c ? `${c.brand} ${c.model}` : null;
+	const parts: string[] = [p.name];
+	if (model && model !== p.name) parts.push(model);
+	parts.push(`${p.bedX} × ${p.bedY} × ${p.bedZ}`);
+	if (p.mmSlots > 1) {
+		const sys = c?.mm.find((m) => m.slots === p.mmSlots)?.name;
+		parts.push(`${sys ? `${sys} ` : ''}${p.mmSlots} filaments`);
+	}
+	const ko = (p.keepOut ?? []).map((k) => k.label.trim().toLowerCase()).filter(Boolean);
+	if (ko.length)
+		parts.push(
+			ko.length === 1
+				? `${ko[0].replace(/[\s-]*keep-?out$/, '')} keep-out`
+				: `${ko.length} keep-out areas`
+		);
+	return parts.join(' · ');
+}

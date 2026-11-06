@@ -4,6 +4,7 @@ import { buildAccess, isSiteAdmin } from '#lib/server/access.ts';
 import { recentBuilds } from '#lib/server/builds/list.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { getDb } from '#lib/server/db/index.ts';
+import { printerCounts } from '#lib/server/printers/store.ts';
 import { builds } from '#lib/server/db/schema.ts';
 import {
 	ensurePersonalWorkspace,
@@ -55,6 +56,11 @@ export const load: LayoutServerLoad = async ({ locals, url, request }) => {
 	return {
 		user: { id: locals.user.id, name: locals.user.name, email: locals.user.email },
 		teams,
+		/** Printers per workspace: the nav's Printers link goes where the printers are. */
+		printerCounts: printerCounts(
+			db,
+			teams.map((t) => t.id)
+		),
 		activeTeamId,
 		/** Install-wide admin (first user or ADMIN_EMAILS): shows the "Kit admin" link. */
 		siteAdmin: isSiteAdmin(db, locals.user),

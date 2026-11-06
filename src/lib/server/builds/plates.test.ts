@@ -117,7 +117,7 @@ describe('built-in layouts', () => {
 			{ id: 'x', userId: 'owner', userName: 'Owen', kind: a.kind, payload: a.payload, at: '' },
 			view(id)
 		);
-		expect(text).toBe('Owen switched the plates to the Bambu H2D / H2S layout (21 plates)');
+		expect(text).toBe("Owen switched the plates to MakeGood's Bambu H2D / H2S profile (21 plates)");
 		expect(() => setPlateLayout(db, id, 'owner', { key: 'zzz' })).toThrow(/Unknown plate layout/);
 	});
 

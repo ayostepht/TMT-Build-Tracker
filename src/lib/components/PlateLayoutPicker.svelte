@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { BuildPrinter } from '#lib/domain/types.ts';
 	import {
 		arrangePlates,
@@ -8,7 +9,7 @@
 		templatePlateLayouts,
 		type PlateLayoutInfo
 	} from '#lib/client/api.ts';
-	import { DEFAULT_BED_PRESET, printerFromBed } from '#lib/printers/printer.ts';
+	import { DEFAULT_BED_PRESET, printerFromBed, printerSummary } from '#lib/printers/printer.ts';
 	import BedPicker from './BedPicker.svelte';
 
 	/**
@@ -23,7 +24,7 @@
 	 * bed) and `printer` (the bed as JSON, only while arranging) so a plain form post carries it.
 	 * The default is "Arrange for my bed" on the most common 256 × 256 bed.
 	 *
-	 * Existing build: pass `buildId`. Choosing a tuned profile switches the plates right away
+	 * Existing build: pass `buildId`. Choosing a tuned profile switches the plates right away (after asking, when it would replace arranged or uploaded plates)
 	 * (asks before converting print logs that hang on plates). Choosing "Arrange for my bed" shows
 	 * the bed picker (`bedPanel`) with an "Arrange plates" button that saves the bed and arranges;
 	 * without the panel (Settings, which has its own printer card) it arranges for the saved
@@ -41,7 +42,8 @@
 		printer = null,
 		label = 'Plate layout',
 		onchanged,
-		onupload
+		onupload,
+		plateCount = 0
 	}: {
 		templateId?: string;
 		buildId?: string;
@@ -58,6 +60,8 @@
 		label?: string;
 		onchanged?: () => void;
 		onupload?: () => void;
+		/** Plates the build has now (for the replace prompt). */
+		plateCount?: number;
 	} = $props();
 
 	const ARRANGE = '__arrange__';
@@ -71,6 +75,8 @@
 	let bed = $state<BuildPrinter | null>(null);
 	let seeded = false;
 	let busy = $state(false);
+	let editBed = $state(false); // build mode: the bed picker is open although the build has a printer
+	let pending = $state<{ key: string; name: string; plates: number } | null>(null);
 	let error = $state<string | null>(null);
 
 	const defaultKey = $derived(layouts.find((l) => l.isDefault)?.key ?? layouts[0]?.key ?? '');
@@ -103,7 +109,8 @@
 	const printerKey = $derived(JSON.stringify(printer));
 	$effect(() => {
 		void printerKey;
-		if (buildId) bed = printer;
+		if (buildId)
+			bed = untrack(() => printer); // only when its content changes, not on a new object
 		else if (!seeded) {
 			seeded = true;
 			bed = printerFromBed(DEFAULT_BED_PRESET.x, DEFAULT_BED_PRESET.y, DEFAULT_BED_PRESET.z);
@@ -151,14 +158,28 @@
 			return;
 		}
 		if (value === effective) return;
+		// Replacing plates the user made (arranged for their bed, or from their own file) asks first.
+		if (current === ARRANGED || current === 'upload') {
+			const l = layouts.find((x) => x.key === value);
+			pending = { key: value, name: l?.name ?? value, plates: l?.plateCount ?? 0 };
+			value = asValue(current) || defaultKey;
+			return;
+		}
+		await applyLayout(value);
+	}
+
+	async function applyLayout(key: string) {
+		pending = null;
+		error = null;
+		value = key;
 		busy = true;
 		try {
-			const ok = await runApply((c) => setPlateLayout(buildId, value, c));
+			const ok = await runApply((c) => setPlateLayout(buildId, key, c));
 			if (!ok) {
 				value = asValue(current) || defaultKey;
 				return;
 			}
-			current = value;
+			current = key;
 			onchanged?.();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not switch the layout.';
@@ -177,6 +198,7 @@
 			const ok = await runApply((c) => arrangePlates(buildId, c));
 			if (!ok) return;
 			current = ARRANGED;
+			editBed = false;
 			value = ARRANGE;
 			onchanged?.();
 		} catch (e) {
@@ -219,17 +241,18 @@
 	</label>
 
 	{#if value === ARRANGE && (bedPanel || !buildId)}
-		<div class="bed" data-testid="arrange-bed-panel">
-			<span class="sub">Your bed</span>
-			<BedPicker
-				value={bed}
-				{disabled}
-				{orgId}
-				preselectSingle={!buildId || !printer}
-				onchange={(p) => (bed = p)}
-			/>
-			{#if buildId}
-				<div>
+		{#if buildId && printer && !editBed}
+			<div class="bed summary" data-testid="bed-compact">
+				<span class="sum-text" data-testid="printer-summary-text">{printerSummary(printer)}</span>
+				<div class="sum-actions">
+					<button
+						class="btn sm"
+						type="button"
+						disabled={disabled || busy}
+						data-testid="change-bed"
+						aria-expanded="false"
+						onclick={() => (editBed = true)}>Change bed or printer</button
+					>
 					<button
 						class="btn primary sm"
 						type="button"
@@ -241,9 +264,71 @@
 							: 'Arrange plates for this bed'}</button
 					>
 				</div>
-			{:else}
-				<span class="hint">The plates are arranged for this bed when the build is created.</span>
-			{/if}
+			</div>
+		{:else}
+			<div class="bed" data-testid="arrange-bed-panel">
+				<span class="sub">Your bed</span>
+				<BedPicker
+					value={bed}
+					{disabled}
+					{orgId}
+					preselectSingle={!buildId || !printer}
+					onchange={(p) => (bed = p)}
+				/>
+				{#if buildId}
+					<div class="sum-actions">
+						<button
+							class="btn primary sm"
+							type="button"
+							disabled={disabled || busy || !bed}
+							data-testid="arrange-bed"
+							onclick={arrange}
+							>{current === ARRANGED && !bedChanged
+								? 'Re-arrange plates'
+								: 'Arrange plates for this bed'}</button
+						>
+						{#if printer}
+							<button
+								class="btn sm"
+								type="button"
+								data-testid="hide-bed"
+								aria-expanded="true"
+								onclick={() => ((editBed = false), (bed = printer))}>Hide</button
+							>
+						{/if}
+					</div>
+				{:else}
+					<span class="hint">The plates are arranged for this bed when the build is created.</span>
+				{/if}
+			</div>
+		{/if}
+	{/if}
+	{#if pending}
+		<div
+			class="confirm"
+			role="alertdialog"
+			aria-label="Replace plates"
+			data-testid="layout-confirm"
+		>
+			<span
+				>Replace your {plateCount}
+				{current === 'upload' ? 'uploaded' : 'arranged'} plates with MakeGood's
+				{pending.name} layout ({pending.plates} plates)? Print logs are kept.</span
+			>
+			<div class="sum-actions">
+				<button
+					class="btn primary sm"
+					type="button"
+					data-testid="layout-confirm-yes"
+					onclick={() => applyLayout(pending!.key)}>Replace plates</button
+				>
+				<button
+					class="btn sm"
+					type="button"
+					data-testid="layout-confirm-cancel"
+					onclick={() => (pending = null)}>Cancel</button
+				>
+			</div>
 		</div>
 	{/if}
 	{#if error}<span class="err" role="alert">{error}</span>{/if}
@@ -264,6 +349,27 @@
 		border: 1px solid var(--line);
 		border-radius: 8px;
 		background: var(--card);
+	}
+	.summary {
+		gap: 8px;
+	}
+	.confirm {
+		display: grid;
+		gap: 8px;
+		padding: 10px;
+		border: 1px solid var(--warn);
+		border-radius: 8px;
+		background: var(--warn-soft);
+		font-size: 13px;
+	}
+	.sum-text {
+		font-size: 14px;
+		overflow-wrap: anywhere;
+	}
+	.sum-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
 	}
 	.sub {
 		font-size: 13px;

@@ -138,7 +138,7 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 		}
 		case 'plates.layout': {
 			const n = num(p.convertedRuns) ?? 0;
-			return `${who} switched the plates to the ${str(p.name) ?? 'selected'} layout (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
+			return `${who} switched the plates to MakeGood's ${str(p.name) ?? 'selected'} profile (${num(p.plates) ?? 0} plates)${n ? ` and converted ${n} print log${n === 1 ? '' : 's'} to part logs` : ''}`;
 		}
 		case 'build.printer': {
 			const n = str(p.name);

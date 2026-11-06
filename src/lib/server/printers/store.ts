@@ -224,3 +224,10 @@ export function configFromInput(db: Db, orgId: string, body: unknown): PrinterCo
 		)
 	};
 }
+
+/** Number of printers per workspace, for the given workspaces (the top nav's Printers link). */
+export function printerCounts(db: Db, orgIds: string[]): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const id of orgIds) out[id] = listPrinters(db, id).length;
+	return out;
+}

@@ -583,6 +583,19 @@ export const listPrinters = (org: string) =>
 		canEdit: boolean;
 		autoLogPrints: boolean;
 	}>('GET', `/api/printers?org=${encodeURIComponent(org)}`);
+export interface PrinterWorkspace {
+	id: string;
+	name: string;
+	personal: boolean;
+	canEdit: boolean;
+	printers: PrinterPublic[];
+}
+/** Printers of every workspace the user belongs to; `first` (a workspace id) leads. */
+export const listMyPrinters = (first?: string) =>
+	call<{ workspaces: PrinterWorkspace[] }>(
+		'GET',
+		`/api/printers/mine${first ? `?first=${encodeURIComponent(first)}` : ''}`
+	);
 export const addPrinter = (org: string, input: PrinterInput) =>
 	call<{ printer: PrinterPublic }>('POST', '/api/printers', { ...input, organizationId: org });
 export const updatePrinter = (id: string, input: PrinterInput) =>

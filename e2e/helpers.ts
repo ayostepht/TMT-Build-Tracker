@@ -71,7 +71,7 @@ export async function createBuild(
 		await page.goto(`/builds/${id}/files`);
 		await settled(page);
 		await page.getByTestId('plate-layout').selectOption({ label: layout });
-		await expect(page.getByTestId('layout-name')).toContainText('MakeGood tuned profile');
+		await expect(page.getByTestId('layout-name')).toContainText("MakeGood's");
 		await page.goto(`/builds/${id}`);
 	}
 	return id;

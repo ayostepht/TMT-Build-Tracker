@@ -52,8 +52,17 @@
 			data.teams[0] ??
 			null
 	);
+	// Printers live in one workspace: when the current one has none but another does, the nav
+	// (link and "n printing") follows the printers rather than showing an empty page.
+	const printersWorkspace = $derived.by(() => {
+		if (!workspace) return null;
+		if (data.printerCounts[workspace.id]) return workspace;
+		return data.teams.find((t) => data.printerCounts[t.id] > 0) ?? workspace;
+	});
 	const printersHref = $derived(
-		workspace ? resolve('/(app)/teams/[slug]/printers', { slug: workspace.slug }) : null
+		printersWorkspace
+			? resolve('/(app)/teams/[slug]/printers', { slug: printersWorkspace.slug })
+			: null
 	);
 	const membersHref = $derived(
 		workspace && !workspace.personal
@@ -67,7 +76,7 @@
 	// Live "n printing" next to Printers, from the workspace's printer stream.
 	let store = $state<PrinterStore | null>(null);
 	$effect(() => {
-		const id = workspace?.id;
+		const id = printersWorkspace?.id;
 		if (!id) {
 			store = null;
 			return;

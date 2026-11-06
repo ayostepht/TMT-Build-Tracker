@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { listPrinters } from '#lib/client/api.ts';
+	import { listMyPrinters, type PrinterWorkspace } from '#lib/client/api.ts';
 	import { catalogPrinter } from '#lib/printers/catalog.ts';
 	import type { PrinterPublic } from '#lib/printers/status.ts';
 	import type { BuildPrinter } from '#lib/domain/types.ts';
@@ -132,6 +132,7 @@
 		emitBed();
 	}
 	function pickPreset(i: number) {
+		if (mode === 'printer') keep.keepOut = []; // a printer's keep-outs belong to that printer
 		mode = 'preset';
 		bedX = BED_PRESETS[i].x;
 		bedY = BED_PRESETS[i].y;
@@ -139,6 +140,7 @@
 		emitBed();
 	}
 	function pickCustom() {
+		if (mode === 'printer') keep.keepOut = [];
 		if (mode === 'custom') return;
 		mode = 'custom';
 		customName = '';
@@ -152,12 +154,13 @@
 	}
 	const presetIdx = $derived(mode === 'preset' ? presetOf(bedX, bedY) : -1);
 
-	// Printers added on the Printers page of this workspace ("Your printers").
+	// Printers of every workspace the user belongs to ("Your printers"), the build's own first.
 	const NEW_PRINTER = '__new__';
-	let team = $state<PrinterPublic[]>([]);
-	let canAddPrinter = $state(false);
+	let groups = $state<PrinterWorkspace[]>([]);
 	let adding = $state(false);
 	let touched = false;
+	const team = $derived(groups.flatMap((g) => g.printers));
+	const canAddPrinter = $derived(groups.find((g) => g.id === orgId)?.canEdit ?? false);
 	const usable = $derived(team.filter((t) => catalogPrinter(t.catalogId)));
 	const teamSel = $derived(
 		mode === 'printer' && picked
@@ -174,11 +177,9 @@
 	async function loadTeam(): Promise<PrinterPublic[]> {
 		if (!orgId) return [];
 		try {
-			const r = await listPrinters(orgId);
-			team = r.printers;
-			canAddPrinter = r.canEdit;
+			groups = (await listMyPrinters(orgId)).workspaces;
 		} catch {
-			team = [];
+			groups = [];
 		}
 		return team;
 	}
@@ -208,7 +209,7 @@
 	}
 	onMount(async () => {
 		const list = await loadTeam();
-		const ok = list.filter((t) => catalogPrinter(t.catalogId));
+		const ok = list.filter((t) => t.organizationId === orgId && catalogPrinter(t.catalogId));
 		if (preselectSingle && !touched && ok.length === 1 && !current?.catalogId) pickTeam(ok[0].id);
 	});
 	function portal(node: HTMLElement) {
@@ -231,12 +232,18 @@
 				<option value=""
 					>{usable.length ? 'Choose one of your printers…' : 'No printers added yet'}</option
 				>
-				{#each team as t (t.id)}
-					<option value={t.id} disabled={!catalogPrinter(t.catalogId)}>{teamLabel(t)}</option>
+				{#each groups.filter((g) => g.printers.length) as g (g.id)}
+					<optgroup label={g.name} data-testid="team-printer-group">
+						{#each g.printers as t (t.id)}
+							<option value={t.id} disabled={!catalogPrinter(t.catalogId)}>{teamLabel(t)}</option>
+						{/each}
+					</optgroup>
 				{/each}
 				{#if canAddPrinter}<option value={NEW_PRINTER}>New printer…</option>{/if}
 			</select>
-			<span class="hint">Printers from the Printers page. Or pick a standard bed size below.</span>
+			<span class="hint"
+				>Printers from the Printers page of all your workspaces. Or pick a standard bed size below.</span
+			>
 		</label>
 	{/if}
 	<div class="presets" role="group" aria-label="Bed size">

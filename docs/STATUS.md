@@ -78,6 +78,19 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
+- Done 2026-11-06 (not yet committed): Files tab UX. (1) "Use my own sliced file" is a visible card at the top
+  of Files -> Printer and plates (and the wizard's Files step); it, the select option and a 3MF dropped anywhere on
+  the page (drop overlay; the kit drop zone keeps its own drops) open the existing `PlateUpload` flow as a modal
+  dialog (no more off-screen panel). (2) With a printer set, `PlateLayoutPicker` shows a one-line summary
+  (`printerSummary()` in `printers/printer.ts`) with "Change bed or printer" / Hide and the Re-arrange button;
+  the `BedPicker` is expanded by default only without a printer. Picking custom/preset after a catalog printer
+  drops that printer's keep-outs. (3) "Your printers" lists printers of every workspace the user is in, grouped
+  by workspace name, the build's own first (`GET /api/printers/mine?first=<org>`, members only, no secrets,
+  `listMyPrinters` in `api.ts`); the top-nav Printers link and "n printing" follow the printers when the
+  current workspace has none (`printerCounts` from the app layout load). (4) Switching to a MakeGood profile
+  while plates are arranged or uploaded asks first (inline confirm, Cancel keeps them); the layout is named
+  "MakeGood's Bambu ... profile" everywhere instead of "Template default". The select was kept (not radio
+  cards). E2E: `e2e/files-ux.spec.ts`; screenshots in `data/shots-files/`.
 - Done 2026-11-06 (not yet committed): large sliced 3MF support. `MAX_3MF_MB` default 1024 (`maxThreeMfBytes()`
   in `config.ts`; plates upload and kit print-geometry import share it), `BODY_SIZE_LIMIT=1100M` in the Dockerfile,
   README/Unraid template/NPM `client_max_body_size 1100m`. fflate's push `Unzip` buffers every unwanted entry that has

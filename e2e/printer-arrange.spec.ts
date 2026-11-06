@@ -116,6 +116,7 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	// A small custom bed on the Files tab: the oversize warnings name the bed.
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	const panel = page.getByTestId('arrange-bed-panel');
+	await page.getByTestId('change-bed').click();
 	await panel.getByTestId('bed-custom').click();
 	await panel.getByLabel('Name (optional)').fill('Tiny Test Printer');
 	await panel.getByTestId('bed-x').fill('180');

@@ -36,6 +36,28 @@
 			notice = null;
 		}
 	});
+
+	// Dropping a 3MF anywhere on the page opens the same upload flow (drop zones that handle the
+	// drop themselves, like the kit import, call preventDefault and are left alone).
+	let dragging = $state(false);
+	const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types?.includes('Files');
+	function onDragOver(e: DragEvent) {
+		if (!ctx.canEdit || uploading || !hasFiles(e)) return;
+		e.preventDefault();
+		dragging = !(e.target as Element | null)?.closest?.('[data-testid="kit-drop"], .upload');
+	}
+	function onDrop(e: DragEvent) {
+		dragging = false;
+		if (e.defaultPrevented || !ctx.canEdit || uploading || !hasFiles(e)) return;
+		e.preventDefault();
+		const file = e.dataTransfer?.files?.[0];
+		if (!file) return;
+		if (!/\.3mf$/i.test(file.name)) {
+			ctx.error = 'Only .3mf files can be used here (a .gcode.3mf from your slicer works too).';
+			return;
+		}
+		ctx.slicedFile = file;
+	}
 	let layouts = $state<PlateLayoutInfo[]>([]);
 	let current = $state<string | null>(null);
 	// Reload the layout name whenever the plates come from somewhere else (switch, upload, other tab).
@@ -49,14 +71,16 @@
 			.catch(() => {});
 	});
 	const printer = $derived(ctx.view.printer);
+	const tunedName = (key: string | null) => {
+		const l = layouts.find((x) => x.key === (key ?? layouts.find((y) => y.isDefault)?.key));
+		return l ? `MakeGood's ${l.name} profile` : null;
+	};
 	const layoutName = $derived(
 		current === 'upload'
 			? 'Your uploaded 3MF'
 			: current === 'arranged'
 				? `Arranged for ${printer?.name ?? 'your printer'}`
-				: layouts.find((l) => l.key === current)
-					? `MakeGood tuned profile: ${layouts.find((l) => l.key === current)!.name}`
-					: 'Template default'
+				: (tunedName(current) ?? 'MakeGood profile')
 	);
 	const layoutNote = $derived(
 		current === 'arranged' && printer
@@ -66,12 +90,14 @@
 
 	// Arrangement (positions, warnings, stale flag), reloaded whenever plates, printer or colors change.
 	let arr = $state<ArrangementDto | null>(null);
+	let arrRev = $state(0); // bumped after the picker arranged or switched, to reload for sure
 	const arrKey = $derived(
 		JSON.stringify([
 			ctx.view.plates.map((p) => [p.number, p.parts, p.source, p.runs]),
 			ctx.view.printer,
 			ctx.view.parts.map((p) => [p.slug, p.role]),
-			ctx.view.runs.filter((r) => r.plateNumber != null).length
+			ctx.view.runs.filter((r) => r.plateNumber != null).length,
+			arrRev
 		])
 	);
 	$effect(() => {
@@ -153,6 +179,41 @@
 	}
 </script>
 
+<svelte:window
+	ondragover={onDragOver}
+	ondragleave={(e) => {
+		if (e.relatedTarget === null) dragging = false;
+	}}
+	ondrop={onDrop}
+/>
+
+{#if dragging}
+	<div class="drop-overlay" data-testid="sliced-drop-overlay" role="presentation">
+		<div>
+			<b>Drop your sliced .3mf here</b>
+			<span>Real print times and grams per plate, read from your slicer's file.</span>
+		</div>
+	</div>
+{/if}
+
+{#if ctx.canEdit && !uploading}
+	<section class="card sliced-card" aria-label="Use my own sliced file">
+		<div class="sliced-text">
+			<h2>Use my own sliced file</h2>
+			<p class="muted">
+				A .3mf or .gcode.3mf from your slicer: real print times and grams per plate. You can also
+				drop the file anywhere on this page.
+			</p>
+		</div>
+		<button
+			class="btn"
+			type="button"
+			data-testid="use-own-sliced"
+			onclick={() => ((uploading = true), (notice = null))}>Choose a sliced file…</button
+		>
+	</section>
+{/if}
+
 <section class="card layout-card" aria-label="Plate layout">
 	<div class="group-head">
 		<h2>Plate layout: <span data-testid="layout-name">{layoutName}</span></h2>
@@ -202,29 +263,34 @@
 			orgId={ctx.view.build.organizationId}
 			{printer}
 			allowUpload
-			onchanged={() => ctx.refresh()}
+			plateCount={ctx.view.plates.length}
+			onchanged={() => (arrRev++, ctx.refresh())}
 			onupload={() => ((uploading = true), (notice = null))}
 		/>
 	{/if}
 	<p class="meta">
-		Unsliced files do not carry print times or grams. Upload a sliced 3MF to get them per plate, or
-		type the slicer grams on each plate.
+		Unsliced files do not carry print times or grams. Use your own sliced file (above) to get them
+		per plate, or type the slicer grams on each plate.
 	</p>
 	{#if notice}<p class="ok-note" role="status">{notice}</p>{/if}
 </section>
 
 {#if uploading && ctx.canEdit}
-	<PlateUpload
-		view={ctx.view}
-		initialFile={ctx.slicedFile}
-		oninitial={() => (ctx.slicedFile = null)}
-		onclose={() => (uploading = false)}
-		ondone={(msg) => {
-			uploading = false;
-			notice = msg;
-			ctx.refresh();
-		}}
-	/>
+	<div class="upload-backdrop" role="dialog" aria-modal="true" aria-label="Use my own sliced file">
+		<div class="upload-sheet" data-testid="upload-dialog">
+			<PlateUpload
+				view={ctx.view}
+				initialFile={ctx.slicedFile}
+				oninitial={() => (ctx.slicedFile = null)}
+				onclose={() => (uploading = false)}
+				ondone={(msg) => {
+					uploading = false;
+					notice = msg;
+					ctx.refresh();
+				}}
+			/>
+		</div>
+	</div>
 {/if}
 
 {#each ctx.view.plates as pl (pl.number)}
@@ -479,5 +545,66 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px 12px;
+	}
+	.sliced-card {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px 16px;
+		margin-bottom: 14px;
+		border-style: dashed;
+	}
+	.sliced-text {
+		flex: 1 1 260px;
+		min-width: 0;
+	}
+	.sliced-text h2 {
+		margin: 0 0 2px;
+		font-size: 17px;
+	}
+	.sliced-text p {
+		margin: 0;
+		font-size: 13px;
+	}
+	.drop-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 100;
+		display: grid;
+		place-items: center;
+		padding: 16px;
+		text-align: center;
+		background: color-mix(in srgb, var(--accent) 18%, transparent);
+		border: 3px dashed var(--accent);
+		pointer-events: none;
+	}
+	.drop-overlay > div {
+		display: grid;
+		gap: 4px;
+		padding: 18px 22px;
+		border-radius: 12px;
+		background: var(--card);
+		color: var(--ink);
+		box-shadow: 0 4px 24px rgb(0 0 0 / 0.25);
+	}
+	.drop-overlay span {
+		font-size: 13px;
+		color: var(--muted);
+	}
+	.upload-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 90;
+		display: grid;
+		align-items: start;
+		justify-items: center;
+		padding: 12px;
+		overflow-y: auto;
+		background: rgb(0 0 0 / 0.5);
+	}
+	.upload-sheet {
+		width: min(760px, 100%);
+		margin: 4vh 0;
 	}
 </style>
