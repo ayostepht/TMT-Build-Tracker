@@ -6,6 +6,7 @@
 	import Swatch from './Swatch.svelte';
 	import RunTable from './RunTable.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
+	import PlateStart from './PlateStart.svelte';
 
 	let { part }: { part: PartDef } = $props();
 
@@ -152,6 +153,17 @@
 							>
 						{/each}
 					</div>
+				{/if}
+				{#if plate && ctx.canEdit}
+					<h3 style="margin-top:12px">Plate {plate.number}</h3>
+					<div class="meta" style="margin-bottom:6px">
+						{plate.parts.map((s) => ctx.view.parts.find((x) => x.slug === s)?.name ?? s).join(', ')}
+					</div>
+					<PlateStart
+						{plate}
+						only={plate.perPartRuns ? part.slug : null}
+						label="Start printing plate {plate.number}"
+					/>
 				{/if}
 				<h3 style="margin-top:12px">Assigned to</h3>
 				<select

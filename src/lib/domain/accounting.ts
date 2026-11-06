@@ -7,6 +7,7 @@
  * Used: logged grams, or the estimate when the unit is printed with nothing
  * logged. A running print still counts as to print.
  */
+import { fmtH } from './format.ts';
 import type { BuildView, PartDef, Plate, PrintRun } from './types.ts';
 
 export interface Unit {
@@ -169,6 +170,14 @@ export interface TimeStats {
 	loggedHours: number;
 	paceRatio: number | null; // actual / estimated, once >= 12 h of timed successful runs
 	adjustedLeftSec: number | null;
+	/** Some plate has a time (so the totals mean something). */
+	known: boolean;
+	/** Part of the total comes from our estimate (not slicer or MakeGood profile times). */
+	estimated: boolean;
+	/** The estimate includes a gram-based guess for parts that are on no MakeGood plate. */
+	rough: boolean;
+	/** Parts remain to be printed. */
+	partsLeft: boolean;
 }
 
 function plateTotalRuns(pl: Plate): number {
@@ -194,10 +203,16 @@ function plateRunsLeft(view: BuildView, pl: Plate): number {
 export function timeStats(view: BuildView): TimeStats {
 	let totalSec = 0;
 	let leftSec = 0;
+	let estimated = false;
+	let rough = false;
 	for (const pl of view.plates) {
 		const est = pl.estSeconds || 0;
 		totalSec += est * plateTotalRuns(pl);
 		leftSec += est * plateRunsLeft(view, pl);
+		if (est && pl.estSource === 'estimate') {
+			estimated = true;
+			if (pl.estRough) rough = true;
+		}
 	}
 	let loggedHours = 0;
 	let estOfTimed = 0;
@@ -219,7 +234,11 @@ export function timeStats(view: BuildView): TimeStats {
 		leftSec,
 		loggedHours,
 		paceRatio,
-		adjustedLeftSec: paceRatio ? leftSec * paceRatio : null
+		adjustedLeftSec: paceRatio ? leftSec * paceRatio : null,
+		known: totalSec > 0,
+		estimated,
+		rough,
+		partsLeft: view.parts.some((p) => view.state[p.slug]?.status !== 'Printed')
 	};
 }
 
@@ -243,5 +262,36 @@ export function overallProgress(view: BuildView): Progress {
 		reprint: count('Reprint'),
 		toPrint: count('To print'),
 		pct: total ? (printed / total) * 100 : 0
+	};
+}
+
+export const NO_TIME_HINT = 'no time estimate yet';
+
+export interface TimeLeftText {
+	text: string;
+	hint: string | null;
+	kind: 'known' | 'estimate' | 'unknown' | 'done';
+}
+
+/**
+ * Text for the time left: "~12 h", or an em dash with a hint when no plate has a time but
+ * parts remain (never "~0.0 h"). Labels our own estimate as an estimate.
+ */
+export function timeLeftText(t: TimeStats): TimeLeftText {
+	if (!t.known) {
+		return t.partsLeft
+			? { text: '—', hint: NO_TIME_HINT, kind: 'unknown' }
+			: { text: '0 h', hint: null, kind: 'done' };
+	}
+	const secs = t.adjustedLeftSec ?? t.leftSec;
+	if (secs <= 0 && t.partsLeft) return { text: '—', hint: NO_TIME_HINT, kind: 'unknown' };
+	return {
+		text: `~${fmtH(secs)}`,
+		hint: t.estimated
+			? t.rough
+				? 'rough estimate from MakeGood’s plate times'
+				: 'estimate from MakeGood’s plate times'
+			: null,
+		kind: t.estimated ? 'estimate' : 'known'
 	};
 }

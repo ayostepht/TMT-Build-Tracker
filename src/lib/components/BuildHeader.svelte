@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fmtH, overallProgress, filamentStats, timeStats } from '#lib/domain/index.ts';
+	import { overallProgress, filamentStats, timeStats, timeLeftText } from '#lib/domain/index.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 
 	let { chapter = '' }: { chapter?: string } = $props();
@@ -8,6 +8,7 @@
 	const prog = $derived(overallProgress(ctx.view));
 	const fil = $derived(filamentStats(ctx.view));
 	const time = $derived(timeStats(ctx.view));
+	const tl = $derived(timeLeftText(time));
 	const usedKg = $derived(fil.reduce((a, s) => a + s.used, 0) / 1000);
 	const estKg = $derived(fil.reduce((a, s) => a + s.used + s.need, 0) / 1000);
 	const pct = (n: number) => `${prog.total ? (n / prog.total) * 100 : 0}%`;
@@ -51,7 +52,11 @@
 			<span><b class="num">{prog.reprint}</b> to reprint</span>
 			<span><b class="num">{usedKg.toFixed(1)} kg</b> used of ~{estKg.toFixed(1)} kg estimated</span
 			>
-			<span><b class="num">~{fmtH(time.leftSec)}</b> of printing left</span>
+			<span title={tl.hint ?? undefined}
+				><b class="num">{tl.text}</b> of printing left{#if tl.kind === 'estimate'}<em class="est"
+						>(estimate)</em
+					>{:else if tl.hint}<em class="est">({tl.hint})</em>{/if}</span
+			>
 			{#if b.deliveryDate}<span>Deliver by <b class="num">{b.deliveryDate}</b></span>{/if}
 		</div>
 		<div

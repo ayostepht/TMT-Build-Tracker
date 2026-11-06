@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fmt, fmtH, filamentStats, timeStats } from '#lib/domain/index.ts';
+	import { fmt, fmtH, filamentStats, timeStats, timeLeftText } from '#lib/domain/index.ts';
 	import { updateFilament } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
@@ -9,7 +9,7 @@
 	const stats = $derived(filamentStats(ctx.view));
 	const time = $derived(timeStats(ctx.view));
 	const timeDone = $derived(time.totalSec ? (1 - time.leftSec / time.totalSec) * 100 : 0);
-	const left = $derived(time.adjustedLeftSec ?? time.leftSec);
+	const tl = $derived(timeLeftText(time));
 
 	function saveSpools(role: string, raw: string) {
 		const v = Math.min(99, Math.max(0, Math.round((Number(raw) || 0) * 100) / 100));
@@ -75,7 +75,12 @@
 			</div>
 		</div>
 		<div class="tile-stats">
-			<div><b>~{fmtH(left)}</b>left{time.adjustedLeftSec ? ' at your pace' : ''}</div>
+			<div>
+				<b>{tl.text}</b>left{time.adjustedLeftSec && time.known ? ' at your pace' : ''}{tl.kind ===
+				'estimate'
+					? ' (est.)'
+					: ''}
+			</div>
 			<div>
 				<b>{time.loggedHours ? Math.round(time.loggedHours * 10) / 10 : 0} h</b>logged so far
 			</div>
@@ -84,12 +89,19 @@
 			<span class="used" style="width:{timeDone}%;background:var(--ok)"></span>
 		</div>
 		<div class="spools">
-			~{fmtH(time.totalSec)} total, about {Math.round(time.totalSec / 86400)} days nonstop
+			{#if time.known}~{fmtH(time.totalSec)}{time.estimated ? ' (est.)' : ''} total, about {Math.round(
+					time.totalSec / 86400
+				)} days nonstop{:else}— total{/if}
 		</div>
 		<div class="verdict info">
 			{time.paceRatio
 				? `Your prints run ${Math.round(time.paceRatio * 100)}% of the estimates`
-				: 'Estimates from the template profile. Log hours to calibrate.'}
+				: !time.known
+					? 'No time estimate yet. Upload a sliced file to get one.'
+					: time.estimated
+						? (time.rough ? 'Rough estimate' : 'Estimate') +
+							" from MakeGood's X/P/A plate times. Log hours to calibrate."
+						: 'Estimates from the template profile. Log hours to calibrate.'}
 		</div>
 	</article>
 </section>

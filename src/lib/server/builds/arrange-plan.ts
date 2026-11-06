@@ -21,6 +21,7 @@ import { effectiveKeepOut } from '#lib/printers/printer.ts';
 import type { Db } from '../db';
 import { buildPlates, builds, templatePlateLayouts, templatePrintGeometry } from '../db/schema';
 import { loadBuildView } from './view';
+import { estimateArrangedPlates, loadTimeModel } from './time-model';
 import { ensureOrientations, ensureSilhouettes } from '../print-geometry/store';
 
 export const ARRANGED_LAYOUT = 'arranged';
@@ -139,6 +140,23 @@ export const hasPlateRuns = (view: BuildView) => view.runs.some((r) => r.plateNu
 
 /** Replace the build's plates with a plan. Callers must have dealt with plate-attached runs. */
 export function writePlan(tx: Db, buildId: string, plan: Plan): number {
+	const tplId = tx
+		.select({ t: builds.templateId })
+		.from(builds)
+		.where(eq(builds.id, buildId))
+		.get()?.t;
+	// MakeGood's X/P/A times, spread over the plate's items (an estimate; the view recomputes it too)
+	const est = tplId
+		? estimateArrangedPlates(
+				loadTimeModel(tx, tplId),
+				plan.result.plates.map((pl) => ({
+					number: pl.number,
+					runs: pl.runs,
+					arrangement: pl,
+					parts: pl.parts
+				}))
+			)
+		: null;
 	tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 	for (const pl of plan.result.plates)
 		tx.insert(buildPlates)
@@ -146,7 +164,7 @@ export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 				buildId,
 				number: pl.number,
 				name: pl.name,
-				estSeconds: null,
+				estSeconds: est?.get(pl.number)?.estSeconds ?? null,
 				runs: pl.runs,
 				perPartRuns: false,
 				parts: pl.parts,

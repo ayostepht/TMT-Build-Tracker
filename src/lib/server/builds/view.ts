@@ -21,9 +21,11 @@ import type {
 	TemplateModelInfo
 } from '#lib/domain/types.ts';
 import { materialFamily } from '#lib/filament-catalog.ts';
+import type { PlateTimeEstimate } from '#lib/domain/time-estimate.ts';
 import { buildAccess } from '../access';
 import { hardwareModelUrl } from '../models/hardware';
 import type { Db } from '../db';
+import { estimateArrangedPlates, loadTimeModel } from './time-model';
 import {
 	activity,
 	buildAssembly,
@@ -175,16 +177,45 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		if (source?.startsWith('upload:') || source === 'arranged') return null;
 		return runNotes.get(number) ?? null;
 	};
-	const plates: Plate[] = db
+	const rawPlates = db
 		.select()
 		.from(buildPlates)
 		.where(eq(buildPlates.buildId, buildId))
 		.orderBy(asc(buildPlates.number))
-		.all()
+		.all();
+	// Time precedence: slicer (uploaded sliced 3MF) > MakeGood's profile time > our estimate.
+	// Arranged plates carry no time of their own; estimate it from MakeGood's X/P/A times.
+	const arrangedRows = rawPlates.filter((p) => p.source === 'arranged');
+	const arrangedEst = arrangedRows.length
+		? estimateArrangedPlates(
+				loadTimeModel(db, tpl.id),
+				arrangedRows.map((p) => ({
+					number: p.number,
+					runs: p.runs,
+					arrangement: p.arrangement,
+					parts: p.parts.filter((s) => !inactive.has(s))
+				}))
+			)
+		: new Map<number, PlateTimeEstimate>();
+	const plates: Plate[] = rawPlates
 		.map((p) => ({
 			number: p.number,
 			name: p.name,
-			estSeconds: p.estSeconds,
+			...(p.source === 'arranged'
+				? {
+						estSeconds: arrangedEst.get(p.number)?.estSeconds ?? null,
+						estSource: arrangedEst.get(p.number)?.estSeconds ? ('estimate' as const) : null,
+						estRough: !!arrangedEst.get(p.number)?.rough
+					}
+				: {
+						estSeconds: p.estSeconds,
+						estSource: p.estSeconds
+							? p.source?.startsWith('upload:')
+								? ('slicer' as const)
+								: ('profile' as const)
+							: null,
+						estRough: false
+					}),
 			runs: p.runs,
 			runNote: noteFor(p.source, p.number),
 			perPartRuns: p.perPartRuns,

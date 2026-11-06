@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-04, after the tab rename (Print = tracking, Files = plates and export). Keep this file
+_Last updated: 2026-11-06, after the print time estimates and Start printing on the Print tab. Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -53,8 +53,8 @@ with ~0.1 mm clearance; footrest and harness each on one plate.
 1. Sliced file to test reading print times and grams: an export **from the app**, sliced in
    Elegoo Slicer and saved with File → Export → "Export plate sliced file" (one or two
    plates is enough). Pending.
-2. "Start printing" for a plate lives on the plate cards in the **Files** tab. Should it
-   (also) be on the **Print** tab, next to part tracking? Pending.
+2. RESOLVED 2026-11-06: "Start printing" is on the **Print** tab too (done, see backlog). Was: it lived
+   only on the plate cards in the **Files** tab; should it also be next to part tracking?
 
 Answered on 2026-11-04 (keep for context):
 
@@ -70,15 +70,24 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
-- Build tabs renamed/reordered (done, not yet deployed): Overview · Design · Print (was Parts:
+- Done 2026-11-06 (not yet deployed): print time for arranged plates. They carry no time of their
+  own, so `src/lib/domain/time-estimate.ts` splits MakeGood's X/P/A plate times over the parts
+  (by BOM grams; perPartRuns per unit; variant parts with no plate and no grams take the time of the
+  other option of their group, marked rough) and the build view fills `estSeconds` for arranged
+  plates (`estSource` = slicer / profile / estimate, `estRough`; also stored on re-arrange).
+  Precedence: slicer time > MakeGood profile time > our estimate. With no time at all the header
+  and time tile show a dash and "no time estimate yet" instead of "~0.0 h". Centauri Carbon
+  (21 plates): ~382 h, matching MakeGood's ~382 h. "Start printing" (and "Start on <printer>") is also on
+  the Print tab: a "Ready to print" section (next 3 plates with nothing printed), each plate group
+  when grouped by Plate, and a part's detail (`PlateStart.svelte`, `ReadyToPrint.svelte`).
+- Build tabs renamed/reordered (done, deployed as r14 = commit 3a32759): Overview · Design · Print (was Parts:
   tracking, logs, now printing) · Files (was Print: bed/printer, plates, own sliced file, export,
   kit status) · Finish · Settings; wizard step "Print" → "Files". Routes `/print` (was
   `/parts`) and `/files` (was `/print`). 308 redirects: `/parts` → `/print`, `/plates` →
   `/files`, `/assembly`, `/handoff` → `/finish#…`. `/print` is reused, so `/print#plates|#export|#settings`
   is redirected client-side to `/files#…`; a bare old `/print` bookmark now shows part tracking
   (unavoidable). Wizard `?step=` takes 1–5 or template/options/colors/print/files/export.
-  "Start printing" on a plate still lives in the Files tab (plate cards).
-  should be earlier".
+  The Files tab keeps its plate-card "Start printing" buttons.
 - Re-test the latest 3MF export in Elegoo Slicer (plates fit, wings, painted supports,
   cutter zone) after the margin/keep-out/group changes.
 - Live test of the printer supervisor with the Centauri Carbon during a real print

@@ -8,7 +8,8 @@ import { catalogPrinter } from '#lib/printers/catalog.ts';
 import { printerFromCatalog } from '#lib/printers/printer.ts';
 import { ApiError } from '../access';
 import { openDb, runMigrations, type Db } from '../db';
-import { builds, member, organization, templates, user } from '../db/schema';
+import { buildPlates, builds, member, organization, templates, user } from '../db/schema';
+import { timeLeftText, timeStats } from '#lib/domain/accounting.ts';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { addRun, setPrinter, setVariant } from './actions';
@@ -243,5 +244,37 @@ describe('arrangeForPrinter', () => {
 					expect(i.x + i.w / 2).toBeLessThanOrEqual(255.1);
 				}
 		expect(Object.keys(info.footprints).length).toBeGreaterThan(10);
+	});
+});
+
+describe('print time estimates on arranged plates', () => {
+	it('arranged plates get a time estimate marked as such, and the build has a total', () => {
+		const id = mk(cc);
+		const v = view(id);
+		expect(v.plates.every((p) => p.estSource === 'estimate' && (p.estSeconds ?? 0) > 0)).toBe(true);
+		const t = timeStats(v);
+		expect(t.known).toBe(true);
+		// MakeGood's X/P/A total is ~382 h; ours is the same kit, so the same ballpark
+		expect(t.totalSec / 3600).toBeGreaterThan(250);
+		expect(t.totalSec / 3600).toBeLessThan(500);
+		expect(timeLeftText(t).kind).toBe('estimate');
+	});
+
+	it('computes the estimate in the loader when the stored plate has none', () => {
+		const id = mk(cc);
+		db.update(buildPlates).set({ estSeconds: null }).where(eq(buildPlates.buildId, id)).run();
+		expect(view(id).plates.every((p) => (p.estSeconds ?? 0) > 0)).toBe(true);
+	});
+
+	it('stores the estimate when arranging', () => {
+		const id = mk(cc);
+		const rows = db.select().from(buildPlates).where(eq(buildPlates.buildId, id)).all();
+		expect(rows.every((r) => (r.estSeconds ?? 0) > 0)).toBe(true);
+	});
+
+	it('keeps MakeGood profile times on a plain X/P/A layout', () => {
+		const id = mk();
+		const p = view(id).plates[0];
+		expect(p.estSource).toBe('profile');
 	});
 });

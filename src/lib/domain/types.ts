@@ -92,7 +92,11 @@ export interface Plate {
 	slicerByPart: Record<string, number>; // per run, per part (when perPartRuns)
 	thumbnailPath: string | null; // served via GET /api/builds/[id]/plates/[number]/thumbnail when set
 	filamentGrams: Record<string, number>; // grams per run by filament role key, from a sliced 3MF; {} when unknown
-	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>'
+	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>' | 'arranged'
+	/** Where `estSeconds` comes from: the slicer, MakeGood's profile, or our estimate from MakeGood's X/P/A times. Absent/null = unknown. */
+	estSource?: 'slicer' | 'profile' | 'estimate' | null;
+	/** The estimate includes a gram-based guess for a part that is on no MakeGood plate. */
+	estRough?: boolean;
 }
 
 /**

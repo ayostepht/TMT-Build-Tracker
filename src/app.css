@@ -1472,3 +1472,9 @@ label.field input[type='file'] {
 	max-width: 100%;
 	min-width: 0;
 }
+.overall-top .est {
+	margin-left: 4px;
+	font-style: normal;
+	font-size: 12px;
+	color: var(--muted);
+}

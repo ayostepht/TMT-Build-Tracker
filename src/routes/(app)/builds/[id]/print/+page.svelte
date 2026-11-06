@@ -6,6 +6,8 @@
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import PartRow from '#lib/components/PartRow.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
+	import PlateStart from '#lib/components/PlateStart.svelte';
+	import ReadyToPrint from '#lib/components/ReadyToPrint.svelte';
 
 	const ctx = getBuildCtx();
 
@@ -48,6 +50,11 @@
 	const groups = $derived(groupParts(ctx.view, by, { role: activeRole, hidePrinted }));
 </script>
 
+{#snippet startFor(key: string)}
+	{@const pl = ctx.view.plates.find((p) => String(p.number) === key)}
+	{#if pl}<PlateStart plate={pl} />{/if}
+{/snippet}
+
 <svelte:head><title>Print · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
 <div class="toolbar" role="toolbar" aria-label="Filter parts">
@@ -83,11 +90,15 @@
 </div>
 
 <main>
+	<ReadyToPrint />
 	{#each groups as g (g.key)}
 		<section class="group" style="margin-bottom:14px">
 			<div class="group-head">
 				<h2>{g.title}</h2>
 				<span class="meta num">{g.meta}</span>
+				{#if by === 'plate'}
+					{@render startFor(g.key)}
+				{/if}
 			</div>
 			<div class="rows">
 				{#each g.parts as p (p.slug)}

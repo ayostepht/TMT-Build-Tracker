@@ -235,7 +235,13 @@
 				>
 			{/if}
 			{#if pl.estSeconds}
-				<span class="meta num">~{fmtH(pl.estSeconds)}{pl.runs > 1 ? ' per run' : ''}</span>
+				<span class="meta num"
+					>~{fmtH(pl.estSeconds)}{pl.runs > 1 ? ' per run' : ''}{pl.estSource === 'estimate'
+						? pl.estRough
+							? ' (rough estimate)'
+							: ' (estimate)'
+						: ''}</span
+				>
 			{/if}
 			{#if pl.runNote || pl.runs > 1}
 				<span class="meta" style="color:var(--warn);font-weight:600"
