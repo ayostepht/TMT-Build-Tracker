@@ -70,7 +70,7 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
-- Done 2026-11-06 (not yet deployed): print time for arranged plates. They carry no time of their
+- Done 2026-11-06 (deployed in ae8497f): print time for arranged plates. They carry no time of their
   own, so `src/lib/domain/time-estimate.ts` splits MakeGood's X/P/A plate times over the parts
   (by BOM grams; perPartRuns per unit; variant parts with no plate and no grams take the time of the
   other option of their group, marked rough) and the build view fills `estSeconds` for arranged
