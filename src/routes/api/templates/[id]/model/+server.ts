@@ -9,6 +9,7 @@ import { createJob, kickQueue } from '#lib/server/models/jobs.ts';
 import { saveUpload } from '#lib/server/models/uploads.ts';
 import type { RequestHandler } from './$types';
 
+/** STEP zips: the TMT's is about 100 MB. Independent of `MAX_3MF_MB`; `BODY_SIZE_LIMIT` (1100M) is above it. */
 const MAX_ZIP_BYTES = 200 * 1024 * 1024;
 
 /**

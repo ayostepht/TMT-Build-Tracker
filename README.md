@@ -119,7 +119,7 @@ Add the `OIDC_*` variables only if you use single sign-on (see [Authentik](#sing
 | `TMT_PRINTERS` (advanced)                             | no       | on                                    | `off` disables the background printer connections.                                                                                                                                                                                              |
 | `KITPACK_DOWNLOAD` (advanced)                         | no       | on                                    | `off` never downloads a kit pack (the one inside the image is used regardless).                                                                                                                                                                 |
 
-Empty optional variables are harmless: they behave as if unset. The template has no `TZ` setting because the app does not read one. Not set by the template either, because the image already has them: `DATABASE_URL=/data/tmt.db`, `PORT=3000`, `HOST=0.0.0.0`, `BODY_SIZE_LIMIT=200M`, `KITPACK_DIR=/app/kitpacks`.
+Empty optional variables are harmless: they behave as if unset. The template has no `TZ` setting because the app does not read one. Not set by the template either, because the image already has them: `DATABASE_URL=/data/tmt.db`, `PORT=3000`, `HOST=0.0.0.0`, `BODY_SIZE_LIMIT=1100M`, `KITPACK_DIR=/app/kitpacks`.
 
 ### 4. First start
 
@@ -170,20 +170,20 @@ The example file maps `./data` to `/data` and publishes port 3000. The container
 
 ## Environment variables
 
-| Variable                                              | Description                                                                                                                                                                                  |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`                                  | Required in production, the app does not start without it. Generate with `openssl rand -hex 32`. Also derives the key that encrypts printer access codes: changing it makes them unreadable. |
-| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work.                                                                                               |
-| `ADMIN_EMAILS`                                        | Optional comma-separated emails that are site admins (kit and 3D model management), besides the first user.                                                                                  |
-| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button. The app uses `<OIDC_ISSUER>/.well-known/openid-configuration` to find the endpoints.                 |
-| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                                                                                                                     |
-| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev. Uploads and the installed kit pack live in an `uploads` folder next to it.                                   |
-| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image (the health check follows `PORT`).                                                                                        |
-| `BODY_SIZE_LIMIT`                                     | Largest request body adapter-node accepts. The image sets `200M` for STEP zip uploads (see 3D model).                                                                                        |
-| `MAX_3MF_MB`                                          | Largest slicer 3MF the Files tab accepts (default `200`); it is streamed to disk, parsed and deleted. Needs `BODY_SIZE_LIMIT` at least as large.                                             |
-| `KITPACK_DIR`, `KITPACK_URL`, `KITPACK_DOWNLOAD`      | Kit pack location (default `/app/kitpacks` in the image), download URL pattern (`{slug}` `{version}` `{file}`) and `KITPACK_DOWNLOAD=off` to never download. See `docs/kit-pack.md`.         |
-| `TMT_PRINTERS`                                        | `off` disables the background printer status connections (default on).                                                                                                                       |
-| `TMT_ARRANGE_OPTIMIZE`                                | `off` makes the plate arranger use only its basic packer. A diagnostic switch for bug reports; leave unset.                                                                                  |
+| Variable                                              | Description                                                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                                  | Required in production, the app does not start without it. Generate with `openssl rand -hex 32`. Also derives the key that encrypts printer access codes: changing it makes them unreadable.                                                                                                              |
+| `PUBLIC_URL`                                          | Optional public URL (no trailing slash). See below. `BETTER_AUTH_URL` and `ORIGIN` still work.                                                                                                                                                                                                            |
+| `ADMIN_EMAILS`                                        | Optional comma-separated emails that are site admins (kit and 3D model management), besides the first user.                                                                                                                                                                                               |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Optional OpenID Connect login (for example Authentik). All three enable the SSO button. The app uses `<OIDC_ISSUER>/.well-known/openid-configuration` to find the endpoints.                                                                                                                              |
+| `OIDC_PROVIDER_NAME`                                  | Label for the SSO button. Default `SSO`.                                                                                                                                                                                                                                                                  |
+| `DATABASE_URL`                                        | SQLite file path. Default `/data/tmt.db` in production, `./data/tmt.db` in dev. Uploads and the installed kit pack live in an `uploads` folder next to it.                                                                                                                                                |
+| `PORT`, `HOST`                                        | Listen port and address. Default `3000` and `0.0.0.0` in the image (the health check follows `PORT`).                                                                                                                                                                                                     |
+| `BODY_SIZE_LIMIT`                                     | Largest request body adapter-node accepts. The image sets `1100M` (above `MAX_3MF_MB`, so sliced projects fit).                                                                                                                                                                                           |
+| `MAX_3MF_MB`                                          | Largest 3MF in MB the Files tab and the kit drop zone accept (default `1024`; a project sliced with G-code for every plate is several hundred MB). It is streamed to disk, parsed (only the small `Metadata/` entries are read, never the G-code) and deleted. Needs `BODY_SIZE_LIMIT` at least as large. |
+| `KITPACK_DIR`, `KITPACK_URL`, `KITPACK_DOWNLOAD`      | Kit pack location (default `/app/kitpacks` in the image), download URL pattern (`{slug}` `{version}` `{file}`) and `KITPACK_DOWNLOAD=off` to never download. See `docs/kit-pack.md`.                                                                                                                      |
+| `TMT_PRINTERS`                                        | `off` disables the background printer status connections (default on).                                                                                                                                                                                                                                    |
+| `TMT_ARRANGE_OPTIMIZE`                                | `off` makes the plate arranger use only its basic packer. A diagnostic switch for bug reports; leave unset.                                                                                                                                                                                               |
 
 For OIDC, register the redirect URI `<PUBLIC_URL>/api/auth/callback/oidc` with your provider.
 
@@ -205,13 +205,13 @@ In NPM: **Hosts**, **Proxy Hosts**, **Add Proxy Host**.
 3. **Advanced**, custom Nginx configuration:
 
    ```nginx
-   client_max_body_size 200m;
+   client_max_body_size 1100m;
    proxy_buffering off;
    proxy_read_timeout 1h;
    proxy_send_timeout 1h;
    ```
 
-   `client_max_body_size` lets STEP zips, 3MF files and photos through (Nginx's own default is 1 MB); `proxy_buffering off` and the long timeouts keep the live-update stream (`/api/builds/<id>/events`, a keepalive every 25 s) flowing. Use a larger size if you raised `MAX_3MF_MB`.
+   `client_max_body_size` lets STEP zips, 3MF files and photos through (Nginx's own default is 1 MB); `proxy_buffering off` and the long timeouts keep the live-update stream (`/api/builds/<id>/events`, a keepalive every 25 s) flowing. Sliced 3MF projects with G-code can be several hundred MB; use a larger size if you raised `MAX_3MF_MB` above 1024.
 
 4. Save. In the Docker tab edit the container, set `PUBLIC_URL` to `https://tmt.example.com` (no trailing slash), **Apply**. The container restarts and from now on only that address works for sign-in. Accounts you made over `http://<ip>:8420` keep working; you just sign in again through the https address.
 
@@ -245,7 +245,7 @@ The container itself fetches the issuer's discovery document, so it must be able
 | Container stops with `BETTER_AUTH_SECRET must be set in production`                    | The variable is empty. Set it (`openssl rand -hex 32`).                                                                                                                                                                                                                                                               |
 | Pull fails with `unauthorized` / `denied`                                              | The package is private. See [Image access](#image-access).                                                                                                                                                                                                                                                            |
 | Sign-in or any form fails with "Cross-site POST form submissions are forbidden" or 403 | You opened the app through an address that does not match `PUBLIC_URL` (the LAN IP while `PUBLIC_URL` is the https domain, or the reverse). Use the `PUBLIC_URL` address, or empty `PUBLIC_URL` to allow the plain IP. With a proxy and `PUBLIC_URL` empty, make sure the proxy sends `Host` and `X-Forwarded-Proto`. |
-| Uploads (STEP zip, 3MF, photos) fail with 413 or a stalled upload through the proxy    | The proxy limits body size. Add `client_max_body_size 200m;` (NPM, Advanced). The app itself accepts up to 200 MB (`BODY_SIZE_LIMIT`, `MAX_3MF_MB`).                                                                                                                                                                  |
+| Uploads (STEP zip, 3MF, photos) fail with 413 or a stalled upload through the proxy    | The proxy limits body size. Add `client_max_body_size 1100m;` (NPM, Advanced). The app itself accepts 3MF files up to 1024 MB (`MAX_3MF_MB`, `BODY_SIZE_LIMIT=1100M`) and STEP zips up to 200 MB.                                                                                                                     |
 | Changes from other people appear only after a reload                                   | The proxy buffers the live-update stream. Add `proxy_buffering off;` and a long `proxy_read_timeout` (see above); on other proxies disable response buffering for `/api/builds/*/events`.                                                                                                                             |
 | Printer shows offline or "find printers" finds nothing                                 | The container must reach the printer's IP on your LAN. Bridge mode does; broadcast discovery needs Host or `br0` networking (see "Printers on your network"). Check the printer's IP, access code and that LAN mode is on (Bambu).                                                                                    |
 | The standard kit's 3D model or print files are missing                                 | Check the log for `[tmt] kit pack:` lines. The pack is inside the image and installs a few seconds after start; a failure is logged as `[tmt] kit pack: ...` and retried at the next start. If it needs a download (`KITPACK_URL`), the container needs internet access and `KITPACK_DOWNLOAD` must not be `off`.     |
@@ -280,10 +280,10 @@ chair's 3D model from **your own copy** of MakeGood's STEP files, if you want to
    then put `hardware.glb` into the kit pack (see `docs/kit-pack.md`). There is no upload route.
 
 Uploads are sent as the raw file body (not multipart), so the server streams them to disk instead of
-holding 200 MB in memory. adapter-node rejects request bodies over `BODY_SIZE_LIMIT` (default 512 kB),
-so the image sets `BODY_SIZE_LIMIT=200M`; if you run it another way, set that variable (it applies to
+holding hundreds of MB in memory. adapter-node rejects request bodies over `BODY_SIZE_LIMIT` (default 512 kB),
+so the image sets `BODY_SIZE_LIMIT=1100M`; if you run it another way, set that variable (it applies to
 every route, each of which has its own smaller limit where it matters). A reverse proxy needs the
-same: in Nginx Proxy Manager add `client_max_body_size 200m;` under Advanced.
+same: in Nginx Proxy Manager add `client_max_body_size 1100m;` under Advanced.
 
 Developing without the zip: `node scripts/dev-register-model.mjs <db file> <template slug> <model.glb>`
 copies a GLB you built earlier into the data directory next to the database and registers it.

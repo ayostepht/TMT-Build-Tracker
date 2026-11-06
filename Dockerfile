@@ -29,7 +29,7 @@ RUN --mount=type=secret,id=gh_token,required=false \
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \
-    BODY_SIZE_LIMIT=200M \
+    BODY_SIZE_LIMIT=1100M \
     PORT=3000 \
     HOST=0.0.0.0 \
     DATABASE_URL=/data/tmt.db \

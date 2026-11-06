@@ -6,6 +6,8 @@ import {
 	kitReadiness,
 	makeSteps,
 	plateCount,
+	slicedItems,
+	slicedPlates,
 	type FileKind,
 	type KitStatusDto,
 	type Probe
@@ -206,5 +208,36 @@ describe('hardware GLB drops', () => {
 		expect(p.items[0].status).toBe('unknown');
 		expect(p.items[0].note).toBe('Not needed: the app includes the hardware');
 		expect(makeSteps(p)).toEqual([]);
+	});
+});
+
+describe('sliced projects', () => {
+	const gcode = ['Metadata/plate_1.gcode', 'Metadata/plate_1.gcode.md5', 'Metadata/plate_2.gcode'];
+	it('slicedPlates: G-code or listed plates make a sliced project, a bare header does not', () => {
+		expect(slicedPlates(MF)).toBeNull();
+		expect(slicedPlates([...MF, ...gcode])).toBe(2);
+		const header = '<config><header><header_item key="a" value="b"/></header></config>';
+		expect(slicedPlates(MF, header)).toBeNull();
+		expect(slicedPlates(MF, '<config><plate><metadata/></plate><plate/></config>')).toBe(2);
+	});
+	it('goes to the build plates by default, never silently to the kit', () => {
+		const p = plan(probe('x.gcode.3mf', '3mf', [...MF, ...gcode], { sliced: { plates: 24 } }));
+		const feeds = p.items[0].feeds;
+		expect(feeds.map((f) => [f.kind, f.enabled])).toEqual([
+			['sliced', true],
+			['print', false]
+		]);
+		expect(feeds[0].label).toBe("Sliced file: use it for this build's plates (24 sliced plates)");
+		expect(makeSteps(p)).toEqual([]);
+		expect(slicedItems(p)).toHaveLength(1);
+	});
+	it('an admin can still choose kit print geometry explicitly', () => {
+		const p = plan(probe('x.gcode.3mf', '3mf', MF, { sliced: { plates: 1 } }));
+		p.items[0].feeds.find((f) => f.kind === 'print')!.enabled = true;
+		expect(makeSteps(p).map((s) => s.kind)).toEqual(['print']);
+	});
+	it('an unsliced 3MF is still print geometry', () => {
+		const p = plan(probe('x.3mf', '3mf', MF));
+		expect(p.items[0].feeds.map((f) => f.kind)).toEqual(['print']);
 	});
 });

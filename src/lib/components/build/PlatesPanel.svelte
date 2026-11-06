@@ -29,6 +29,13 @@
 	const ctx = getBuildCtx();
 	let uploading = $state(false);
 	let notice = $state<string | null>(null);
+	// A sliced project dropped in the kit drop zone opens the upload with that file.
+	$effect(() => {
+		if (ctx.slicedFile && ctx.canEdit) {
+			uploading = true;
+			notice = null;
+		}
+	});
 	let layouts = $state<PlateLayoutInfo[]>([]);
 	let current = $state<string | null>(null);
 	// Reload the layout name whenever the plates come from somewhere else (switch, upload, other tab).
@@ -209,6 +216,8 @@
 {#if uploading && ctx.canEdit}
 	<PlateUpload
 		view={ctx.view}
+		initialFile={ctx.slicedFile}
+		oninitial={() => (ctx.slicedFile = null)}
 		onclose={() => (uploading = false)}
 		ondone={(msg) => {
 			uploading = false;

@@ -50,9 +50,17 @@ with ~0.1 mm clearance; footrest and harness each on one plate.
 
 ## Open questions for the maintainer
 
-1. Sliced file to test reading print times and grams: an export **from the app**, sliced in
-   Elegoo Slicer and saved with File → Export → "Export plate sliced file" (one or two
-   plates is enough). Pending.
+1. RESOLVED 2026-11-06: sliced file to test reading print times and grams. The maintainer's
+   all-plates export `ECC_0.4_tmt_4691_colors_Overture PETG HF_0.2_14h40m.gcode.3mf` (340 MB, Elegoo
+   Slicer on OrcaSlicer 2.4.2, 24 plates) parses: all 24 plates with slicer time (e.g. plate 1
+   57380 s, 421.22 g) and grams per filament, thumbnails, 51/51 objects matched to kit parts.
+   Needed: Elegoo 2.4 keeps plates in `model_settings.config` without model instances, so the
+   objects come from `slice_info.config` (`identify_id`, `..._id_N_copy_N` tail stripped); its
+   names use underscores for spaces (matcher now normalizes them); filaments of the same material
+   map to the nearest build color. Verified through upload → review → apply on an arranged and an
+   unarranged build: plates get `estSource` slicer, header time loses "(estimate)" (457.5 h total).
+   The sliced export carries no 3D objects for plates and its `app` reads BambuStudio-02.06.00.51
+   (3dmodel.model) although it is Elegoo/Orca.
 2. RESOLVED 2026-11-06: "Start printing" is on the **Print** tab too (done, see backlog). Was: it lived
    only on the plate cards in the **Files** tab; should it also be next to part tracking?
 
@@ -69,6 +77,17 @@ Answered on 2026-11-04 (keep for context):
   Authentik details stay with the maintainer.
 
 ## Known gaps and backlog
+
+- Done 2026-11-06 (not yet committed): large sliced 3MF support. `MAX_3MF_MB` default 1024 (`maxThreeMfBytes()`
+  in `config.ts`; plates upload and kit print-geometry import share it), `BODY_SIZE_LIMIT=1100M` in the Dockerfile,
+  README/Unraid template/NPM `client_max_body_size 1100m`. fflate's push `Unzip` buffers every unwanted entry that has
+  a data descriptor (all of a slicer's G-code), so a 340 MB file cost 415 MB RAM and 5 s; files on disk are now read
+  through the zip central directory (`src/lib/server/threemf/zipfile.ts`: 56 ms, 80 MB RSS), in both the plate parser
+  and the print-geometry reader (`readEntries`). The browser sniff of big files (> 48 MB) uses `File.slice`
+  (`openBlobZip` in `kit-probe.ts`), a 500 MB synthetic file grows RSS < 60 MB. The kit drop zone detects sliced
+  projects (`Metadata/plate_N.gcode` or plates in `slice_info.config`) and hands them to the build's "Use my own sliced
+  file" upload (`BuildCtx.slicedFile`); "Import as kit print geometry" is an explicit, unticked choice.
+  Tests: `large.test.ts` (600 MB synthetic), `sliced.real.test.ts` (set `TMT_SLICED_3MF`, `KITPACK_DIR`).
 
 - Done 2026-11-06 (deployed in ae8497f): print time for arranged plates. They carry no time of their
   own, so `src/lib/domain/time-estimate.ts` splits MakeGood's X/P/A plate times over the parts

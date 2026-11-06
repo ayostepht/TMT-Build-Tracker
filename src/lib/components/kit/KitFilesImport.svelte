@@ -7,11 +7,20 @@
 		type ModelJobInfo
 	} from '#lib/client/api.ts';
 	import { pdfPageCount, renderPdfPages } from '#lib/client/guide-import.ts';
-	import { findGuidePdf, itemBytes, mergeStepSources, probeBytes } from '#lib/client/kit-probe.ts';
+	import {
+		BIG_FILE,
+		findGuidePdf,
+		findGuidePdfInBlob,
+		itemBytes,
+		mergeStepSources,
+		probeBlob,
+		probeBytes
+	} from '#lib/client/kit-probe.ts';
 	import {
 		buildPlan,
 		guidePdfEntries,
 		makeSteps,
+		slicedItems,
 		type Plan,
 		type PlanItem,
 		type Probe,
@@ -24,18 +33,25 @@
 	 * 3MFs, the guide PDF (or the 3MF holding it) in any mix. Each file is
 	 * sniffed in the browser, the plan shows what it will feed, and one run does the lot.
 	 * Imports are install-wide, so only site admins get the drop zone (`canImport`).
+	 *
+	 * A sliced project (G-code / sliced plates) is not kit geometry: it is offered to the build's
+	 * own plates through `onSlicedFile` (the caller has a build); without that callback the card
+	 * says where to upload it. Big files are opened through their central directory, never read whole.
 	 */
 	let {
 		templateId,
 		canImport,
 		compact = false,
-		onchange
+		onchange,
+		onSlicedFile
 	}: {
 		templateId: string;
 		canImport: boolean;
 		compact?: boolean;
 		/** Called after each step finished (refresh the checklist). */
 		onchange?: () => void;
+		/** Hands a sliced project to this build's sliced-file (plates) upload. */
+		onSlicedFile?: (file: File) => void;
 	} = $props();
 
 	interface Dropped {
@@ -91,10 +107,16 @@
 		for (const d of added) {
 			const entry = dropped.find((x) => x.id === d.id)!;
 			try {
-				const bytes = new Uint8Array(await d.file.arrayBuffer());
-				const probe = probeBytes(d.file.name, bytes);
-				await countPages(probe, bytes);
-				entry.probe = probe;
+				if (d.file.size > BIG_FILE) {
+					const probe = await probeBlob(d.file);
+					await countPagesBlob(probe, d.file);
+					entry.probe = probe;
+				} else {
+					const bytes = new Uint8Array(await d.file.arrayBuffer());
+					const probe = probeBytes(d.file.name, bytes);
+					await countPages(probe, bytes);
+					entry.probe = probe;
+				}
 			} catch (e) {
 				entry.error = e instanceof Error ? e.message : 'Could not read this file';
 			}
@@ -119,11 +141,26 @@
 		}
 	}
 
+	/** Same for a file too big to read whole: only the guide PDF's entry is read. */
+	async function countPagesBlob(p: Probe, file: File) {
+		if ((p.kind === '3mf' && guidePdfEntries(p.entries ?? []).length) || p.kind === 'zip') {
+			const g = await findGuidePdfInBlob(file);
+			if (g) p.pdfPages = await pdfPageCount(g.bytes);
+		}
+	}
+
 	function removeFile(fileId: number) {
 		dropped = dropped.filter((d) => d.id !== fileId);
 	}
 	function toggle(it: PlanItem, kind: string, on: boolean) {
 		overrides[`${it.id}|${kind}`] = on;
+		// A sliced project goes to the build's plates or to the kit, not both.
+		if (kind === 'print' && on && it.feeds.some((f) => f.kind === 'sliced'))
+			overrides[`${it.id}|sliced`] = false;
+	}
+	function useSliced(it: PlanItem) {
+		onSlicedFile?.(fileOf(it));
+		removeFile(it.fileId);
 	}
 	function reset() {
 		dropped = [];
@@ -333,15 +370,47 @@
 								{#each items as it (it.id)}
 									{#if it.entryPath.length}<div class="muted sub">Inside: {it.name}</div>{/if}
 									{#each it.feeds as f (f.kind)}
-										<label class="feed" class:off={!f.enabled}>
-											<input
-												type="checkbox"
-												checked={f.enabled}
-												onchange={(e) => toggle(it, f.kind, e.currentTarget.checked)}
-											/>
-											<span>{f.label}</span>
-										</label>
-										{#if f.note}<div class="muted sub">{f.note}</div>{/if}
+										{#if f.kind === 'sliced'}
+											<div class="sliced" data-testid="kit-sliced">
+												<label class="feed" class:off={!f.enabled}>
+													<input
+														type="checkbox"
+														checked={f.enabled}
+														onchange={(e) => toggle(it, f.kind, e.currentTarget.checked)}
+													/>
+													<span><strong>{f.label}</strong></span>
+												</label>
+												{#if f.enabled}
+													{#if onSlicedFile}
+														<p class="muted sub">
+															It carries print times and grams for the plates, so it is not kit
+															geometry.
+														</p>
+														<button
+															type="button"
+															class="btn primary"
+															data-testid="kit-use-sliced"
+															onclick={() => useSliced(it)}>Use it for this build's plates</button
+														>
+													{:else}
+														<p class="muted sub" data-testid="kit-sliced-where">
+															Upload it on a build: Files tab, Printer and plates, "Use my own
+															sliced file". It is not imported here.
+														</p>
+													{/if}
+												{/if}
+											</div>
+										{:else}
+											<label class="feed" class:off={!f.enabled}>
+												<input
+													type="checkbox"
+													checked={f.enabled}
+													onchange={(e) => toggle(it, f.kind, e.currentTarget.checked)}
+												/>
+												<span>{f.label}</span>
+											</label>
+											{#if f.note}<div class="muted sub">{f.note}</div>{/if}
+										{/if}
 									{/each}
 									{#if it.status === 'unknown'}
 										<div class="warn" data-testid="kit-unknown">
@@ -368,6 +437,10 @@
 							disabled={!steps.length || probing}
 							onclick={start}>Import {steps.length} step{steps.length === 1 ? '' : 's'}</button
 						>
+						{#if slicedItems(plan).length && !steps.length}
+							<span class="muted sub0">Nothing to import: sliced files go to a build's plates.</span
+							>
+						{/if}
 						<button type="button" class="btn" onclick={reset}>Clear</button>
 					</div>
 				</div>
@@ -495,6 +568,21 @@
 	.sub {
 		font-size: 12px;
 		padding-left: 26px;
+	}
+	.sliced {
+		display: grid;
+		gap: 6px;
+		justify-items: start;
+		padding: 8px;
+		border-radius: 8px;
+		background: var(--accent-soft);
+	}
+	.sliced p {
+		margin: 0;
+	}
+	.sub0 {
+		font-size: 13px;
+		align-self: center;
 	}
 	.warn {
 		color: var(--warn);

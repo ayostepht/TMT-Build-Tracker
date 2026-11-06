@@ -4,13 +4,15 @@
  *
  * Two body shapes are accepted: a raw body (`application/octet-stream` with the
  * file name in `?name=`, what the app's own client sends, so progress events and
- * 200 MB files work) and `multipart/form-data` with a `file` field (convenient
+ * 1 GB files work) and `multipart/form-data` with a `file` field (convenient
  * for curl; the runtime buffers that one, so prefer the raw form for big files).
  *
  * adapter-node refuses request bodies over `BODY_SIZE_LIMIT` (512 kB by default)
- * before any handler runs, so the deployment must raise it. The Dockerfile sets one global `BODY_SIZE_LIMIT=200M`
- * (shared with the model import); this module enforces its own per-upload limit
- * (`MAX_3MF_MB`, default 200), so a larger `BODY_SIZE_LIMIT` is needed to raise it.
+ * before any handler runs, so the deployment must raise it. The Dockerfile sets one global `BODY_SIZE_LIMIT=1100M`
+ * (shared with the model and print-geometry imports); this module enforces its own per-upload limit
+ * (`MAX_3MF_MB`, default 1024: a project sliced with G-code for all plates is several hundred MB),
+ * so a larger `BODY_SIZE_LIMIT` is needed to raise it. The body is only ever streamed to disk, and the
+ * parser inflates just `Metadata/` configs and thumbnails (never `plate_N.gcode` or `3D/Objects/*`).
  */
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, mkdirSync, rmSync } from 'node:fs';
@@ -18,14 +20,11 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ApiError } from '../access';
-import { uploadsDir } from '../config';
+import { maxThreeMfBytes, uploadsDir } from '../config';
 import { parseThreeMfFile, ThreeMfError } from './index';
 import type { ThreeMfSummary } from '#lib/domain/threemf.ts';
 
-export function maxUploadBytes(): number {
-	const mb = Number(process.env.MAX_3MF_MB);
-	return (Number.isFinite(mb) && mb > 0 ? mb : 200) * 1024 * 1024;
-}
+export const maxUploadBytes = maxThreeMfBytes;
 
 const tooBig = () =>
 	new ApiError(413, `The file is larger than ${Math.round(maxUploadBytes() / 1048576)} MB`);

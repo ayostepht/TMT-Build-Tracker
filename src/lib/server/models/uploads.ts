@@ -20,7 +20,7 @@ export async function saveUpload(
 	if (Number.isFinite(declared) && declared > opts.maxBytes)
 		throw new ApiError(
 			413,
-			`The ${opts.what} is larger than ${Math.round(opts.maxBytes / 1e6)} MB`
+			`The ${opts.what} is larger than ${Math.round(opts.maxBytes / 1048576)} MB`
 		);
 	await mkdir(dirname(destPath), { recursive: true });
 	const tmp = `${destPath}.part`;
@@ -30,7 +30,10 @@ export async function saveUpload(
 			bytes += chunk.length;
 			if (bytes > opts.maxBytes)
 				cb(
-					new ApiError(413, `The ${opts.what} is larger than ${Math.round(opts.maxBytes / 1e6)} MB`)
+					new ApiError(
+						413,
+						`The ${opts.what} is larger than ${Math.round(opts.maxBytes / 1048576)} MB`
+					)
 				);
 			else cb(null, chunk);
 		}

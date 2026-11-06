@@ -6,6 +6,7 @@
 		uploadThumbnailUrl,
 		type UploadResult
 	} from '#lib/client/api.ts';
+	import { untrack } from 'svelte';
 	import { objectKey } from '#lib/domain/plates-match.ts';
 	import { fmt, fmtH } from '#lib/domain/index.ts';
 	import type { BuildView, PartDef } from '#lib/domain/types.ts';
@@ -17,11 +18,17 @@
 	let {
 		view,
 		onclose,
-		ondone
+		ondone,
+		initialFile = null,
+		oninitial
 	}: {
 		view: BuildView;
 		onclose: () => void;
 		ondone: (msg: string) => void;
+		/** A file already chosen elsewhere (the kit drop zone); uploaded right away. */
+		initialFile?: File | null;
+		/** Called once `initialFile` was taken, so the owner can clear it. */
+		oninitial?: () => void;
 	} = $props();
 
 	type Phase = 'pick' | 'uploading' | 'review' | 'applying';
@@ -84,6 +91,14 @@
 		}
 	}
 
+	$effect(() => {
+		const f = initialFile;
+		if (f && untrack(() => phase) === 'pick') {
+			oninitial?.();
+			untrack(() => void pick(f));
+		}
+	});
+
 	const badge = (key: string) => {
 		const m = up?.suggestions.matches[key];
 		if (!mapping[key]) return { cls: 'none', text: 'No match' };
@@ -145,8 +160,8 @@
 		<p class="muted">
 			Choose the 3MF project from Bambu Studio, OrcaSlicer, Elegoo Slicer or similar. Your plates,
 			print times and grams per filament are read from it; the file itself is not kept. A file that
-			is only saved, not sliced, has plates and objects but no times or grams. Large files (up to
-			200 MB) are fine.
+			is only saved, not sliced, has plates and objects but no times or grams. Large files (up to 1
+			GB, such as a project sliced with G-code for every plate) are fine.
 		</p>
 		{#if phase === 'pick'}
 			<label

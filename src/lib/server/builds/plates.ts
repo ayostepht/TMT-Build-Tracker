@@ -26,6 +26,7 @@ import {
 } from '#lib/domain/plates-match.ts';
 import { toStoredSummary, type StoredSummary, type ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { BuildView } from '#lib/domain/types.ts';
+import { deltaE } from '#lib/domain/color.ts';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import type { ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
@@ -243,7 +244,13 @@ export function suggestUpload(view: BuildView, summary: StoredSummary): UploadSu
 				}
 			}
 		const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-		const byMaterial = view.filaments.find((r) => family(r.material) === family(f.type))?.key;
+		// No object-to-filament link (Elegoo sliced exports): same material, nearest color of the build's roles.
+		const sameMaterial = view.filaments.filter((r) => family(r.material) === family(f.type));
+		const byMaterial = (
+			f.color && sameMaterial.length > 1
+				? [...sameMaterial].sort((a, b) => deltaE(a.hex, f.color!) - deltaE(b.hex, f.color!))[0]
+				: sameMaterial[0]
+		)?.key;
 		filamentMap[String(f.index)] = best ?? byMaterial ?? null;
 	}
 	const matched = Object.values(mapping).filter((s): s is string => !!s);

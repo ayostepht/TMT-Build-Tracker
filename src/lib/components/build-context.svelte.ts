@@ -21,6 +21,9 @@ export class BuildCtx {
 	/** Guide viewer: null = closed; slug null = whole guide. */
 	guide = $state<{ slug: string | null; page?: number } | null>(null);
 
+	/** A sliced project handed over by the kit drop zone; the plates panel picks it up and opens its upload. */
+	slicedFile = $state<File | null>(null);
+
 	constructor(view: BuildView) {
 		this.view = view;
 	}

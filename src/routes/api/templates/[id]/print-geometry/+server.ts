@@ -3,7 +3,7 @@ import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ApiError } from '#lib/server/access.ts';
 import { respond } from '#lib/server/api.ts';
-import { importsDir } from '#lib/server/config.ts';
+import { importsDir, maxThreeMfBytes } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { requireAdminForTemplate } from '#lib/server/models/guard.ts';
 import { saveUpload } from '#lib/server/models/uploads.ts';
@@ -12,8 +12,6 @@ import { templateSeeds } from '#lib/server/seed/index.ts';
 import { seedTemplates } from '#lib/server/seed/run.ts';
 import { clearImportedGeometry } from '#lib/server/print-geometry/store.ts';
 import type { RequestHandler } from './$types';
-
-const MAX_BYTES = 200 * 1024 * 1024;
 
 /** Site admin: the template's print geometry rows (seed and imported). */
 export const GET: RequestHandler = (event) =>
@@ -32,7 +30,7 @@ export const POST: RequestHandler = (event) =>
 		requireAdminForTemplate(event, event.params.id);
 		const dest = join(importsDir(), `geometry-${randomUUID()}.upload`);
 		await saveUpload(event.request, dest, {
-			maxBytes: MAX_BYTES,
+			maxBytes: maxThreeMfBytes(),
 			magic: 'PK\x03\x04',
 			what: '3MF or zip file'
 		});

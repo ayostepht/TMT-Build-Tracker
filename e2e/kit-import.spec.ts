@@ -360,3 +360,110 @@ test('a member who is not an admin can read the checklist but gets no import rig
 		await context.close();
 	}
 });
+
+// A sliced project (G-code, slicer times) is a build's own plates, never kit geometry.
+test('a sliced 3MF in the kit drop zone is offered to the build plates', async ({ page }) => {
+	test.setTimeout(120_000);
+	const shots = process.env.SHOTS_DIR;
+	await signInAsAdmin(page);
+	await page.goto('/');
+	await page.waitForLoadState('networkidle');
+	const buildId = await startBuild(page, 'Sliced hand-off');
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('skip-setup').click();
+	await page.goto(`/builds/${buildId}/files`);
+	await page.waitForLoadState('networkidle');
+	await page.getByText('Add or replace files').click();
+
+	const sliced = makeProjectThreeMf({
+		sliced: true,
+		app: 'ElegooSlicer-1.0.0',
+		printerModel: 'Elegoo Centauri Carbon',
+		printerSettingsId: 'Elegoo Centauri Carbon 0.4 nozzle',
+		filamentTypes: ['PETG', 'TPU'],
+		plates: [
+			{
+				name: 'HANDLE LEFT',
+				prediction: 57380,
+				weight: 421.22,
+				filaments: { 1: 420, 2: 1.22 },
+				objects: [{ name: '3DTMT A1 HANDLE LEFT REV A.STEP' }]
+			}
+		],
+		extra: {
+			'Metadata/plate_1.gcode': strToU8('G1 X1 Y1\n'.repeat(1000)),
+			'Metadata/plate_1.gcode.md5': strToU8('d41d8cd98f00b204e9800998ecf8427e')
+		}
+	});
+	const root = page.getByTestId('kit-import');
+	await root.getByTestId('kit-file-input').setInputFiles({
+		name: 'ECC_0.4_tmt_colors_Overture PETG HF_0.2_14h40m.gcode.3mf',
+		mimeType: 'model/3mf',
+		buffer: Buffer.from(sliced)
+	});
+	const box = root.getByTestId('kit-sliced');
+	await expect(box).toContainText("Sliced file: use it for this build's plates (1 sliced plate)");
+	// Not silently kit geometry: the import button has nothing to do.
+	await expect(root.getByTestId('kit-start')).toBeDisabled();
+	await expect(
+		root.getByText('Import as kit print geometry instead (its meshes are valid)')
+	).toBeVisible();
+	const overflow = () =>
+		page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		);
+	expect(await overflow()).toBeLessThanOrEqual(0);
+	if (shots) {
+		for (const [w, h] of [
+			[390, 844],
+			[1440, 900]
+		]) {
+			await page.setViewportSize({ width: w, height: h });
+			await root.scrollIntoViewIfNeeded();
+			await root.screenshot({ path: `${shots}/dropzone-sliced-${w}.png` });
+		}
+		await page.setViewportSize({ width: 1280, height: 800 });
+	}
+
+	await box.getByTestId('kit-use-sliced').click();
+	const panel = page.getByRole('region', { name: 'Upload a 3MF' });
+	await expect(panel.getByText('Elegoo Centauri Carbon')).toBeVisible({ timeout: 30_000 });
+	await expect(panel.getByText('~16 h')).toBeVisible();
+	await expect(
+		panel.locator('li', { hasText: '3DTMT A1 HANDLE LEFT' }).locator('select')
+	).toHaveValue('handle-left');
+	if (shots) {
+		for (const [w, h] of [
+			[390, 844],
+			[1440, 900]
+		]) {
+			await page.setViewportSize({ width: w, height: h });
+			await panel.scrollIntoViewIfNeeded();
+			await panel.screenshot({ path: `${shots}/plates-review-${w}.png` });
+		}
+		await page.setViewportSize({ width: 1280, height: 800 });
+	}
+	await panel.getByTestId('apply-upload').click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Plates organized from ECC_0.4_tmt' })
+	).toBeVisible();
+	const plate = page.getByRole('region', { name: 'Plate 1' });
+	await expect(plate).toContainText('~16 h');
+	await expect(plate).not.toContainText('(estimate)');
+	// Slicer time in the build header, no "(estimate)".
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+	await expect(page.locator('header.head')).not.toContainText('(estimate)');
+	await expect(page.locator('header.head')).toContainText('of printing left');
+	if (shots) {
+		for (const [w, h] of [
+			[390, 844],
+			[1440, 900]
+		]) {
+			await page.setViewportSize({ width: w, height: h });
+			await page.goto(`/builds/${buildId}/files`);
+			await page.waitForLoadState('networkidle');
+			await page.screenshot({ path: `${shots}/files-plates-sliced-${w}.png`, fullPage: false });
+		}
+	}
+});

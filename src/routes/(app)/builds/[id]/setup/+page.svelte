@@ -137,7 +137,15 @@
 		</div>
 	{:else if step === 1}
 		{#key data.baseTemplateId}
-			<TemplateStep baseTemplateId={data.baseTemplateId} />
+			<TemplateStep
+				baseTemplateId={data.baseTemplateId}
+				onSlicedFile={ctx.canEdit
+					? (file) => {
+							ctx.slicedFile = file;
+							void go(4);
+						}
+					: undefined}
+			/>
 		{/key}
 	{:else if step === 2}
 		<section class="card" aria-labelledby="opt-h">

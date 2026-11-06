@@ -11,7 +11,14 @@
 	 * Setup step 1, "Choose build template": the built-in MakeGood kit, or the user's own files
 	 * (a workspace-owned copy of the kit that the drop zone imports into).
 	 */
-	let { baseTemplateId }: { baseTemplateId: string } = $props();
+	let {
+		baseTemplateId,
+		onSlicedFile
+	}: {
+		baseTemplateId: string;
+		/** Takes a sliced project the drop zone found (the wizard moves on to the Files step with it). */
+		onSlicedFile?: (file: File) => void;
+	} = $props();
 	const ctx = getBuildCtx();
 
 	const owned = $derived(ctx.view.build.templateOwned);
@@ -121,6 +128,7 @@
 							templateId={baseTemplateId}
 							canImport={base.canImport}
 							compact
+							{onSlicedFile}
 							onchange={loadBase}
 						/>
 					{/key}
@@ -163,6 +171,7 @@
 					templateId={ownId}
 					canImport={own.canImport}
 					compact
+					{onSlicedFile}
 					onchange={() => {
 						void loadOwn();
 						void ctx.refresh();

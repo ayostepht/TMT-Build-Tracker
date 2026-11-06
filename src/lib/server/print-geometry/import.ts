@@ -10,7 +10,7 @@ import type { Db } from '../db';
 import { templateParts, templatePrintGeometry } from '../db/schema';
 import { SEED_NOTE } from '../seed/run';
 import { extractPartGeometry, type ExtractedPart, type ExtractReport } from './extract';
-import { streamEntries, type SourceFactory } from './reader';
+import { readEntries, type SourceFactory } from './reader';
 import { storeExtractedParts } from './store';
 
 export interface ImportFileReport extends Omit<ExtractReport, 'app' | 'objects'> {
@@ -26,7 +26,7 @@ const MAX_NESTED_ZIP = 300 * 1024 * 1024;
 
 async function entryNames(open: SourceFactory): Promise<string[]> {
 	const names: string[] = [];
-	await streamEntries(open(), (n) => (names.push(n), null));
+	await readEntries(open, (n) => (names.push(n), null));
 	return names;
 }
 
@@ -55,7 +55,10 @@ export async function importPrintGeometry(
 			components: p.components,
 			qty: p.qty
 		}));
-	const open: SourceFactory = () => createReadStream(path, { highWaterMark: 1 << 20 });
+	const open: SourceFactory = Object.assign(
+		() => createReadStream(path, { highWaterMark: 1 << 20 }),
+		{ path }
+	);
 	const names = await entryNames(open);
 	const jobs: { label: string; open: SourceFactory; nested: boolean }[] = [];
 	// A zip of stored 3MFs shows their inner entries ('3D/3dmodel.model') to a streaming reader, so

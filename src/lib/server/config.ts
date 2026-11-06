@@ -111,3 +111,9 @@ export function kitpackUrl(): string {
 export function kitpackDownloadEnabled(): boolean {
 	return !/^(off|0|false|no)$/i.test((env.KITPACK_DOWNLOAD ?? '').trim());
 }
+
+/** Largest 3MF upload in bytes: `MAX_3MF_MB`, default 1024. Sliced projects with G-code for every plate reach several hundred MB. */
+export function maxThreeMfBytes(): number {
+	const mb = Number(process.env.MAX_3MF_MB);
+	return (Number.isFinite(mb) && mb > 0 ? mb : 1024) * 1024 * 1024;
+}

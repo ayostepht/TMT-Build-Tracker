@@ -58,7 +58,8 @@ function stem(t: string): string {
 }
 
 export function normalizeName(raw: string): Norm {
-	let s = raw.toLowerCase().replace(EXT, ' ');
+	// Elegoo Slicer writes object names with underscores for spaces ("3DTMT_J_FRAME_PIN_REV_A.STEP").
+	let s = raw.toLowerCase().replace(/_/g, ' ').replace(EXT, ' ');
 	const revM = /\brev\.?\s*([a-z0-9][a-z0-9.]*)/.exec(s);
 	const rev = revM ? revM[1].replace(/\.$/, '') : null;
 	s = s.replace(/\brev\.?\s*[a-z0-9][a-z0-9.]*/g, ' ');

@@ -13,6 +13,7 @@
 import { Unzip, UnzipInflate, UnzipPassThrough, strFromU8 } from 'fflate';
 import { XMLParser } from 'fast-xml-parser';
 import { decodeEntities } from '#lib/domain/threemf.ts';
+import { entryChunks, readZipDirectory } from '../threemf/zipfile';
 import type { PaintEntry } from './mesh-format';
 import {
 	bounds,
@@ -25,7 +26,8 @@ import {
 } from '#lib/domain/geom2d.ts';
 
 export type Source = AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
-export type SourceFactory = () => Source;
+/** Opens the zip again on every call. `path` (a file on disk) lets the readers go through the central directory. */
+export type SourceFactory = (() => Source) & { path?: string };
 
 export interface Component {
 	path: string | null;
@@ -280,6 +282,49 @@ export async function streamEntries(
 	if (failure) throw failure;
 }
 
+/**
+ * `streamEntries` for a factory: a file on disk is read through its central directory (only the chosen
+ * entries are touched; fflate's push parser would buffer every unwanted entry that has a data descriptor,
+ * which is the whole of a sliced project's G-code), anything else is streamed.
+ */
+export async function readEntries(
+	open: SourceFactory,
+	want: (name: string) => ModelScanner | Uint8Array[] | null,
+	onDone?: (name: string, data: ModelScanner | Uint8Array) => void,
+	maxEntryBytes = 1 << 30
+): Promise<void> {
+	let dir: Awaited<ReturnType<typeof readZipDirectory>> | null = null;
+	if (open.path) dir = await readZipDirectory(open.path).catch(() => null);
+	if (!dir) return streamEntries(open(), want, onDone, maxEntryBytes);
+	for (const e of dir) {
+		const sink = want(e.name);
+		if (!sink) continue;
+		let size = 0;
+		try {
+			for await (const chunk of entryChunks(open.path!, e)) {
+				size += chunk.length;
+				if (size > maxEntryBytes) throw new Error('is too large to read');
+				if (sink instanceof ModelScanner) sink.push(chunk, false);
+				else sink.push(chunk);
+			}
+		} catch (err) {
+			throw new Error(`Cannot read ${e.name}: ${(err as Error).message}`, { cause: err });
+		}
+		if (sink instanceof ModelScanner) {
+			sink.push(new Uint8Array(0), true);
+			onDone?.(e.name, sink);
+		} else {
+			const buf = new Uint8Array(size);
+			let o = 0;
+			for (const c of sink) {
+				buf.set(c, o);
+				o += c.length;
+			}
+			onDone?.(e.name, buf);
+		}
+	}
+}
+
 // ---- model_settings.config
 
 const xml = new XMLParser({
@@ -395,8 +440,8 @@ export async function readStructure(open: SourceFactory): Promise<Structure> {
 	const model = new ModelScanner(true);
 	let ms: Uint8Array | null = null;
 	let ps: Uint8Array | null = null;
-	await streamEntries(
-		open(),
+	await readEntries(
+		open,
 		(name) => {
 			if (name === '3D/3dmodel.model') return model;
 			if (name === 'Metadata/model_settings.config') return [];
@@ -692,8 +737,8 @@ export async function extractGeometry(
 	const files = new Map<string, Map<string, RawObject>>(); // path -> objects
 	if (need.size) {
 		let done = 0;
-		await streamEntries(
-			open(),
+		await readEntries(
+			open,
 			(name) => (need.has(name) ? new ModelScanner(true) : null),
 			(name, data) => {
 				files.set(name, (data as ModelScanner).scan.objects);

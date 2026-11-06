@@ -36,6 +36,12 @@
 					templateId={ctx.view.build.templateId}
 					{canImport}
 					compact
+					onSlicedFile={ctx.canEdit
+						? (file) => {
+								ctx.slicedFile = file;
+								document.getElementById('plates')?.scrollIntoView({ behavior: 'smooth' });
+							}
+						: undefined}
 					onchange={() => {
 						status?.refresh();
 						void ctx.refresh();

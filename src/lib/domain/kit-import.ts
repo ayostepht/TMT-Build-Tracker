@@ -5,7 +5,7 @@
  * sniffing, `KitImportCard.svelte` runs the plan.
  */
 
-export type TargetKind = 'model' | 'print' | 'guide';
+export type TargetKind = 'model' | 'print' | 'guide' | 'sliced';
 export type FileKind = 'zip' | '3mf' | 'step' | 'pdf' | 'unknown';
 
 /** What a file (or a zip entry, one level down) was sniffed to be. */
@@ -21,6 +21,8 @@ export interface Probe {
 	children?: Probe[];
 	/** PDF page count when known (a PDF, or the PDF inside a 3MF). */
 	pdfPages?: number;
+	/** Set on a 3MF that was sliced (G-code and/or sliced plates in `slice_info.config`). */
+	sliced?: { plates: number };
 }
 
 export interface Feed {
@@ -95,6 +97,25 @@ export function plateCount(entries: string[]): number {
 	return n.size;
 }
 
+/** Entries of a sliced plate: `Metadata/plate_<n>.gcode` (the G-code itself, not its `.md5`). */
+export const isGcodeEntry = (name: string) => /^Metadata\/plate_\d+\.gcode$/i.test(name);
+
+/** Where a sliced project keeps its per-plate predictions (read to tell a sliced project from a saved one). */
+export const SLICE_INFO_ENTRY = 'Metadata/slice_info.config';
+
+/**
+ * Is this 3MF a sliced project? It has G-code for a plate, or `slice_info.config` lists plates
+ * (an unsliced Bambu/Orca save has the file with a header only). `sliceInfo` is the file's text
+ * when it was read. Returns the number of sliced plates, or null for an unsliced 3MF.
+ */
+export function slicedPlates(entries: string[], sliceInfo?: string | null): number | null {
+	const gcode = new Set<string>();
+	for (const e of entries) if (isGcodeEntry(e)) gcode.add(e.toLowerCase());
+	const listed = sliceInfo ? (sliceInfo.match(/<plate\b/g) ?? []).length : 0;
+	const n = Math.max(gcode.size, listed);
+	return n > 0 ? n : null;
+}
+
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const pdfDesc = (pages?: number) => (pages ? `${pages}-page PDF` : 'PDF');
 
@@ -103,6 +124,22 @@ const pdfDesc = (pages?: number) => (pages ? `${pages}-page PDF` : 'PDF');
 function threeMfFeeds(p: Probe): Feed[] {
 	const entries = p.entries ?? [];
 	const plates = plateCount(entries);
+	if (p.sliced) {
+		// A sliced project belongs to a build's own plates; its meshes are valid kit geometry, but only on request.
+		return [
+			{
+				kind: 'sliced',
+				enabled: true,
+				label: `Sliced file: use it for this build's plates (${plural(p.sliced.plates, 'sliced plate')})`
+			},
+			{
+				kind: 'print',
+				enabled: false,
+				label: 'Import as kit print geometry instead (its meshes are valid)',
+				note: 'Only for adding the kit files. A sliced project is normally uploaded for one build.'
+			}
+		];
+	}
 	const feeds: Feed[] = [
 		{
 			kind: 'print',
@@ -285,6 +322,10 @@ export function buildPlan(inputs: PlanInput[]): Plan {
 	return { items, warnings };
 }
 
+/** Items holding a sliced project that is switched to the build's plates (the default). */
+export const slicedItems = (plan: Plan) =>
+	plan.items.filter((it) => it.feeds.some((f) => f.kind === 'sliced' && f.enabled));
+
 /** How many STEP files an item brings to the 3D chair. */
 export function stepCount(it: PlanItem): number {
 	if (it.probe.kind === 'step') return 1;
@@ -295,6 +336,7 @@ export function stepCount(it: PlanItem): number {
 export function makeSteps(plan: Plan): Step[] {
 	const on = (kind: TargetKind) =>
 		plan.items.filter((it) => it.feeds.some((f) => f.kind === kind && f.enabled));
+	// 'sliced' feeds are not import steps: the drop zone hands those files to the build's plate upload.
 	const steps: Step[] = [];
 	const model = on('model');
 	if (model.length) {

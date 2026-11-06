@@ -135,8 +135,13 @@ SvelteKit 3 specifics that trip people up:
   family, plain; Metadata only, never `3D/Objects/*`), matcher
   `src/lib/domain/plates-match.ts`, apply in `src/lib/server/builds/plates.ts`
   (plate-attached runs must be converted to per-part runs: `convertRuns`)
-- Uploads stream the raw body to disk; `BODY_SIZE_LIMIT=200M` is set in the
-  Dockerfile (adapter-node rejects bigger bodies before any handler)
+- Uploads stream the raw body to disk; `BODY_SIZE_LIMIT=1100M` is set in the
+  Dockerfile (adapter-node rejects bigger bodies before any handler); 3MF uploads
+  are limited by `MAX_3MF_MB` (default 1024, `maxThreeMfBytes()` in `config.ts`),
+  STEP zips by 200 MB. A sliced project (`Metadata/plate_N.gcode`) is read from disk
+  through its central directory (`threemf/zipfile.ts`); never use fflate `Unzip` on a
+  file path (it buffers unwanted data-descriptor entries). The kit drop zone sends
+  sliced projects to the build's plate upload (`BuildCtx.slicedFile`), not to kit geometry
 - `src/lib/server/filaments/`: bundled SpoolmanDB catalog (`catalog.json`,
   MIT, attribution in `THIRD_PARTY.md`; refresh with `npm run
   filaments:update`), served by `/api/filaments*`; browser-safe helpers in

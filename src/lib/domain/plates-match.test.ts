@@ -166,3 +166,15 @@ describe('3MF name helpers', () => {
 		expect(decodeEntities('plain')).toBe('plain');
 	});
 });
+
+describe('Elegoo Slicer names (underscores for spaces)', () => {
+	it('match like the spaced names', () => {
+		expect(normalizeName('3DTMT_J_FRAME_PIN_REV_A.STEP').core).toBe(
+			normalizeName('3DTMT J FRAME PIN REV A.STEP').core
+		);
+		expect(slugOf('3DTMT_J_FRAME_PIN_REV_A.STEP')).toBe('connectors');
+		expect(slugOf('3DTMT_A1_HANDLE_LEFT_REV_A.STEP')).toBe(
+			slugOf('3DTMT A1 HANDLE LEFT REV A.STEP')
+		);
+	});
+});
