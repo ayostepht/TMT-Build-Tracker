@@ -313,6 +313,8 @@ export const builds = sqliteTable(
 		printer: text('printer', { mode: 'json' }).$type<BuildPrinter>(),
 		/** Setup wizard: the step (1-5) the build is on; null = setup finished (or never started, for older builds). */
 		setupStep: integer('setup_step'),
+		/** 'build' (tracked build) | 'draft' (Design studio sandbox: no tracking; hidden from build lists). */
+		kind: text('kind').notNull().default('build'),
 		createdBy: text('created_by')
 			.notNull()
 			.references(() => user.id),

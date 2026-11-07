@@ -71,6 +71,13 @@
       "when": 1793997456151,
       "tag": "0009_build_part_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794024474628,
+      "tag": "0010_build_kind_draft",
+      "breakpoints": true
     }
   ]
 }
