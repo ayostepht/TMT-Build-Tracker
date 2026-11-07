@@ -257,8 +257,8 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 	await page.goto(`/builds/${buildId}/print`);
 	await page.getByTestId('back-to-build').click();
 	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}$`));
-	await page.getByRole('banner').getByRole('link', { name: 'Designs' }).click();
-	await expect(page).toHaveURL(/\/designs\?from=/);
+	await page.getByRole('banner').getByRole('link', { name: 'Studio' }).click();
+	await expect(page).toHaveURL(/\/studio\?from=/);
 	await expect(page.getByTestId('back-to-build-link')).toContainText('Test chair');
 	await page.getByTestId('back-to-build-link').click();
 	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}$`));

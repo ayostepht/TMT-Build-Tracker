@@ -144,7 +144,11 @@ export interface HardwareItem {
 	note: string | null;
 }
 
+/** 'build' = a tracked build; 'draft' = a Studio sandbox (design, plates and export; no tracking). */
+export type BuildKind = 'build' | 'draft';
+
 export interface BuildSummary {
+	kind: BuildKind;
 	id: string;
 	organizationId: string;
 	name: string;

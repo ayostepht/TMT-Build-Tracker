@@ -8,6 +8,7 @@
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
 	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
 	import SpoolLink from '#lib/components/SpoolLink.svelte';
+	import DraftSettings from '#lib/components/build/DraftSettings.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
@@ -50,126 +51,135 @@
 	}
 </script>
 
-<form class="card" onsubmit={saveBuild}>
-	<h2>Build details</h2>
-	<div class="form-grid">
-		<label class="field">Name <input bind:value={name} disabled={!ctx.canEdit} required /></label>
-		<label class="field"
-			>Phase
-			<select bind:value={phase} disabled={!ctx.canEdit}>
-				{#each BUILD_PHASES as p (p)}<option value={p}>{p}</option>{/each}
-			</select>
-		</label>
-		<label class="field">Recipient <input bind:value={recipient} disabled={!ctx.canEdit} /></label>
-		<label class="field">Hospital <input bind:value={hospital} disabled={!ctx.canEdit} /></label>
-		<label class="field"
-			>Delivery date <input type="date" bind:value={deliveryDate} disabled={!ctx.canEdit} /></label
-		>
-	</div>
-	{#if ctx.canEdit}
-		<div>
-			<button class="btn primary" type="submit">Save details</button>
-			<span class="muted" role="status">{saved}</span>
-		</div>
-	{/if}
-</form>
-
-<section class="card">
-	<h2>Filament</h2>
-	<p class="muted">
-		Names, colors and spools for this build. The template's roles stay the same; only this build
-		changes.
-	</p>
-	{#each ctx.view.filaments as f (f.key)}
-		<div class="fil-role" data-role={f.key}>
-			<FilamentPicker
-				value={{ name: f.name, material: f.material, hex: f.hex }}
-				preferMaterial={f.tpu ? 'TPU 95A' : 'PETG'}
-				organizationId={ctx.view.build.organizationId}
-				disabled={!ctx.canEdit}
-				onchange={(v) => saveFil(f, v)}
-			/>
+{#if b.kind === 'draft'}
+	<DraftSettings />
+{:else}
+	<form class="card" onsubmit={saveBuild}>
+		<h2>Build details</h2>
+		<div class="form-grid">
+			<label class="field">Name <input bind:value={name} disabled={!ctx.canEdit} required /></label>
 			<label class="field"
-				>Spools (kg)
-				<input
-					type="number"
-					min="0"
-					step="0.25"
-					inputmode="decimal"
-					value={f.spools}
+				>Phase
+				<select bind:value={phase} disabled={!ctx.canEdit}>
+					{#each BUILD_PHASES as p (p)}<option value={p}>{p}</option>{/each}
+				</select>
+			</label>
+			<label class="field">Recipient <input bind:value={recipient} disabled={!ctx.canEdit} /></label
+			>
+			<label class="field">Hospital <input bind:value={hospital} disabled={!ctx.canEdit} /></label>
+			<label class="field"
+				>Delivery date <input
+					type="date"
+					bind:value={deliveryDate}
 					disabled={!ctx.canEdit}
-					onchange={(e) =>
-						saveFil(f, {
-							spools: Math.min(
-								99,
-								Math.max(0, Math.round((Number(e.currentTarget.value) || 0) * 100) / 100)
-							)
-						})}
 				/></label
 			>
 		</div>
-	{/each}
-	<SpoolLink />
-</section>
-
-<section class="card">
-	<h2>Setup</h2>
-	<p class="muted">Choose the kit files, options, colors and printer again, step by step.</p>
-	<div>
-		<a
-			class="btn"
-			href={resolve('/(app)/builds/[id]/setup', { id: ctx.id })}
-			data-testid="rerun-setup">Open the setup steps</a
-		>
-	</div>
-</section>
-
-<MoveToChapter />
-<ImportPrototype />
-
-{#if ctx.view.role === 'owner'}
-	<section class="card danger-zone">
-		<h2>Delete build</h2>
-		<p class="muted">
-			Deletes this build with all its progress and print logs for everyone on the team. This cannot
-			be undone.
-		</p>
-		{#if !confirming}
+		{#if ctx.canEdit}
 			<div>
-				<button class="btn danger" type="button" onclick={() => (confirming = true)}
-					>Delete this build…</button
-				>
-			</div>
-		{:else}
-			<div
-				role="alertdialog"
-				aria-labelledby="delTitle"
-				class="stack"
-				style="display:grid;gap:10px"
-			>
-				<strong id="delTitle">Type the build name to confirm: {b.name}</strong>
-				<input
-					aria-label="Build name"
-					bind:value={confirmText}
-					autocomplete="off"
-					style="padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper)"
-				/>
-				<div>
-					<button
-						class="btn danger solid"
-						type="button"
-						disabled={confirmText !== b.name}
-						onclick={remove}>Delete forever</button
-					>
-					<button
-						class="btn"
-						type="button"
-						onclick={() => ((confirming = false), (confirmText = ''))}>Cancel</button
-					>
-				</div>
+				<button class="btn primary" type="submit">Save details</button>
+				<span class="muted" role="status">{saved}</span>
 			</div>
 		{/if}
+	</form>
+
+	<section class="card">
+		<h2>Filament</h2>
+		<p class="muted">
+			Names, colors and spools for this build. The template's roles stay the same; only this build
+			changes.
+		</p>
+		{#each ctx.view.filaments as f (f.key)}
+			<div class="fil-role" data-role={f.key}>
+				<FilamentPicker
+					value={{ name: f.name, material: f.material, hex: f.hex }}
+					preferMaterial={f.tpu ? 'TPU 95A' : 'PETG'}
+					organizationId={ctx.view.build.organizationId}
+					disabled={!ctx.canEdit}
+					onchange={(v) => saveFil(f, v)}
+				/>
+				<label class="field"
+					>Spools (kg)
+					<input
+						type="number"
+						min="0"
+						step="0.25"
+						inputmode="decimal"
+						value={f.spools}
+						disabled={!ctx.canEdit}
+						onchange={(e) =>
+							saveFil(f, {
+								spools: Math.min(
+									99,
+									Math.max(0, Math.round((Number(e.currentTarget.value) || 0) * 100) / 100)
+								)
+							})}
+					/></label
+				>
+			</div>
+		{/each}
+		<SpoolLink />
 	</section>
+
+	<section class="card">
+		<h2>Setup</h2>
+		<p class="muted">Choose the kit files, options, colors and printer again, step by step.</p>
+		<div>
+			<a
+				class="btn"
+				href={resolve('/(app)/builds/[id]/setup', { id: ctx.id })}
+				data-testid="rerun-setup">Open the setup steps</a
+			>
+		</div>
+	</section>
+
+	<MoveToChapter />
+	<ImportPrototype />
+
+	{#if ctx.view.role === 'owner'}
+		<section class="card danger-zone">
+			<h2>Delete build</h2>
+			<p class="muted">
+				Deletes this build with all its progress and print logs for everyone on the team. This
+				cannot be undone.
+			</p>
+			{#if !confirming}
+				<div>
+					<button class="btn danger" type="button" onclick={() => (confirming = true)}
+						>Delete this build…</button
+					>
+				</div>
+			{:else}
+				<div
+					role="alertdialog"
+					aria-labelledby="delTitle"
+					class="stack"
+					style="display:grid;gap:10px"
+				>
+					<strong id="delTitle">Type the build name to confirm: {b.name}</strong>
+					<input
+						aria-label="Build name"
+						bind:value={confirmText}
+						autocomplete="off"
+						style="padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper)"
+					/>
+					<div>
+						<button
+							class="btn danger solid"
+							type="button"
+							disabled={confirmText !== b.name}
+							onclick={remove}>Delete forever</button
+						>
+						<button
+							class="btn"
+							type="button"
+							onclick={() => ((confirming = false), (confirmText = ''))}>Cancel</button
+						>
+					</div>
+				</div>
+			{/if}
+		</section>
+	{/if}
 {/if}
 
 <style>

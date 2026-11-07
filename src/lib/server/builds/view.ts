@@ -340,6 +340,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			name: b.name,
 			recipient: b.recipient,
 			hospital: b.hospital,
+			kind: b.kind === 'draft' ? 'draft' : 'build',
 			phase: b.phase as BuildPhase,
 			deliveryDate: b.deliveryDate,
 			createdAt: b.createdAt.toISOString(),

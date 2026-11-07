@@ -25,6 +25,7 @@ export const POST: RequestHandler = (event) =>
 				hospital: str(o.hospital),
 				deliveryDate: str(o.deliveryDate),
 				plateLayout: str(o.plateLayout),
+				kind: o.kind === 'draft' ? 'draft' : 'build',
 				printer: o.printer == null ? null : parsePrinterInput(o.printer),
 				variantChoices:
 					typeof o.variantChoices === 'object' && o.variantChoices !== null

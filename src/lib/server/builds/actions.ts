@@ -74,6 +74,24 @@ function slugList(v: unknown, view: BuildView, field = 'slugs'): string[] {
 }
 
 /**
+ * Activity kinds a Studio draft may produce. Everything else (runs, part status, printing,
+ * assembly, handoff, photos, spools, imports) is build tracking and is refused with a 400.
+ */
+const DRAFT_KINDS = new Set([
+	'build.update',
+	'build.variant',
+	'build.printer',
+	'build.template',
+	'build.move',
+	'build.promote',
+	'filament.update',
+	'plate.slicer'
+]);
+export function draftAllows(kind: string): boolean {
+	return DRAFT_KINDS.has(kind) || kind.startsWith('design.') || kind.startsWith('plates.');
+}
+
+/**
  * Run one mutation: permission check (404 non-member, 403 viewer), load the view,
  * let `fn` validate and compute, persist patches + an activity row in one
  * transaction, then emit the SSE event.
@@ -93,6 +111,8 @@ export function mutateBuild(
 		const view = loadBuildView(tx, buildId, userId);
 		if (!view) throw new ApiError(404, 'Not found');
 		const o = fn(tx, view, now);
+		if (access.kind === 'draft' && !draftAllows(o.kind))
+			throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 		if (o.patches?.length) applyPatches(tx, buildId, o.patches, now);
 		if (REARRANGE_KINDS.has(o.kind)) autoRearrangeBuild(tx, buildId, userId);
 		tx.insert(activity)
@@ -110,7 +130,7 @@ function publish(db: Db, buildId: string, userId: string, kind: string, now: Dat
 
 export function updateBuild(db: Db, buildId: string, userId: string, body: unknown): void {
 	if (!isObj(body)) bad('Invalid body');
-	mutateBuild(db, buildId, userId, (tx) => {
+	mutateBuild(db, buildId, userId, (tx, view) => {
 		const set: Partial<typeof builds.$inferInsert> = {};
 		if (body.name !== undefined) {
 			if (typeof body.name !== 'string' || !body.name.trim()) bad('name is required');
@@ -124,6 +144,7 @@ export function updateBuild(db: Db, buildId: string, userId: string, body: unkno
 			set.deliveryDate =
 				body.deliveryDate === null ? null : dateStr(body.deliveryDate, 'deliveryDate');
 		if (body.phase !== undefined) {
+			if (view.build.kind === 'draft') bad('Drafts have no phase');
 			if (!(BUILD_PHASES as readonly unknown[]).includes(body.phase)) bad('Unknown phase');
 			set.phase = body.phase as string;
 		}
@@ -136,9 +157,28 @@ export function updateBuild(db: Db, buildId: string, userId: string, body: unkno
 export function deleteBuild(db: Db, buildId: string, userId: string): void {
 	const access = buildAccess(db, buildId, userId);
 	if (!access) throw new ApiError(404, 'Not found');
-	requireOwner(db, access.organizationId, userId);
+	// A draft is a sandbox: editors may delete it. A real build needs a chapter owner.
+	if (access.kind === 'draft') requireEditor(db, access.organizationId, userId);
+	else requireOwner(db, access.organizationId, userId);
 	db.delete(builds).where(eq(builds.id, buildId)).run();
 	publish(db, buildId, userId, 'build.delete', new Date());
+}
+
+/**
+ * Studio draft to tracked build: keeps the design, variants, printer, plates and uploaded
+ * files. Setup counts as done up to the Export step (everything it asks for exists already), so
+ * the wizard opens there with every earlier step one click away.
+ * Editors and owners. Writes a `build.promote` activity row.
+ */
+export function promoteDraft(db: Db, buildId: string, userId: string): void {
+	const access = buildAccess(db, buildId, userId);
+	if (!access) throw new ApiError(404, 'Not found');
+	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
+	if (access.kind !== 'draft') throw new ApiError(400, 'This is already a build');
+	mutateBuild(db, buildId, userId, (tx) => {
+		tx.update(builds).set({ kind: 'build', setupStep: 5 }).where(eq(builds.id, buildId)).run();
+		return { kind: 'build.promote', payload: {} };
+	});
 }
 
 export function setPartStatus(
@@ -721,6 +761,8 @@ export function mutateBuildSystem(
 		const view = loadBuildView(tx, buildId, viewAs);
 		if (!view) throw new ApiError(404, 'Not found');
 		const o = fn(tx, view, now);
+		if (view.build.kind === 'draft' && !draftAllows(o.kind))
+			throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 		if (o.patches?.length) applyPatches(tx, buildId, o.patches, now);
 		if (REARRANGE_KINDS.has(o.kind)) autoRearrangeBuild(tx, buildId, viewAs);
 		tx.insert(activity)
@@ -788,6 +830,7 @@ export function setSetupStep(db: Db, buildId: string, userId: string, body: unkn
 	const access = buildAccess(db, buildId, userId);
 	if (!access) throw new ApiError(404, 'Not found');
 	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
+	if (access.kind === 'draft') throw new ApiError(400, 'Drafts have no setup steps.');
 	db.update(builds)
 		.set({ setupStep: step as number | null })
 		.where(eq(builds.id, buildId))

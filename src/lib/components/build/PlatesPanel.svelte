@@ -29,6 +29,9 @@
 	/** Setup wizard: plate pictures only, no print log or slicer grams. */
 	let { wizard = false }: { wizard?: boolean } = $props();
 	const ctx = getBuildCtx();
+	/** Studio drafts have no tracking either: no print log, slicer grams or start buttons. */
+	const draft = $derived(ctx.view.build.kind === 'draft');
+	const track = $derived(!wizard && !draft);
 	let uploading = $state(false);
 	let notice = $state<string | null>(null);
 	// A sliced project dropped in the kit drop zone opens the upload with that file.
@@ -382,7 +385,9 @@
 	<section class="plate-card" aria-label="Plate {pl.number}">
 		<div class="group-head">
 			<h2>Plate {pl.number} · {pl.name}</h2>
-			<span class="meta num">{done}/{pl.parts.length} printed</span>
+			<span class="meta num"
+				>{draft ? `${pl.parts.length} parts` : `${done}/${pl.parts.length} printed`}</span
+			>
 			{#each rolesOf(pl) as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
 			{#if slicerTotal(pl)}
 				<span class="meta num" title="From your slicer grams"
@@ -457,12 +462,13 @@
 					type="button"
 					title="Open in the build guide"
 					onclick={() => ctx.openGuide(slug)}
-					>{partOf(slug)?.name ?? slug} <span class="meta">· {status(slug)}</span></button
+					>{partOf(slug)?.name ?? slug}
+					{#if !draft}<span class="meta">· {status(slug)}</span>{/if}</button
 				>
 			{/each}
 		</div>
 
-		{#if ctx.canEdit && !wizard}
+		{#if ctx.canEdit && track}
 			<div class="slicer-row">
 				{#if pl.perPartRuns}
 					{#each pl.parts as slug (slug)}
@@ -511,7 +517,7 @@
 			</div>
 		{/if}
 
-		{#if runs.length && !wizard}
+		{#if runs.length && track}
 			<div class="plate-log">
 				<RunTable
 					{runs}

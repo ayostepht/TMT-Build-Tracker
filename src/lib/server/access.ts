@@ -1,5 +1,5 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
-import type { TeamRole } from '#lib/domain/types.ts';
+import type { BuildKind, TeamRole } from '#lib/domain/types.ts';
 import type { Db } from './db';
 import { adminEmails } from './config';
 import { builds, member, user } from './db/schema';
@@ -56,16 +56,21 @@ export function buildAccess(
 	db: Db,
 	buildId: string,
 	userId: string
-): { organizationId: string; role: TeamRole; canEdit: boolean } | null {
+): { organizationId: string; role: TeamRole; canEdit: boolean; kind: BuildKind } | null {
 	const b = db
-		.select({ organizationId: builds.organizationId })
+		.select({ organizationId: builds.organizationId, kind: builds.kind })
 		.from(builds)
 		.where(eq(builds.id, buildId))
 		.get();
 	if (!b) return null;
 	const role = getMemberRole(db, b.organizationId, userId);
 	if (!role) return null;
-	return { organizationId: b.organizationId, role, canEdit: canEditRole(role) };
+	return {
+		organizationId: b.organizationId,
+		role,
+		canEdit: canEditRole(role),
+		kind: b.kind === 'draft' ? 'draft' : 'build'
+	};
 }
 
 /**

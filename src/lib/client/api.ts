@@ -699,3 +699,10 @@ export const setSetupStep = (buildId: string, step: number | null) =>
 /** Step 1: `own: true` points the build at a workspace-owned copy of its kit (for your own files). */
 export const chooseTemplate = (buildId: string, own: boolean) =>
 	call<{ templateId: string }>('POST', `${b(buildId)}/template`, { own });
+
+/** Studio draft → tracked build. The draft keeps its design, variants, printer, plates and files. */
+export const promoteDraft = (buildId: string) => call('POST', `${b(buildId)}/promote`);
+
+/** A Studio draft in a workspace (no tracking); returns its id. */
+export const createDraft = (organizationId: string, templateId: string, name: string) =>
+	call<{ id: string }>('POST', '/api/builds', { organizationId, templateId, name, kind: 'draft' });

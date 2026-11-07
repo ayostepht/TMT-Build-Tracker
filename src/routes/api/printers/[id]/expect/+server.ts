@@ -19,6 +19,7 @@ export const POST: RequestHandler = (event) =>
 		const access = buildAccess(db, body.buildId, userId);
 		if (!access || access.organizationId !== p.organizationId)
 			throw new ApiError(404, 'Build not found');
+		if (access.kind === 'draft') throw new ApiError(400, 'Drafts cannot be linked to print jobs.');
 		setExpected(db, p.organizationId, p.id, {
 			buildId: body.buildId,
 			plate: body.plateNumber,

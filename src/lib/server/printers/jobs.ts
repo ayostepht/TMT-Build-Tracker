@@ -58,12 +58,19 @@ export function findPlateForFile(db: Db, printer: PrinterRow, fileName: string):
 	const exp = getExpected(db, printer.organizationId, printer.id);
 	if (exp && Date.now() - exp.at < 12 * 3600_000) {
 		const v = loadBuildView(db, exp.buildId, actor);
-		if (v && v.plates.some((p) => p.number === exp.plate)) return { view: v, plate: exp.plate };
+		if (v && v.build.kind === 'build' && v.plates.some((p) => p.number === exp.plate))
+			return { view: v, plate: exp.plate };
 	}
 	const rows = db
 		.select({ id: builds.id, phase: builds.phase })
 		.from(builds)
-		.where(and(eq(builds.organizationId, printer.organizationId), ne(builds.phase, 'done')))
+		.where(
+			and(
+				eq(builds.organizationId, printer.organizationId),
+				ne(builds.phase, 'done'),
+				eq(builds.kind, 'build')
+			)
+		)
 		.all();
 	const views = rows.map((r) => loadBuildView(db, r.id, actor)).filter((v): v is BuildView => !!v);
 
@@ -461,6 +468,8 @@ export function linkJob(
 	if (!b || b.org !== orgId) throw new ApiError(404, 'Build not found');
 	const view = loadBuildView(db, buildId, userId);
 	if (!view) throw new ApiError(404, 'Build not found');
+	if (view.build.kind === 'draft')
+		throw new ApiError(400, 'Drafts cannot be linked to print jobs.');
 	if (!view.plates.some((p) => p.number === plateNumber)) throw new ApiError(400, 'Unknown plate');
 	const status = (printer.lastStatus ?? {
 		state: 'printing',

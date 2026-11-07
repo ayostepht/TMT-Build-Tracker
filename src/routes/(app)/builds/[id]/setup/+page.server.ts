@@ -8,6 +8,7 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ parent, locals }) => {
 	const { view } = await parent();
 	// The wizard changes things; view-only members just see the build.
+	if (view.build.kind === 'draft') redirect(303, `/builds/${view.build.id}/design`);
 	if (!view.canEdit) redirect(303, `/builds/${view.build.id}`);
 	const db = getDb();
 	const cur = db

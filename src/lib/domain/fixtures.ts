@@ -57,6 +57,7 @@ export function makeView(
 			name: 'Test build',
 			recipient: null,
 			hospital: null,
+			kind: 'build',
 			phase: 'printing',
 			deliveryDate: null,
 			createdAt: t0,

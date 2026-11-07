@@ -27,11 +27,13 @@
 
 	const ctx = getBuildCtx();
 	const canEdit = $derived(view.canEdit);
+	/** Studio drafts have no spools on hand: show what the design needs, not stock. */
+	const draft = $derived(view.build.kind === 'draft');
 
 	const statOf = (f: FilamentRole) => stats.find((s) => s.role === f.key);
 	const partCount = (f: FilamentRole) => view.parts.filter((p) => p.role === f.key).length;
 	const totalG = $derived(stats.reduce((a, s) => a + s.total, 0));
-	const shortCount = $derived(stats.filter((s) => s.short && s.total > 0).length);
+	const shortCount = $derived(draft ? 0 : stats.filter((s) => s.short && s.total > 0).length);
 
 	function remove(f: FilamentRole) {
 		void ctx.act(() => setBuildDesign(ctx.id, { removeRole: f.key }));
@@ -81,9 +83,9 @@
 						<b>{filamentLabel(f, f.key)}</b>
 						<span class="muted">{f.material} · {partCount(f)} parts · {fmt(grams)} g</span>
 					</button>
-					<div class="need" class:short={s?.short && grams > 0}>
-						Needs {fmtSpools(grams / 1000)} kg, have {fmtSpools(f.spools)}
-						{#if grams > 0}
+					<div class="need" class:short={!draft && s?.short && grams > 0}>
+						Needs {fmtSpools(grams / 1000)} kg{#if !draft}, have {fmtSpools(f.spools)}{/if}
+						{#if grams > 0 && !draft}
 							{#if spare < 0}<span class="flag">short</span>{:else}<span class="ok">ok</span>{/if}
 						{/if}
 					</div>

@@ -2,16 +2,30 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 
-	let { id }: { id: string } = $props();
+	let { id, draft = false }: { id: string; draft?: boolean } = $props();
 
-	const tabs = $derived([
-		{ label: 'Overview', href: resolve('/(app)/builds/[id]', { id }), exact: true },
-		{ label: 'Design', href: resolve('/(app)/builds/[id]/design', { id }) },
-		{ label: 'Print', href: resolve('/(app)/builds/[id]/print', { id }) },
-		{ label: 'Files', href: resolve('/(app)/builds/[id]/files', { id }) },
-		{ label: 'Finish', href: resolve('/(app)/builds/[id]/finish', { id }) },
-		{ label: '⚙ Settings', name: 'Settings', href: resolve('/(app)/builds/[id]/settings', { id }) }
-	]);
+	const settings = $derived<{ label: string; name?: string; href: string; exact?: boolean }>({
+		label: '⚙ Settings',
+		name: 'Settings',
+		href: resolve('/(app)/builds/[id]/settings', { id })
+	});
+	// A Studio draft has no tracking tabs: design, files (plates, export) and settings only.
+	const tabs = $derived<{ label: string; name?: string; href: string; exact?: boolean }[]>(
+		draft
+			? [
+					{ label: 'Design', href: resolve('/(app)/builds/[id]/design', { id }) },
+					{ label: 'Files', href: resolve('/(app)/builds/[id]/files', { id }) },
+					settings
+				]
+			: [
+					{ label: 'Overview', href: resolve('/(app)/builds/[id]', { id }), exact: true },
+					{ label: 'Design', href: resolve('/(app)/builds/[id]/design', { id }) },
+					{ label: 'Print', href: resolve('/(app)/builds/[id]/print', { id }) },
+					{ label: 'Files', href: resolve('/(app)/builds/[id]/files', { id }) },
+					{ label: 'Finish', href: resolve('/(app)/builds/[id]/finish', { id }) },
+					settings
+				]
+	);
 	const here = (t: { href: string; exact?: boolean }) =>
 		t.exact ? page.url.pathname === t.href : page.url.pathname.startsWith(t.href);
 
@@ -50,6 +64,7 @@
 	onscroll={measure}
 >
 	{#each tabs as t (t.href)}
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 		<a href={t.href} aria-current={here(t) ? 'page' : undefined} aria-label={t.name}>{t.label}</a>
 	{/each}
 </nav>

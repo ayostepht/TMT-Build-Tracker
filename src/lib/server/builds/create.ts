@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import type { BuildPrinter } from '#lib/domain/types.ts';
+import type { BuildKind, BuildPrinter } from '#lib/domain/types.ts';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import { ApiError, requireEditor } from '../access';
 import { canSeeDesign } from '../designs/access';
@@ -33,6 +33,8 @@ export interface CreateBuildInput {
 	plateLayout?: string | null;
 	/** Printer to plan plates for (BuildPrinter, validated). With one set, plates are arranged right away unless a layout is chosen. */
 	printer?: BuildPrinter | null;
+	/** 'draft' creates a Studio draft: no setup wizard, no tracking. Default 'build'. */
+	kind?: BuildKind;
 	/** Start the setup wizard at step 1 (the New build form); API-created builds skip it. */
 	setup?: boolean;
 }
@@ -95,7 +97,8 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 				variantChoices: resolveChoices(tpl.variantGroups, choices),
 				plateLayout: layout?.key ?? null,
 				printer: input.printer ?? null,
-				setupStep: input.setup ? 1 : null,
+				kind: input.kind === 'draft' ? 'draft' : 'build',
+				setupStep: input.setup && input.kind !== 'draft' ? 1 : null,
 				createdBy: userId
 			})
 			.returning({ id: builds.id })
@@ -180,7 +183,12 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 				.run();
 		}
 		tx.insert(activity)
-			.values({ buildId: id, userId, kind: 'build.create', payload: { name } })
+			.values({
+				buildId: id,
+				userId,
+				kind: 'build.create',
+				payload: input.kind === 'draft' ? { name, draft: true } : { name }
+			})
 			.run();
 		return id;
 	});

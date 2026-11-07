@@ -43,7 +43,9 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 
 	switch (a.kind) {
 		case 'build.create':
-			return `${who} started this build`;
+			return p.draft ? `${who} started this draft` : `${who} started this build`;
+		case 'build.promote':
+			return `${who} turned this draft into a build`;
 		case 'build.update': {
 			const bits: string[] = [];
 			if ('name' in p) bits.push(`renamed it to "${str(p.name) ?? ''}"`);

@@ -34,10 +34,19 @@
 
 	// The build being looked at (the build layout puts its view into page data).
 	const current = $derived(
-		(page.data as { view?: { build: { id: string; name: string } } }).view?.build ?? null
+		(page.data as { view?: { build: { id: string; name: string; kind?: string } } }).view?.build ??
+			null
 	);
-	const overviewHref = $derived(current ? resolve('/(app)/builds/[id]', { id: current.id }) : null);
-	const onOverview = $derived(!!overviewHref && page.url.pathname === overviewHref);
+	const isDraft = $derived(current?.kind === 'draft');
+	// A draft has no Overview: its crumb leads back to the Studio.
+	const overviewHref = $derived(
+		current
+			? isDraft
+				? resolve('/(app)/studio')
+				: resolve('/(app)/builds/[id]', { id: current.id })
+			: null
+	);
+	const onOverview = $derived(!isDraft && !!overviewHref && page.url.pathname === overviewHref);
 	const onSetup = $derived(page.route.id === '/(app)/builds/[id]/setup');
 	// Pages that are not part of a build carry `?from=<id>` so they can lead back to it.
 	const fromQuery = $derived(current ? `?from=${current.id}` : '');
@@ -163,8 +172,17 @@
 						</div>
 					{/if}
 				</div>
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-				<a class="navlink" href={resolve('/(app)/designs') + fromQuery}>Designs</a>
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
+				<a
+					class="navlink"
+					href={resolve('/(app)/studio') + fromQuery}
+					data-testid="nav-studio"
+					aria-current={page.url.pathname.startsWith('/studio') ||
+					page.url.pathname.startsWith('/designs')
+						? 'page'
+						: undefined}>Studio</a
+				>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 				{#if printersHref}
 					<a
 						class="navlink"
@@ -247,7 +265,7 @@
 		</div>
 		{#if current && !onOverview && !onSetup}
 			<a class="crumb" href={overviewHref} data-testid="back-to-build"
-				><span aria-hidden="true">←</span> {current.name}</a
+				><span aria-hidden="true">←</span> {isDraft ? 'Studio' : current.name}</a
 			>
 		{/if}
 	</header>

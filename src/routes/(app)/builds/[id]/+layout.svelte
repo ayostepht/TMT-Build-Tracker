@@ -4,6 +4,7 @@
 	import { subscribeBuild } from '#lib/client/live.ts';
 	import { BuildCtx, setBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import BuildHeader from '#lib/components/BuildHeader.svelte';
+	import DraftHeader from '#lib/components/DraftHeader.svelte';
 	import TabBar from '#lib/components/TabBar.svelte';
 	import GuideViewer from '#lib/components/GuideViewer.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -42,6 +43,7 @@
 	});
 
 	const inSetup = $derived(page.route.id === '/(app)/builds/[id]/setup');
+	const isDraft = $derived(ctx.view.build.kind === 'draft');
 	const chapter = $derived(
 		(data as { teams?: { id: string; name: string }[] }).teams?.find(
 			(t) => t.id === data.view.build.organizationId
@@ -52,18 +54,23 @@
 <svelte:head><title>{ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
 {#if !inSetup}
-	<BuildHeader {chapter} />
+	{#if isDraft}
+		<DraftHeader {chapter} />
+	{:else}
+		<BuildHeader {chapter} />
+	{/if}
 {/if}
 {#if !ctx.canEdit}
 	<div class="banner" role="note">
-		You have view-only access to this build. Ask a chapter owner for editor access to make changes.
+		You have view-only access to this {isDraft ? 'draft' : 'build'}. Ask a chapter owner for editor
+		access to make changes.
 	</div>
 {/if}
 {#if ctx.error}
 	<div class="banner bad" role="alert">{ctx.error}</div>
 {/if}
 {#if !inSetup}
-	<TabBar id={ctx.id} />
+	<TabBar id={ctx.id} draft={isDraft} />
 {/if}
 {@render children()}
 <GuideViewer />
