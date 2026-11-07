@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-07, after Studio drafts (deployed as r20; r19 = log plate, pace, twins). Keep this file
+_Last updated: 2026-11-07, after palette color locks + plate runs in part logs (dadd250, not deployed; r20 = Studio drafts). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -53,6 +53,25 @@ Save as design all work as on a build.
   `kind = 'build'` and `setup_step = 5` (everything the wizard asks for already exists), writes `build.promote`,
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
+
+## Palette color locks and part print logs (2026-11-07, dadd250, not deployed)
+
+- Design tab "Build one from a color" has four slot tiles (Primary, Accent, Soft, Tires), each a locked
+  color or Auto. Quick swatches fill the selected tile, else the next Auto slot; "Use current" locks a slot
+  to the build's current filament hex; × returns it to Auto. Initial state: Primary = the build's primary.
+- `generateFromLocked(locked, harmony, shuffle)` keeps locked slots exact; anchor = primary > accent > soft
+  > tire; an accent-only lock derives a primary >= `MIN_ACCENT_DE` away; primary + accent locked derive
+  > soft/tire (`deriveSoftTire`). `paletteVariations(locked, count, page, harmonies?)` interleaves harmonies
+  > per shuffle round and skips near-duplicates (`VARIATION_MIN_DE` 6 on every unlocked slot).
+- Theme chips filter ("All themes" default); 6 cards per page + "More variations"; locked slots get a
+  "yours" badge; preview ids `gen:<harmony>-<shuffle>`. Thin themes (Monochrome, primary only) give ~3.
+- Open: no screenshots taken yet (the agent's Playwright screenshot run was denied at a permission prompt;
+  spec ready in `data/shots-palette-locks/`).
+- Bug fix: a part's Print log (`PartRow`) hid whole-plate runs (printer auto-log, Log plate N), so a Printed
+  part said "No prints logged yet". `partRuns(view, slug)` in `logrun.ts` adds plate runs that cover the part
+  (`runTargets`); `RunTable` `scopeOf` tags them "Plate N · whole plate" / "k of m parts" (grams titled
+  "plate total"); deleting one from a part row confirms (it affects every part on the plate). The phone
+  `.detail` column is `minmax(0, 1fr)` so a log table scrolls instead of widening the page.
 
 ## Decisions (do not revisit without the maintainer)
 
