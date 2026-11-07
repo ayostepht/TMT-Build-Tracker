@@ -91,10 +91,12 @@ describe('matchObject on the H-series object names', () => {
 		expect(slugOf('MG_PUSH HANDLE.step', 'TPU')).toBe('push-grip');
 	});
 
-	it('picks the rim by revision, and flags the two parts that share the file', () => {
+	it('picks the rim by revision, and names the two parts that share the file', () => {
 		const rimB = matchObject('3DTMT O WHEEL RIM REV B.STEP', parts, { filamentType: 'PETG' });
 		expect(['rims-1-4', 'rims-2-3']).toContain(rimB.slug);
-		expect(rimB.confidence).toBeLessThanOrEqual(0.6);
+		// the two halves are twins (same source file): not an ambiguity, and the match names them
+		expect(rimB.twins).toEqual(['rims-1-4', 'rims-2-3']);
+		expect(rimB.confidence).toBeGreaterThan(0.8);
 		const rimA = matchObject('3DTMT O WHEEL RIM REV A.STEP', parts, { filamentType: 'PETG' });
 		expect(['rims-small-1-4', 'rims-small-2-3']).toContain(rimA.slug);
 	});

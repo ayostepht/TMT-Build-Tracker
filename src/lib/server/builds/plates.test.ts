@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { recomputeParts } from '#lib/domain/recompute.ts';
 import { describeActivity } from '#lib/domain/activity.ts';
 import { ApiError } from '../access';
@@ -10,9 +10,11 @@ import { openDb, runMigrations, type Db } from '../db';
 import {
 	activity,
 	buildUploads,
+	buildPlates,
 	builds,
 	member,
 	organization,
+	printRuns,
 	templates,
 	user
 } from '../db/schema';
@@ -22,6 +24,7 @@ import { makeProjectThreeMf } from '../threemf/fixtures';
 import { parseThreeMfBytes } from '../threemf';
 import { addRun, setPartStatus } from './actions';
 import { createBuild } from './create';
+import { repairTwinPlates } from './twin-repair';
 import {
 	applyUpload,
 	buildLayouts,
@@ -280,7 +283,11 @@ describe('uploading a 3MF', () => {
 			convertedRuns: 0,
 			mode: 'plates',
 			learned: 5,
-			arranged: false
+			arranged: false,
+			twinPlates: [
+				{ plate: 2, parts: ['rims-small-1-4', 'rims-small-2-3'], runsPerPart: 2, totalRuns: 4 }
+			],
+			warnings: []
 		});
 		const v = view(id);
 		expect(v.variantChoices.rim).toBe('smaller');
@@ -295,8 +302,10 @@ describe('uploading a 3MF', () => {
 			source: `upload:${up.uploadId}`
 		});
 		expect(handles.parts).toEqual(['handle-left', 'handle-right', 'storage-left']);
-		expect(rim).toMatchObject({ runs: 4, filamentGrams: { accent: 120, tire: 12.5 } });
-		expect(rim.parts).toEqual(['rims-small-1-4']);
+		// the rim object stands for both rim halves (twins): each prints half of the 4 runs
+		expect(rim).toMatchObject({ runs: 2, perPartRuns: true, filamentGrams: {} });
+		expect(rim.parts).toEqual(['rims-small-1-4', 'rims-small-2-3']);
+		expect(Object.keys(rim.slicerByPart)).toEqual(['rims-small-1-4', 'rims-small-2-3']);
 		// thumbnails: served from the build folder, upload folder cleaned up
 		expect(plateThumbnailFile(db, id, 'owner', 1)).toMatch(/plates\/.+\/1\.png$/);
 		expect(existsSync(plateThumbnailFile(db, id, 'owner', 1)!)).toBe(true);
@@ -386,5 +395,165 @@ describe('uploading a 3MF', () => {
 		expect(() =>
 			applyUpload(db, id, 'owner', second.uploadId, { mapping: second.suggestions.mapping })
 		).toThrow(/already/);
+	});
+});
+
+describe('twin parts (one source object, several kit parts)', () => {
+	async function uploadRim(id: string, plateName = 'WHEEL RIM (PRINT X4)') {
+		const bytes = makeProjectThreeMf({
+			sliced: true,
+			filamentTypes: ['PETG'],
+			plates: [
+				{
+					name: plateName,
+					prediction: 35000,
+					weight: 66,
+					filaments: { 1: 66 },
+					objects: [{ name: '3DTMT O WHEEL RIM REV B.STEP' }]
+				}
+			]
+		});
+		const parsed = await parseThreeMfBytes(bytes);
+		return createUpload(db, id, 'owner', { name: 'rim.3mf', size: bytes.length }, parsed, view(id));
+	}
+	const plate = (id: string) => view(id).plates.find((p) => p.number === 1)!;
+
+	it('assigns both rim halves, shares the runs and keeps the time per run', async () => {
+		const id = mk();
+		const up = await uploadRim(id);
+		const key = Object.keys(up.suggestions.mapping)[0];
+		expect(up.suggestions.mapping[key]).toMatch(/^rims-(1-4|2-3)$/);
+		expect(up.suggestions.twinGroups).toContainEqual(['rims-1-4', 'rims-2-3']);
+		const r = applyUpload(db, id, 'owner', up.uploadId, {
+			mapping: up.suggestions.mapping,
+			filamentMap: { '1': 'accent' }
+		});
+		expect(r.twinPlates).toEqual([
+			{ plate: 1, parts: ['rims-1-4', 'rims-2-3'], runsPerPart: 2, totalRuns: 4 }
+		]);
+		expect(r.warnings).toEqual([]);
+		const p = plate(id);
+		expect(p).toMatchObject({
+			parts: ['rims-1-4', 'rims-2-3'],
+			perPartRuns: true,
+			runs: 2,
+			estSeconds: 35000,
+			filamentGrams: {},
+			slicerByPart: { 'rims-1-4': 66, 'rims-2-3': 66 }
+		});
+		// nothing is left on no plate
+		const v = view(id);
+		const placed = new Set(v.plates.flatMap((x) => x.parts));
+		expect(v.parts.filter((x) => x.slug.startsWith('rims-') && !placed.has(x.slug))).toEqual([]);
+	});
+
+	it('keeps runs per twin = ceil and warns when they do not divide', async () => {
+		const id = mk();
+		const up = await uploadRim(id, 'WHEEL RIM (PRINT X3)');
+		const r = applyUpload(db, id, 'owner', up.uploadId, {
+			mapping: up.suggestions.mapping,
+			filamentMap: { '1': 'accent' }
+		});
+		expect(plate(id)).toMatchObject({ runs: 2, perPartRuns: true });
+		expect(r.warnings).toHaveLength(1);
+		expect(r.warnings[0]).toMatch(/Plate 1.*do not divide evenly/);
+	});
+
+	it('can be overridden to the single mapped part', async () => {
+		const id = mk();
+		const up = await uploadRim(id);
+		const key = Object.keys(up.suggestions.mapping)[0];
+		const r = applyUpload(db, id, 'owner', up.uploadId, {
+			mapping: up.suggestions.mapping,
+			filamentMap: { '1': 'accent' },
+			single: { [key]: true }
+		});
+		expect(r.twinPlates).toEqual([]);
+		expect(plate(id)).toMatchObject({ perPartRuns: false, runs: 4, slicerGrams: 66 });
+		expect(plate(id).parts).toHaveLength(1);
+	});
+});
+
+describe('repairTwinPlates', () => {
+	/** The state the old apply left: one rim half, 4 whole-plate runs, the other half on no plate. */
+	function legacy(id: string) {
+		db.update(buildPlates)
+			.set({
+				name: 'WHEEL RIM (PRINT X4)',
+				runs: 4,
+				perPartRuns: false,
+				parts: ['rims-1-4'],
+				slicerGrams: 66,
+				slicerByPart: {},
+				filamentGrams: { accent: 66 },
+				source: 'upload:old'
+			})
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 13)))
+			.run();
+	}
+	const rim = (id: string) =>
+		db
+			.select()
+			.from(buildPlates)
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 13)))
+			.get()!;
+
+	it('fixes the old pattern in place, once, without touching print runs', () => {
+		const id = mk();
+		legacy(id);
+		const logs = db.select().from(printRuns).where(eq(printRuns.buildId, id)).all().length;
+		const fixed = repairTwinPlates(db);
+		expect(fixed).toEqual([
+			{
+				buildId: id,
+				plate: 13,
+				before: ['rims-1-4'],
+				after: ['rims-1-4', 'rims-2-3'],
+				runsBefore: 4,
+				runsAfter: 2
+			}
+		]);
+		expect(rim(id)).toMatchObject({
+			parts: ['rims-1-4', 'rims-2-3'],
+			perPartRuns: true,
+			runs: 2,
+			filamentGrams: {},
+			slicerByPart: { 'rims-1-4': 66, 'rims-2-3': 66 }
+		});
+		expect(db.select().from(printRuns).where(eq(printRuns.buildId, id)).all()).toHaveLength(logs);
+		// idempotent
+		expect(repairTwinPlates(db)).toEqual([]);
+	});
+
+	it('recognises already fixed builds and layouts as done', () => {
+		const id = mk();
+		expect(repairTwinPlates(db)).toEqual([]);
+		expect(rim(id)).toMatchObject({ perPartRuns: true, runs: 2 });
+		// hand-fixed uploaded plate
+		db.update(buildPlates)
+			.set({ source: 'upload:old', slicerByPart: { 'rims-1-4': 66, 'rims-2-3': 66 } })
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 13)))
+			.run();
+		expect(repairTwinPlates(db)).toEqual([]);
+		expect(rim(id).parts).toEqual(['rims-1-4', 'rims-2-3']);
+	});
+
+	it('leaves a plate alone when the other twin is placed elsewhere or runs do not divide', () => {
+		const id = mk();
+		legacy(id);
+		db.update(buildPlates)
+			.set({ parts: ['rims-2-3'] })
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 12)))
+			.run();
+		expect(repairTwinPlates(db)).toEqual([]);
+		db.update(buildPlates)
+			.set({ parts: ['connectors'] })
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 12)))
+			.run();
+		db.update(buildPlates)
+			.set({ runs: 3 })
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 13)))
+			.run();
+		expect(repairTwinPlates(db)).toEqual([]);
 	});
 });

@@ -14,3 +14,4 @@ export * from './assembly.ts';
 export * from './printer-match.ts';
 export * from './spool-split.ts';
 export * from './time-estimate.ts';
+export * from './pace.ts';

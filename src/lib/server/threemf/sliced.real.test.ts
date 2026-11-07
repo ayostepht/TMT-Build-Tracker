@@ -146,6 +146,22 @@ describe.skipIf(!file || !existsSync(file))('real sliced project', () => {
 				expect(after.plates.every((p) => (p.slicerGrams ?? 0) > 0)).toBe(true);
 				expect(after.plates.some((p) => Object.keys(p.filamentGrams).length > 0)).toBe(true);
 				expect(t.estimated).toBe(false);
+				// the rim object stands for both rim pairs (twins): plate 13 holds both, runs shared, none left over
+				const rim = after.plates.find((p) => p.name.toUpperCase().includes('WHEEL RIM'));
+				console.log(`${label}: rim plate ${JSON.stringify(rim)}`);
+				expect(rim).toMatchObject({ perPartRuns: true, runs: 2, filamentGrams: {} });
+				expect(rim!.parts).toEqual(['rims-1-4', 'rims-2-3']);
+				expect(Object.keys(rim!.slicerByPart)).toEqual(['rims-1-4', 'rims-2-3']);
+				const placed = new Set(after.plates.flatMap((p) => p.parts));
+				console.log(
+					`${label}: parts on no plate: ${after.parts
+						.filter((p) => !placed.has(p.slug))
+						.map((p) => p.slug)
+						.join(', ')}`
+				);
+				expect(
+					after.parts.filter((p) => p.slug.startsWith('rims-') && !placed.has(p.slug))
+				).toEqual([]);
 			}
 		}
 	);

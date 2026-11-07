@@ -8,6 +8,7 @@
  * logged. A running print still counts as to print.
  */
 import { fmtH } from './format.ts';
+import { paceOf, type Pace } from './pace.ts';
 import type { BuildView, PartDef, Plate, PrintRun } from './types.ts';
 
 export interface Unit {
@@ -170,6 +171,8 @@ export interface TimeStats {
 	loggedHours: number;
 	paceRatio: number | null; // actual / estimated, once >= 12 h of timed successful runs
 	adjustedLeftSec: number | null;
+	/** The full pace calibration (ratio, sample hours, text); null before enough timed runs. */
+	pace: Pace | null;
 	/** Some plate has a time (so the totals mean something). */
 	known: boolean;
 	/** Part of the total comes from our estimate (not slicer or MakeGood profile times). */
@@ -219,26 +222,16 @@ export function timeStats(view: BuildView): TimeStats {
 		}
 	}
 	let loggedHours = 0;
-	let estOfTimed = 0;
-	let actualOfTimed = 0;
-	for (const r of view.runs) {
-		const h = Number(r.hours) || 0;
-		loggedHours += h;
-		if (h > 0 && r.result === 'Success' && r.plateNumber != null) {
-			const est = plateByNumber(view, r.plateNumber)?.estSeconds;
-			if (est) {
-				estOfTimed += est / 3600;
-				actualOfTimed += h;
-			}
-		}
-	}
-	const paceRatio = estOfTimed >= 12 ? actualOfTimed / estOfTimed : null;
+	for (const r of view.runs) loggedHours += Number(r.hours) || 0;
+	const pace = paceOf(view);
+	const paceRatio = pace ? pace.ratio : null;
 	return {
 		totalSec,
 		leftSec,
 		loggedHours,
 		paceRatio,
 		adjustedLeftSec: paceRatio ? leftSec * paceRatio : null,
+		pace,
 		known: totalSec > 0,
 		estimated,
 		rough,

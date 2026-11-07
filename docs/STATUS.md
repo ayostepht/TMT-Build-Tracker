@@ -12,22 +12,23 @@ specifics (test copy, printer IP, deploy routine) are in the untracked
 All planned milestones 1–7 are built and running on the maintainer's test copy.
 Milestone 8 (release) has not started.
 
-| Area                                                                                                | State                                                               |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Builds, chapters, roles, live updates, activity                                                     | Done                                                                |
-| Prototype import, print logs (log sheet, edit, delete, undo)                                        | Done                                                                |
-| Variants (seat, rear caster, footrest, rim) and accessories (headrest, push handle)                 | Done                                                                |
-| 3D designer (tap parts, slots, swatch picker, 13 palettes, generator, shareable designs)            | Done                                                                |
-| Setup wizard (template, options, colors with the full designer, print, export)                      | Done                                                                |
-| Build tabs: Overview · Design · Print · Files · Finish · Settings; Builds/Printers nav              | Done                                                                |
-| Printer catalog (70), bed presets, team printers, keep-out zones                                    | Done                                                                |
-| Plate arranging (true outlines, flat rotations only, edge margins, rigid source groups when needed) | Done                                                                |
-| 3MF export (Orca/Elegoo, Bambu, plain), painted supports, `bed_exclude_area`                        | Done, opened in Elegoo Slicer once (v1)                             |
-| Bundled MakeGood kit pack (CC0) 1.0.1, installed on first start                                     | Done                                                                |
-| Assembly checklist, photos, handoff, printable summary                                              | Done                                                                |
-| Read-only printer status (Elegoo SDCP, Moonraker, OctoPrint, Bambu LAN), job → plate linking        | Done; SDCP probe verified live, full supervisor not yet tested live |
-| Spoolman (optional)                                                                                 | Done, mock-tested only                                              |
-| Release (Unraid template, domain, public repo)                                                      | Not started                                                         |
+| Area                                                                                                                     | State                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Builds, chapters, roles, live updates, activity                                                                          | Done                                                                                                                                            |
+| Prototype import, print logs (log sheet, edit, delete, undo)                                                             | Done                                                                                                                                            |
+| Variants (seat, rear caster, footrest, rim) and accessories (headrest, push handle)                                      | Done                                                                                                                                            |
+| 3D designer (tap parts, slots, swatch picker, 13 palettes, generator, shareable designs)                                 | Done                                                                                                                                            |
+| Setup wizard (template, options, colors with the full designer, print, export)                                           | Done                                                                                                                                            |
+| Build tabs: Overview · Design · Print · Files · Finish · Settings; Builds/Printers nav                                   | Done                                                                                                                                            |
+| Printer catalog (70), bed presets, team printers, keep-out zones                                                         | Done                                                                                                                                            |
+| Plate arranging (true outlines, flat rotations only, edge margins, rigid source groups when needed)                      | Done                                                                                                                                            |
+| 3MF export (Orca/Elegoo, Bambu, plain), painted supports, `bed_exclude_area`                                             | Done, opened in Elegoo Slicer once (v1)                                                                                                         |
+| Bundled MakeGood kit pack (CC0) 1.0.1, installed on first start                                                          | Done                                                                                                                                            |
+| Assembly checklist, photos, handoff, printable summary                                                                   | Done                                                                                                                                            |
+| Read-only printer status (Elegoo SDCP, Moonraker, OctoPrint, Bambu LAN), job → plate linking                             | Done; SDCP probe verified live, full supervisor not yet tested live                                                                             |
+| Spoolman (optional)                                                                                                      | Done, mock-tested only                                                                                                                          |
+| Log a whole plate (Print tab: Ready to print, plate groups, part detail; bulk "Log N plates"), pace-adjusted plate times | Done (uncommitted): `LogPlateButton`, `LogRunSheet quick`, `domain/pace.ts`, `PlateTime`; e2e `log-plate`. No screenshots of the multi-run flow |
+| Release (Unraid template, domain, public repo)                                                                           | Not started                                                                                                                                     |
 
 Latest real-geometry result (Elegoo Centauri Carbon, 256 × 256 with the cutter
 keep-out, pack 1.0.1): **21 plates, no warnings, export guard clean**; both wings fit
@@ -78,6 +79,30 @@ Answered on 2026-11-04 (keep for context):
 
 ## Known gaps and backlog
 
+- Done 2026-11-06 (not yet committed): twin parts on uploaded plates. A slicer project holds ONE object for kit parts
+  that share a source file (the rims: `rims-1-4` accent and `rims-2-3` primary, both `3DTMT O WHEEL RIM REV B.STEP`;
+  plate 13 "WHEEL RIM (PRINT X4)" prints it 4 times). Apply used to put one twin on the plate with runs 4 and leave the other
+  under "Other" (6 halves, wrong grams). Now `src/lib/domain/twins.ts` (pure: `twinGroups` by identical source file, or
+  identical component files when a part has no real file; `planPlateParts`, `splitTwinRuns`) is used by apply (`applyUpload` in
+  `builds/plates.ts`) and the review UI. An object mapped to a twin puts ALL twins active under the chosen variants on the
+  plate, `perPartRuns` true, runs = ceil(runsHint / twins) (a warning in the result and review when not divisible),
+  `slicer_by_part` = plate grams per run for each twin, `filament_grams` {} (accounting takes the roles from the parts),
+  `est_seconds` per run unchanged, `slicer_grams` kept. Only plates made of one twin group are shared out; mixed plates, or
+  plates that already map every twin, stay as mapped (mixed ones get a warning). `matchObject` returns `twins` and no longer
+  caps the confidence of a tie among twins (other ties stay capped at 0.6). Review UI (`PlateUpload.svelte`): a callout per
+  plate, e.g. "Wheel Rim -> Wheel Rims 1 and 4 (Accent) x2 and Wheel Rims 2 and 3 (Primary) x2", with a checkbox "Use only
+  <part>" (apply body `single`: object keys). Result gains `twinPlates` and `warnings`; suggestions gain `twinGroups`.
+  Non-sliced profile imports use the same path. Built-in layouts (`xpa` 13, `h2d` 12 and 20) already use perPartRuns with
+  both twins: unchanged. Repair: `repairTwinPlates` (`builds/twin-repair.ts`, runs in `startup()` after the backfill, logs
+  each change with `[tmt] twin repair:`): an uploaded plate with only one twin, perPartRuns false, the other active twins on
+  no plate, runs divisible by the twin count becomes the shape above; print runs are not touched (note: whole-plate logs on
+  such a plate stop counting toward a perPartRuns unit, as with any per-part plate); idempotent, and the maintainer's two
+  hand-fixed builds (perPartRuns already true) are a no-op. Tests: `twins.test.ts`, additions in `plates.test.ts` (apply 4 -> 2
+  each, odd 3 -> 2 + warning, single override, repair + idempotency + hand-fixed no-op), `plates-match.test.ts`,
+  accounting totals; e2e `plates-upload` (new twin test). Real check (the maintainer's 24-plate sliced file, kit pack 1.0.1,
+  scratch DB, arranged and unarranged build): plate 13 = parts [rims-1-4, rims-2-3], runs 2, perPartRuns, slicer grams 287.98 per
+  part per run, filament_grams {}, 36852 s per run, no part left on no plate, total 457.5 h as before
+  (`sliced.real.test.ts`, now asserts it).
 - Done 2026-11-06 (not yet committed): sliced files as a data source ("print template"). After upload the review
   screen asks "Use these plates" (file's plates as sliced, today's behaviour) or "Use as print template" (keep my plates,
   optionally re-arrange now; learn per-part data). Default: template when the build has a printer or arranged plates, else
@@ -184,3 +209,22 @@ variants · `f26ceb1` 3D designer + 3MF plates · `455193b` printer planner · `
 complete chair + palettes · `1bb95d4` 3MF export · `5da23aa` flat-rotation rule ·
 `b345442` true-outline fitting · `7d40f61` wizard + kit pack · `c45b1cd` margins,
 keep-outs · `f4e7715` groups + kit pack 1.0.1.
+
+### Log a whole plate and pace (2026-11-07, uncommitted)
+
+- "Log plate N printed…" (`LogPlateButton.svelte`) opens `LogRunSheet` with `quick`: Success
+  preselected, finished now, time = started→now if Printing else the plate's per-run time
+  (source labelled), grams = slicer/learned grams per run (sum of per-filament grams when no
+  plate total). The Now printing finish flow is unchanged (no default result). Sheet summary shows
+  "Print 1 of 2" on multi-run plates. Ready to print has checkboxes + "Log N plates printed"
+  (single-run, non-perPartRuns plates only; hours left empty; one Undo reverses the batch).
+- Pace (`src/lib/domain/pace.ts`): sum(actual)/sum(plate time) over successful timed whole-plate
+  runs, ignoring failed/partial, subset runs, hours <30% or >300% of plate time, and hours that
+  equal the plate time exactly (the sheet's prefill, not a measurement). Needs 12 estimated
+  hours. `Plate.estSeconds` is already the best source (slicer > learned > profile > estimate).
+  `timeStats.pace` carries it; header text "Calibrated: you print 7% faster than the slicer".
+  `PlateTime.svelte` shows "≈ 9.4 h at your pace · slicer 10 h" (plus total for multi-run) on
+  Ready to print, plate groups, Files plate cards and Now printing; Now printing's ETA uses the
+  pace when the time is slicer/learned/estimate and no printer job reports its own.
+- Caveat: a user who saves the prefilled plan time unedited records plan time as actual hours;
+  the exact-match rule in pace excludes that, but the logged hours stay in totals.

@@ -97,7 +97,7 @@
 		</div>
 		<div class="verdict info">
 			{time.paceRatio
-				? `Your prints run ${Math.round(time.paceRatio * 100)}% of the estimates`
+				? `Calibrated: ${time.pace?.text ?? ''}`
 				: !time.known
 					? 'No time estimate yet. Upload a sliced file to get one.'
 					: time.estimated

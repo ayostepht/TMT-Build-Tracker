@@ -7,6 +7,7 @@
 	import RunTable from './RunTable.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
 	import PlateStart from './PlateStart.svelte';
+	import LogPlateButton from './LogPlateButton.svelte';
 
 	let { part }: { part: PartDef } = $props();
 
@@ -163,6 +164,11 @@
 						{plate}
 						only={plate.perPartRuns ? part.slug : null}
 						label="Start printing plate {plate.number}"
+					/>
+					<LogPlateButton
+						{plate}
+						first={plate.perPartRuns ? part.slug : null}
+						label="Log plate {plate.number} printed…"
 					/>
 				{/if}
 				<h3 style="margin-top:12px">Assigned to</h3>

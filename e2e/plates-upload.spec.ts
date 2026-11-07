@@ -88,3 +88,44 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 		.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0))
 		.toBe(true);
 });
+
+test('a rim object stands for both rim pairs, with an override to a single part', async ({
+	page
+}) => {
+	await ownerWithBuild(page, 'twins');
+	await page.getByRole('link', { name: 'Files', exact: true }).click();
+	await page.getByTestId('plate-layout').selectOption({ label: 'Use my own sliced file…' });
+	const panel = page.getByRole('region', { name: 'Upload a 3MF' });
+	const file = makeProjectThreeMf({
+		sliced: true,
+		filamentTypes: ['PETG'],
+		plates: [
+			{
+				name: 'WHEEL RIM (PRINT X4)',
+				prediction: 35000,
+				weight: 66,
+				filaments: { 1: 66 },
+				objects: [{ name: '3DTMT O WHEEL RIM REV B.STEP' }]
+			}
+		]
+	});
+	await panel.getByTestId('3mf-file').setInputFiles({
+		name: 'rims.3mf',
+		mimeType: 'model/3mf',
+		buffer: Buffer.from(file)
+	});
+	await panel.getByTestId('outcome-plates').check();
+	const twin = panel.getByTestId('twin-plan');
+	await expect(twin).toContainText('Wheel Rim');
+	await expect(twin).toContainText(
+		'Wheel Rims 1 and 4 (Accent) ×2 and Wheel Rims 2 and 3 (Primary) ×2'
+	);
+	await twin.getByTestId('twin-single').check();
+	await expect(twin).toContainText('only');
+	await twin.getByTestId('twin-single').uncheck();
+	await expect(twin).toContainText('Wheel Rims 2 and 3 (Primary) ×2');
+	await panel.getByTestId('apply-upload').click();
+	const plate = page.getByRole('region', { name: 'Plate 1', exact: true });
+	await expect(plate).toContainText('Wheel Rims 1 and 4');
+	await expect(plate).toContainText('Wheel Rims 2 and 3');
+});

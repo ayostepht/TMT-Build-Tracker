@@ -4,6 +4,7 @@
 		fmtH,
 		fmtDur,
 		fmtHM,
+		paceOf,
 		parseDur,
 		toLocalInput,
 		type nowPrinting
@@ -12,6 +13,7 @@
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import RoleChip from './RoleChip.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
+	import PlateTime from './PlateTime.svelte';
 	import PrinterLive from './PrinterLive.svelte';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 
@@ -39,7 +41,13 @@
 		item.parts.reduce((a, p) => a + (p.bomGrams ?? 0) / Math.max(1, plate?.runs ?? 1), 0)
 	);
 	const elapsedMs = $derived(item.startedAt ? ctx.now - Date.parse(item.startedAt) : 0);
-	const estMs = $derived((item.estSeconds ?? 0) * 1000);
+	// Pace-adjusted when the time is the slicer's, learned or an estimate and no printer reports its own.
+	const pace = $derived(
+		!liveJobs.length && ['slicer', 'learned', 'estimate'].includes(item.estSource ?? '')
+			? paceOf(ctx.view)
+			: null
+	);
+	const estMs = $derived((item.estSeconds ?? 0) * 1000 * (pace?.ratio ?? 1));
 	const leftMs = $derived(estMs - elapsedMs);
 	const etaTxt = $derived.by(() => {
 		if (!item.startedAt || !estMs) return '';
@@ -94,6 +102,7 @@
 		<div class="now-meta">
 			{#each item.roles as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
 			{#if item.gramsPerRun}<span class="num">~{fmt(item.gramsPerRun)} g</span>{/if}
+			{#if plate}<PlateTime {plate} />{/if}
 		</div>
 	</div>
 	<div class="now-parts">
@@ -163,9 +172,8 @@
 		{#if item.startedAt}
 			<span class="now-elapsed">{fmtDur(elapsedMs)}</span> elapsed ·
 			{#if estMs}
-				{#if leftMs > 0}~{fmtDur(leftMs)} left, done around {etaTxt}{:else}past the ~{fmtH(
-						estMs / 1000
-					)} estimate{/if}
+				{#if leftMs > 0}~{fmtDur(leftMs)} left{pace ? ' at your pace' : ''}, done around {etaTxt}{:else}past
+					the ~{fmtH(estMs / 1000)} estimate{/if}
 			{/if}
 		{:else}
 			Estimate {item.estSource === 'slicer'

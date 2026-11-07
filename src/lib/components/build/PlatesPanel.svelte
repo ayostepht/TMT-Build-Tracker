@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { printersHrefFor } from '#lib/workspace-links.ts';
-	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
+	import { fmt, runInfo } from '#lib/domain/index.ts';
 	import {
 		printing,
 		deleteRun,
@@ -19,6 +19,7 @@
 	import RoleChip from '#lib/components/RoleChip.svelte';
 	import RunTable from '#lib/components/RunTable.svelte';
 	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
+	import PlateTime from '#lib/components/PlateTime.svelte';
 	import StartOnPrinter from '#lib/components/StartOnPrinter.svelte';
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
@@ -388,17 +389,7 @@
 					>~{fmt(slicerTotal(pl))} g (slicer)</span
 				>
 			{/if}
-			{#if pl.estSeconds}
-				<span class="meta num"
-					>~{fmtH(pl.estSeconds)}{pl.runs > 1 ? ' per run' : ''}{pl.estSource === 'estimate'
-						? pl.estRough
-							? ' (rough estimate)'
-							: ' (estimate)'
-						: pl.estSource === 'learned'
-							? ' (from your slice)'
-							: ''}</span
-				>
-			{/if}
+			<PlateTime plate={pl} />
 			{#if pl.runNote || pl.runs > 1}
 				<span class="meta" style="color:var(--warn);font-weight:600"
 					>{pl.runNote ?? `Print ${pl.runs} times`}{ri ? ` · run ${ri.run} of ${ri.of}` : ''}</span

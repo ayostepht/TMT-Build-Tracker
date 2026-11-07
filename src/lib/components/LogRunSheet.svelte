@@ -13,6 +13,7 @@
 		hoursFromSeconds,
 		parseDur,
 		recomputeParts,
+		runInfo,
 		runTargets,
 		runOutcomeSummary,
 		snapshotParts,
@@ -29,7 +30,8 @@
 		slugs: slugsIn = [],
 		startedAt = null,
 		title: titleIn = 'Log print',
-		editRun = null
+		editRun = null,
+		quick = false
 	}: {
 		open?: boolean;
 		/** Plate this run belongs to; null logs against a single part. */
@@ -41,6 +43,11 @@
 		title?: string;
 		/** Edit this past log instead of creating a new one. */
 		editRun?: PrintRun | null;
+		/**
+		 * "Log a whole plate" shortcut: Success preselected, time prefilled from the plate's
+		 * slicer/learned time (or started to now), grams from the slicer/learned grams per run.
+		 */
+		quick?: boolean;
 	} = $props();
 
 	const ctx = getBuildCtx();
@@ -81,7 +88,37 @@
 	const slicerDefault = $derived.by(() => {
 		if (!plate) return null;
 		const v = plate.perPartRuns ? plate.slicerByPart[pickedSlug ?? slugs[0]] : plate.slicerGrams;
-		return typeof v === 'number' && v > 0 ? v : null;
+		if (typeof v === 'number' && v > 0) return v;
+		if (quick && !plate.perPartRuns) {
+			const sum = Object.values(plate.filamentGrams).reduce((a, b) => a + b, 0);
+			if (sum > 0) return Math.round(sum);
+		}
+		return null;
+	});
+	const gramsSource = $derived(
+		plate?.estSource === 'learned' && plate.slicerGrams == null
+			? 'From your slice; edit if different.'
+			: 'From your slicer; edit if different.'
+	);
+	/** The plate's own time per run, used when the print has no start time. */
+	const planned = $derived(quick && !startedAt && plate?.estSeconds ? plate.estSeconds : null);
+	const plannedLabel = $derived(
+		plate?.estSource === 'slicer'
+			? 'From your slicer'
+			: plate?.estSource === 'learned'
+				? 'From your slice'
+				: plate?.estSource === 'profile'
+					? "From the template's profile"
+					: "Estimate from MakeGood's X/P/A times"
+	);
+	const runLine = $derived.by(() => {
+		if (!quick || !plate) return '';
+		const info = runInfo(
+			ctx.view,
+			plate.number,
+			plate.perPartRuns ? pickedSlug || undefined : undefined
+		);
+		return info ? `Print ${info.run} of ${info.of}. ` : '';
 	});
 	const bomEstimate = $derived.by(() => {
 		if (plate?.perPartRuns) {
@@ -161,12 +198,12 @@
 			? editChanges.length
 				? `Saving: ${sentence(editChanges)}.`
 				: 'Saving changes the log only; part statuses stay as they are.'
-			: runOutcomeSummary(ctx.view, buildInput(result))
+			: runLine + runOutcomeSummary(ctx.view, buildInput(result))
 	);
 	const canSave = $derived(!!result && !durInvalid && !gramsInvalid && !busy);
 
 	function recalc() {
-		if (!durEdited) dur = durText(elapsedSeconds(startedAt, finDate));
+		if (!durEdited) dur = durText(startedAt ? elapsedSeconds(startedAt, finDate) : planned);
 	}
 	function setFin(v: string) {
 		fin = v;
@@ -189,7 +226,8 @@
 		error = null;
 		busy = false;
 		fin = toLocalInput(new Date());
-		dur = durText(elapsedSeconds(startedAt, new Date()));
+		dur = durText(startedAt ? elapsedSeconds(startedAt, new Date()) : planned);
+		if (quick && !editRun) result = 'Success';
 		if (editRun) {
 			result = editRun.result;
 			note = editRun.note;
@@ -319,7 +357,7 @@
 
 			{#if pickable}
 				<label class="f" for="{uid}-part"
-					>Which color/part was this run
+					>Which color/part was this print
 					<select id="{uid}-part" bind:value={picked}>
 						{#each slugs as s (s)}
 							<option value={s}
@@ -370,7 +408,8 @@
 					}}
 				/>
 				{#if durInvalid}<small class="err">Try 13h 07m, 13:07 or 1.5 (hours).</small>
-				{:else if startedAt && !durEdited}<small>From the start time to finish.</small>{/if}
+				{:else if startedAt && !durEdited}<small>From the start time to finish.</small>
+				{:else if planned && !durEdited}<small>{plannedLabel}; edit if different.</small>{/if}
 			</label>
 
 			<label class="f" for="{uid}-g"
@@ -388,9 +427,7 @@
 						gramsEdited = true;
 					}}
 				/>
-				{#if slicerDefault != null && !gramsEdited}<small
-						>From your slicer; edit if different.</small
-					>{/if}
+				{#if slicerDefault != null && !gramsEdited}<small>{gramsSource}</small>{/if}
 			</label>
 
 			<label class="f" for="{uid}-n"

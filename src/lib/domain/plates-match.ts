@@ -11,6 +11,7 @@
  * weight, left vs right is never confused); finally the part's notes for
  * oddly named objects. Below 0.45 the result has no slug.
  */
+import { twinGroups, twinsOf } from './twins.ts';
 import type { VariantGroup } from './types.ts';
 
 export interface MatchPart {
@@ -29,6 +30,8 @@ export interface ObjectMatch {
 	/** 0..1; >= 0.8 is a confident match, 0.45..0.8 worth a look. */
 	confidence: number;
 	reason: string;
+	/** Parts cut from the same source object as `slug` (itself included, inactive variants too); absent when it has none. */
+	twins?: string[];
 }
 
 export interface MatchContext {
@@ -200,14 +203,27 @@ export function matchObject(name: string, parts: MatchPart[], ctx: MatchContext 
 	if (!top || top.score < MATCH_THRESHOLD)
 		return { slug: null, confidence: top?.score ?? 0, reason: 'No close match' };
 	const rivals = cands.filter((c) => c !== top && top.score - c.score < 0.02);
+	// Parts cut from the same source object (twins) are one object in a slicer file: the plate belongs to
+	// all of them (see twins.ts), so a tie among them is no doubt about the object.
+	const twins = twinsOf(top.slug, twinGroups(parts));
+	const twin = twins.length > 1 ? { twins } : {};
+	const other = rivals.filter((r) => !twins.includes(r.slug));
 	// Ties between decorated variants (several parts sharing a file) keep the first listed part, flagged.
-	if (rivals.length)
+	if (other.length)
 		return {
 			slug: top.slug,
 			confidence: Math.min(top.score, 0.6),
-			reason: `${top.reason}; also fits ${rivals.map((r) => r.slug).join(', ')}`
+			reason: `${top.reason}; also fits ${other.map((r) => r.slug).join(', ')}`,
+			...twin
 		};
-	return { slug: top.slug, confidence: top.score, reason: top.reason };
+	if (twins.length > 1 && rivals.length)
+		return {
+			slug: top.slug,
+			confidence: top.score,
+			reason: `${top.reason}; shared by ${twins.join(', ')}`,
+			...twin
+		};
+	return { slug: top.slug, confidence: top.score, reason: top.reason, ...twin };
 }
 
 export interface MatchPlateInput {

@@ -231,6 +231,8 @@ export interface UploadSuggestionsDto {
 	mapping: Record<string, string | null>;
 	filamentMap: Record<string, string | null>;
 	variantChoices: Record<string, string>;
+	/** Groups of parts that share a source object (twins), every template part. */
+	twinGroups: string[][];
 }
 export interface UploadResult {
 	uploadId: string;
@@ -284,6 +286,8 @@ export const applyPlateUpload = (
 		mode?: 'plates' | 'template';
 		/** Template mode: arrange the plates for the build's printer right away with the learned data. */
 		arrange?: boolean;
+		/** Object keys whose twins are not added: the object stays on the one part it is mapped to. */
+		single?: Record<string, boolean>;
 	}
 ) =>
 	call<{
@@ -293,6 +297,8 @@ export const applyPlateUpload = (
 		mode: 'plates' | 'template';
 		learned: number;
 		arranged: boolean;
+		twinPlates: { plate: number; parts: string[]; runsPerPart: number; totalRuns: number }[];
+		warnings: string[];
 	}>('POST', `${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}/apply`, body);
 /** Forget the per-part data learned from a sliced file (plates stay). */
 export const forgetPrintTemplate = (buildId: string) =>

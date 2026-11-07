@@ -23,16 +23,16 @@ import { runTargets } from '#lib/domain/actions.ts';
 import {
 	matchPlates,
 	objectKey,
-	slugsFor,
 	suggestVariants,
 	MATCH_THRESHOLD,
 	type MatchPart,
 	type ObjectMatch
 } from '#lib/domain/plates-match.ts';
+import { planPlateParts, twinGroups } from '#lib/domain/twins.ts';
 import { toStoredSummary, type StoredSummary, type ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { BuildView } from '#lib/domain/types.ts';
 import { deltaE } from '#lib/domain/color.ts';
-import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
+import { inactiveSlugs, resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import type { ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { Silhouette } from '#lib/domain/silhouette.ts';
@@ -229,6 +229,8 @@ export interface UploadSuggestions {
 	filamentMap: Record<string, string | null>;
 	/** group key → option key, only for groups the file speaks about. */
 	variantChoices: Record<string, string>;
+	/** Groups of parts cut from the same source object (every template part, inactive variants included). */
+	twinGroups: string[][];
 }
 
 export function suggestUpload(view: BuildView, summary: StoredSummary): UploadSuggestions {
@@ -264,7 +266,8 @@ export function suggestUpload(view: BuildView, summary: StoredSummary): UploadSu
 		matches,
 		mapping,
 		filamentMap,
-		variantChoices: suggestVariants(view.variantGroups, matched)
+		variantChoices: suggestVariants(view.variantGroups, matched),
+		twinGroups: twinGroups(parts)
 	};
 }
 
@@ -382,6 +385,10 @@ export interface ApplyResult {
 	learned: number;
 	/** Plates were re-arranged right away (template mode with `arrange: true`). */
 	arranged: boolean;
+	/** Plates whose object stands for several parts that share a source object (plate number → parts and runs each). */
+	twinPlates: { plate: number; parts: string[]; runsPerPart: number; totalRuns: number }[];
+	/** Things to look at after applying (runs that do not divide between twins, mixed plates). */
+	warnings: string[];
 }
 
 export function applyUpload(
@@ -401,7 +408,9 @@ export function applyUpload(
 		convertedRuns: 0,
 		mode,
 		learned: 0,
-		arranged: false
+		arranged: false,
+		twinPlates: [],
+		warnings: []
 	};
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		const up = getUpload(tx, buildId, uploadId);
@@ -431,15 +440,31 @@ export function applyUpload(
 			});
 		}
 
+		// Objects whose twins the user chose not to add (`single`: object keys).
+		const single: Record<string, boolean> = {};
+		if (b.single !== undefined) {
+			if (!isObj(b.single)) bad('single must be an object');
+			for (const [k, v] of Object.entries(b.single as Obj)) if (v === true) single[k] = true;
+		}
+		const groups = twinGroups(matchParts(view));
+		const inactive = inactiveSlugs(view.variantGroups, choices);
 		const rows = summary.plates
 			.map((pl) => {
-				const slugs = slugsFor(pl.index, pl.objects, mapping);
+				const plan = planPlateParts({
+					plateIndex: pl.index,
+					objects: pl.objects,
+					mapping,
+					single,
+					groups,
+					isActive: (s) => !inactive.has(s),
+					runsHint: pl.runsHint
+				});
 				const fg: Record<string, number> = {};
 				for (const [idx, g] of Object.entries(pl.filamentGrams)) {
 					const role = filamentMap[idx];
 					if (role && g > 0) fg[role] = Math.round(((fg[role] ?? 0) + g) * 100) / 100;
 				}
-				return { pl, slugs, fg };
+				return { pl, plan, slugs: plan.parts, fg };
 			})
 			.filter((r) => r.slugs.length > 0);
 		if (!rows.length) bad('Map at least one object to a part first');
@@ -502,7 +527,16 @@ export function applyUpload(
 				}
 			}
 			finishUpload();
-			result = { plates: 0, skipped: 0, convertedRuns, mode, learned, arranged };
+			result = {
+				plates: 0,
+				skipped: 0,
+				convertedRuns,
+				mode,
+				learned,
+				arranged,
+				twinPlates: [],
+				warnings: []
+			};
 			return {
 				kind: 'plates.template',
 				payload: {
@@ -520,7 +554,17 @@ export function applyUpload(
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
 		tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 		clearBuildThumbs(buildId);
-		for (const { pl, slugs, fg } of rows) {
+		const twinPlates: ApplyResult['twinPlates'] = [];
+		const warnings: string[] = [];
+		for (const { pl, plan, slugs, fg } of rows) {
+			if (plan.perPartRuns)
+				twinPlates.push({
+					plate: pl.index,
+					parts: plan.parts,
+					runsPerPart: plan.runs,
+					totalRuns: plan.totalRuns
+				});
+			if (plan.warning) warnings.push(`Plate ${pl.index} (${pl.name}): ${plan.warning}`);
 			let thumb: string | null = null;
 			const src = uploadThumbPath(uploadId, pl.index);
 			if (pl.hasThumbnail && existsSync(src)) {
@@ -535,12 +579,17 @@ export function applyUpload(
 					number: pl.index,
 					name: pl.name,
 					estSeconds: pl.estSeconds,
-					runs: Math.max(1, pl.runsHint || 1),
-					perPartRuns: false,
+					runs: plan.runs,
+					perPartRuns: plan.perPartRuns,
 					parts: slugs,
 					slicerGrams: pl.grams,
+					// twins: each part's grams per run are the plate's; accounting counts them under the part's own role
+					slicerByPart:
+						plan.perPartRuns && pl.grams
+							? Object.fromEntries(slugs.map((s) => [s, pl.grams as number]))
+							: {},
 					thumbnailPath: thumb,
-					filamentGrams: fg,
+					filamentGrams: plan.perPartRuns ? {} : fg,
 					source: `upload:${uploadId}`
 				})
 				.run();
@@ -557,7 +606,9 @@ export function applyUpload(
 			convertedRuns,
 			mode,
 			learned,
-			arranged: false
+			arranged: false,
+			twinPlates,
+			warnings
 		};
 		return {
 			kind: 'plates.upload',

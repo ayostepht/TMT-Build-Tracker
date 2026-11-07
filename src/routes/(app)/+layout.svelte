@@ -353,8 +353,8 @@
 		display: grid;
 		gap: 2px;
 	}
-	.menu a,
-	.menu button {
+	.menu a:not(.btn),
+	.menu button:not(.btn) {
 		display: grid;
 		gap: 2px;
 		padding: 9px 10px;
@@ -368,8 +368,8 @@
 		text-align: left;
 		font: inherit;
 	}
-	.menu a:hover,
-	.menu button:hover {
+	.menu a:not(.btn):hover,
+	.menu button:not(.btn):hover {
 		background: var(--accent-soft);
 	}
 	.menu a[aria-current='true'] {
@@ -412,7 +412,6 @@
 	.menu-foot .btn {
 		display: inline-flex;
 		align-items: center;
-		color: #fff;
 	}
 	.crumb {
 		flex-basis: 100%;

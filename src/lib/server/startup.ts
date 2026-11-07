@@ -1,4 +1,5 @@
 import { backfillBuildParts } from './builds/backfill';
+import { repairTwinPlates } from './builds/twin-repair';
 import { failStaleModelJobs, kickQueue } from './models/jobs';
 import { getDb, runMigrations } from './db';
 import { templateSeeds } from './seed';
@@ -18,6 +19,13 @@ export function startup(): void {
 	if (updated.length) console.log(`[tmt] updated templates: ${updated.join(', ')}`);
 	const added = backfillBuildParts(db);
 	if (added) console.log(`[tmt] added ${added} part rows to existing builds`);
+	try {
+		const fixed = repairTwinPlates(db);
+		if (fixed.length)
+			console.log(`[tmt] repaired ${fixed.length} uploaded plate(s) with twin parts`);
+	} catch (e) {
+		console.error('[tmt] twin plate repair failed', e);
+	}
 	const stale = failStaleModelJobs(db);
 	if (stale) console.log(`[tmt] marked ${stale} interrupted 3D model job(s) as failed`);
 	kickQueue(db);

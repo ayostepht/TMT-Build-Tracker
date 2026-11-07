@@ -7,6 +7,8 @@
 	import PartRow from '#lib/components/PartRow.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import PlateStart from '#lib/components/PlateStart.svelte';
+	import PlateTime from '#lib/components/PlateTime.svelte';
+	import LogPlateButton from '#lib/components/LogPlateButton.svelte';
 	import ReadyToPrint from '#lib/components/ReadyToPrint.svelte';
 
 	const ctx = getBuildCtx();
@@ -52,7 +54,7 @@
 
 {#snippet startFor(key: string)}
 	{@const pl = ctx.view.plates.find((p) => String(p.number) === key)}
-	{#if pl}<PlateStart plate={pl} />{/if}
+	{#if pl}<PlateTime plate={pl} /><PlateStart plate={pl} /><LogPlateButton plate={pl} />{/if}
 {/snippet}
 
 <svelte:head><title>Print · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>

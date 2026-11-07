@@ -8,6 +8,8 @@
 	} from '#lib/client/api.ts';
 	import { untrack } from 'svelte';
 	import { objectKey } from '#lib/domain/plates-match.ts';
+	import { planPlateParts, type PlatePartsPlan } from '#lib/domain/twins.ts';
+	import { inactiveSlugs, resolveChoices } from '#lib/domain/variants.ts';
 	import { fmt, fmtH } from '#lib/domain/index.ts';
 	import type { BuildView, PartDef } from '#lib/domain/types.ts';
 
@@ -44,6 +46,8 @@
 	/** What to do with the file: take its plates as sliced, or learn per-part data and keep my plates. */
 	let outcome = $state<'plates' | 'template'>('plates');
 	let arrangeNow = $state(false);
+	/** Object keys the user keeps to the one mapped part instead of all its twins. */
+	let single = $state<Record<string, boolean>>({});
 	const hasArranged = $derived(view.plates.some((p) => p.source === 'arranged'));
 	const defaultOutcome = (sliced: boolean): 'plates' | 'template' =>
 		sliced && (hasArranged || view.printer) ? 'template' : 'plates';
@@ -76,6 +80,43 @@
 		up ? up.summary.plates.filter((p) => (p.exact?.length ?? 0) > 0).length : 0
 	);
 
+	/** Parts that are active once the accepted option changes are applied (plates mode). */
+	const inactiveNow = $derived.by(() => {
+		const choices = { ...view.variantChoices };
+		if (outcome === 'plates') for (const [g, o] of variantChanges) if (accept[g]) choices[g] = o;
+		return inactiveSlugs(view.variantGroups, resolveChoices(view.variantGroups, choices));
+	});
+	const partName = (slug: string) => view.allParts.find((p) => p.slug === slug)?.name ?? slug;
+	const roleLabel = (slug: string) => {
+		const r = view.allParts.find((p) => p.slug === slug)?.role ?? '';
+		return r ? r.charAt(0).toUpperCase() + r.slice(1) : '';
+	};
+	/** "3DTMT O WHEEL RIM REV B.STEP" -> "Wheel Rim" */
+	const shortName = (n: string) =>
+		n
+			.replace(/\.(step|stp|stl|3mf|obj)$/i, '')
+			.replace(/_/g, ' ')
+			.replace(/\brev\.?\s*\w+/gi, ' ')
+			.split(/\s+/)
+			.filter((w) => w && !/^(3dtmt|tmt3d|mg|kit)$/i.test(w) && !/^[a-z]\d?$/i.test(w))
+			.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+			.join(' ');
+	const planFor = (
+		pl: { index: number; objects: { id: string }[]; runsHint: number },
+		singles: Record<string, boolean>
+	): PlatePartsPlan =>
+		planPlateParts({
+			plateIndex: pl.index,
+			objects: pl.objects,
+			mapping,
+			single: singles,
+			groups: up?.suggestions.twinGroups ?? [],
+			isActive: (s) => !inactiveNow.has(s),
+			runsHint: pl.runsHint
+		});
+	/** The twin assignment of a plate as shown: parts with their color and runs each. */
+	const twinText = (plan: PlatePartsPlan) =>
+		plan.parts.map((s) => `${partName(s)} (${roleLabel(s)}) ×${plan.runs}`).join(' and ');
 	const objectTotal = $derived(
 		up ? up.summary.plates.reduce((a, p) => a + p.objects.length, 0) : 0
 	);
@@ -100,6 +141,7 @@
 			filamentMap = { ...up.suggestions.filamentMap };
 			outcome = defaultOutcome(up.summary.sliced);
 			arrangeNow = false;
+			single = {};
 			accept = Object.fromEntries(variantChanges.map(([g]) => [g, true]));
 			phase = 'review';
 		} catch (e) {
@@ -142,12 +184,19 @@
 				variantChoices: Object.fromEntries(variantChanges.filter(([g]) => accept[g])),
 				convertRuns: attachedRuns > 0,
 				mode: outcome,
-				arrange: outcome === 'template' && arrangeNow
+				arrange: outcome === 'template' && arrangeNow,
+				single
 			});
+			const twinNote = r.twinPlates.length
+				? ` Shared source objects were split between their parts on plate${r.twinPlates.length === 1 ? '' : 's'} ${r.twinPlates.map((t) => t.plate).join(', ')}.`
+				: '';
+			const warnNote = r.warnings.length ? ` Check: ${r.warnings.join(' ')}` : '';
 			ondone(
-				r.mode === 'template'
+				(r.mode === 'template'
 					? `Print template learned from ${fileName}: print time and grams for ${r.learned} part${r.learned === 1 ? '' : 's'}${r.arranged ? '; plates re-arranged with it' : '; your plates are unchanged'}.`
-					: `Plates organized from ${fileName}: ${r.plates} plate${r.plates === 1 ? '' : 's'}${r.skipped ? `, ${r.skipped} without mapped parts skipped` : ''}.`
+					: `Plates organized from ${fileName}: ${r.plates} plate${r.plates === 1 ? '' : 's'}${r.skipped ? `, ${r.skipped} without mapped parts skipped` : ''}.`) +
+					twinNote +
+					warnNote
 			);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not apply the plates.';
@@ -369,6 +418,37 @@
 							</li>
 						{/each}
 					</ul>
+					{#if outcome === 'plates'}
+						{@const base = planFor(pl, {})}
+						{#if base.perPartRuns}
+							{@const plan = planFor(pl, single)}
+							<div class="twin" data-testid="twin-plan">
+								{#each base.expansions as e (e.key)}
+									{@const o = pl.objects.find((x) => objectKey(pl.index, x.id) === e.key)}
+									<div class="twin-line">
+										<b>{shortName(o?.name ?? '')}</b> →
+										{#if plan.perPartRuns}
+											{twinText(plan)}
+										{:else}
+											{partName(e.from)} ({roleLabel(e.from)}) only
+										{/if}
+									</div>
+									<label class="chk">
+										<input
+											type="checkbox"
+											checked={single[e.key] === true}
+											onchange={(ev) => (single[e.key] = ev.currentTarget.checked)}
+											data-testid="twin-single"
+										/>
+										Use only {partName(e.from)} (these parts share one source object)
+									</label>
+								{/each}
+								{#if plan.warning}<p class="note">{plan.warning}</p>{/if}
+							</div>
+						{:else if base.warning}
+							<p class="note">{base.warning}</p>
+						{/if}
+					{/if}
 				</article>
 			{/each}
 		</div>
@@ -537,6 +617,17 @@
 	}
 	.warn {
 		color: var(--warn);
+	}
+	.twin {
+		display: grid;
+		gap: 6px;
+		padding: 8px 10px;
+		border-radius: 6px;
+		background: var(--accent-soft);
+		font-size: 13px;
+	}
+	.twin-line {
+		overflow-wrap: anywhere;
 	}
 	.objs {
 		list-style: none;
