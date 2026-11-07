@@ -12,24 +12,24 @@ specifics (test copy, printer IP, deploy routine) are in the untracked
 All planned milestones 1–7 are built and running on the maintainer's test copy.
 Milestone 8 (release) has not started.
 
-| Area                                                                                                                     | State                                                                                                                                   |
-| ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Builds, chapters, roles, live updates, activity                                                                          | Done                                                                                                                                    |
-| Prototype import, print logs (log sheet, edit, delete, undo)                                                             | Done                                                                                                                                    |
-| Variants (seat, rear caster, footrest, rim) and accessories (headrest, push handle)                                      | Done                                                                                                                                    |
-| 3D designer (tap parts, slots, swatch picker, 13 palettes, generator, shareable designs)                                 | Done                                                                                                                                    |
-| Setup wizard (template, options, colors with the full designer, print, export)                                           | Done                                                                                                                                    |
-| Build tabs: Overview · Design · Print · Files · Finish · Settings; Builds/Printers nav                                   | Done                                                                                                                                    |
-| Printer catalog (70), bed presets, team printers, keep-out zones                                                         | Done                                                                                                                                    |
-| Plate arranging (true outlines, flat rotations only, edge margins, rigid source groups when needed)                      | Done                                                                                                                                    |
-| 3MF export (Orca/Elegoo, Bambu, plain), painted supports, `bed_exclude_area`                                             | Done, opened in Elegoo Slicer once (v1)                                                                                                 |
-| Bundled MakeGood kit pack (CC0) 1.0.1, installed on first start                                                          | Done                                                                                                                                    |
-| Assembly checklist, photos, handoff, printable summary                                                                   | Done                                                                                                                                    |
-| Read-only printer status (Elegoo SDCP, Moonraker, OctoPrint, Bambu LAN), job → plate linking                             | Done; SDCP probe verified live, full supervisor not yet tested live                                                                     |
-| Spoolman (optional)                                                                                                      | Done, mock-tested only                                                                                                                  |
-| Log a whole plate (Print tab: Ready to print, plate groups, part detail; bulk "Log N plates"), pace-adjusted plate times | Done (r19): `LogPlateButton`, `LogRunSheet quick`, `domain/pace.ts`, `PlateTime`; e2e `log-plate`. No screenshots of the multi-run flow |
-| Studio drafts (Studio nav, `builds.kind = 'draft'`, draft tabs, Make this a build)                                       | Done (r20): `/studio`, `drafts.test.ts`, e2e `studio`; open: printer/layout pickers only in Files, not draft Settings                   |
-| Release (Unraid template, domain, public repo)                                                                           | Not started                                                                                                                             |
+| Area                                                                                                                          | State                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Builds, chapters, roles, live updates, activity                                                                               | Done                                                                                                                                    |
+| Prototype import, print logs (log sheet, edit, delete, undo)                                                                  | Done                                                                                                                                    |
+| Variants (seat, rear caster, footrest, rim) and accessories (headrest, push handle)                                           | Done                                                                                                                                    |
+| 3D designer (tap parts, slots, swatch picker, 13 palettes, generator, shareable designs)                                      | Done                                                                                                                                    |
+| Setup wizard (template, options, colors with the full designer, print, export)                                                | Done                                                                                                                                    |
+| Build tabs: Overview · Design · Print · Files · Finish · Settings; Builds/Printers nav                                        | Done                                                                                                                                    |
+| Printer catalog (70), bed presets, team printers, keep-out zones                                                              | Done                                                                                                                                    |
+| Plate arranging (true outlines, flat rotations only, edge margins, rigid source groups when needed)                           | Done                                                                                                                                    |
+| 3MF export (Orca/Elegoo, Bambu, plain), painted supports, `bed_exclude_area`                                                  | Done, opened in Elegoo Slicer once (v1)                                                                                                 |
+| Bundled MakeGood kit pack (CC0) 1.0.1, installed on first start                                                               | Done                                                                                                                                    |
+| Assembly checklist, photos, handoff, printable summary                                                                        | Done                                                                                                                                    |
+| Read-only printer status (Elegoo SDCP, Moonraker, OctoPrint, Bambu LAN), job → plate linking                                  | Done; SDCP probe verified live, full supervisor not yet tested live                                                                     |
+| Spoolman (optional)                                                                                                           | Done, mock-tested only                                                                                                                  |
+| Log a whole plate (Print tab: plate groups, part detail; Ready to print + bulk log removed in r22), pace-adjusted plate times | Done (r19): `LogPlateButton`, `LogRunSheet quick`, `domain/pace.ts`, `PlateTime`; e2e `log-plate`. No screenshots of the multi-run flow |
+| Studio drafts (Studio nav, `builds.kind = 'draft'`, draft tabs, Make this a build)                                            | Done (r20): `/studio`, `drafts.test.ts`, e2e `studio`; open: printer/layout pickers only in Files, not draft Settings                   |
+| Release (Unraid template, domain, public repo)                                                                                | Not started                                                                                                                             |
 
 Latest real-geometry result (Elegoo Centauri Carbon, 256 × 256 with the cutter
 keep-out, pack 1.0.1): **21 plates, no warnings, export guard clean**; both wings fit
@@ -53,6 +53,14 @@ Save as design all work as on a build.
   `kind = 'build'` and `setup_step = 5` (everything the wizard asks for already exists), writes `build.promote`,
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
+
+## Print tab trim (2026-11-07, r22)
+
+- "Ready to print" section removed at the maintainer's request (too much space); `ReadyToPrint.svelte` deleted,
+  with it the bulk "Log N plates printed". Older notes below that mention it are historical. Single-plate
+  "Log plate N printed" and "Start printing" live in plate group headers and a part's detail.
+- Print view groups by Plate by default. The toolbar is stored per build in localStorage `tmt-ui:<id>` as
+  `{ role, hidePrinted, group }`; the old `by` field is ignored, so every build started on Plate once.
 
 ## Palette color locks and part print logs (2026-11-07, dadd250, not deployed)
 
@@ -223,6 +231,12 @@ Answered on 2026-11-04 (keep for context):
   `hardware.glb` routes (the folders were ignored); fixed and guarded in CI.
 - `BuildPrinter` has no `teamPrinterId` link back to the team printer.
 - Minor UI: 0.2–1.1 mm clearance on the Seat Center plate is geometric, not a bug.
+
+- Queued 2026-11-07 (next after r22): live printer camera on Overview's Now printing card while a team
+  printer prints. Server-side proxy with one upstream connection fanned out to viewers (works via
+  LAN/Tailscale/NPM; printers often allow few stream clients); snapshot every few s by default, tap for
+  live; per-printer camera URL, auto-filled for Elegoo (`http://<ip>:3031/video`, MJPEG, verified 200 on
+  the maintainer's Centauri Carbon), Moonraker/OctoPrint webcam URLs, manual override.
 
 ## Next steps (suggested order)
 

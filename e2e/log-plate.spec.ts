@@ -1,17 +1,27 @@
 import { expect, test } from './fixtures';
 import { ownerWithBuild } from './helpers';
+import type { Page } from '@playwright/test';
 
-test('Log plate printed from the Print tab: one-tap Success, undo, and bulk log', async ({
-	page
-}) => {
-	await ownerWithBuild(page);
+/** Print tab grouped by Plate; returns the first plate group's "Log plate N printed" button and N. */
+async function firstPlateLog(page: Page) {
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
-	const ready = page.getByTestId('ready-to-print');
-	await expect(ready.locator('.ready-row')).toHaveCount(3);
-	const rows = ready.locator('.ready-row');
-	const first = (await rows.nth(0).getAttribute('data-plate')) as string;
+	await expect(page.getByTestId('ready-to-print')).toHaveCount(0);
+	await page.getByLabel('Group by').selectOption('plate');
+	const heads = page
+		.locator('.group-head')
+		.getByRole('button', { name: /^Log plate \d+ printed$/ });
+	await expect(heads.first()).toBeVisible();
+	const name = (await heads.first().getAttribute('aria-label')) as string;
+	const plate = /\d+/.exec(name)![0];
+	return { plate, button: heads.first(), name };
+}
 
-	await ready.getByRole('button', { name: `Log plate ${first} printed`, exact: true }).click();
+test('Log plate printed from a plate group: one-tap Success and undo', async ({ page }) => {
+	await ownerWithBuild(page);
+	const { plate, name } = await firstPlateLog(page);
+	const inHead = page.locator('.group-head').getByRole('button', { name, exact: true });
+
+	await inHead.click();
 	const sheet = page.getByRole('dialog');
 	await expect(sheet).toBeVisible();
 	// Success is preselected, so Save works straight away.
@@ -24,23 +34,14 @@ test('Log plate printed from the Print tab: one-tap Success, undo, and bulk log'
 	await expect(save).toBeEnabled();
 	await save.click();
 	await expect(sheet).toBeHidden();
-	await expect(page.locator('.toasts')).toContainText(`Logged plate ${first} · Success`);
-	await expect(ready.locator(`.ready-row[data-plate="${first}"]`)).toHaveCount(0);
+	await expect(page.locator('.toasts')).toContainText(`Logged plate ${plate} · Success`);
+	// The plate is done: its group no longer offers the log button.
+	await expect(inHead).toHaveCount(0);
 	await expect(page.locator('.row[data-s="Printed"]').first()).toBeVisible();
 
 	// Undo brings the plate back.
 	await page.locator('.toasts').getByRole('button', { name: 'Undo' }).click();
-	await expect(ready.locator(`.ready-row[data-plate="${first}"]`)).toHaveCount(1);
-
-	// Bulk: select two plates and log them together.
-	const a = (await rows.nth(0).getAttribute('data-plate')) as string;
-	const b = (await rows.nth(1).getAttribute('data-plate')) as string;
-	await ready.getByLabel(`Select plate ${a}`).check();
-	await ready.getByLabel(`Select plate ${b}`).check();
-	await ready.getByRole('button', { name: 'Log 2 plates printed' }).click();
-	await expect(page.locator('.toasts')).toContainText('Logged 2 plates');
-	await expect(ready.locator(`.ready-row[data-plate="${a}"]`)).toHaveCount(0);
-	await expect(ready.locator(`.ready-row[data-plate="${b}"]`)).toHaveCount(0);
+	await expect(inHead).toHaveCount(1);
 
 	await page.getByRole('link', { name: 'Overview' }).click();
 	await expect(page.locator('.overall-top')).toContainText('printed');
@@ -50,10 +51,8 @@ test('A plate run shows in the Print log of a part on that plate, tagged with th
 	page
 }) => {
 	await ownerWithBuild(page);
-	await page.getByRole('link', { name: 'Print', exact: true }).click();
-	const ready = page.getByTestId('ready-to-print');
-	const plate = (await ready.locator('.ready-row').first().getAttribute('data-plate')) as string;
-	await ready.getByRole('button', { name: `Log plate ${plate} printed`, exact: true }).click();
+	const { plate, button } = await firstPlateLog(page);
+	await button.click();
 	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();
 
@@ -65,4 +64,18 @@ test('A plate run shows in the Print log of a part on that plate, tagged with th
 	const log = part.locator('.detail table.log');
 	await expect(log).toContainText(new RegExp(`Plate ${plate} · `));
 	await expect(part.locator('.detail .empty')).toHaveCount(0);
+});
+
+test('A part detail offers Log plate printed and logs the run', async ({ page }) => {
+	await ownerWithBuild(page);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	const todo = page.locator('.row[data-s="To print"]').first();
+	await todo.getByRole('button', { name: /^Details for/ }).click();
+	const log = todo.getByRole('button', { name: /^Log plate \d+ printed$/ });
+	await expect(log).toBeVisible();
+	await log.click();
+	await expect(page.getByRole('dialog').getByRole('button', { name: 'Success' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
 });

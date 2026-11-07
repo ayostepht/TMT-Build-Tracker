@@ -9,7 +9,6 @@
 	import PlateStart from '#lib/components/PlateStart.svelte';
 	import PlateTime from '#lib/components/PlateTime.svelte';
 	import LogPlateButton from '#lib/components/LogPlateButton.svelte';
-	import ReadyToPrint from '#lib/components/ReadyToPrint.svelte';
 
 	const ctx = getBuildCtx();
 
@@ -26,19 +25,19 @@
 
 	let role = $state('all');
 	let hidePrinted = $state(false);
-	let by = $state<By>('role');
+	let by = $state<By>('plate');
 
 	// Remember the toolbar per build (localStorage can be blocked; render fine without it).
 	try {
 		const u = JSON.parse(localStorage.getItem(KEY) ?? '{}');
 		if (typeof u.role === 'string') role = u.role;
 		if (typeof u.hidePrinted === 'boolean') hidePrinted = u.hidePrinted;
-		if (['role', 'section', 'plate'].includes(u.by)) by = u.by;
+		if (['role', 'section', 'plate'].includes(u.group)) by = u.group;
 	} catch {
 		/* ignore */
 	}
 	$effect(() => {
-		const v = JSON.stringify({ role, hidePrinted, by });
+		const v = JSON.stringify({ role, hidePrinted, group: by });
 		try {
 			localStorage.setItem(KEY, v);
 		} catch {
@@ -92,7 +91,6 @@
 </div>
 
 <main>
-	<ReadyToPrint />
 	{#each groups as g (g.key)}
 		<section class="group" style="margin-bottom:14px">
 			<div class="group-head">
