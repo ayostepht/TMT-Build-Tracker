@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { elapsedSeconds, hoursFromSeconds, runOutcomeSummary, snapshotParts } from './logrun.ts';
-import { makeView } from './fixtures.ts';
+import {
+	elapsedSeconds,
+	hoursFromSeconds,
+	partRuns,
+	runOutcomeSummary,
+	snapshotParts
+} from './logrun.ts';
+import { makeView, run } from './fixtures.ts';
 import type { PrintRunInput, RunResult } from './types.ts';
 
 describe('elapsedSeconds / hoursFromSeconds', () => {
@@ -56,5 +62,41 @@ describe('runOutcomeSummary / snapshotParts', () => {
 		const [s] = snapshotParts(view, [plate.parts[0]]);
 		expect(s.status).toBe(view.state[plate.parts[0]].status);
 		expect(s.comps).not.toBe(view.state[plate.parts[0]].comps);
+	});
+});
+
+describe('partRuns', () => {
+	const base = makeView();
+	const multi = base.plates.find((p) => p.parts.length >= 2)!;
+	const [a, b] = multi.parts;
+	const other = base.plates.find((p) => p.number !== multi.number)!;
+	const withRuns = (runs: ReturnType<typeof run>[]) => ({ ...base, runs });
+
+	it('includes a part-only run and ignores another part', () => {
+		const mine = run({ partSlug: a });
+		expect(partRuns(withRuns([mine, run({ partSlug: b })]), a)).toEqual([mine]);
+	});
+	it('includes a whole-plate run (partSlugs null) for every part on the plate', () => {
+		const r = run({ plateNumber: multi.number });
+		for (const s of multi.parts) expect(partRuns(withRuns([r]), s)).toEqual([r]);
+	});
+	it('a subset plate run only covers the listed parts', () => {
+		const r = run({ plateNumber: multi.number, partSlugs: [a] });
+		expect(partRuns(withRuns([r]), a)).toEqual([r]);
+		expect(partRuns(withRuns([r]), b)).toEqual([]);
+	});
+	it('a plate run with partSlug set covers only that part', () => {
+		const r = run({ plateNumber: multi.number, partSlug: a });
+		expect(partRuns(withRuns([r]), a)).toEqual([r]);
+		expect(partRuns(withRuns([r]), b)).toEqual([]);
+	});
+	it('ignores a plate run on a plate the part is not on', () => {
+		expect(partRuns(withRuns([run({ plateNumber: other.number })]), a)).toEqual([]);
+	});
+	it('keeps view.runs order', () => {
+		const r1 = run({ plateNumber: multi.number });
+		const r2 = run({ partSlug: a });
+		const r3 = run({ plateNumber: multi.number, partSlugs: [a] });
+		expect(partRuns(withRuns([r1, r2, r3]), a)).toEqual([r1, r2, r3]);
 	});
 });

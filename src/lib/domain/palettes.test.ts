@@ -11,9 +11,11 @@ import {
 	PALETTES,
 	SLOTS,
 	exclusionReason,
+	generateFromLocked,
 	generateTargets,
 	isAllowedFilament,
 	nearest,
+	paletteVariations,
 	paletteSlots,
 	resolvePalette,
 	type CatalogSwatches,
@@ -126,6 +128,90 @@ describe('generateTargets', () => {
 		expect(diff(generateTargets('#3a7bd5', 'complementary').accent)).toBeGreaterThan(130);
 		expect(diff(generateTargets('#3a7bd5', 'analogous').accent)).toBeLessThan(60);
 		expect(diff(generateTargets('#3a7bd5', 'monochrome').accent)).toBeLessThan(25);
+	});
+});
+
+describe('generateFromLocked / paletteVariations', () => {
+	const pink = '#ec407a';
+	const purple = '#8e24aa';
+	it('returns locked slots exactly (normalized) and fills the rest', () => {
+		for (const h of HARMONIES)
+			for (let s = 0; s < 4; s++) {
+				const t = generateFromLocked(
+					{ primary: 'EC407A', accent: '#8E24AA', tire: '#222222' },
+					h.id,
+					s
+				);
+				expect(t.primary).toBe(pink);
+				expect(t.accent).toBe(purple);
+				expect(t.tire).toBe('#222222');
+				expect(isHex(t.soft)).toBe(true);
+				const t2 = generateFromLocked({ soft: '#abcdef' }, h.id, s);
+				expect(t2.soft).toBe('#abcdef');
+				for (const v of Object.values(t2)) expect(isHex(v)).toBe(true);
+			}
+	});
+	it('with only a primary it matches generateTargets', () => {
+		for (const h of HARMONIES)
+			for (let s = 0; s < 4; s++) {
+				const g = generateTargets('#3a7bd5', h.id, s);
+				const t = generateFromLocked({ primary: '#3a7bd5' }, h.id, s);
+				expect({ ...t, primary: g.primary }).toEqual(g);
+			}
+	});
+	it('with nothing locked uses the default blue', () => {
+		expect(generateFromLocked({}, 'triadic', 1).accent).toBe(
+			generateTargets('#1e88e5', 'triadic', 1).accent
+		);
+	});
+	it('an accent-only lock derives a primary clear of it', () => {
+		for (const a of ['#ec407a', '#fdd835', '#212121', '#f5f5f5'])
+			for (const h of HARMONIES)
+				for (let s = 0; s < 4; s++) {
+					const t = generateFromLocked({ accent: a }, h.id, s);
+					expect(t.accent).toBe(a);
+					expect(deltaE(t.primary, a)).toBeGreaterThanOrEqual(MIN_ACCENT_DE - 0.5);
+				}
+	});
+	it('does not fix two similar locked colors', () => {
+		const t = generateFromLocked({ primary: '#ff0000', accent: '#fe0101' }, 'complementary');
+		expect(t.primary).toBe('#ff0000');
+		expect(t.accent).toBe('#fe0101');
+	});
+	it('is deterministic', () => {
+		const l = { primary: pink, accent: purple };
+		expect(generateFromLocked(l, 'analogous', 3)).toEqual(generateFromLocked(l, 'analogous', 3));
+		expect(paletteVariations(l, 6, 1)).toEqual(paletteVariations(l, 6, 1));
+	});
+	it('pink + purple gives distinct variations with dark tires (except soft theme)', () => {
+		const vars = paletteVariations({ primary: pink, accent: purple });
+		expect(vars).toHaveLength(6);
+		expect(new Set(vars.map((v) => v.id)).size).toBe(vars.length);
+		const keys = vars.map((v) => `${v.targets.soft}|${v.targets.tire}`);
+		expect(new Set(keys).size).toBeGreaterThanOrEqual(4);
+		for (const v of vars) {
+			expect(v.targets.primary).toBe(pink);
+			expect(v.targets.accent).toBe(purple);
+			if (v.harmony !== 'soft') expect(hexToOklch(v.targets.tire).l).toBeLessThan(0.5);
+		}
+	});
+	it('has no near-duplicates across pages, and a harmony filter keeps to that theme', () => {
+		const l = { primary: pink, accent: purple };
+		const all = [0, 1, 2].flatMap((p) => paletteVariations(l, 6, p));
+		expect(new Set(all.map((v) => v.id)).size).toBe(all.length);
+		for (let i = 0; i < all.length; i++)
+			for (let j = 0; j < i; j++)
+				expect(
+					deltaE(all[i].targets.soft, all[j].targets.soft) >= 6 ||
+						deltaE(all[i].targets.tire, all[j].targets.tire) >= 6
+				).toBe(true);
+		const one = paletteVariations({ primary: pink }, 6, 0, ['analogous']);
+		expect(one.length).toBeGreaterThanOrEqual(4);
+		expect(one.every((v) => v.harmony === 'analogous')).toBe(true);
+		// All four locked: nothing left to vary.
+		expect(
+			paletteVariations({ primary: pink, accent: purple, soft: '#ffffff', tire: '#111111' })
+		).toHaveLength(1);
 	});
 });
 
@@ -343,4 +429,29 @@ describe('palettes against the real catalog', () => {
 				resolvePalette(p.targets, real, { brand: 'Overture' })
 			);
 	}, 30_000);
+});
+
+describe('locked variations against the real catalog', () => {
+	it('resolved variations never contain excluded filaments', () => {
+		const sets = [
+			{ primary: '#ec407a', accent: '#8e24aa' },
+			{ accent: '#fdd835' },
+			{ soft: '#43a047' },
+			{ primary: '#1e88e5' }
+		];
+		for (const l of sets)
+			for (const v of paletteVariations(l, 6, 0).concat(paletteVariations(l, 6, 1))) {
+				const r = resolvePalette(v.targets, real, { brand: 'Overture' });
+				for (const slot of SLOTS) {
+					const m = r[slot];
+					expect(m, `${v.id}/${slot}`).toBeTruthy();
+					const items = slot === 'primary' || slot === 'accent' ? real.petg : real.tpu;
+					const src = items.find(
+						(x) => x[0] === m!.brand && x[1] === m!.colorName && x[3] === m!.material
+					)!;
+					const ok = isAllowedFilament(src) || (m!.relaxed && isAllowedFilament(src, true));
+					expect(ok, `${v.id}/${slot}: ${label(m!)}`).toBe(true);
+				}
+			}
+	}, 60_000);
 });

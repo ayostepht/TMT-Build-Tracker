@@ -1,7 +1,14 @@
 /** Pure helpers for the "log a print" sheet: prefill values, the outcome summary and undo snapshots. */
 import { applyRun, runInfo, runTargets } from './actions.ts';
 import { fmtHM } from './format.ts';
-import type { BuildView, PartPatch, PartState, PrintRunInput, RunResult } from './types.ts';
+import type {
+	BuildView,
+	PartPatch,
+	PartState,
+	PrintRun,
+	PrintRunInput,
+	RunResult
+} from './types.ts';
 
 /** The fields of a part's state an undo must put back. */
 export type PartSnapshot = Pick<
@@ -84,3 +91,10 @@ export function runOutcomeSummary(
 
 /** "13h 07m" for the duration input from seconds, or ''. */
 export const durText = (seconds: number | null): string => (seconds ? fmtHM(seconds) : '');
+
+/** Runs that count toward a part: its own part-log runs plus plate runs that cover it. View order. */
+export function partRuns(view: BuildView, slug: string): PrintRun[] {
+	return view.runs.filter((r) =>
+		r.plateNumber == null ? r.partSlug === slug : runTargets(view, r).includes(slug)
+	);
+}

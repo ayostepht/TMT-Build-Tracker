@@ -1377,7 +1377,7 @@ label.field select {
 		max-width: 100%;
 	}
 	.detail {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 	.logform {
 		grid-template-columns: 1fr 1fr;

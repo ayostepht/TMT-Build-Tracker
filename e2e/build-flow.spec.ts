@@ -81,7 +81,9 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	// Undo puts the previous status back and removes the run again.
 	await page.locator('.toasts').getByRole('button', { name: 'Undo' }).last().click();
 	await expect(row(page, slug)).toHaveAttribute('data-s', 'Reprint');
-	await expect(row(page, slug).locator('tbody tr')).toHaveCount(0);
+	// Only the plate's earlier failed run is left in the part's log.
+	await expect(row(page, slug).locator('tbody tr')).toHaveCount(1);
+	await expect(row(page, slug).locator('tbody tr')).toContainText('Failed');
 
 	await row(page, slug).getByRole('button', { name: 'Log a print…' }).click();
 	await sheet.getByRole('button', { name: 'Success' }).click();

@@ -16,11 +16,12 @@
 		PALETTES,
 		SLOTS,
 		SLOT_LABEL,
-		generateTargets,
 		paletteSlots,
+		paletteVariations,
 		resolvePalette,
 		type CatalogSwatches,
 		type Harmony,
+		type LockedTargets,
 		type PaletteTargets,
 		type ResolvedPalette,
 		type SlotKey
@@ -60,18 +61,53 @@
 		'#546e7a',
 		'#212121'
 	];
-	let base = $state('#1e88e5');
-	let harmony = $state<Harmony>('complementary');
-	let shuffle = $state(0);
+	const PAGE_SIZE = 6;
+	/** Order in which a quick color fills the Auto slots. */
+	const FILL_ORDER: SlotKey[] = ['primary', 'accent', 'soft', 'tire'];
+	/** What the tiles show and edit; `settled` follows it (debounced while dragging the picker). */
+	let locked = $state<LockedTargets>({});
+	let settled = $state<LockedTargets>({});
+	let selected = $state<SlotKey | null>(null);
+	let theme = $state<Harmony | 'all'>('all');
+	let pages = $state(1);
+	let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function setLocked(next: LockedTargets, immediate = true) {
+		locked = next;
+		clearTimeout(settleTimer);
+		if (immediate) settled = next;
+		else settleTimer = setTimeout(() => (settled = next), 150);
+	}
+	function lockSlot(slot: SlotKey, hex: string, immediate = true) {
+		setLocked({ ...locked, [slot]: normHex(hex) }, immediate);
+	}
+	function clearSlot(slot: SlotKey) {
+		const next = { ...locked };
+		delete next[slot];
+		setLocked(next);
+		if (selected === slot) selected = null;
+	}
+	/** A quick swatch fills the selected slot, else the next Auto one (Primary when all are set). */
+	function quickPick(hex: string) {
+		const slot = selected ?? FILL_ORDER.find((s) => !locked[s]) ?? 'primary';
+		lockSlot(slot, hex);
+		selected = null;
+	}
+	const currentHex = (slot: SlotKey): string | null => {
+		const key = slotMap[slot];
+		const h = key ? view.filaments.find((f) => f.key === key)?.hex : undefined;
+		return h && isHex(h) ? normHex(h) : null;
+	};
 
 	onMount(() => {
 		brand = loadPreferredBrand();
 		const p = view.filaments.find((f) => f.key === 'primary');
-		if (p && isHex(p.hex)) base = normHex(p.hex);
+		if (p && isHex(p.hex)) setLocked({ primary: normHex(p.hex) });
 		loadCatalog(view.build.organizationId).then(
 			(c) => (catalog = c),
 			() => (failed = true)
 		);
+		return () => clearTimeout(settleTimer);
 	});
 
 	const brands = $derived.by(() => {
@@ -89,14 +125,43 @@
 			PALETTES.map((p) => [p.id, resolvePalette(p.targets, c, { brand })])
 		) as Record<string, ResolvedPalette | undefined>;
 	});
-	const generated = $derived.by(
-		(): { targets: PaletteTargets; resolved: ResolvedPalette } | null => {
-			if (!catalog || !isHex(base)) return null;
-			const targets = generateTargets(base, harmony, shuffle);
-			return { targets, resolved: resolvePalette(targets, catalog, { brand }) };
+
+	// resolvePalette is CIEDE2000 over the catalog: remember results per targets and brand.
+	let memo: Record<string, ResolvedPalette> = {};
+	let memoSize = 0;
+	function resolveMemo(c: CatalogSwatches, t: PaletteTargets): ResolvedPalette {
+		const key = `${brand}|${SLOTS.map((s) => t[s]).join(',')}`;
+		let r = memo[key];
+		if (!r) {
+			if (memoSize > 300) {
+				memo = {};
+				memoSize = 0;
+			}
+			r = resolvePalette(t, c, { brand });
+			memo[key] = r;
+			memoSize++;
 		}
-	);
-	const harmonyLabel = $derived(HARMONIES.find((h) => h.id === harmony)?.label ?? '');
+		return r;
+	}
+
+	const lockedHexes = $derived(FILL_ORDER.map((s) => settled[s]).filter((h): h is string => !!h));
+	const lockedSlots = $derived(FILL_ORDER.filter((s) => settled[s]));
+	const variations = $derived.by(() => {
+		const c = catalog;
+		if (!c) return null;
+		const harmonies = theme === 'all' ? undefined : [theme];
+		const want = PAGE_SIZE * pages;
+		const all = paletteVariations(settled, want + 1, 0, harmonies);
+		return {
+			hasMore: all.length > want,
+			items: all.slice(0, want).map((v) => ({
+				...v,
+				label: v.label,
+				full: lockedHexes.length ? `${v.label} · ${lockedHexes.join(' + ')}` : v.label,
+				resolved: resolveMemo(c, v.targets)
+			}))
+		};
+	});
 
 	function previewOf(id: string, label: string, r: ResolvedPalette): PalettePreview {
 		const slots: Record<string, PickedFilament> = {};
@@ -108,14 +173,21 @@
 		return { id, label, slots };
 	}
 
-	// A previewed palette follows its inputs: theme, base color, shuffle, brand (generated) and the
-	// preferred brand (ready-made). The base color is debounced so dragging the picker stays smooth.
+	// A previewed palette follows its inputs: locked colors, brand (generated) and the preferred
+	// brand (ready-made). The locked colors settle debounced, so dragging the picker stays smooth.
+	// A previewed variation that no longer exists (theme changed) stops the preview.
 	$effect(() => {
 		const cur = preview;
 		if (!cur) return;
 		let next: PalettePreview | null = null;
-		if (cur.id === 'gen') {
-			if (generated) next = previewOf('gen', `${harmonyLabel} from ${base}`, generated.resolved);
+		if (cur.id.startsWith('gen:')) {
+			if (!variations) return;
+			const v = variations.items.find((x) => `gen:${x.id}` === cur.id);
+			if (!v) {
+				untrack(() => onpreview(null));
+				return;
+			}
+			next = previewOf(cur.id, v.full, v.resolved);
 		} else {
 			const r = resolvedPremade[cur.id];
 			if (r) next = previewOf(cur.id, cur.label, r);
@@ -130,7 +202,7 @@
 			() => {
 				if (untrack(() => preview?.id) === n.id) onpreview(n);
 			},
-			cur.id === 'gen' ? 150 : 0
+			cur.id.startsWith('gen:') ? 150 : 0
 		);
 		return () => clearTimeout(timer);
 	});
@@ -194,7 +266,8 @@
 		A palette fills the primary, accent, soft and tire slots with the closest real filaments from
 		the catalog{missing.length
 			? ` (this build has no ${missing.map((m) => SLOT_LABEL[m]).join(', ')} slot)`
-			: ''}. Preview it in 3D first; nothing is saved until you apply.
+			: ''}. Pick the colors you want to keep and the rest is filled in for you, with several
+		variations to choose from. Preview one in 3D first; nothing is saved until you apply.
 	</p>
 	{#if failed}
 		<p class="muted" role="alert">The filament catalog could not be loaded.</p>
@@ -202,67 +275,141 @@
 		<p class="muted">Loading the filament catalog…</p>
 	{/if}
 
-	{#if generated}
+	{#if variations}
 		<div class="card gen" data-testid="generator">
-			<h3>Build one from a color</h3>
-			<div class="base">
-				<input type="color" aria-label="Base color" bind:value={base} />
-				<input
-					type="text"
-					class="hexin"
-					aria-label="Base color hex"
-					maxlength="7"
-					value={base}
-					onchange={(e) => {
-						const v = normHex(e.currentTarget.value);
-						if (isHex(v)) {
-							base = v;
-							shuffle = 0;
-						} else e.currentTarget.value = base;
-					}}
-				/>
-				<div class="quick" role="group" aria-label="Quick base colors">
-					{#each QUICK as q (q)}
-						<button
-							type="button"
-							class="qs"
-							class:on={base === q}
-							style="background-color:{q}"
-							aria-label="Base {q}"
-							onclick={() => {
-								base = q;
-								shuffle = 0;
-							}}
-						></button>
+			<h3>Build one from your colors</h3>
+			<div class="yours" role="group" aria-label="Your colors">
+				<span class="kicker">Your colors</span>
+				<div class="tiles">
+					{#each FILL_ORDER as s (s)}
+						{@const hexv = locked[s]}
+						{@const cur = currentHex(s)}
+						<div class="tile" class:locked={!!hexv} class:sel={selected === s} data-slot={s}>
+							<button
+								type="button"
+								class="tsel"
+								aria-pressed={selected === s}
+								aria-label="{SLOT_LABEL[s]} slot: {hexv ??
+									'Auto'}. Select it to fill it with the next quick color"
+								onclick={() => (selected = selected === s ? null : s)}
+							>
+								<span
+									class="tdot"
+									class:auto={!hexv}
+									class:tpu={s === 'soft' || s === 'tire'}
+									style={hexv ? `background-color:${hexv}` : ''}
+									aria-hidden="true"
+								></span>
+								<span class="tname">
+									<b>{SLOT_LABEL[s]}</b>
+									<span class="muted small">{hexv ?? 'Auto'}</span>
+								</span>
+							</button>
+							<div class="tctl">
+								<input
+									type="color"
+									aria-label="{SLOT_LABEL[s]} color"
+									value={hexv ?? cur ?? '#808080'}
+									oninput={(e) => lockSlot(s, e.currentTarget.value, false)}
+									onchange={(e) => lockSlot(s, e.currentTarget.value)}
+								/>
+								<input
+									type="text"
+									class="hexin"
+									aria-label="{SLOT_LABEL[s]} hex"
+									placeholder="Auto"
+									maxlength="7"
+									value={hexv ?? ''}
+									onchange={(e) => {
+										const raw = e.currentTarget.value.trim();
+										if (!raw) clearSlot(s);
+										else if (isHex(normHex(raw))) lockSlot(s, raw);
+										else e.currentTarget.value = hexv ?? '';
+									}}
+								/>
+								{#if hexv}
+									<button
+										type="button"
+										class="x"
+										aria-label="Clear {SLOT_LABEL[s]} (back to Auto)"
+										onclick={() => clearSlot(s)}>×</button
+									>
+								{/if}
+							</div>
+							<button
+								type="button"
+								class="linkbtn"
+								disabled={!cur || cur === hexv}
+								aria-label="Use current {SLOT_LABEL[s]} filament color"
+								title={cur ? `Lock to this build's ${cur}` : 'This build has no such slot'}
+								onclick={() => cur && lockSlot(s, cur)}>Use current</button
+							>
+						</div>
 					{/each}
 				</div>
 			</div>
+			<div class="quick" role="group" aria-label="Quick colors">
+				{#each QUICK as q (q)}
+					<button
+						type="button"
+						class="qs"
+						class:on={FILL_ORDER.some((s) => locked[s] === q)}
+						style="background-color:{q}"
+						aria-label="Color {q}"
+						title={selected ? `Fill ${SLOT_LABEL[selected]}` : 'Fill the next Auto slot'}
+						onclick={() => quickPick(q)}
+					></button>
+				{/each}
+			</div>
 			<div class="chips" role="group" aria-label="Theme">
+				<button
+					type="button"
+					class="chip"
+					aria-pressed={theme === 'all'}
+					title="Variations across every theme"
+					onclick={() => {
+						theme = 'all';
+						pages = 1;
+					}}>All themes</button
+				>
 				{#each HARMONIES as h (h.id)}
 					<button
 						type="button"
 						class="chip"
-						aria-pressed={harmony === h.id}
+						aria-pressed={theme === h.id}
 						title={h.hint}
 						onclick={() => {
-							harmony = h.id;
-							shuffle = 0;
+							theme = h.id;
+							pages = 1;
 						}}>{h.label}</button
 					>
 				{/each}
 			</div>
-			{@render card(
-				`gen`,
-				`${harmonyLabel} from ${base}`,
-				`Generated · ${harmonyLabel}`,
-				generated.resolved,
-				generated.targets
-			)}
-			<div>
-				<button type="button" class="btn sm" onclick={() => shuffle++}>Shuffle</button>
-				<span class="muted small">Another take on the same color and theme.</span>
-			</div>
 		</div>
+
+		<h3>Variations</h3>
+		<div class="list" data-testid="variations">
+			{#each variations.items as v (v.id)}
+				<div class="card pc" data-variation={v.id}>
+					<div class="pname">
+						<b>{v.label}</b>
+						<span class="muted"
+							>{lockedSlots.length
+								? `Your ${lockedSlots.map((s) => SLOT_LABEL[s]).join(', ')}; the rest auto-filled.`
+								: 'All colors auto-filled.'}</span
+						>
+					</div>
+					{@render card(`gen:${v.id}`, v.full, null, v.resolved, v.targets, lockedSlots)}
+				</div>
+			{/each}
+		</div>
+		{#if variations.hasMore}
+			<div>
+				<button type="button" class="btn sm" onclick={() => pages++}>More variations</button>
+			</div>
+		{:else if !variations.items.length}
+			<p class="muted">No variations for these colors.</p>
+		{/if}
 
 		<h3>Ready-made</h3>
 		<div class="list">
@@ -284,7 +431,8 @@
 	label: string,
 	title: string | null,
 	r: ResolvedPalette,
-	targets: PaletteTargets
+	targets: PaletteTargets,
+	yours: SlotKey[] = []
 )}
 	<div class="pcard" class:previewing={preview?.id === id}>
 		{#if title}<b class="gtitle">{title}</b>{/if}
@@ -299,7 +447,19 @@
 						aria-hidden="true"
 					></span>
 					<span class="lbl">
-						<span class="muted small">{SLOT_LABEL[s]}</span>
+						<span class="muted small">
+							{SLOT_LABEL[s]}
+							{#if yours.includes(s)}
+								<span class="mine" title="You chose this color" data-testid="yours-{s}">
+									<svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+										<path
+											fill="currentColor"
+											d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1m-2 5V4.5a2 2 0 1 1 4 0V6z"
+										/>
+									</svg>yours</span
+								>
+							{/if}
+						</span>
 						<span class="nm">{m?.name ?? 'No match'}</span>
 						{#if m?.relaxed && m.relaxedReason}
 							<span class="rnote small" data-testid="relaxed-note">{m.relaxedReason}</span>
@@ -363,20 +523,124 @@
 	.gen {
 		gap: 10px;
 	}
-	.base {
+	.yours {
+		display: grid;
+		gap: 6px;
+	}
+	.yours .kicker {
+		margin: 0;
+	}
+	.tiles {
+		display: grid;
+		gap: 8px;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+	}
+	.tile {
+		display: grid;
+		gap: 6px;
+		padding: 8px;
+		border: 1px dashed var(--line);
+		border-radius: 8px;
+		min-width: 0;
+	}
+	.tile.locked {
+		border-style: solid;
+	}
+	.tile.sel {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.tsel {
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		flex-wrap: wrap;
-	}
-	.base input[type='color'] {
-		width: 48px;
-		height: 38px;
+		background: none;
+		border: 0;
 		padding: 0;
+		text-align: left;
+		cursor: pointer;
+		color: inherit;
+		font: inherit;
+		min-height: 36px;
+	}
+	.tdot {
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		flex: none;
+		border: 2px solid var(--line);
+		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+	}
+	.tdot.auto {
+		background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 7px);
+	}
+	.tdot.tpu:not(.auto) {
+		background-image: repeating-linear-gradient(
+			45deg,
+			rgba(255, 255, 255, 0.28) 0 3px,
+			transparent 3px 7px
+		);
+	}
+	.tname {
+		display: grid;
+		line-height: 1.2;
+		min-width: 0;
+	}
+	.tctl {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+	}
+	.tctl input[type='color'] {
+		width: 40px;
+		height: 34px;
+		padding: 0;
+		flex: none;
 	}
 	.hexin {
-		width: 92px;
+		width: 0;
+		flex: 1;
+		min-width: 70px;
 		font-family: var(--f-mono);
+	}
+	.x {
+		width: 32px;
+		height: 32px;
+		flex: none;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		background: none;
+		color: inherit;
+		font-size: 18px;
+		line-height: 1;
+		cursor: pointer;
+	}
+	.linkbtn {
+		justify-self: start;
+		background: none;
+		border: 0;
+		padding: 2px 0;
+		color: var(--accent);
+		font: inherit;
+		font-size: 12px;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.linkbtn:disabled {
+		color: var(--muted);
+		text-decoration: none;
+		cursor: default;
+	}
+	.mine {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		margin-left: 4px;
+		padding: 0 5px;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		font-size: 11px;
+		line-height: 1.5;
 	}
 	.quick {
 		display: flex;

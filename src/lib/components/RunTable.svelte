@@ -4,6 +4,7 @@
 	let {
 		runs,
 		colorOf,
+		scopeOf,
 		canEdit,
 		ondelete,
 		onedit
@@ -11,6 +12,8 @@
 		runs: PrintRun[];
 		/** When set, adds a Color column showing this label for each run. */
 		colorOf?: (r: PrintRun) => string;
+		/** When set, a small muted tag before the note (e.g. "Plate 7 · whole plate"); empty = none. Grams then read as plate totals. */
+		scopeOf?: (r: PrintRun) => string;
 		canEdit: boolean;
 		ondelete: (r: PrintRun) => void;
 		/** When set, editors get an Edit button per row. */
@@ -33,9 +36,13 @@
 					<td class="num">{r.date}</td>
 					<td>{r.result}</td>
 					{#if colorOf}<td>{colorOf(r)}</td>{/if}
-					<td class="num">{r.grams ?? ''}</td>
+					<td class="num" title={scopeOf?.(r) ? 'plate total' : undefined}>{r.grams ?? ''}</td>
 					<td class="num">{r.hours ?? ''}</td>
-					<td>{r.note}{r.userName ? ` (${r.userName})` : ''}</td>
+					<td
+						>{#if scopeOf?.(r)}<small class="scope">{scopeOf(r)}</small>{/if}{r.note}{r.userName
+							? ` (${r.userName})`
+							: ''}</td
+					>
 					<td>
 						{#if canEdit}
 							{#if onedit}
@@ -56,3 +63,10 @@
 		</tbody>
 	</table>
 </div>
+
+<style>
+	.scope {
+		display: block;
+		color: var(--muted);
+	}
+</style>

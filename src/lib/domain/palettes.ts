@@ -8,7 +8,9 @@ import {
 	deltaE2000,
 	hexToLab,
 	hexToOklch,
+	isHex,
 	isNeutral,
+	normHex,
 	oklchToHex,
 	type Lab,
 	type Oklch
@@ -615,4 +617,177 @@ export function generateTargets(baseHex: string, harmony: Harmony, shuffle = 0):
 		else if (tv === 2) tire = { l: 0.25, c: 0.04, h: hue };
 	}
 	return { primary, accent, soft, tire: hex(tire) };
+}
+
+// ---- generator with locked colors
+
+/** Slots the user pinned to a color; the rest are auto-filled. */
+export type LockedTargets = Partial<PaletteTargets>;
+
+const DEFAULT_ANCHOR = '#1e88e5';
+
+/** Keep only valid hexes, normalized (lowercase, with #). */
+function cleanLocked(locked: LockedTargets): LockedTargets {
+	const out: LockedTargets = {};
+	for (const s of SLOTS) {
+		const v = locked[s];
+		if (typeof v === 'string' && isHex(v)) out[s] = normHex(v);
+	}
+	return out;
+}
+
+const hueGap = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
+
+/** Push an accent (Oklch) away from `primaryHex` until the gap is at least MIN_ACCENT_DE. */
+function withGap(primaryHex: string, a: Oklch): string {
+	let cur = a;
+	let out = hex(cur);
+	let dir = cur.l >= hexToOklch(primaryHex).l ? 1 : -1;
+	for (let i = 0; i < 40 && dE(primaryHex, out) < MIN_ACCENT_DE; i++) {
+		cur = { ...cur, l: cur.l + dir * 0.03, c: Math.min(0.2, cur.c + 0.008) };
+		if (cur.l > 0.95 || cur.l < 0.22) {
+			dir = -dir;
+			cur.l = clamp(cur.l, 0.22, 0.95);
+		}
+		out = hex(cur);
+	}
+	return out;
+}
+
+/** Soft and tire targets derived from a known primary and accent. */
+function deriveSoftTire(
+	primary: string,
+	accent: string,
+	harmony: Harmony,
+	shuffle: number
+): { soft: string; tire: string } {
+	const hi = HARMONIES.findIndex((h) => h.id === harmony);
+	const r = rng(shuffle * 6151 + hi * 131 + 29);
+	const jit = (amp: number) => (shuffle === 0 ? 0 : (r() * 2 - 1) * amp);
+	const p = hexToOklch(primary);
+	const a = hexToOklch(accent);
+	const pHue = isNeutral(primary) ? a.h : p.h;
+	const aHue = isNeutral(accent) ? p.h : a.h;
+	const sv = (shuffle + hi) % 4;
+	let soft: string;
+	if (sv === 0) soft = accent;
+	else if (sv === 1) soft = hex({ ...a, l: Math.min(0.9, a.l + 0.1 + Math.abs(jit(0.04))) });
+	else if (sv === 2)
+		soft = hex({
+			l: clamp((p.l + a.l) / 2 + 0.06 + jit(0.05), 0.45, 0.88),
+			c: Math.max(p.c * 0.9, 0.07),
+			h: pHue + 20 + jit(10)
+		});
+	else {
+		// A hue between the two, or opposite the primary when they are close together.
+		const diff = hueGap(pHue, aHue);
+		const mid = diff < 60 ? pHue + 180 : pHue + (((aHue - pHue + 540) % 360) - 180) / 2;
+		soft = hex({ l: clamp(0.7 + jit(0.06), 0.5, 0.88), c: Math.max(0.1, (p.c + a.c) / 2), h: mid });
+	}
+
+	const tv = (shuffle + hi) % 3;
+	let tire: Oklch = { l: 0.22, c: 0.01, h: 270 };
+	if (harmony === 'contrast') tire = { l: 0.18, c: 0.005, h: 270 };
+	else if (harmony === 'soft') tire = { l: 0.4, c: 0.015, h: 270 };
+	else if (harmony === 'monochrome') tire = { l: 0.24, c: 0.035, h: pHue };
+	if (harmony !== 'contrast' && harmony !== 'soft') {
+		if (tv === 1) tire = { l: 0.3 + jit(0.02), c: 0.012, h: 270 };
+		else if (tv === 2) tire = { l: 0.25, c: 0.04, h: pHue };
+	}
+	return { soft, tire: hex(tire) };
+}
+
+/**
+ * Propose all four target colors while keeping the user's locked slots exactly as given
+ * (normalized hex). Unlocked slots are derived from an anchor (primary, else accent, else soft,
+ * else tire, else a default blue) with the harmony; `shuffle` 0 is canonical, others are
+ * deterministic alternatives. With only a primary locked this matches {@link generateTargets}.
+ */
+export function generateFromLocked(
+	lockedIn: LockedTargets,
+	harmony: Harmony,
+	shuffle = 0
+): PaletteTargets {
+	const locked = cleanLocked(lockedIn);
+	const anchor = locked.primary ?? locked.accent ?? locked.soft ?? locked.tire ?? DEFAULT_ANCHOR;
+	const g = generateTargets(anchor, harmony, shuffle);
+
+	// Only a primary (and maybe soft/tire) locked: the plain generator, with locks laid over it.
+	if (locked.primary && !locked.accent) {
+		const accent =
+			dE(locked.primary, g.accent) < MIN_ACCENT_DE
+				? withGap(locked.primary, hexToOklch(g.accent))
+				: g.accent;
+		return {
+			primary: locked.primary,
+			accent,
+			soft: locked.soft ?? g.soft,
+			tire: locked.tire ?? g.tire
+		};
+	}
+
+	let primary: string;
+	let accent: string;
+	if (locked.primary && locked.accent) {
+		primary = locked.primary;
+		accent = locked.accent;
+	} else if (locked.accent) {
+		// Derive a primary from the accent: generate from it and swap roles.
+		accent = locked.accent;
+		primary = withGap(accent, hexToOklch(g.accent));
+	} else {
+		primary = g.primary;
+		accent = g.accent;
+	}
+	const st =
+		locked.primary || locked.accent
+			? deriveSoftTire(primary, accent, harmony, shuffle)
+			: { soft: g.soft, tire: g.tire };
+	return { primary, accent, soft: locked.soft ?? st.soft, tire: locked.tire ?? st.tire };
+}
+
+export interface PaletteVariation {
+	id: string;
+	label: string;
+	harmony: Harmony;
+	targets: PaletteTargets;
+}
+
+/** Variations closer than this (CIEDE2000, every unlocked slot) count as duplicates. */
+export const VARIATION_MIN_DE = 6;
+
+/**
+ * Distinct variations of the locked colors across harmonies (interleaved per shuffle round) or,
+ * with `harmonies`, only those themes. Near-duplicates are skipped; `page` gives the next set.
+ * Fewer than `count` come back when the locks leave little room (all four locked: one).
+ */
+export function paletteVariations(
+	lockedIn: LockedTargets,
+	count = 6,
+	page = 0,
+	harmonies: Harmony[] = HARMONIES.map((h) => h.id)
+): PaletteVariation[] {
+	const locked = cleanLocked(lockedIn);
+	const free = SLOTS.filter((s) => !locked[s]);
+	const need = (page + 1) * count;
+	const kept: PaletteVariation[] = [];
+	const maxRounds = 40;
+	for (let s = 0; s < maxRounds && kept.length < need; s++) {
+		for (const h of harmonies) {
+			if (kept.length >= need) break;
+			const targets = generateFromLocked(locked, h, s);
+			const dup = kept.some((k) =>
+				free.every((slot) => dE(k.targets[slot], targets[slot]) < VARIATION_MIN_DE)
+			);
+			if (dup) continue;
+			const label = HARMONIES.find((x) => x.id === h)!.label;
+			kept.push({
+				id: `${h}-${s}`,
+				label: s === 0 ? label : `${label} · ${s + 1}`,
+				harmony: h,
+				targets
+			});
+		}
+	}
+	return kept.slice(page * count, need);
 }

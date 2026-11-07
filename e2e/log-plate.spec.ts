@@ -45,3 +45,24 @@ test('Log plate printed from the Print tab: one-tap Success, undo, and bulk log'
 	await page.getByRole('link', { name: 'Overview' }).click();
 	await expect(page.locator('.overall-top')).toContainText('printed');
 });
+
+test('A plate run shows in the Print log of a part on that plate, tagged with the plate', async ({
+	page
+}) => {
+	await ownerWithBuild(page);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	const ready = page.getByTestId('ready-to-print');
+	const plate = (await ready.locator('.ready-row').first().getAttribute('data-plate')) as string;
+	await ready.getByRole('button', { name: `Log plate ${plate} printed`, exact: true }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('dialog')).toBeHidden();
+
+	const part = page
+		.locator('.row[data-s="Printed"]')
+		.filter({ hasText: `Plate ${plate}` })
+		.first();
+	await part.getByRole('button', { name: /^Details for / }).click();
+	const log = part.locator('.detail table.log');
+	await expect(log).toContainText(new RegExp(`Plate ${plate} · `));
+	await expect(part.locator('.detail .empty')).toHaveCount(0);
+});

@@ -1,5 +1,7 @@
 import { expect, test } from './fixtures';
 import { ownerWithBuild } from './helpers';
+import { resolvePalette } from '../src/lib/domain/palettes.ts';
+import { swatches as serverSwatches } from '../src/lib/server/filaments/index.ts';
 
 test('apply a pre-made palette: matched filaments show on Overview, Undo restores', async ({
 	page
@@ -41,50 +43,137 @@ test('apply a pre-made palette: matched filaments show on Overview, Undo restore
 	await expect(page.locator('li.slot[data-role="primary"] b')).toContainText(names[0]);
 });
 
-test('generate a palette from a base color, preview it and apply it', async ({ page }) => {
+const PINK = '#ec407a';
+const PURPLE = '#8e24aa';
+const real = { petg: serverSwatches('petg'), tpu: serverSwatches('tpu') };
+
+test('lock pink and purple, pick from auto-filled variations, preview, apply and undo', async ({
+	page
+}) => {
 	const { buildId } = await ownerWithBuild(page, 'generate');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.getByRole('tab', { name: 'Palettes' }).click();
 	const gen = page.getByTestId('generator');
 	await expect(gen).toBeVisible();
 
-	await gen.getByRole('button', { name: 'Base #e53935' }).click();
-	await gen.getByRole('button', { name: 'Triadic' }).click();
-	const chosen = gen.locator('.nm');
-	await expect(chosen).toHaveCount(4);
-	const first = await chosen.allInnerTexts();
+	// Primary starts locked to the build's current primary; clear it, then quick swatches fill Primary, Accent.
+	const tile = (slot: string) => gen.locator(`.tile[data-slot="${slot}"]`);
+	await expect(tile('primary')).toHaveClass(/locked/);
+	await expect(tile('accent')).not.toHaveClass(/locked/);
+	await gen.getByRole('button', { name: 'Clear Primary (back to Auto)' }).click();
+	await expect(tile('primary')).not.toHaveClass(/locked/);
+	await gen.getByRole('button', { name: `Color ${PINK}` }).click();
+	await gen.getByRole('button', { name: `Color ${PURPLE}` }).click();
+	await expect(tile('primary')).toContainText(PINK);
+	await expect(tile('accent')).toContainText(PURPLE);
+	await expect(tile('soft')).toContainText('Auto');
 
-	await gen.getByRole('button', { name: 'Shuffle' }).click();
-	await expect.poll(async () => (await chosen.allInnerTexts()).join('|')).not.toBe(first.join('|'));
+	const cards = page.getByTestId('variations').locator('[data-variation]');
+	await expect.poll(() => cards.count()).toBeGreaterThanOrEqual(4);
+	// Every card keeps the filaments nearest to the two chosen colors, and marks them as yours.
+	const want = resolvePalette(
+		{ primary: PINK, accent: PURPLE, soft: '#888888', tire: '#222222' },
+		real
+	);
+	const n = await cards.count();
+	for (let i = 0; i < n; i++) {
+		const names = await cards.nth(i).locator('.nm').allInnerTexts();
+		expect(names[0]).toBe(want.primary!.name);
+		expect(names[1]).toBe(want.accent!.name);
+		await expect(cards.nth(i).getByTestId('yours-primary')).toHaveCount(1);
+		await expect(cards.nth(i).getByTestId('yours-accent')).toHaveCount(1);
+		await expect(cards.nth(i).getByTestId('yours-soft')).toHaveCount(0);
+	}
+	// The auto-filled soft/tire differ between variations.
+	const softs = new Set<string>();
+	for (let i = 0; i < n; i++) softs.add((await cards.nth(i).locator('.nm').allInnerTexts())[2]);
+	expect(softs.size).toBeGreaterThan(1);
 
-	await gen.getByRole('button', { name: 'Preview' }).click();
+	// More variations appends the next set.
+	await page.getByRole('button', { name: 'More variations' }).click();
+	await expect.poll(() => cards.count()).toBeGreaterThan(n);
+
+	// Preview one: the 3D preview label shows, and it follows the locked colors.
+	const second = cards.nth(1);
+	await second.getByRole('button', { name: 'Preview' }).click();
 	const banner = page.getByTestId('preview-banner');
-	await expect(banner).toContainText('Triadic');
+	await expect(banner).toContainText(PINK);
 	const hexes = () => banner.getAttribute('data-hexes');
-	const triadic = await hexes();
-	expect(triadic).toMatch(/primary:#/);
+	const before = await hexes();
+	await gen.getByRole('button', { name: `Color #e53935` }).click(); // fills the next Auto slot, Soft
+	await expect(tile('soft')).toContainText('#e53935');
+	await expect.poll(hexes).not.toBe(before);
+	await gen.getByRole('button', { name: /^Clear Soft/ }).click();
+	await expect(tile('soft')).toContainText('Auto');
+	await second.getByRole('button', { name: 'Stop preview' }).click();
+	await expect(banner).toHaveCount(0);
 
-	// A previewed palette follows its inputs: theme, base color, shuffle.
-	await gen.getByRole('button', { name: 'Monochrome' }).click();
-	await expect(banner).toContainText('Monochrome');
-	await expect.poll(hexes).not.toBe(triadic);
-	const mono = await hexes();
-	await gen.getByRole('button', { name: 'Shuffle' }).click();
-	await expect.poll(hexes).not.toBe(mono);
-	const shuffled = await hexes();
-	await gen.getByRole('button', { name: 'Base #1e88e5' }).click();
-	await expect(banner).toContainText('#1e88e5');
-	await expect.poll(hexes).not.toBe(shuffled);
-	// The preview matches the swatches shown for the current inputs.
-	await expect(banner).toHaveAttribute('data-hexes', /primary:#/);
-	const names = await chosen.allInnerTexts();
+	// A theme filter shows that theme only; "All themes" brings the mix back.
+	await gen.getByRole('button', { name: 'Triadic' }).click();
+	await expect.poll(() => cards.count()).toBeGreaterThanOrEqual(3);
+	for (const t of await cards.locator('.pname b').allInnerTexts()) expect(t).toMatch(/^Triadic/);
+	await gen.getByRole('button', { name: 'All themes' }).click();
 
-	await gen.getByRole('button', { name: 'Apply' }).click();
-	await expect(page.getByText(/^Applied Monochrome/)).toBeVisible();
-
+	// Apply the third variation: the build's primary and accent filaments change.
+	const third = cards.nth(2);
+	const applied = await third.locator('.nm').allInnerTexts();
+	await third.getByRole('button', { name: 'Apply' }).click();
+	await expect(page.getByText(/^Applied /)).toBeVisible();
+	await page.getByRole('tab', { name: 'Slots' }).click();
+	await expect(page.locator('li.slot[data-role="primary"] b')).toContainText(applied[0]);
+	await expect(page.locator('li.slot[data-role="accent"] b')).toContainText(applied[1]);
 	await page.goto(`/builds/${buildId}`);
 	const filament = page.getByRole('region', { name: 'Filament' });
-	for (const n of names) await expect(filament).toContainText(n);
+	for (const nm of applied) await expect(filament).toContainText(nm);
+
+	// Undo restores the original primary.
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	await page
+		.getByTestId('variations')
+		.locator('[data-variation]')
+		.first()
+		.getByRole('button', { name: 'Apply' })
+		.click();
+	await page.getByRole('button', { name: 'Undo' }).click();
+	await page.getByRole('tab', { name: 'Slots' }).click();
+	await expect(page.locator('li.slot[data-role="primary"] b')).toContainText(applied[0]);
+});
+
+test('slot tiles: select a slot for the next color, use current, clear back to Auto', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'tiles');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	const gen = page.getByTestId('generator');
+	const tile = (slot: string) => gen.locator(`.tile[data-slot="${slot}"]`);
+	await expect(tile('primary')).toHaveClass(/locked/);
+
+	// Selecting Tires sends the next quick color there instead of the first Auto slot.
+	const tires = tile('tire').getByRole('button', { pressed: false }).first();
+	await tires.click();
+	await expect(tile('tire').locator('.tsel')).toHaveAttribute('aria-pressed', 'true');
+	await gen.getByRole('button', { name: 'Color #212121' }).click();
+	await expect(tile('tire')).toContainText('#212121');
+	await expect(tile('accent')).toContainText('Auto');
+
+	// Use current locks the accent to the build's current accent filament color.
+	await tile('accent')
+		.getByRole('button', { name: /^Use current/ })
+		.click();
+	await expect(tile('accent')).toHaveClass(/locked/);
+	await expect(tile('accent').locator('.hexin')).toHaveValue(/^#[0-9a-f]{6}$/);
+
+	// Clearing returns the slot to Auto and variations stay available.
+	await tile('accent')
+		.getByRole('button', { name: /^Clear Accent/ })
+		.click();
+	await expect(tile('accent')).not.toHaveClass(/locked/);
+	await expect(tile('accent')).toContainText('Auto');
+	await expect(tile('accent').locator('.hexin')).toHaveValue('');
+	await expect(page.getByTestId('variations').locator('[data-variation]')).toHaveCount(6);
+	await expect(page.getByTestId('yours-accent')).toHaveCount(0);
 });
 
 test('a previewed ready-made palette follows the preferred brand', async ({ page }) => {

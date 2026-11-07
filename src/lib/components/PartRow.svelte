@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { PART_STATUSES, type PartDef, type PrintRun } from '#lib/domain/types.ts';
 	import { fmt, plateOf } from '#lib/domain/index.ts';
+	import { partRuns } from '#lib/domain/logrun.ts';
+	import { runTargets } from '#lib/domain/actions.ts';
 	import { setPartStatus, updatePart, deleteRun } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
@@ -19,9 +21,26 @@
 	const fil = $derived(ctx.filament(part.role));
 	const plate = $derived(plateOf(ctx.view, part.slug));
 	const doneComps = $derived(part.components.filter((_, i) => st?.comps[i]).length);
-	const log = $derived(
-		ctx.view.runs.filter((r) => r.partSlug === part.slug && r.plateNumber === null)
-	);
+	const log = $derived(partRuns(ctx.view, part.slug));
+
+	function scopeOf(r: PrintRun): string {
+		if (r.plateNumber == null) return '';
+		const n = runTargets(ctx.view, r).length;
+		const total = ctx.view.plates.find((p) => p.number === r.plateNumber)?.parts.length ?? n;
+		return `Plate ${r.plateNumber} · ${n >= total ? 'whole plate' : `${n} of ${total} parts`}`;
+	}
+
+	function removeRun(r: PrintRun) {
+		if (r.plateNumber != null) {
+			const n = runTargets(ctx.view, r).length;
+			const msg =
+				n > 1
+					? `This removes the print log for all ${n} parts on plate ${r.plateNumber}.`
+					: `This removes this print log entry for plate ${r.plateNumber}.`;
+			if (!confirm(msg)) return;
+		}
+		ctx.act(() => deleteRun(ctx.id, r.id));
+	}
 	const pages = $derived(
 		part.guideRefs.map((g) => ({
 			...g,
@@ -191,7 +210,8 @@
 					<RunTable
 						runs={log}
 						canEdit={ctx.canEdit}
-						ondelete={(r) => ctx.act(() => deleteRun(ctx.id, r.id))}
+						{scopeOf}
+						ondelete={removeRun}
 						onedit={(r) => ((editing = r), (editOpen = true))}
 					/>
 				{:else}
