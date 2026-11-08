@@ -3,6 +3,7 @@ import { ApiError, requireEditor } from '#lib/server/access.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { CameraError, grabFrame } from '#lib/server/printers/camera.ts';
+import { testEnabler } from '#lib/server/printers/camera-access.ts';
 import { resolveCameraSource } from '#lib/server/printers/camera-source.ts';
 import { configFromInput } from '#lib/server/printers/store.ts';
 import type { RequestHandler } from './$types';
@@ -37,7 +38,7 @@ export const POST: RequestHandler = (event) =>
 		});
 		if (!src) return { works: false, message: 'No camera found for this printer.' };
 		try {
-			const jpg = await grabFrame(src);
+			const jpg = await grabFrame(src, {}, testEnabler(cfg));
 			return {
 				works: true,
 				image: `data:image/jpeg;base64,${jpg.toString('base64')}`,

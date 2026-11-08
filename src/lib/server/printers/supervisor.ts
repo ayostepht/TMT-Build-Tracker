@@ -61,6 +61,15 @@ export class Supervisor {
 		this.conns.set(printerId, conn);
 	}
 
+	/**
+	 * Camera on (Elegoo SDCP) over the printer's existing connection. Null when there is no
+	 * connection or the adapter has no such command (the caller may use a temporary socket).
+	 */
+	async enableCamera(printerId: string): Promise<boolean | null> {
+		const fn = this.conns.get(printerId)?.handle.enableCamera;
+		return fn ? fn() : null;
+	}
+
 	/** Drop a connection (printer deleted). */
 	remove(printerId: string): void {
 		this.disconnect(printerId);

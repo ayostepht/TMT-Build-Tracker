@@ -25,6 +25,11 @@ export interface HubOptions {
 	backoffBaseMs: number;
 	backoffMaxMs: number;
 	fetchFn: typeof fetch;
+	/** Camera-on: wait between reconnect tries and for how long in total after sending it. */
+	enableRetryMs: number;
+	enableWaitMs: number;
+	/** At most one camera-on per printer within this window. */
+	enableThrottleMs: number;
 }
 
 export const DEFAULT_HUB_OPTIONS: HubOptions = {
@@ -35,10 +40,29 @@ export const DEFAULT_HUB_OPTIONS: HubOptions = {
 	maxFrameBytes: MAX_FRAME_BYTES,
 	backoffBaseMs: 1000,
 	backoffMaxMs: 30000,
+	enableRetryMs: 1000,
+	enableWaitMs: 5000,
+	enableThrottleMs: 30000,
 	fetchFn: (...a) => fetch(...a)
 };
 
-export class CameraError extends Error {}
+export class CameraError extends Error {
+	/** HTTP status the camera answered (non-2xx), when that is what failed. */
+	status?: number;
+	/** The stream stalled or stopped producing frames. */
+	stalled?: boolean;
+	constructor(message: string, extra: { status?: number; stalled?: boolean } = {}) {
+		super(message);
+		this.status = extra.status;
+		this.stalled = extra.stalled;
+	}
+}
+
+/** Sends the camera-on command for one printer (throttled by the hub); true when it was sent. */
+export type CameraEnabler = () => Promise<boolean>;
+
+const needsEnable = (e: unknown): e is CameraError =>
+	e instanceof CameraError && (e.status !== undefined || e.stalled === true);
 
 export type SessionStatus = 'idle' | 'connecting' | 'live' | 'error';
 
@@ -88,7 +112,7 @@ export async function openUpstream(
 		}
 		if (!res.ok) {
 			await res.body?.cancel().catch(() => {});
-			throw new CameraError(`Camera answered ${res.status}`);
+			throw new CameraError(`Camera answered ${res.status}`, { status: res.status });
 		}
 		return res;
 	}
@@ -130,10 +154,7 @@ const isMultipart = (ct: string | null) => !!ct && /multipart\/x-mixed-replace/i
  * Fetch one frame straight from a source (no hub): used by the settings "Test" button.
  * Tries each URL in order.
  */
-export async function grabFrame(
-	source: CameraSource,
-	opts: Partial<HubOptions> = {}
-): Promise<Buffer> {
+async function grabOnce(source: CameraSource, opts: Partial<HubOptions>): Promise<Buffer> {
 	const o = { ...DEFAULT_HUB_OPTIONS, ...opts };
 	let last: unknown = new CameraError('No camera');
 	for (const url of source.urls) {
@@ -168,6 +189,33 @@ export async function grabFrame(
 	throw last instanceof CameraError ? last : new CameraError('Could not reach the camera');
 }
 
+/**
+ * `grabOnce` for the settings "Test" button. With an `enable` function (Elegoo) the camera is
+ * switched on first, and a non-2xx answer (camera not ready) is retried once a second for up to
+ * `enableWaitMs`.
+ */
+export async function grabFrame(
+	source: CameraSource,
+	opts: Partial<HubOptions> = {},
+	enable?: CameraEnabler
+): Promise<Buffer> {
+	const o = { ...DEFAULT_HUB_OPTIONS, ...opts };
+	if (!enable) return grabOnce(source, opts);
+	await enable().catch(() => false);
+	const tries = Math.max(1, Math.round(o.enableWaitMs / o.enableRetryMs));
+	let last: unknown;
+	for (let i = 0; i <= tries; i++) {
+		if (i > 0) await new Promise((r) => setTimeout(r, o.enableRetryMs));
+		try {
+			return await grabOnce(source, opts);
+		} catch (e) {
+			last = e;
+			if (!needsEnable(e)) throw e;
+		}
+	}
+	throw last;
+}
+
 /** One printer's shared upstream connection. */
 export class CameraSession {
 	status: SessionStatus = 'idle';
@@ -185,7 +233,8 @@ export class CameraSession {
 	constructor(
 		private resolver: () => Promise<CameraSource | null>,
 		private opts: HubOptions,
-		private onClosed: () => void = () => {}
+		private onClosed: () => void = () => {},
+		private enabler?: CameraEnabler
 	) {}
 
 	/** Count a viewer; the upstream connection opens with the first one. Returns release. */
@@ -293,6 +342,7 @@ export class CameraSession {
 
 	private async loop(signal: AbortSignal) {
 		let attempt = 0;
+		let first = true;
 		while (!signal.aborted) {
 			this.setStatus('connecting');
 			let got = false;
@@ -300,7 +350,11 @@ export class CameraSession {
 				const src = await this.resolver();
 				if (signal.aborted) return;
 				if (!src) throw new CameraError('No camera for this printer');
-				got = await this.consumeAny(src, signal);
+				// Elegoo: a new session starts with camera-on (a no-op within the throttle window).
+				if (this.enabler && first) await this.enabler().catch(() => false);
+				first = false;
+				if (signal.aborted) return;
+				got = await this.connectEnabling(src, signal);
 			} catch (e) {
 				if (signal.aborted) return;
 				this.setStatus('error', e instanceof CameraError ? e.message : 'Camera unavailable');
@@ -309,6 +363,33 @@ export class CameraSession {
 			if (got) attempt = 0;
 			if (this.status !== 'error') this.setStatus('error', 'Camera stream ended');
 			await sleep(backoff(attempt++, this.opts.backoffBaseMs, this.opts.backoffMaxMs), signal);
+		}
+	}
+
+	/**
+	 * `consumeAny`, plus camera-on for Elegoo: when the camera answers non-2xx ("camera not
+	 * ready") or an open stream stalls, send camera-on (throttled by the hub) and reconnect once a
+	 * second for up to `enableWaitMs` before giving up to the normal backoff.
+	 */
+	private async connectEnabling(src: CameraSource, signal: AbortSignal): Promise<boolean> {
+		try {
+			return await this.consumeAny(src, signal);
+		} catch (e) {
+			if (signal.aborted || !this.enabler || !needsEnable(e)) throw e;
+			let last: unknown = e;
+			await this.enabler().catch(() => false);
+			const tries = Math.max(1, Math.round(this.opts.enableWaitMs / this.opts.enableRetryMs));
+			for (let i = 0; i < tries; i++) {
+				await sleep(this.opts.enableRetryMs, signal);
+				if (signal.aborted) throw last;
+				try {
+					return await this.consumeAny(src, signal);
+				} catch (e2) {
+					if (signal.aborted || !needsEnable(e2)) throw e2;
+					last = e2;
+				}
+			}
+			throw last;
 		}
 	}
 
@@ -366,7 +447,9 @@ export class CameraSession {
 				void reader.cancel().catch(() => {});
 			}
 			if (stalled || frames === 0)
-				throw new CameraError(frames === 0 ? 'Camera sent no frames' : 'Camera stream stopped');
+				throw new CameraError(frames === 0 ? 'Camera sent no frames' : 'Camera stream stopped', {
+					stalled: true
+				});
 			return true;
 		}
 		// Plain JPEG: this response is frame one, then poll (throttled, shared by all viewers).
@@ -386,17 +469,46 @@ export class CameraSession {
 /** Sessions per printer. */
 export class CameraHub {
 	private sessions = new Map<string, CameraSession>();
+	private lastEnable = new Map<string, number>();
 	readonly opts: HubOptions;
 	constructor(opts: Partial<HubOptions> = {}) {
 		this.opts = { ...DEFAULT_HUB_OPTIONS, ...opts };
 	}
 
-	session(printerId: string, resolver: () => Promise<CameraSource | null>): CameraSession {
+	/**
+	 * Wrap a camera-on sender so it runs at most once per `enableThrottleMs` per key (printer),
+	 * across sessions and the settings Test. A throttled call returns false without sending.
+	 */
+	throttledEnabler(key: string, send: () => Promise<boolean>): CameraEnabler {
+		return async () => {
+			const now = Date.now();
+			const last = this.lastEnable.get(key);
+			if (last !== undefined && now - last < this.opts.enableThrottleMs) return false;
+			this.lastEnable.set(key, now);
+			try {
+				return await send();
+			} catch {
+				return false;
+			}
+		};
+	}
+
+	/** `send` makes this an Elegoo printer: the session sends camera-on (throttled) when needed. */
+	session(
+		printerId: string,
+		resolver: () => Promise<CameraSource | null>,
+		send?: () => Promise<boolean>
+	): CameraSession {
 		let s = this.sessions.get(printerId);
 		if (!s) {
-			const created: CameraSession = new CameraSession(resolver, this.opts, () => {
-				if (this.sessions.get(printerId) === created) this.sessions.delete(printerId);
-			});
+			const created: CameraSession = new CameraSession(
+				resolver,
+				this.opts,
+				() => {
+					if (this.sessions.get(printerId) === created) this.sessions.delete(printerId);
+				},
+				send ? this.throttledEnabler(printerId, send) : undefined
+			);
 			s = created;
 			this.sessions.set(printerId, s);
 		}

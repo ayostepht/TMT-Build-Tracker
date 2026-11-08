@@ -1,5 +1,8 @@
 /**
- * Elegoo SDCP (Smart Device Control Protocol v3) over WebSocket, read-only.
+ * Elegoo SDCP (Smart Device Control Protocol v3) over WebSocket, read-only except for one
+ * maintainer-approved write: Cmd 386 `{ Enable: 1 }` (camera on; port 3031 answers
+ * `camera not ready` until the printer gets it). Every request is built by `sdcpEnvelope`, which
+ * refuses any other command (`SDCP_ALLOWED_COMMANDS`).
  *
  * Centauri Carbon (CC1): `ws://<ip>:3030/websocket`, JSON envelopes
  * `{ Id, Topic: 'sdcp/request/<MainboardID>', Data: { Cmd, Data, RequestID, MainboardID, TimeStamp, From } }`.
@@ -21,6 +24,95 @@ import {
 	type AdapterHandle,
 	type PrinterConfig
 } from '../types';
+
+/** Read-only commands: status refresh and attributes refresh. Always sent with empty data. */
+export const SDCP_READ_COMMANDS: readonly number[] = [0, 1];
+/**
+ * The ONLY write commands this app may ever send, each with its one allowed payload. 386 turns
+ * the camera on. Never add anything that moves, heats, pauses, stops or starts a print.
+ */
+export const SDCP_ALLOWED_COMMANDS: readonly number[] = [386];
+const SDCP_WRITE_PAYLOADS: Record<number, string> = { 386: JSON.stringify({ Enable: 1 }) };
+
+export class SdcpCommandError extends Error {}
+
+/** The one place an SDCP request is built: throws unless the command (and payload) is allowed. */
+export function sdcpEnvelope(cmd: number, data: Obj, mainboardId: string): string {
+	const isRead = SDCP_READ_COMMANDS.includes(cmd);
+	const isWrite = SDCP_ALLOWED_COMMANDS.includes(cmd);
+	if (!isRead && !isWrite) throw new SdcpCommandError(`SDCP command ${cmd} is not allowed`);
+	const payload = JSON.stringify(data);
+	if (isRead && payload !== '{}') throw new SdcpCommandError(`SDCP command ${cmd} takes no data`);
+	if (isWrite && payload !== SDCP_WRITE_PAYLOADS[cmd])
+		throw new SdcpCommandError(`SDCP command ${cmd} payload is not allowed`);
+	return JSON.stringify({
+		Id: mainboardId,
+		Topic: `sdcp/request/${mainboardId}`,
+		Data: {
+			Cmd: cmd,
+			Data: data,
+			RequestID: randomBytes(8).toString('hex'),
+			MainboardID: mainboardId,
+			TimeStamp: Date.now(),
+			From: 1
+		}
+	});
+}
+
+/** Camera-on request text (Cmd 386 `{ Enable: 1 }`). */
+export const cameraOnEnvelope = (mainboardId: string) =>
+	sdcpEnvelope(386, { Enable: 1 }, mainboardId);
+
+/**
+ * Turn the camera on over a short-lived socket of our own (used when no supervisor socket is
+ * open): connect, send Cmd 386, wait briefly for the answer, close. True when it was sent.
+ */
+export async function enableSdcpCamera(
+	cfg: PrinterConfig,
+	opts: { timeoutMs?: number; settleMs?: number } = {}
+): Promise<boolean> {
+	const timeout = opts.timeoutMs ?? 5000;
+	const settle = opts.settleMs ?? 1500;
+	const id = cfg.secrets.mainboardId || (await probeMainboardId(cfg.host)) || '';
+	if (!id) return false;
+	return new Promise<boolean>((resolve) => {
+		let sock: WebSocket;
+		let sent = false;
+		let finished = false;
+		const done = (ok: boolean) => {
+			if (finished) return;
+			finished = true;
+			clearTimeout(t);
+			try {
+				sock.close();
+			} catch {
+				/* ignore */
+			}
+			resolve(ok);
+		};
+		const t = setTimeout(() => done(sent), timeout);
+		try {
+			sock = new WebSocket(`ws://${cfg.host}:${cfg.port ?? 3030}/websocket`);
+		} catch {
+			clearTimeout(t);
+			return resolve(false);
+		}
+		sock.onopen = () => {
+			try {
+				sock.send(cameraOnEnvelope(id));
+				sent = true;
+				setTimeout(() => done(true), settle);
+			} catch {
+				done(false);
+			}
+		};
+		sock.onmessage = () => {
+			if (sent) done(true);
+		};
+		sock.onerror = () => done(sent);
+		sock.onclose = () => done(sent);
+	});
+}
 
 const POLL_MS = 4000;
 const STALE_MS = 20000;
@@ -138,19 +230,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 
 	const send = (cmd: 0 | 1) => {
 		if (!ws || ws.readyState !== 1) return;
-		const body = {
-			Id: mainboardId,
-			Topic: `sdcp/request/${mainboardId}`,
-			Data: {
-				Cmd: cmd,
-				Data: {},
-				RequestID: randomBytes(8).toString('hex'),
-				MainboardID: mainboardId,
-				TimeStamp: Date.now(),
-				From: 1
-			}
-		};
-		ws.send(JSON.stringify(body));
+		ws.send(sdcpEnvelope(cmd, {}, mainboardId));
 	};
 
 	const armStale = () => {
@@ -230,6 +310,18 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 
 	return {
 		status$: (cb) => subj.subscribe(cb),
+		/** Cmd 386 on our own open socket (the printer limits clients); a temporary one otherwise. */
+		enableCamera: async () => {
+			if (ws && ws.readyState === 1 && mainboardId) {
+				try {
+					ws.send(cameraOnEnvelope(mainboardId));
+					return true;
+				} catch {
+					return false;
+				}
+			}
+			return enableSdcpCamera(cfg);
+		},
 		close: () => {
 			subj.closed = true;
 			clearInterval(poll);

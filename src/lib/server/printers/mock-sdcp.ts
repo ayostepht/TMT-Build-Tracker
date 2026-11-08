@@ -20,7 +20,12 @@ export interface MockStatus {
 }
 
 export class MockSdcp extends MiniWsServer {
-	received: { cmd: number }[] = [];
+	received: { cmd: number; data?: unknown }[] = [];
+	/** Camera state: off until Cmd 386 {Enable:1}; falls back to off `cameraTimeoutMs` later (0 = never). */
+	cameraTimeoutMs = 0;
+	private cameraAt = 0;
+	/** Number of Cmd 386 requests received. */
+	cameraEnables = 0;
 	status: MockStatus = {
 		printStatus: 0,
 		machineStatus: [0],
@@ -37,7 +42,7 @@ export class MockSdcp extends MiniWsServer {
 	constructor() {
 		super();
 		this.onMessage = (socket, text) => {
-			let msg: { Data?: { Cmd?: number } };
+			let msg: { Data?: { Cmd?: number; Data?: unknown } };
 			try {
 				msg = JSON.parse(text);
 			} catch {
@@ -45,10 +50,33 @@ export class MockSdcp extends MiniWsServer {
 			}
 			const cmd = msg.Data?.Cmd;
 			if (typeof cmd !== 'number') return;
-			this.received.push({ cmd });
+			this.received.push({ cmd, data: msg.Data?.Data });
+			if (cmd === 386) {
+				const d = msg.Data?.Data as { Enable?: number } | undefined;
+				if (d?.Enable === 1) {
+					this.cameraAt = Date.now();
+					this.cameraEnables++;
+				}
+				sendJson(socket, {
+					Id: 'x',
+					Topic: `sdcp/response/${MAINBOARD}`,
+					Data: { Cmd: 386, Data: { Ack: 0 }, MainboardID: MAINBOARD }
+				});
+			}
 			if (cmd === 0) sendJson(socket, this.statusMessage());
 			if (cmd === 1) sendJson(socket, this.attributesMessage());
 		};
+	}
+
+	/** Is the camera streaming right now? */
+	cameraReady(): boolean {
+		if (!this.cameraAt) return false;
+		return this.cameraTimeoutMs <= 0 || Date.now() - this.cameraAt < this.cameraTimeoutMs;
+	}
+
+	/** Back to "camera not ready", as if the printer timed it out. */
+	cameraOff() {
+		this.cameraAt = 0;
 	}
 
 	set(patch: Partial<MockStatus>) {

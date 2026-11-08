@@ -21,6 +21,8 @@ export class MockCamera {
 	withLength = true;
 	fps = 20;
 	frames: Buffer[] = [fakeJpeg('frame-0')];
+	/** When set, `/video` answers 500 "camera not ready" until this returns true (like the printer's camera before SDCP Cmd 386); a stream stops sending when it turns false. */
+	readyWhen: (() => boolean) | null = null;
 	active = 0;
 	maxActive = 0;
 	total = 0;
@@ -61,6 +63,10 @@ export class MockCamera {
 		this.active++;
 		this.maxActive = Math.max(this.maxActive, this.active);
 		res.on('close', () => this.active--);
+		if (path === '/video' && this.readyWhen && !this.readyWhen()) {
+			res.writeHead(500, { 'content-type': 'text/plain' }).end('camera not ready');
+			return;
+		}
 		if (path === '/snapshot' || (path === '/video' && this.mode === 'jpeg')) {
 			const f = this.nextFrame();
 			res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': f.length });
@@ -79,6 +85,7 @@ export class MockCamera {
 		});
 		if (this.mode === 'stall') return; // headers only, then silence
 		const send = () => {
+			if (this.readyWhen && !this.readyWhen()) return; // printer timed the camera out: silence
 			const f = this.nextFrame();
 			const head = `${delim}\r\nContent-Type: image/jpeg\r\n${this.withLength ? `Content-Length: ${f.length}\r\n` : ''}\r\n`;
 			res.write(head);

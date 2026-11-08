@@ -239,3 +239,90 @@ test('printer settings: camera override, auto default placeholder, test preview,
 	await expect(page.getByTestId('pf-camera-unsupported')).toContainText('not supported');
 	await expect(page.getByTestId('pf-camera-url')).toHaveCount(0);
 });
+
+test('Elegoo camera is switched on with SDCP Cmd 386 only: not ready -> enable -> frames, throttled, Test button too', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	const { buildId } = await ownerWithBuild(page, 'camera-enable');
+	const org = await orgId(page, buildId);
+
+	// The printer's camera answers 500 "camera not ready" until its SDCP socket got Cmd 386.
+	const printer = new MockSdcp();
+	await printer.start();
+	const camera = new MockCamera();
+	camera.fps = 5;
+	camera.readyWhen = () => printer.cameraReady();
+	camera.frames = [cam.frames[0]];
+	await camera.start();
+	// A second printer for the settings Test button.
+	const printer2 = new MockSdcp();
+	await printer2.start();
+	const camera2 = new MockCamera();
+	camera2.readyWhen = () => printer2.cameraReady();
+	camera2.frames = [cam.frames[0]];
+	await camera2.start();
+	try {
+		const make = async (name: string, s: MockSdcp, c: MockCamera) => {
+			const r = await page.request.post('/api/printers', {
+				data: {
+					organizationId: org,
+					name,
+					kind: 'elegoo-sdcp',
+					host: '127.0.0.1',
+					port: s.port,
+					secrets: { mainboardId: 'ABCDEF' },
+					cameraUrl: c.url('/video')
+				}
+			});
+			expect(r.ok()).toBe(true);
+			return ((await r.json()).printer as { id: string }).id;
+		};
+		const id = await make('Enable Centauri', printer, camera);
+		await make('Test Centauri', printer2, camera2);
+		await expect.poll(() => printer.sockets.size, { timeout: 15_000 }).toBe(1);
+		expect(camera.hits).toEqual([]);
+
+		// A snapshot with the camera off: enable goes out, the camera comes ready, a frame arrives.
+		const snap = await page.request.get(`/api/printers/${id}/camera/snapshot`);
+		expect(snap.status()).toBe(200);
+		expect(snap.headers()['content-type']).toBe('image/jpeg');
+		expect(printer.cameraEnables).toBe(1);
+		// It went over the existing connection: still exactly one client socket.
+		expect(printer.sockets.size).toBe(1);
+
+		// Throttle: the printer times the camera out; more requests within 30 s send nothing new.
+		printer.cameraOff();
+		const again = await page.request.get(`/api/printers/${id}/camera/snapshot`);
+		expect([200, 502]).toContain(again.status());
+		expect(printer.cameraEnables).toBe(1);
+
+		// Guard: the app never sent anything but status/attributes reads and the one camera-on.
+		const sent = printer.received.filter((r) => r.cmd !== 0 && r.cmd !== 1);
+		expect(sent).toEqual([{ cmd: 386, data: { Enable: 1 } }]);
+
+		// Settings Test turns the camera on first (temporary socket), then shows a frame.
+		await page.setViewportSize({ width: 390, height: 844 });
+		const t = await page.request.post('/api/printers/camera-test', {
+			data: {
+				organizationId: org,
+				kind: 'elegoo-sdcp',
+				host: '127.0.0.1',
+				port: printer2.port,
+				secrets: { mainboardId: 'ABCDEF' },
+				cameraUrl: camera2.url('/video')
+			}
+		});
+		const res = (await t.json()) as { works: boolean; image?: string; message?: string };
+		expect(res.works, res.message).toBe(true);
+		expect(res.image).toMatch(/^data:image\/jpeg;base64,/);
+		expect(printer2.received.filter((r) => r.cmd === 386)).toEqual([
+			{ cmd: 386, data: { Enable: 1 } }
+		]);
+	} finally {
+		await printer.stop();
+		await camera.stop();
+		await printer2.stop();
+		await camera2.stop();
+	}
+});

@@ -68,6 +68,13 @@ Save as design all work as on a build.
   `POST /api/printers/camera-test` (editors). SSRF guard `checkCameraUrl` (`src/lib/printers/camera-url.ts`):
   http(s), no credentials, host == printer host; redirects re-checked; no DNS-rebinding protection beyond that.
   `cameraUrl` is returned to editors only. Any printer PATCH drops its camera connection.
+- r24: the Centauri Carbon answers `500 camera not ready` until SDCP Cmd 386 `{"Enable":1}` (see Decisions).
+  Elegoo printers get an enabler: sent before a session's first connect, on non-2xx or stall (then 1 s
+  reconnects for 5 s), throttled hub-wide to once per 30 s per printer; over the supervisor's socket when open,
+  else a temporary socket (settings Test always temporary). Guard: every SDCP request goes through
+  `sdcpEnvelope` (`adapters/sdcp.ts`): reads 0/1 with `{}` only, writes `SDCP_ALLOWED_COMMANDS = [386]` with
+  exactly `{Enable:1}`, anything else throws. Real check during a print: not ready → enable → 200 + frame.
+  Opt-in real probe `camera.real-enable.test.ts` (`TMT_REAL_ELEGOO`).
 - Supervisor now emits a `job` event on job create/link/finish so an open Overview picks up a new print live.
 - Real check: Centauri Carbon frame 640x360 via the hub; 3 concurrent GETs accepted. Moonraker/OctoPrint
   resolution tested with fake fetch only. Screenshots `data/shots-camera/`.
@@ -113,6 +120,9 @@ Save as design all work as on a build.
 - Palettes/generator exclude matte, silk, transparent, glow, marble, wood, glitter, rock
   textures, multi-color, CF/GF and non-95A TPU (strength). Manual picks are unrestricted.
 - Spoolman stays optional ("just another thing to update").
+- Printers are read-only. The one exception (maintainer, 2026-11-07): Elegoo SDCP Cmd 386 `{"Enable":1}` to turn the
+  camera stream on when someone views it (the printer answers "camera not ready" otherwise; OctoEverywhere does
+  the same). Never send anything that moves, heats, pauses, stops or starts a print.
 
 ## Open questions for the maintainer
 
