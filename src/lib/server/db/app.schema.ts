@@ -557,6 +557,9 @@ export const printers = sqliteTable(
 		/** AES-GCM encrypted JSON of secrets (API key, access code, serial); never sent to the browser. */
 		secretEnc: text('secret_enc'),
 		enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+		/** Camera override (http/https, same host as the printer); null = automatic default per printer type. */
+		cameraUrl: text('camera_url'),
+		cameraEnabled: integer('camera_enabled', { mode: 'boolean' }).notNull().default(true),
 		lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
 		/** Last normalised status snapshot (state, progress, file, temps, remaining). */
 		lastStatus: text('last_status', { mode: 'json' }).$type<Record<string, unknown>>(),

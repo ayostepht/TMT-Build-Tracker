@@ -7,6 +7,7 @@ import {
 	type PrinterStatus
 } from '#lib/printers/status.ts';
 import { catalogPrinter } from '#lib/printers/catalog.ts';
+import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
 import { ApiError } from '../access';
 import type { Db } from '../db';
 import { printers } from '../db/schema';
@@ -24,7 +25,7 @@ const bad = (m: string): never => {
 const publicKeys = (kind: PrinterKind) =>
 	PRINTER_KIND_INFO[kind].secrets.filter((s) => !s.secret).map((s) => s.key);
 
-export function toPublic(r: Row): PrinterPublic {
+export function toPublic(r: Row, editor = false): PrinterPublic {
 	const kind = r.kind as PrinterKind;
 	const secrets = decryptSecrets(r.secretEnc);
 	const pub = publicKeys(kind);
@@ -37,6 +38,8 @@ export function toPublic(r: Row): PrinterPublic {
 		port: r.port,
 		catalogId: r.catalogId,
 		enabled: r.enabled,
+		cameraEnabled: r.cameraEnabled,
+		cameraUrl: editor ? r.cameraUrl : null,
 		lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
 		status: (r.lastStatus as PrinterStatus | null) ?? null,
 		secretsSet: Object.keys(secrets).filter((k) => secrets[k]),
@@ -76,6 +79,14 @@ export function parseHost(v: unknown): string {
 	return h;
 }
 
+/** SSRF guard at save time: the camera must be on the printer's own host (any port). */
+function checkCamera(url: string | null | undefined, host: string, kind: PrinterKind): void {
+	if (!url) return;
+	if (!cameraSupported(kind)) bad('This printer type has no camera support');
+	const c = checkCameraUrl(url, host);
+	if (!c.ok) bad(c.error);
+}
+
 interface ParsedInput {
 	name?: string;
 	kind?: PrinterKind;
@@ -83,6 +94,8 @@ interface ParsedInput {
 	port?: number | null;
 	catalogId?: string | null;
 	enabled?: boolean;
+	cameraUrl?: string | null;
+	cameraEnabled?: boolean;
 	secrets?: Secrets; // only the fields supplied
 }
 
@@ -120,6 +133,17 @@ export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput 
 		if (typeof o.enabled !== 'boolean') bad('enabled must be true or false');
 		out.enabled = o.enabled as boolean;
 	}
+	if (o.cameraUrl !== undefined) {
+		if (o.cameraUrl === null || (typeof o.cameraUrl === 'string' && !o.cameraUrl.trim()))
+			out.cameraUrl = null;
+		else if (typeof o.cameraUrl !== 'string' || o.cameraUrl.length > 500)
+			bad('Camera address is too long');
+		else out.cameraUrl = o.cameraUrl.trim();
+	}
+	if (o.cameraEnabled !== undefined) {
+		if (typeof o.cameraEnabled !== 'boolean') bad('cameraEnabled must be true or false');
+		out.cameraEnabled = o.cameraEnabled as boolean;
+	}
 	if (o.secrets !== undefined) {
 		if (typeof o.secrets !== 'object' || o.secrets === null || Array.isArray(o.secrets))
 			bad('secrets must be an object');
@@ -147,6 +171,7 @@ function mergeSecrets(kind: PrinterKind, current: Secrets, supplied: Secrets | u
 
 export function createPrinter(db: Db, orgId: string, userId: string, body: unknown): Row {
 	const p = parsePrinterInput(body, false);
+	checkCamera(p.cameraUrl, p.host!, p.kind!);
 	const secrets = mergeSecrets(p.kind!, {}, p.secrets);
 	return db
 		.insert(printers)
@@ -158,6 +183,8 @@ export function createPrinter(db: Db, orgId: string, userId: string, body: unkno
 			port: p.port ?? null,
 			catalogId: p.catalogId ?? null,
 			enabled: p.enabled ?? true,
+			cameraUrl: p.cameraUrl ?? null,
+			cameraEnabled: p.cameraEnabled ?? true,
 			secretEnc: Object.keys(secrets).length ? encryptSecrets(secrets) : null,
 			createdBy: userId
 		})
@@ -175,6 +202,13 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 	const p = parsePrinterInput(body, true);
 	const kind = p.kind ?? (cur.kind as PrinterKind);
 	const kindChanged = kind !== cur.kind;
+	const host = p.host ?? cur.host;
+	const cameraUrl = !cameraSupported(kind)
+		? null
+		: p.cameraUrl !== undefined
+			? p.cameraUrl
+			: cur.cameraUrl;
+	checkCamera(cameraUrl, host, kind);
 	const secrets = mergeSecrets(kind, kindChanged ? {} : decryptSecrets(cur.secretEnc), p.secrets);
 	const set: Partial<typeof printers.$inferInsert> = {
 		secretEnc: Object.keys(secrets).length ? encryptSecrets(secrets) : null
@@ -185,6 +219,9 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 	if (p.port !== undefined) set.port = p.port;
 	if (p.catalogId !== undefined) set.catalogId = p.catalogId;
 	if (p.enabled !== undefined) set.enabled = p.enabled;
+	if (p.cameraUrl !== undefined) set.cameraUrl = p.cameraUrl;
+	if (p.cameraEnabled !== undefined) set.cameraEnabled = p.cameraEnabled;
+	if (kind === 'bambu-lan') set.cameraUrl = null;
 	return db.update(printers).set(set).where(eq(printers.id, id)).returning().get();
 }
 

@@ -54,6 +54,24 @@ Save as design all work as on a build.
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
 
+## Printer camera (2026-11-07, r23)
+
+- Overview Now printing card (`PrinterLive` → `CameraTile.svelte`) shows the linked printer's camera while
+  it prints: snapshot every 5 s (paused when the tab is hidden), "Live" MJPEG toggle, lightbox, quiet
+  "Camera unavailable" + Retry. Desktop: tile capped at 640 px, left-aligned.
+- Migration 0011: `printers.camera_url` (nullable override), `camera_enabled` (default 1). Defaults resolved
+  at runtime (`camera-source.ts`): Elegoo `http://<host>:3031/video`; Moonraker `/server/webcams/list`
+  (relative URLs against `http://<host>`); OctoPrint webcam settings; Bambu LAN unsupported.
+- Server hub `camera.ts` (+ `mjpeg.ts` parser): one upstream per printer fanned out to viewers, latest
+  frame kept, closed 30 s after the last viewer; 5 MB frame cap, 5 s connect / 15 s stall timeouts, backoff.
+  Routes: `GET /api/printers/:id/camera`, `/camera/snapshot`, `/camera/stream` (members only, 404 otherwise),
+  `POST /api/printers/camera-test` (editors). SSRF guard `checkCameraUrl` (`src/lib/printers/camera-url.ts`):
+  http(s), no credentials, host == printer host; redirects re-checked; no DNS-rebinding protection beyond that.
+  `cameraUrl` is returned to editors only. Any printer PATCH drops its camera connection.
+- Supervisor now emits a `job` event on job create/link/finish so an open Overview picks up a new print live.
+- Real check: Centauri Carbon frame 640x360 via the hub; 3 concurrent GETs accepted. Moonraker/OctoPrint
+  resolution tested with fake fetch only. Screenshots `data/shots-camera/`.
+
 ## Print tab trim (2026-11-07, r22)
 
 - "Ready to print" section removed at the maintainer's request (too much space); `ReadyToPrint.svelte` deleted,

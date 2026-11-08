@@ -14,6 +14,6 @@ export const GET: RequestHandler = (event) =>
 		return {
 			organizationId: access.organizationId,
 			jobs: buildJobs(db, event.params.id, access.organizationId),
-			printers: listPrinters(db, access.organizationId).map(toPublic)
+			printers: listPrinters(db, access.organizationId).map((p) => toPublic(p))
 		};
 	});

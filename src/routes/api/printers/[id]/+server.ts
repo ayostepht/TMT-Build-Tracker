@@ -3,6 +3,7 @@ import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { deletePrinter, getPrinter, toPublic, updatePrinter } from '#lib/server/printers/store.ts';
 import { getSupervisor } from '#lib/server/printers/supervisor.ts';
+import { cameraChanged } from '#lib/server/printers/camera-access.ts';
 import type { RequestHandler } from './$types';
 
 function orgOf(id: string, userId: string): string {
@@ -18,12 +19,14 @@ export const PATCH: RequestHandler = (event) =>
 		const org = orgOf(event.params.id, requireUserId(event));
 		const row = updatePrinter(getDb(), event.params.id, org, await readJson(event));
 		getSupervisor()?.refresh(row.id);
-		return { printer: toPublic(row) };
+		cameraChanged(row.id);
+		return { printer: toPublic(row, true) };
 	});
 
 export const DELETE: RequestHandler = (event) =>
 	respond(() => {
 		const org = orgOf(event.params.id, requireUserId(event));
 		deletePrinter(getDb(), event.params.id, org);
+		cameraChanged(event.params.id);
 		getSupervisor()?.remove(event.params.id);
 	});

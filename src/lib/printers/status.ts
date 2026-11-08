@@ -104,6 +104,10 @@ export interface PrinterPublic {
 	port: number | null;
 	catalogId: string | null;
 	enabled: boolean;
+	/** Camera on or off (default on). */
+	cameraEnabled: boolean;
+	/** Camera override; only sent to team editors and owners (it may carry a token). */
+	cameraUrl: string | null;
 	lastSeenAt: string | null;
 	status: PrinterStatus | null;
 	/** Names of stored secret fields that are set (values are never sent). */

@@ -3,10 +3,12 @@
 		addPrinter,
 		discoverPrinters,
 		testPrinter,
+		testPrinterCamera,
 		updatePrinter,
 		type DiscoveredPrinterDto
 	} from '#lib/client/api.ts';
 	import { printerBrands } from '#lib/printers/catalog.ts';
+	import { cameraSupported, defaultCameraUrl } from '#lib/printers/camera-url.ts';
 	import {
 		PRINTER_KIND_INFO,
 		PRINTER_KINDS,
@@ -36,7 +38,9 @@
 		host: printer?.host ?? '',
 		port: printer?.port ?? null,
 		catalogId: printer?.catalogId ?? '',
-		enabled: printer?.enabled ?? true
+		enabled: printer?.enabled ?? true,
+		cameraUrl: printer?.cameraUrl ?? '',
+		cameraEnabled: printer?.cameraEnabled ?? true
 	});
 	let f = $state(init());
 	let secrets = $state<Record<string, string>>({});
@@ -52,6 +56,16 @@
 	let testing = $state(false);
 	let test = $state<{ connected: boolean; status: PrinterStatus | null; message?: string } | null>(
 		null
+	);
+	let camTesting = $state(false);
+	let cam = $state<{ works: boolean; message?: string; image?: string } | null>(null);
+	const camSupported = $derived(cameraSupported(f.kind));
+	const camPlaceholder = $derived(
+		f.kind === 'elegoo-sdcp'
+			? (defaultCameraUrl(f.kind, f.host.trim() || 'printer-address') ?? '')
+			: f.kind === 'moonraker'
+				? 'Automatic: the webcam set up in Klipper'
+				: 'Automatic: the webcam set in OctoPrint (needs an API key)'
 	);
 	let discovering = $state(false);
 	let found = $state<DiscoveredPrinterDto[] | null>(null);
@@ -69,6 +83,8 @@
 			port: f.port,
 			catalogId: f.catalogId || null,
 			enabled: f.enabled,
+			cameraUrl: cameraSupported(f.kind) ? f.cameraUrl.trim() || null : null,
+			cameraEnabled: f.cameraEnabled,
 			secrets: s
 		};
 	}
@@ -98,6 +114,19 @@
 			error = err instanceof Error ? err.message : 'Test failed';
 		} finally {
 			testing = false;
+		}
+	}
+
+	async function runCameraTest() {
+		camTesting = true;
+		cam = null;
+		error = '';
+		try {
+			cam = await testPrinterCamera(org, { ...payload(), id: printer?.id });
+		} catch (err) {
+			cam = { works: false, message: err instanceof Error ? err.message : 'Camera test failed' };
+		} finally {
+			camTesting = false;
 		}
 	}
 
@@ -218,6 +247,53 @@
 		</div>
 	{/if}
 
+	<fieldset class="cam" data-testid="pf-camera">
+		<legend>Camera</legend>
+		{#if camSupported}
+			<label class="chk"
+				><input type="checkbox" bind:checked={f.cameraEnabled} data-testid="pf-camera-on" /> Show the
+				camera while this printer is printing</label
+			>
+			<label class="field"
+				>Camera address (optional)
+				<input
+					bind:value={f.cameraUrl}
+					placeholder={camPlaceholder}
+					autocapitalize="none"
+					autocomplete="off"
+					maxlength="500"
+					data-testid="pf-camera-url"
+				/>
+				<small
+					>Leave empty to use the automatic address. A custom address must be on the same address as
+					the printer (any port).</small
+				>
+			</label>
+			<div class="actions">
+				<button
+					class="btn sm"
+					type="button"
+					onclick={runCameraTest}
+					disabled={camTesting || !f.host}
+					data-testid="pf-camera-test">{camTesting ? 'Testing…' : 'Test camera'}</button
+				>
+			</div>
+			{#if cam}
+				<div data-testid="pf-camera-result">
+					{#if cam.works && cam.image}
+						<img class="camprev" src={cam.image} alt="Camera test frame" />
+					{:else}
+						<span class="bad">{cam.message ?? 'No picture'}</span>
+					{/if}
+				</div>
+			{/if}
+		{:else}
+			<p class="muted hint" data-testid="pf-camera-unsupported">
+				Camera is not supported for Bambu Lab printers: their camera uses a proprietary stream.
+			</p>
+		{/if}
+	</fieldset>
+
 	<label class="chk"
 		><input type="checkbox" bind:checked={f.enabled} /> Connected (uncheck to pause)</label
 	>
@@ -262,6 +338,26 @@
 	.pf small {
 		color: var(--muted);
 		font-size: 12px;
+	}
+	.cam {
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 10px 12px;
+		display: grid;
+		gap: 8px;
+	}
+	.cam legend {
+		font-size: 13px;
+		padding: 0 4px;
+	}
+	.camprev {
+		display: block;
+		width: 100%;
+		max-width: 480px;
+		aspect-ratio: 16 / 9;
+		object-fit: contain;
+		background: #0c0e16;
+		border-radius: 6px;
 	}
 	.hint {
 		margin: 0;

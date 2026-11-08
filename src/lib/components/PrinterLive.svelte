@@ -3,6 +3,7 @@
 	import type { PrinterStore } from '#lib/client/printer-store.svelte.ts';
 	import { fmtRemaining, type PrinterJobView } from '#lib/printers/status.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
+	import CameraTile from './CameraTile.svelte';
 
 	/** Live progress of the printer running a plate's job (inside a Now printing card). */
 	let { job, store }: { job: PrinterJobView; store: PrinterStore } = $props();
@@ -56,6 +57,7 @@
 				>Not this plate</button
 			>{/if}
 	</div>
+	<CameraTile printerId={job.printerId} />
 </div>
 
 <style>

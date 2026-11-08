@@ -78,6 +78,13 @@
       "when": 1794024474628,
       "tag": "0010_build_kind_draft",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794095035314,
+      "tag": "0011_printer_camera",
+      "breakpoints": true
     }
   ]
 }

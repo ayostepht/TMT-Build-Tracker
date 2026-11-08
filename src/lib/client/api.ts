@@ -563,6 +563,9 @@ export interface PrinterInput {
 	port?: number | null;
 	catalogId?: string | null;
 	enabled?: boolean;
+	/** Camera override (same host as the printer); null or blank = automatic. */
+	cameraUrl?: string | null;
+	cameraEnabled?: boolean;
 	/** Only the fields typed; blank clears a stored value, omitted keeps it. */
 	secrets?: Record<string, string>;
 }
@@ -622,6 +625,20 @@ export const testPrinter = (org: string, input: PrinterInput & { id?: string }) 
 	call<{ connected: boolean; status: PrinterStatus | null; message?: string }>(
 		'POST',
 		'/api/printers/test',
+		{ ...input, organizationId: org }
+	);
+export interface CameraInfo {
+	supported: boolean;
+	enabled: boolean;
+	available: boolean;
+	origin: 'custom' | 'default' | 'moonraker' | 'octoprint' | null;
+}
+export const printerCameraInfo = (printerId: string) =>
+	call<CameraInfo>('GET', `/api/printers/${encodeURIComponent(printerId)}/camera`);
+export const testPrinterCamera = (org: string, input: PrinterInput & { id?: string }) =>
+	call<{ works: boolean; message?: string; image?: string; origin?: string }>(
+		'POST',
+		'/api/printers/camera-test',
 		{ ...input, organizationId: org }
 	);
 export const discoverPrinters = (org: string) =>

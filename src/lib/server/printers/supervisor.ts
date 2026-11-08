@@ -93,7 +93,10 @@ export class Supervisor {
 				if (s.state !== 'offline') set.lastSeenAt = new Date(now);
 				this.db.update(printers).set(set).where(eq(printers.id, printerId)).run();
 			}
-			if (s.state !== 'offline') processStatus(this.db, printerId, s, new Date(now));
+			const jobsChanged =
+				s.state !== 'offline' && processStatus(this.db, printerId, s, new Date(now)).changed;
+			// A job started, linked or finished: open pages reload their job list (the Now printing tile).
+			if (jobsChanged) emitPrinterEvent(row.org, { type: 'job', printerId });
 			emitPrinterEvent(row.org, {
 				type: 'status',
 				printerId,
