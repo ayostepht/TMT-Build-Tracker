@@ -5,7 +5,7 @@
 	import { applyDesign, createBuild, deleteDesign, updateDesignMeta } from '#lib/client/api.ts';
 	import ModelStage from '#lib/components/design/ModelStage.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
-	import { filamentLabel } from '#lib/domain/labels.ts';
+	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -20,7 +20,10 @@
 		)
 	);
 	const bySlot = $derived(
-		d.roles.map((r) => ({ role: r, parts: d.parts.filter((p) => p.role === r.key) }))
+		sortRoles(d.roles, (r) => r.key).map((r) => ({
+			role: r,
+			parts: d.parts.filter((p) => p.role === r.key)
+		}))
 	);
 
 	let workspace = $state('');
@@ -94,13 +97,18 @@
 
 <section class="stack">
 	<a class="crumb" href={resolve('/(app)/designs')}>All designs</a>
-	<div class="kicker">{d.templateName}</div>
-	<h1>{d.name}</h1>
-	<p class="muted">
-		{d.authorName ? `By ${d.authorName}` : 'Included with the kit'} · {d.isPublic
-			? 'public'
-			: 'private'}
-	</p>
+	<div class="top">
+		<div class="titles">
+			<div class="kicker">{d.templateName}</div>
+			<h1>{d.name}</h1>
+			<p class="muted">
+				{d.authorName ? `By ${d.authorName}` : 'Included with the kit'} · {d.isPublic
+					? 'public'
+					: 'private'}
+			</p>
+		</div>
+		<a class="btn primary usebtn" href="#use" data-testid="use-design">Use this design</a>
+	</div>
 
 	<div class="cols">
 		<div class="stagebox">
@@ -121,11 +129,12 @@
 						<li data-role={s.role.key}>
 							<Swatch hex={s.role.hex} tpu={/^tp/i.test(s.role.material)} />
 							<span class="txt">
-								<b>{filamentLabel(s.role, s.role.key)}</b>
-								<span class="muted">{s.role.material} · {s.parts.length} parts</span>
-								<span class="muted parts"
-									>{s.parts.map((p) => p.name).join(', ') || 'No parts'}</span
-								>
+								<b>{roleLabel(s.role.key, s.role)}</b>
+								<span class="muted">{filamentLabel(s.role, s.role.key)}</span>
+								<details class="parts">
+									<summary>{s.parts.length} parts</summary>
+									<span class="muted">{s.parts.map((p) => p.name).join(', ') || 'No parts'}</span>
+								</details>
 							</span>
 						</li>
 					{/each}
@@ -135,50 +144,56 @@
 			{#if error}<div class="error" role="alert">{error}</div>{/if}
 			{#if note}<div class="muted" role="status">{note}</div>{/if}
 
-			<section class="card">
-				<h2>Start a build from this design</h2>
-				{#if data.targets.workspaces.length}
-					<label class="field">
-						Workspace
-						<select bind:value={workspace}>
-							{#each data.targets.workspaces as w (w.id)}<option value={w.id}>{w.name}</option
-								>{/each}
-						</select>
-					</label>
-					<label class="field">
-						Build name
-						<input bind:value={buildName} maxlength="200" />
-					</label>
-					<button class="btn primary" disabled={busy} onclick={start}>Start a build</button>
-				{:else}
-					<p class="muted">You need to be an editor in a workspace to start a build.</p>
+			<section class="card" id="use">
+				<h2>Use this design</h2>
+				<div class="opt">
+					<h3>Start a new build</h3>
+					{#if data.targets.workspaces.length}
+						<label class="field">
+							Workspace
+							<select bind:value={workspace}>
+								{#each data.targets.workspaces as w (w.id)}<option value={w.id}>{w.name}</option
+									>{/each}
+							</select>
+						</label>
+						<label class="field">
+							Build name
+							<input bind:value={buildName} maxlength="200" />
+						</label>
+						<button class="btn primary" disabled={busy} onclick={start}>Start a build</button>
+					{:else}
+						<p class="muted">You need to be an editor in a workspace to start a build.</p>
+					{/if}
+				</div>
+
+				{#if data.targets.builds.length}
+					<div class="opt">
+						<h3>Or copy it into a build or draft you have</h3>
+						<p class="muted small">
+							Replaces that build's filament names, materials, colors and every part's slot. Spools
+							and print progress stay.
+						</p>
+						<label class="field">
+							Build or draft
+							<select bind:value={target}>
+								{#each data.targets.builds as b (b.id)}
+									<option value={b.id}>{b.name} ({b.workspaceName})</option>
+								{/each}
+							</select>
+						</label>
+						<button class="btn" disabled={busy} onclick={copy}>Copy into my build…</button>
+					</div>
 				{/if}
 			</section>
 
-			{#if data.targets.builds.length}
-				<section class="card">
-					<h2>Copy into my build</h2>
-					<label class="field">
-						Build
-						<select bind:value={target}>
-							{#each data.targets.builds as b (b.id)}
-								<option value={b.id}>{b.name} ({b.workspaceName})</option>
-							{/each}
-						</select>
-					</label>
-					<button class="btn" disabled={busy} onclick={copy}>Copy into my build…</button>
-				</section>
-			{/if}
-
 			{#if d.mine}
 				<section class="card">
-					<h2>Manage</h2>
-					<div class="acts">
-						<button class="btn" disabled={busy} onclick={togglePublic}>
-							{d.isPublic ? 'Make private' : 'Share publicly'}
-						</button>
-						<button class="btn danger" disabled={busy} onclick={remove}>Delete design</button>
-					</div>
+					<h2>Sharing</h2>
+					<p class="muted small">
+						{d.isPublic
+							? 'Anyone signed in with this link can see and use this design.'
+							: 'Only you can see this design. Share it publicly to give others the link.'}
+					</p>
 					<label class="field">
 						Link
 						<input
@@ -187,6 +202,12 @@
 							onfocus={(e) => e.currentTarget.select()}
 						/>
 					</label>
+					<div class="acts">
+						<button class="btn" disabled={busy} onclick={togglePublic}>
+							{d.isPublic ? 'Make private' : 'Share publicly'}
+						</button>
+						<button class="btn danger" disabled={busy} onclick={remove}>Delete design</button>
+					</div>
 				</section>
 			{/if}
 		</div>
@@ -194,10 +215,36 @@
 </section>
 
 <style>
+	section.stack {
+		display: grid;
+		gap: 16px;
+	}
 	h1,
 	h2,
+	h3,
 	p {
 		margin: 0;
+	}
+	h3 {
+		font-size: 15px;
+	}
+	.top {
+		display: flex;
+		gap: 12px;
+		align-items: flex-end;
+		justify-content: space-between;
+		flex-wrap: wrap;
+	}
+	.titles {
+		display: grid;
+		gap: 4px;
+		min-width: 0;
+	}
+	.usebtn {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+		padding-inline: 20px;
 	}
 	.cols {
 		display: grid;
@@ -223,7 +270,7 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 10px;
+		gap: 12px;
 	}
 	.slots li {
 		display: flex;
@@ -233,8 +280,29 @@
 	.txt {
 		display: grid;
 		min-width: 0;
+		gap: 1px;
 	}
 	.parts {
+		font-size: 13px;
+	}
+	.parts summary {
+		cursor: pointer;
+		color: var(--muted);
+		width: fit-content;
+	}
+	#use {
+		scroll-margin-top: 12px;
+		gap: 16px;
+	}
+	.opt {
+		display: grid;
+		gap: 10px;
+	}
+	.opt + .opt {
+		border-top: 1px solid var(--line);
+		padding-top: 16px;
+	}
+	.small {
 		font-size: 13px;
 	}
 	.acts {
@@ -250,6 +318,25 @@
 		background: var(--paper);
 		color: var(--ink);
 		font-size: 15px;
+	}
+	/* The primary action stays reachable on a phone while the page scrolls. */
+	@media (max-width: 899px) {
+		.top {
+			position: sticky;
+			top: 0;
+			z-index: 5;
+			background: var(--paper);
+			padding: 8px 0;
+			align-items: center;
+			border-bottom: 1px solid var(--line);
+		}
+		.top .kicker,
+		.top p {
+			display: none;
+		}
+		.top h1 {
+			font-size: 20px;
+		}
 	}
 	@media (min-width: 900px) {
 		.cols {

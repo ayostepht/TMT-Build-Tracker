@@ -3,6 +3,7 @@
  * based generator, and the matcher that maps target colors to the nearest real catalog
  * filaments (CIEDE2000, preferring a brand and plain PETG / TPU 95A).
  */
+import { ROLE_LABEL } from './labels.ts';
 import { materialFamily, suggestName } from '../filament-catalog.ts';
 import {
 	deltaE2000,
@@ -41,10 +42,10 @@ export type SlotKey = (typeof SLOTS)[number];
 export type PaletteTargets = Record<SlotKey, string>;
 
 export const SLOT_LABEL: Record<SlotKey, string> = {
-	primary: 'Primary',
-	accent: 'Accent',
-	soft: 'Primary (TPU)',
-	tire: 'Accent (TPU)'
+	primary: ROLE_LABEL.primary,
+	accent: ROLE_LABEL.accent,
+	soft: ROLE_LABEL.soft,
+	tire: ROLE_LABEL.tire
 };
 
 export interface Palette {

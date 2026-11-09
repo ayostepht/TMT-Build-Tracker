@@ -62,13 +62,25 @@
 			>
 		</p>
 	{/if}
-	<div class="kicker">Studio</div>
-	<h1>Play with designs, no build needed</h1>
-	<p class="muted">
-		A draft is a scratch copy of the kit: recolor it, change options, generate plates for your
-		printer and export a 3MF. Nothing is tracked, and drafts stay out of your build lists. When you
-		like one, make it a build.
-	</p>
+	<div class="top">
+		<div class="titles">
+			<div class="kicker">Studio</div>
+			<h1>Play with designs, no build needed</h1>
+			<p class="muted lead">
+				A draft is a scratch copy of the kit: recolor it, change options, generate plates for your
+				printer and export a 3MF. Nothing is tracked, and drafts stay out of your build lists. When
+				you like one, make it a build.
+			</p>
+		</div>
+		{#if data.workspaces.length && !creating}
+			<button
+				class="btn primary newbtn"
+				type="button"
+				data-testid="new-draft"
+				onclick={() => (creating = true)}>New draft</button
+			>
+		{/if}
+	</div>
 
 	{#if error}<div class="error" role="alert">{error}</div>{/if}
 
@@ -76,16 +88,7 @@
 		<div class="banner" role="note">
 			You have view-only access everywhere, so you cannot start a draft.
 		</div>
-	{:else if !creating}
-		<div>
-			<button
-				class="btn primary"
-				type="button"
-				data-testid="new-draft"
-				onclick={() => (creating = true)}>New draft</button
-			>
-		</div>
-	{:else}
+	{:else if creating}
 		<form
 			class="card stack narrow"
 			method="post"
@@ -125,6 +128,16 @@
 	<ul class="grid" aria-label="Drafts">
 		{#each data.drafts as d (d.id)}
 			<li class="card draft" data-draft={d.name}>
+				{#if d.colors.length}
+					<a
+						class="swatches"
+						href={resolve('/(app)/builds/[id]/design', { id: d.id })}
+						tabindex="-1"
+						aria-hidden="true"
+					>
+						{#each d.colors as c, i (i)}<span style="background:{c}"></span>{/each}
+					</a>
+				{/if}
 				{#if renaming === d.id}
 					<form
 						class="acts"
@@ -145,13 +158,10 @@
 					</h3>
 				{/if}
 				<div class="muted">{d.templateName} · {d.workspace} · updated {ago(d.updated)}</div>
-				{#if d.colors.length}
-					<span class="strip" aria-hidden="true">
-						{#each d.colors as c, i (i)}<span style="background:{c}"></span>{/each}
-					</span>
-				{/if}
 				<div class="acts">
-					<a class="btn sm" href={resolve('/(app)/builds/[id]/design', { id: d.id })}>Open</a>
+					<a class="btn sm primary" href={resolve('/(app)/builds/[id]/design', { id: d.id })}
+						>Open</a
+					>
 					<button
 						class="btn sm"
 						type="button"
@@ -170,12 +180,37 @@
 		{/each}
 	</ul>
 
-	<div class="card shared">
-		<h2>Shared designs</h2>
-		<p class="muted">Color schemes other makers shared, and the ones you saved.</p>
-		<a class="btn" href={resolve('/(app)/designs')} data-testid="browse-designs"
-			>Browse the design gallery</a
-		>
+	<div class="shared">
+		<div class="shead">
+			<h2>Shared designs</h2>
+			<a class="btn sm" href={resolve('/(app)/designs')} data-testid="browse-designs"
+				>Browse the design gallery</a
+			>
+		</div>
+		<p class="muted">
+			Open a design and choose Use this design to start a build from it, or to copy its colors into
+			a build or draft you already have.
+		</p>
+		{#if data.gallery.length}
+			<ul class="strip6" aria-label="Recent designs">
+				{#each data.gallery as g (g.id)}
+					<li>
+						<a href={resolve('/(app)/designs/[slug]', { slug: g.slug })}>
+							<span class="gthumb">
+								{#if g.hasSnapshot}
+									<img src="/api/designs/{g.id}/snapshot.png" alt="" loading="lazy" />
+								{:else}
+									<span class="swatches">
+										{#each g.colors as c, i (i)}<span style="background:{c}"></span>{/each}
+									</span>
+								{/if}
+							</span>
+							<span class="gname">{g.name}</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	</div>
 </section>
 
@@ -204,22 +239,31 @@
 		display: grid;
 		gap: 16px;
 	}
-	.shared .btn {
-		justify-self: start;
-	}
-	.shared {
-		display: grid;
-		gap: 10px;
-		margin-top: 8px;
-	}
-	h1 + p {
-		margin-top: -10px;
-	}
 	h1,
 	h2,
 	h3,
 	p {
 		margin: 0;
+	}
+	.top {
+		display: flex;
+		gap: 16px;
+		align-items: flex-end;
+		justify-content: space-between;
+		flex-wrap: wrap;
+	}
+	.titles {
+		display: grid;
+		gap: 6px;
+		flex: 1 1 320px;
+		min-width: 0;
+	}
+	.lead {
+		max-width: 68ch;
+	}
+	.newbtn {
+		min-height: 44px;
+		padding-inline: 24px;
 	}
 	.acts {
 		display: flex;
@@ -252,15 +296,70 @@
 		gap: 8px;
 		align-content: start;
 	}
-	.strip {
+	.swatches {
 		display: flex;
-		height: 14px;
-		border-radius: 4px;
+		height: 72px;
+		border-radius: 8px;
 		overflow: hidden;
 		border: 1px solid var(--line);
 	}
-	.strip span {
+	.swatches span {
 		flex: 1;
+	}
+	.shared {
+		display: grid;
+		gap: 10px;
+		margin-top: 8px;
+	}
+	.shead {
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+	}
+	.strip6 {
+		list-style: none;
+		margin: 0;
+		padding: 0 0 4px;
+		display: flex;
+		gap: 12px;
+		overflow-x: auto;
+	}
+	.strip6 li {
+		flex: 0 0 160px;
+	}
+	.strip6 a {
+		display: grid;
+		gap: 6px;
+		text-decoration: none;
+		color: var(--ink);
+	}
+	.gthumb {
+		display: block;
+		aspect-ratio: 4 / 3;
+		border-radius: 8px;
+		overflow: hidden;
+		border: 1px solid var(--line);
+		background: var(--card);
+	}
+	.gthumb img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+	.gthumb .swatches {
+		height: 100%;
+		border: 0;
+		border-radius: 0;
+	}
+	.gname {
+		font-size: 14px;
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.backdrop {
 		position: fixed;

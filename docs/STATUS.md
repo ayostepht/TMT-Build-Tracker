@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after the filament supplement (r30 deployed); design studio redesign in progress (uncommitted). Keep this file
+_Last updated: 2026-11-09, after design studio redesign round 1 (r31 deployed). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -67,13 +67,20 @@ Save as design all work as on a build.
 - SpoolmanDB PR: parked by the maintainer (2026-11-09). Draft branch `overture-tpu-95a` + `PR_DRAFT.md` in
   `/workspace/spoolmandb-pr` (local only). Blocker: regular 95A spool_weight must be measured per their CONTRIBUTING.
 
-## Design studio redesign (in progress, uncommitted)
+## Design studio redesign, round 1 (2026-11-09, r31)
 
-- From the UX audit (scratchpad report; maintainer approved D1-D6). Done in working tree: role labels (`ROLE_LABEL`,
-  `roleLabel` in labels.ts), Colors | Parts tabs with Palettes drawer, fixed two-pane desktop, pinned phone stage, compact
-  build header on Design, /designs + /studio pages. In progress: PalettePanel compact cards + Apply bar. Later: swatch picker,
-  part chip, Save/Share at top + apply saved design, a11y; fixups: PartSheet duplicate subtitle, slot order, gallery
-  `slotTitle.ts` → `roleLabel`.
+- From a UX audit (Design tab Palettes was 7,013 px / 8.3 phone screens). Maintainer approved D1-D6.
+- Role labels everywhere: `ROLE_LABEL`, `roleLabel(key, filament?)`, `sortRoles` in labels.ts (Primary PETG, Accent
+  PETG, Primary TPU, Accent TPU, then added slots); filament name is a subtitle only when it differs.
+- `DesignWorkspace` (build/, also wizard + drafts): tabs Colors | Parts; Palettes is a drawer opened from Colors
+  (`open-palettes`); >=900 px fixed-height two panes (no page scroll), <900 px sticky stage (~34vh) + sticky tabs;
+  preview banner overlays the stage. Design route widens `.wrap` to 1680 px; Build/DraftHeader compact there.
+- `PalettePanel`: compact dot cards (one click previews, aria-pressed, roving focus), sticky Apply/Cancel bar with
+  matched filament names, generator collapsed ("Build from your colors"). Global `.bar/.head/.dot/...` in app.css clash
+  with component class names: use distinct names.
+- /designs, /designs/[slug] (#use card, sticky Use this design on phone), /studio (New draft, gallery strip).
+- Round 2 (not started): swatch picker (H4), part chip on stage (H3/M5/M6), Save/Share to header + apply a saved design
+  on the tab (D2), a11y pass. Open: picker title "Accent PETG" vs "Accent PETG color"; editableTargets lacks `kind`.
 
 ## Manual plate times (2026-11-09, r29)
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { promoteDraft } from '#lib/client/api.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 
@@ -9,6 +10,7 @@
 	const b = $derived(ctx.view.build);
 	const kicker = $derived(['Studio', chapter, b.templateName].filter(Boolean).join(' · '));
 	let busy = $state(false);
+	const compact = $derived(page.route.id === '/(app)/builds/[id]/design');
 
 	async function promote() {
 		busy = true;
@@ -22,13 +24,13 @@
 	}
 </script>
 
-<header class="draft-head" data-testid="draft-header">
+<header class="draft-head" class:compact data-testid="draft-header">
 	<div>
 		<div class="kicker">{kicker}</div>
 		<h1>
 			{b.name}<span class="phase" data-testid="draft-badge">Draft</span>
 		</h1>
-		<p class="muted">
+		<p class="muted desc">
 			A scratch design: nothing here is tracked and it stays out of your build lists.
 		</p>
 	</div>
@@ -54,5 +56,19 @@
 	h1,
 	p {
 		margin: 0;
+	}
+	@media (max-width: 899px) {
+		.draft-head.compact {
+			flex-wrap: nowrap;
+			align-items: center;
+			gap: 8px;
+		}
+		.draft-head.compact .desc,
+		.draft-head.compact .kicker {
+			display: none;
+		}
+		.draft-head.compact h1 {
+			font-size: 18px;
+		}
 	}
 </style>

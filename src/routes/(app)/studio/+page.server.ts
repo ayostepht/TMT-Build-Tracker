@@ -3,10 +3,11 @@ import { ApiError } from '#lib/server/access.ts';
 import { createBuild } from '#lib/server/builds/create.ts';
 import { draftRows } from '#lib/server/builds/list.ts';
 import { getDb } from '#lib/server/db/index.ts';
+import { listDesigns } from '#lib/server/designs/designs.ts';
 import { listTemplatesFor } from '#lib/server/templates/fork.ts';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ parent }) => {
+export const load: PageServerLoad = async ({ parent, locals }) => {
 	const { teams, activeTeamId } = await parent();
 	const db = getDb();
 	const writable = teams.filter((t) => t.role !== 'viewer');
@@ -15,7 +16,17 @@ export const load: PageServerLoad = async ({ parent }) => {
 		db,
 		teams.map((t) => t.id)
 	).map((d) => ({ ...d, workspace: nameOf.get(d.organizationId) ?? '' }));
+	const gallery = (locals.user ? await listDesigns(db, locals.user.id) : [])
+		.slice(0, 6)
+		.map((g) => ({
+			id: g.id,
+			slug: g.slug,
+			name: g.name,
+			hasSnapshot: g.hasSnapshot,
+			colors: g.roles.map((r) => r.hex)
+		}));
 	return {
+		gallery,
 		drafts,
 		workspaces: writable.map((t) => ({
 			id: t.id,

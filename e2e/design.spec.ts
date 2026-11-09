@@ -30,9 +30,7 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await sheet.locator('button[data-role="primary"]').click();
 	await expect(page.locator('button.row[data-slug="wing-left"]')).not.toHaveText(wingBefore);
 	const right = page.locator('button.row[data-slug="wing-right"]');
-	await expect(right).toContainText(
-		await page.locator('li.slot[data-role="primary"] b').innerText()
-	);
+	await expect(right).toContainText('Primary PETG');
 
 	// The Overview filament tile changed (the wings moved onto the first slot).
 	await page.goto(`/builds/${buildId}`);
@@ -82,9 +80,7 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await page.getByRole('tab', { name: 'Parts' }).click();
 	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
 	await expect(page.locator('button.row[data-slug="handle-left"]')).toContainText('E2E Red');
-	await expect(page.locator('button.row[data-slug="wing-right"]')).toContainText(
-		await page.locator('li.slot[data-role="primary"] b').innerText()
-	);
+	await expect(page.locator('button.row[data-slug="wing-right"]')).toContainText('Primary PETG');
 });
 
 test('design tab: Esc, the close button and picking the same part again deselect', async ({
@@ -117,7 +113,7 @@ test('design tab: pick a catalog swatch for a slot, search, and add a slot from 
 
 	// Tap the slot's big swatch: the picker opens with real catalog colors.
 	const slot = page.locator('li.slot[data-role="primary"]');
-	const before = await slot.locator('b').innerText();
+	const before = await slot.innerText();
 	await slot
 		.getByRole('button', { name: /^Change filament for/ })
 		.first()
@@ -132,15 +128,17 @@ test('design tab: pick a catalog swatch for a slot, search, and add a slot from 
 	const name = label.split(',')[0];
 	expect(name).toMatch(/red/i);
 	await swatch.click();
-	await expect(slot.locator('b')).toContainText(name);
-	expect(await slot.locator('b').innerText()).not.toBe(before);
+	await expect(slot).toContainText(name);
+	// The heading stays the fixed role name; the picked filament is its subtitle.
+	await expect(slot.locator('b')).toHaveText('Primary PETG');
+	expect(await slot.innerText()).not.toBe(before);
 	await expect(picker.getByTestId('swatch-detail')).toContainText(name);
 	await picker.getByRole('button', { name: 'Done' }).click();
 	await expect(picker).toHaveCount(0);
 
 	// The pick was saved, not just shown.
 	await page.reload();
-	await expect(page.locator('li.slot[data-role="primary"] b')).toContainText(name);
+	await expect(page.locator('li.slot[data-role="primary"]')).toContainText(name);
 
 	// New slot: choose the material, tap a swatch, the slot appears in one step.
 	await page.getByRole('button', { name: 'Add a color' }).click();

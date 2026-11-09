@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import Swatch from '#lib/components/Swatch.svelte';
-	import { filamentLabel } from '#lib/domain/labels.ts';
+	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -33,13 +33,15 @@
 			>
 		</p>
 	{/if}
-	<div class="kicker">Color designs</div>
-	<h1>Designs</h1>
-	<p class="muted">
-		Color schemes other makers shared, and the ones you saved from a build. Start a new build from
-		one, or copy it into a build you already have.
-	</p>
-	<div class="bar">
+	<div class="ghead">
+		<div class="kicker">Color designs</div>
+		<h1>Designs</h1>
+		<p class="muted lead">
+			Color schemes other makers shared, and the ones you saved. Open one to start a new build from
+			it, or to copy its colors into a build or draft you already have.
+		</p>
+	</div>
+	<div class="filters">
 		<div class="seg" role="group" aria-label="Show">
 			<button type="button" aria-pressed={scope === 'all'} onclick={() => (scope = 'all')}>
 				All
@@ -49,6 +51,9 @@
 			</button>
 		</div>
 		<input type="search" placeholder="Search designs" aria-label="Search designs" bind:value={q} />
+		<span class="muted count" aria-live="polite"
+			>{shown.length} design{shown.length === 1 ? '' : 's'}</span
+		>
 	</div>
 
 	<ul class="grid">
@@ -64,22 +69,33 @@
 						<img src="/api/designs/{d.id}/snapshot.png" alt="" loading="lazy" />
 					{:else}
 						<span class="strip">
-							{#each d.roles as r (r.key)}
+							{#each sortRoles(d.roles, (r) => r.key) as r (r.key)}
 								<span style="background:{r.hex}"></span>
 							{/each}
 						</span>
 					{/if}
 				</a>
-				<h3><a href={resolve('/(app)/designs/[slug]', { slug: d.slug })}>{d.name}</a></h3>
-				<div class="muted">
-					{d.authorName ?? 'Included with the kit'} · {d.templateName}
-					{#if !d.isPublic}<span class="set">private</span>{/if}
+				<div class="meta">
+					<h3><a href={resolve('/(app)/designs/[slug]', { slug: d.slug })}>{d.name}</a></h3>
+					<div class="muted">
+						{d.authorName ?? 'Included with the kit'} · {d.templateName}
+						{#if !d.isPublic}<span class="set">private</span>{/if}
+					</div>
 				</div>
 				<ul class="fils">
-					{#each d.roles as r (r.key)}
-						<li><Swatch hex={r.hex} size="mini" /> {filamentLabel(r, r.key)}</li>
+					{#each sortRoles(d.roles, (r) => r.key) as r (r.key)}
+						<li>
+							<Swatch hex={r.hex} size="mini" />
+							<span class="role">{roleLabel(r.key, r)}</span>
+							<span class="muted fil" title={filamentLabel(r, r.key)}
+								>{filamentLabel(r, r.key)}</span
+							>
+						</li>
 					{/each}
 				</ul>
+				<a class="btn primary use" href="{resolve('/(app)/designs/[slug]', { slug: d.slug })}#use"
+					>Use this design</a
+				>
 			</li>
 		{:else}
 			<li class="muted">
@@ -92,25 +108,43 @@
 </section>
 
 <style>
+	section.stack {
+		display: grid;
+		gap: 16px;
+	}
 	h1,
 	h3,
 	p {
 		margin: 0;
 	}
-	.bar {
+	.ghead {
+		display: grid;
+		gap: 6px;
+	}
+	.lead {
+		max-width: 62ch;
+	}
+	/* Not ".bar": app.css uses that name for the 10 px progress bar, which clipped this row. */
+	.filters {
 		display: flex;
 		gap: 10px;
 		flex-wrap: wrap;
 		align-items: center;
 	}
-	.bar input {
+	.filters input {
 		flex: 1 1 200px;
+		max-width: 420px;
+		min-height: 40px;
 		padding: 8px 10px;
 		border: 1px solid var(--line);
 		border-radius: 6px;
 		background: var(--card);
 		color: var(--ink);
 		font-size: 15px;
+	}
+	.count {
+		font-size: 14px;
+		margin-left: auto;
 	}
 	.seg {
 		display: inline-flex;
@@ -122,9 +156,12 @@
 		border: 0;
 		background: var(--card);
 		color: var(--ink);
-		padding: 8px 14px;
+		padding: 8px 16px;
+		min-height: 40px;
 		cursor: pointer;
 		font: inherit;
+		font-size: 15px;
+		font-weight: 500;
 	}
 	.seg button[aria-pressed='true'] {
 		background: var(--accent);
@@ -140,7 +177,14 @@
 	}
 	.design {
 		align-content: start;
-		gap: 8px;
+		gap: 10px;
+	}
+	.meta {
+		display: grid;
+		gap: 2px;
+	}
+	.meta .muted {
+		font-size: 14px;
 	}
 	.thumb {
 		display: block;
@@ -168,7 +212,28 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 2px;
+		gap: 4px;
 		font-size: 14px;
+	}
+	.fils li {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.role {
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.fil {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 13px;
+	}
+	.use {
+		justify-self: start;
+		margin-top: 2px;
 	}
 </style>

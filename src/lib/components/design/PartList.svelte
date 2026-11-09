@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { filamentLabel } from '#lib/domain/labels.ts';
+	import { roleLabel } from '#lib/domain/labels.ts';
 	import type { BuildView, PartDef } from '#lib/domain/types.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 
@@ -64,7 +64,7 @@
 						>
 							{#if f}<Swatch hex={f.hex} tpu={f.tpu} size="mini" />{/if}
 							<span class="name">{p.name}</span>
-							<span class="muted slotname">{filamentLabel(f, p.role)}</span>
+							<span class="muted slotname">{roleLabel(p.role, f)}</span>
 							{#if noPreview.includes(p.slug)}<span class="tag">no 3D preview</span>{/if}
 						</button>
 					</li>

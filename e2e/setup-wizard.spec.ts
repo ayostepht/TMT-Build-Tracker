@@ -58,8 +58,9 @@ test('new build walks the setup wizard: template, options, colors, files, export
 	await expect(page.getByTestId('design-workspace')).toBeVisible();
 	await expect(page.getByTestId('no-model').or(page.locator('canvas').first())).toBeVisible();
 	await page.waitForLoadState('networkidle');
-	await page.getByRole('tab', { name: 'Palettes' }).click();
-	await page.locator('[data-palette="fire-truck"]').getByRole('button', { name: 'Apply' }).click();
+	await page.getByTestId('open-palettes').click();
+	await page.locator('[data-palette="fire-truck"]').click();
+	await page.getByTestId('palette-bar').getByRole('button', { name: 'Apply' }).click();
 	await expect(page.getByText('Applied Fire Truck')).toBeVisible();
 	// Move a part between slots right here, then save-as-design is on offer too.
 	await page.getByRole('tab', { name: 'Parts' }).click();

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { filamentLabel } from '#lib/domain/labels.ts';
+	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
 	import { fmt, fmtSpools, type FilamentStat } from '#lib/domain/index.ts';
 	import type { BuildView, FilamentRole } from '#lib/domain/types.ts';
 	import { setBuildDesign } from '#lib/client/api.ts';
@@ -48,7 +48,7 @@
 		</span>
 	</div>
 	<ul>
-		{#each view.filaments as f (f.key)}
+		{#each sortRoles(view.filaments, (x) => x.key) as f (f.key)}
 			{@const s = statOf(f)}
 			{@const grams = s?.total ?? 0}
 			{@const spare = s ? s.haveGrams - s.used - s.need : 0}
@@ -64,7 +64,7 @@
 						class="big"
 						class:tpu={f.tpu}
 						style="background-color:{f.hex}"
-						aria-label="Change filament for {filamentLabel(f, f.key)}"
+						aria-label="Change filament for {roleLabel(f.key, f)}"
 						title="Pick a different filament"
 						onclick={() => onedit?.(f.key)}
 					></button>
@@ -80,7 +80,10 @@
 						onclick={() => onfilter?.(activeRole === f.key ? null : f.key)}
 						title="Show only the parts in this slot"
 					>
-						<b>{filamentLabel(f, f.key)}</b>
+						<b>{roleLabel(f.key, f)}</b>
+						{#if roleLabel(f.key, f) !== filamentLabel(f, f.key)}<span class="fname"
+								>{filamentLabel(f, f.key)}</span
+							>{/if}
 						<span class="muted">{f.material} · {partCount(f)} parts · {fmt(grams)} g</span>
 					</button>
 					<div class="need" class:short={!draft && s?.short && grams > 0}>
@@ -195,6 +198,11 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 		border-radius: 6px;
+	}
+	.fname {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.need {
 		font-size: 13px;

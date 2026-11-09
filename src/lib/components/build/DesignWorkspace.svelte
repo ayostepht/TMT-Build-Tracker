@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { filamentStats } from '#lib/domain/index.ts';
+	import { filamentStats, roleLabel } from '#lib/domain/index.ts';
 	import { applyPartRole, designColors, hiddenSlugs } from '#lib/domain/design.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import { setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
@@ -22,18 +22,16 @@
 	let { embedded = false }: { embedded?: boolean } = $props();
 	const ctx = getBuildCtx();
 
-	type Tab = 'slots' | 'palettes' | 'parts';
-	const ALL_TABS: { id: Tab; label: string }[] = [
-		{ id: 'slots', label: 'Slots' },
-		{ id: 'palettes', label: 'Palettes' },
+	type Tab = 'colors' | 'parts';
+	const TABS: { id: Tab; label: string }[] = [
+		{ id: 'colors', label: 'Colors' },
 		{ id: 'parts', label: 'Parts' }
 	];
-	const TABS = ALL_TABS;
 	let root = $state<HTMLElement>();
-	/** Embedded on desktop: height left below the workspace's top edge (minus the wizard's bar). */
+	/** Desktop: height left below the workspace top edge (minus the wizard bar, or a small margin on the Design tab). */
 	let fill = $state('');
 	$effect(() => {
-		if (!embedded || !root) return;
+		if (!root) return;
 		const el = root;
 		const measure = () => {
 			if (!window.matchMedia('(min-width: 900px)').matches) {
@@ -41,13 +39,30 @@
 				return;
 			}
 			const top = el.getBoundingClientRect().top + window.scrollY;
-			fill = `${Math.max(480, Math.round(window.innerHeight - top - 84))}px`;
+			fill = `${Math.max(480, Math.round(window.innerHeight - top - (embedded ? 84 : 16)))}px`;
 		};
 		measure();
 		window.addEventListener('resize', measure);
 		return () => window.removeEventListener('resize', measure);
 	});
-	let tab = $state<Tab>('slots');
+	/** Height of the build's sticky tab bar (0 in the wizard): the pinned stage sits right under it. */
+	let stick = $state(0);
+	$effect(() => {
+		if (!root) return;
+		const nav = embedded ? null : document.querySelector<HTMLElement>('nav.tabs');
+		if (!nav) {
+			stick = 0;
+			return;
+		}
+		const m = () => (stick = Math.round(nav.getBoundingClientRect().height));
+		m();
+		const ro = new ResizeObserver(m);
+		ro.observe(nav);
+		return () => ro.disconnect();
+	});
+	let tab = $state<Tab>('colors');
+	/** Colors mode: the palettes drawer replaces the slot list while open. */
+	let palettesOpen = $state(false);
 	let paletteSeen = $state(false);
 	/** Palette shown in 3D but not saved. */
 	let preview = $state<PalettePreview | null>(null);
@@ -92,15 +107,43 @@
 
 	function openPicker(p: NonNullable<typeof picker>) {
 		picker = p;
-		// On phones the sheet covers the lower half: bring the 3D view up so the recolor stays visible.
-		if (window.matchMedia('(max-width: 899px)').matches)
-			document.querySelector('.stagebox')?.scrollIntoView({ block: 'start' });
+		// On phones the stage is pinned above the sheet, so the recolor stays visible without scrolling.
 	}
 
 	function setTab(t: Tab) {
 		tab = t;
-		if (t === 'palettes') paletteSeen = true;
-		else preview = null;
+		// Choosing a mode (also re-choosing Colors) returns to its main view and drops any preview.
+		palettesOpen = false;
+		preview = null;
+	}
+
+	function openPalettes() {
+		palettesOpen = true;
+		paletteSeen = true;
+	}
+
+	function closePalettes() {
+		palettesOpen = false;
+		preview = null;
+	}
+
+	/** Arrow keys / Home / End move between the mode tabs (roving tabindex). */
+	function tabKey(e: KeyboardEvent) {
+		const i = TABS.findIndex((t) => t.id === tab);
+		const n =
+			e.key === 'ArrowRight'
+				? (i + 1) % TABS.length
+				: e.key === 'ArrowLeft'
+					? (i + TABS.length - 1) % TABS.length
+					: e.key === 'Home'
+						? 0
+						: e.key === 'End'
+							? TABS.length - 1
+							: -1;
+		if (n < 0) return;
+		e.preventDefault();
+		setTab(TABS[n].id);
+		document.getElementById(`tab-${TABS[n].id}`)?.focus();
 	}
 
 	async function move(role: string) {
@@ -142,6 +185,8 @@
 		// Picking the selected part again toggles it off.
 		slug = slug === selected ? null : slug;
 		selected = slug;
+		// Phones: the stage is pinned, so the model never scrolls away. Only bring the sheet into
+		// view if it is off-screen (it has a scroll-margin that clears the pinned stage).
 		if (slug && typeof window !== 'undefined' && window.matchMedia('(max-width: 899px)').matches) {
 			queueMicrotask(() =>
 				document.querySelector('[data-testid="part-sheet"]')?.scrollIntoView({ block: 'nearest' })
@@ -166,7 +211,7 @@
 	class:embedded
 	bind:this={root}
 	data-testid="design-workspace"
-	style={fill ? `--fill:${fill}` : undefined}
+	style="--stick:{stick}px;{fill ? `--fill:${fill}` : ''}"
 >
 	<div class="stagecol">
 		<div class="stagebox">
@@ -182,23 +227,38 @@
 				siteAdmin={page.data.siteAdmin === true}
 				addFilesHref={resolve('/(app)/builds/[id]/files', { id: ctx.id }) + '#settings'}
 			/>
+			{#if preview}
+				<p
+					class="prev"
+					role="status"
+					data-testid="preview-banner"
+					data-hexes={Object.entries(preview.slots)
+						.map(([k, v]) => `${k}:${v.hex}`)
+						.join(',')}
+				>
+					<span>Previewing <b>{preview.label}</b>. Not saved yet.</span>
+					<button type="button" class="btn sm" onclick={() => (preview = null)}>Stop</button>
+				</p>
+			{/if}
 		</div>
-		{#if preview}
-			<p
-				class="banner prev"
-				role="status"
-				data-testid="preview-banner"
-				data-hexes={Object.entries(preview.slots)
-					.map(([k, v]) => `${k}:${v.hex}`)
-					.join(',')}
-			>
-				Previewing <b>{preview.label}</b>. Not saved yet.
-				<button type="button" class="btn sm" onclick={() => (preview = null)}>Stop</button>
-			</p>
-		{/if}
 	</div>
 
 	<div class="panel">
+		<div class="tabs" role="tablist" aria-label="Design panel" tabindex="-1" onkeydown={tabKey}>
+			{#each TABS as t (t.id)}
+				<button
+					type="button"
+					role="tab"
+					id="tab-{t.id}"
+					aria-selected={tab === t.id}
+					aria-controls="tabpanel-{t.id}"
+					tabindex={tab === t.id ? 0 : -1}
+					class="tab"
+					onclick={() => setTab(t.id)}>{t.label}</button
+				>
+			{/each}
+		</div>
+
 		{#if part}
 			<PartSheet
 				view={live}
@@ -216,49 +276,47 @@
 		{/if}
 
 		<div
-			class="tabs"
-			role="tablist"
-			aria-label="Design panel"
-			style="grid-template-columns:repeat({TABS.length}, 1fr)"
+			role="tabpanel"
+			id="tabpanel-colors"
+			aria-labelledby="tab-colors"
+			hidden={tab !== 'colors'}
 		>
-			{#each TABS as t (t.id)}
-				<button
-					type="button"
-					role="tab"
-					id="tab-{t.id}"
-					aria-selected={tab === t.id}
-					aria-controls="tabpanel-{t.id}"
-					class="tab"
-					onclick={() => setTab(t.id)}>{t.label}</button
-				>
-			{/each}
-		</div>
-
-		<div role="tabpanel" id="tabpanel-slots" aria-labelledby="tab-slots" hidden={tab !== 'slots'}>
-			<SlotPanel
-				view={live}
-				{stats}
-				activeRole={roleFilter}
-				editingRole={picker?.mode === 'edit' ? picker.role : null}
-				onfilter={(r) => {
-					roleFilter = r;
-					if (r) setTab('parts');
-				}}
-				onedit={(role) => openPicker({ mode: 'edit', role })}
-				onadd={() => openPicker({ mode: 'new' })}
-			/>
-		</div>
-
-		{#if paletteSeen}
-			<div
-				role="tabpanel"
-				id="tabpanel-palettes"
-				aria-labelledby="tab-palettes"
-				hidden={tab !== 'palettes'}
-			>
-				<PalettePanel view={ctx.view} {preview} onpreview={(p) => (preview = p)} />
+			<div class="view" hidden={palettesOpen}>
+				<div class="palrow">
+					<span class="muted">Try a ready-made or generated color scheme.</span>
+					<button
+						type="button"
+						class="btn"
+						data-testid="open-palettes"
+						aria-expanded={palettesOpen}
+						onclick={openPalettes}>Palettes</button
+					>
+				</div>
+				<SlotPanel
+					view={live}
+					{stats}
+					activeRole={roleFilter}
+					editingRole={picker?.mode === 'edit' ? picker.role : null}
+					onfilter={(r) => {
+						roleFilter = r;
+						if (r) setTab('parts');
+					}}
+					onedit={(role) => openPicker({ mode: 'edit', role })}
+					onadd={() => openPicker({ mode: 'new' })}
+				/>
 			</div>
-		{/if}
+
+			{#if paletteSeen}
+				<div class="view" data-testid="palettes-drawer" hidden={!palettesOpen}>
+					<div class="palhead">
+						<button type="button" class="btn sm" onclick={closePalettes}>
+							<span aria-hidden="true">←</span> Back to colors
+						</button>
+					</div>
+					<PalettePanel view={ctx.view} {preview} onpreview={(p) => (preview = p)} />
+				</div>
+			{/if}
+		</div>
 
 		<div
 			class="partsTab"
@@ -269,8 +327,10 @@
 		>
 			{#if roleFilter}
 				<p class="muted filt">
-					Showing only the parts in the {live.filaments.find((f) => f.key === roleFilter)?.name ??
-						'selected'}
+					Showing only the parts in the {roleLabel(
+						roleFilter,
+						live.filaments.find((f) => f.key === roleFilter)
+					)}
 					slot.
 					<button type="button" class="btn sm" onclick={() => (roleFilter = null)}>Show all</button>
 				</p>
@@ -303,11 +363,13 @@
 			{/if}
 		</div>
 
-		<SaveDesign
-			snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
-		/>
+		{#if !palettesOpen}
+			<SaveDesign
+				snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
+			/>
+		{/if}
 
-		{#if !embedded}
+		{#if !embedded && !palettesOpen}
 			<section class="next" aria-label="Next steps">
 				<a href={resolve('/(app)/builds/[id]/files', { id: ctx.id })} data-testid="next-plates"
 					>Next: files and export →</a
@@ -319,7 +381,7 @@
 
 {#if picker?.mode === 'edit' && pickerSlot}
 	<SwatchPicker
-		title="Change {pickerSlot.name}"
+		title={roleLabel(pickerSlot.key, pickerSlot)}
 		family={pickerSlot.tpu ? 'tpu' : 'petg'}
 		current={{ name: pickerSlot.name, material: pickerSlot.material, hex: pickerSlot.hex }}
 		slotMaterial={pickerSlot.material}
@@ -339,25 +401,54 @@
 
 <style>
 	.design {
+		--stageh: clamp(200px, 34vh, 320px);
 		display: grid;
-		gap: 16px;
+		gap: 12px;
 		align-items: start;
+	}
+	.design.embedded {
+		padding-bottom: 16px;
+	}
+	/* Phones: the stage is pinned right under the page's tab bar while the panel scrolls beneath. */
+	.stagecol {
+		position: sticky;
+		top: var(--stick, 0px);
+		z-index: 6;
+		background: var(--paper);
+		padding: 0 0 8px;
+	}
+	.stagebox {
+		position: relative;
+		height: var(--stageh);
 	}
 	.panel {
 		display: grid;
 		gap: 16px;
 		min-width: 0;
 	}
-	.stagebox {
-		height: 55vh;
-		min-height: 260px;
-	}
+	/* "Previewing X" sits on top of the stage so it never moves the layout; the viewer below keeps its touches. */
 	.prev {
-		margin: 8px 0 0;
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		right: 8px;
+		z-index: 2;
+		margin: 0;
 		display: flex;
 		gap: 10px;
 		align-items: center;
-		flex-wrap: wrap;
+		justify-content: space-between;
+		padding: 6px 8px 6px 12px;
+		font-size: 14px;
+		background: var(--card);
+		border: 1px solid var(--accent);
+		border-radius: 8px;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+		pointer-events: none;
+	}
+	.prev .btn {
+		pointer-events: auto;
+		flex: none;
 	}
 	.hint {
 		margin: 0;
@@ -373,13 +464,13 @@
 	}
 	.tabs {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(2, 1fr);
 		gap: 4px;
 		padding: 4px;
 		background: var(--accent-soft);
 		border-radius: 10px;
 		position: sticky;
-		top: 0;
+		top: calc(var(--stick, 0px) + var(--stageh) + 8px);
 		z-index: 5;
 	}
 	.tab {
@@ -400,13 +491,26 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}
-	[role='tabpanel'] {
+	[role='tabpanel'],
+	.view {
 		display: grid;
 		gap: 16px;
 		min-width: 0;
 	}
-	[role='tabpanel'][hidden] {
+	[role='tabpanel'][hidden],
+	.view[hidden] {
 		display: none;
+	}
+	.palrow {
+		display: flex;
+		gap: 10px 14px;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+	}
+	.palhead {
+		display: flex;
+		align-items: center;
 	}
 	.filt {
 		margin: 0;
@@ -415,48 +519,34 @@
 		align-items: center;
 		flex-wrap: wrap;
 	}
+	/* The part sheet scrolls into view below the pinned stage and tab bar. */
+	.panel :global([data-testid='part-sheet']) {
+		scroll-margin-top: calc(var(--stick, 0px) + var(--stageh) + 64px);
+	}
+	/* Desktop: fixed-viewport two panes. The stage fills the left, the panel scrolls on its own. */
 	@media (min-width: 900px) {
-		.design {
-			grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr);
-		}
-		.stagecol {
-			position: sticky;
-			top: 12px;
-		}
-		.stagebox {
-			height: min(72vh, 720px);
-		}
-		.tabs {
-			top: 4px;
-		}
-	}
-	/* Inside the setup wizard: stage first (~50vh on phones), panel scrolls on its own on desktop. */
-	.design.embedded {
-		padding-bottom: 16px;
-	}
-	.design.embedded .stagebox {
-		height: 50vh;
-		height: 50dvh;
-	}
-	@media (min-width: 900px) {
+		.design,
 		.design.embedded {
-			grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
+			grid-template-columns: minmax(0, 1fr) minmax(340px, 460px);
 			height: var(--fill, 70vh);
 			padding-bottom: 0;
 			align-items: stretch;
+			gap: 16px;
 		}
-		.design.embedded .stagecol {
+		.stagecol {
 			position: static;
+			background: none;
+			padding: 0;
 			min-height: 0;
 			display: flex;
 			flex-direction: column;
 		}
-		.design.embedded .stagebox {
+		.stagebox {
 			height: auto;
 			flex: 1;
 			min-height: 0;
 		}
-		.design.embedded .panel {
+		.panel {
 			display: flex;
 			flex-direction: column;
 			min-height: 0;
@@ -465,11 +555,15 @@
 			padding: 0 6px 24px 0;
 			scrollbar-gutter: stable;
 		}
-		.design.embedded .panel > *:not(.never) {
+		.panel > * {
 			flex: none;
 		}
-		.design.embedded .tabs {
+		.tabs {
+			top: 0;
 			margin: 0;
+		}
+		.panel :global([data-testid='part-sheet']) {
+			scroll-margin-top: 0;
 		}
 	}
 </style>

@@ -75,3 +75,12 @@
 {@render children()}
 <GuideViewer />
 <Toast />
+
+<style>
+	/* The Design tab is a work area: wider container, tighter bottom padding, no page scroll on desktop. */
+	:global(.wrap:has(.design-route)) {
+		max-width: 1680px;
+		padding-bottom: 16px;
+		gap: 12px;
+	}
+</style>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { filamentLabel } from '#lib/domain/labels.ts';
+	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
 	import { fmt, roleOptions, symmetryPeers } from '#lib/domain/index.ts';
 	import type { BuildView, PartDef } from '#lib/domain/types.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
@@ -39,7 +39,10 @@
 	</header>
 	<p class="now">
 		{#if current}<Swatch hex={current.hex} tpu={current.tpu} size="mini" />{/if}
-		<span>In slot <b>{filamentLabel(current, part.role)}</b></span>
+		<span>In slot <b>{roleLabel(part.role, current)}</b></span>
+		{#if current && roleLabel(part.role, current) !== filamentLabel(current, part.role)}<span
+				class="muted">· {filamentLabel(current, part.role)}</span
+			>{/if}
 		{#if part.bomGrams}<span class="muted">· about {fmt(part.bomGrams)} g</span>{/if}
 	</p>
 	{#if noPreview}<p class="muted">This part has no 3D preview. Its color still counts.</p>{/if}
@@ -60,7 +63,7 @@
 			</label>
 		{/if}
 		<div class="opts" role="group" aria-label="Move to a slot">
-			{#each options as o (o.filament.key)}
+			{#each sortRoles(options, (x) => x.filament.key) as o (o.filament.key)}
 				<div class="opt">
 					<button
 						type="button"
@@ -73,8 +76,10 @@
 					>
 						<Swatch hex={o.filament.hex} tpu={o.filament.tpu} />
 						<span class="txt">
-							<b>{filamentLabel(o.filament, o.filament.key)}</b>
-							<span class="muted">{o.filament.material}</span>
+							<b>{roleLabel(o.filament.key, o.filament)}</b>
+							{#if roleLabel(o.filament.key, o.filament) !== filamentLabel(o.filament, o.filament.key)}<span
+									class="muted">{filamentLabel(o.filament, o.filament.key)}</span
+								>{/if}
 						</span>
 					</button>
 					{#if o.reason}<span class="why">{o.reason}</span>{/if}

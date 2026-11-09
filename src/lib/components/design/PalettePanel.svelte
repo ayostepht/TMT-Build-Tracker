@@ -45,6 +45,11 @@
 	let failed = $state(false);
 	let preferred = $state<string[]>([]);
 	let busy = $state(false);
+	/** The "Build from your colors" disclosure; variations are only computed while it is open. */
+	let genOpen = $state(false);
+	/** Roving tabindex: the one card per list that is a tab stop (arrow keys move between cards). */
+	let readyFocus = $state(0);
+	let varFocus = $state(0);
 
 	// Generator
 	const QUICK = [
@@ -154,7 +159,7 @@
 	const lockedSlots = $derived(FILL_ORDER.filter((s) => settled[s]));
 	const variations = $derived.by(() => {
 		const c = catalog;
-		if (!c) return null;
+		if (!c || !(genOpen || untrack(() => preview?.id.startsWith('gen:')))) return null;
 		const harmonies = theme === 'all' ? undefined : [theme];
 		const want = PAGE_SIZE * pages;
 		const all = paletteVariations(settled, want + 1, 0, harmonies);
@@ -215,8 +220,9 @@
 	const togglePreview = (id: string, label: string, r: ResolvedPalette) =>
 		onpreview(preview?.id === id ? null : previewOf(id, label, r));
 
-	async function apply(id: string, label: string, r: ResolvedPalette) {
-		const next = previewOf(id, label, r);
+	/** Commit the palette currently shown in the 3D preview. */
+	async function apply(next: PalettePreview) {
+		const label = next.label;
 		const before = view.filaments
 			.filter((f) => next.slots[f.key])
 			.map((f) => ({ key: f.key, name: f.name, material: f.material, hex: f.hex }));
@@ -248,12 +254,54 @@
 	}
 
 	const missing = $derived(SLOTS.filter((s) => !slotMap[s]));
+
+	const cancel = () => onpreview(null);
+
+	/** The previewed palette's filaments per role, for the action bar. */
+	const previewRows = $derived.by(() => {
+		if (!preview) return [];
+		return SLOTS.map((s) => {
+			const key = slotMap[s];
+			const f = key ? preview.slots[key] : undefined;
+			return f ? { slot: s, name: f.name, hex: f.hex } : null;
+		}).filter((x): x is { slot: SlotKey; name: string; hex: string } => !!x);
+	});
+
+	/** Arrow keys / Home / End move between the cards of one list (roving tabindex). */
+	function rove(e: KeyboardEvent, setFocus: (i: number) => void) {
+		const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+		if (!keys.includes(e.key)) return;
+		const cards = [
+			...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-card]')
+		];
+		const at = cards.indexOf(document.activeElement as HTMLElement);
+		if (at < 0) return;
+		e.preventDefault();
+		const to =
+			e.key === 'Home'
+				? 0
+				: e.key === 'End'
+					? cards.length - 1
+					: Math.min(
+							cards.length - 1,
+							Math.max(0, at + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1))
+						);
+		setFocus(to);
+		cards[to].focus();
+	}
 </script>
 
-<section class="pal" aria-label="Palettes">
-	<div class="head">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<section
+	class="pal"
+	aria-label="Palettes"
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && preview && !busy) cancel();
+	}}
+>
+	<div class="phead">
 		<h2>Palettes</h2>
-		<details class="brand" data-testid="brand-pref">
+		<details class="brandpick" data-testid="brand-pref">
 			<summary
 				aria-label="Preferred brands: {preferred.length ? preferred.join(', ') : 'Any brand'}"
 			>
@@ -294,165 +342,223 @@
 		</details>
 	</div>
 	<p class="muted intro">
-		A palette fills the primary, accent, soft and tire slots with the closest real filaments from
-		the catalog{missing.length
-			? ` (this build has no ${missing.map((m) => SLOT_LABEL[m]).join(', ')} slot)`
-			: ''}. Pick the colors you want to keep and the rest is filled in for you, with several
-		variations to choose from. Preview one in 3D first; nothing is saved until you apply.
+		Tap a palette to preview it in 3D; nothing is saved until you apply.{missing.length
+			? ` This build has no ${missing.map((m) => SLOT_LABEL[m]).join(', ')} slot.`
+			: ''}
 	</p>
 	{#if failed}
 		<p class="muted" role="alert">The filament catalog could not be loaded.</p>
 	{:else if !catalog}
 		<p class="muted">Loading the filament catalog…</p>
-	{/if}
-
-	{#if variations}
-		<div class="card gen" data-testid="generator">
-			<h3>Build one from your colors</h3>
-			<div class="yours" role="group" aria-label="Your colors">
-				<span class="kicker">Your colors</span>
-				<div class="tiles">
-					{#each FILL_ORDER as s (s)}
-						{@const hexv = locked[s]}
-						{@const cur = currentHex(s)}
-						<div class="tile" class:locked={!!hexv} class:sel={selected === s} data-slot={s}>
-							<button
-								type="button"
-								class="tsel"
-								aria-pressed={selected === s}
-								aria-label="{SLOT_LABEL[s]} slot: {hexv ??
-									'Auto'}. Select it to fill it with the next quick color"
-								onclick={() => (selected = selected === s ? null : s)}
-							>
-								<span
-									class="tdot"
-									class:auto={!hexv}
-									class:tpu={s === 'soft' || s === 'tire'}
-									style={hexv ? `background-color:${hexv}` : ''}
-									aria-hidden="true"
-								></span>
-								<span class="tname">
-									<b>{SLOT_LABEL[s]}</b>
-									<span class="muted small">{hexv ?? 'Auto'}</span>
-								</span>
-							</button>
-							<div class="tctl">
-								<input
-									type="color"
-									aria-label="{SLOT_LABEL[s]} color"
-									value={hexv ?? cur ?? '#808080'}
-									oninput={(e) => lockSlot(s, e.currentTarget.value, false)}
-									onchange={(e) => lockSlot(s, e.currentTarget.value)}
-								/>
-								<input
-									type="text"
-									class="hexin"
-									aria-label="{SLOT_LABEL[s]} hex"
-									placeholder="Auto"
-									maxlength="7"
-									value={hexv ?? ''}
-									onchange={(e) => {
-										const raw = e.currentTarget.value.trim();
-										if (!raw) clearSlot(s);
-										else if (isHex(normHex(raw))) lockSlot(s, raw);
-										else e.currentTarget.value = hexv ?? '';
-									}}
-								/>
-								{#if hexv}
-									<button
-										type="button"
-										class="x"
-										aria-label="Clear {SLOT_LABEL[s]} (back to Auto)"
-										onclick={() => clearSlot(s)}>×</button
-									>
-								{/if}
-							</div>
-							<button
-								type="button"
-								class="linkbtn"
-								disabled={!cur || cur === hexv}
-								aria-label="Use current {SLOT_LABEL[s]} filament color"
-								title={cur ? `Lock to this build's ${cur}` : 'This build has no such slot'}
-								onclick={() => cur && lockSlot(s, cur)}>Use current</button
-							>
-						</div>
-					{/each}
-				</div>
-			</div>
-			<div class="quick" role="group" aria-label="Quick colors">
-				{#each QUICK as q (q)}
-					<button
-						type="button"
-						class="qs"
-						class:on={FILL_ORDER.some((s) => locked[s] === q)}
-						style="background-color:{q}"
-						aria-label="Color {q}"
-						title={selected ? `Fill ${SLOT_LABEL[selected]}` : 'Fill the next Auto slot'}
-						onclick={() => quickPick(q)}
-					></button>
-				{/each}
-			</div>
-			<div class="chips" role="group" aria-label="Theme">
-				<button
-					type="button"
-					class="chip"
-					aria-pressed={theme === 'all'}
-					title="Variations across every theme"
-					onclick={() => {
-						theme = 'all';
-						pages = 1;
-					}}>All themes</button
-				>
-				{#each HARMONIES as h (h.id)}
-					<button
-						type="button"
-						class="chip"
-						aria-pressed={theme === h.id}
-						title={h.hint}
-						onclick={() => {
-							theme = h.id;
-							pages = 1;
-						}}>{h.label}</button
-					>
-				{/each}
-			</div>
-		</div>
-
-		<h3>Variations</h3>
-		<div class="list" data-testid="variations">
-			{#each variations.items as v (v.id)}
-				<div class="card pc" data-variation={v.id}>
-					<div class="pname">
-						<b>{v.label}</b>
-						<span class="muted"
-							>{lockedSlots.length
-								? `Your ${lockedSlots.map((s) => SLOT_LABEL[s]).join(', ')}; the rest auto-filled.`
-								: 'All colors auto-filled.'}</span
-						>
-					</div>
-					{@render card(`gen:${v.id}`, v.full, null, v.resolved, v.targets, lockedSlots)}
-				</div>
-			{/each}
-		</div>
-		{#if variations.hasMore}
-			<div>
-				<button type="button" class="btn sm" onclick={() => pages++}>More variations</button>
-			</div>
-		{:else if !variations.items.length}
-			<p class="muted">No variations for these colors.</p>
-		{/if}
-
-		<h3>Ready-made</h3>
-		<div class="list">
-			{#each PALETTES as p (p.id)}
+	{:else}
+		<div
+			class="list"
+			role="group"
+			aria-label="Ready-made palettes"
+			onkeydown={(e) => rove(e, (i) => (readyFocus = i))}
+		>
+			{#each PALETTES as p, i (p.id)}
 				{@const r = resolvedPremade[p.id]}
 				{#if r}
-					<div class="card pc" data-palette={p.id}>
-						<div class="pname"><b>{p.name}</b><span class="muted">{p.description}</span></div>
-						{@render card(p.id, p.name, null, r, p.targets)}
-					</div>
+					{@render card(
+						p.id,
+						p.name,
+						p.name,
+						r,
+						p.targets,
+						[],
+						i === readyFocus,
+						() => (readyFocus = i),
+						{
+							'data-palette': p.id
+						}
+					)}
 				{/if}
 			{/each}
+		</div>
+
+		<details class="gen" data-testid="generator-toggle" bind:open={genOpen}>
+			<summary>
+				<span>Build from your colors</span>
+				<span class="muted small">Pick colors, fill the rest</span>
+			</summary>
+			{#if variations}
+				<div class="genbody" data-testid="generator">
+					<div class="yours" role="group" aria-label="Your colors">
+						<span class="kicker">Your colors</span>
+						<div class="tiles">
+							{#each FILL_ORDER as s (s)}
+								{@const hexv = locked[s]}
+								{@const cur = currentHex(s)}
+								<div class="tile" class:locked={!!hexv} class:sel={selected === s} data-slot={s}>
+									<button
+										type="button"
+										class="tsel"
+										aria-pressed={selected === s}
+										aria-label="{SLOT_LABEL[s]} slot: {hexv ??
+											'Auto'}. Select it to fill it with the next quick color"
+										onclick={() => (selected = selected === s ? null : s)}
+									>
+										<span
+											class="tdot"
+											class:auto={!hexv}
+											class:tpu={s === 'soft' || s === 'tire'}
+											style={hexv ? `background-color:${hexv}` : ''}
+											aria-hidden="true"
+										></span>
+										<span class="tname">
+											<b>{SLOT_LABEL[s]}</b>
+											<span class="muted small">{hexv ?? 'Auto'}</span>
+										</span>
+									</button>
+									<div class="tctl">
+										<input
+											type="color"
+											aria-label="{SLOT_LABEL[s]} color"
+											value={hexv ?? cur ?? '#808080'}
+											oninput={(e) => lockSlot(s, e.currentTarget.value, false)}
+											onchange={(e) => lockSlot(s, e.currentTarget.value)}
+										/>
+										<input
+											type="text"
+											class="hexin"
+											aria-label="{SLOT_LABEL[s]} hex"
+											placeholder="Auto"
+											maxlength="7"
+											value={hexv ?? ''}
+											onchange={(e) => {
+												const raw = e.currentTarget.value.trim();
+												if (!raw) clearSlot(s);
+												else if (isHex(normHex(raw))) lockSlot(s, raw);
+												else e.currentTarget.value = hexv ?? '';
+											}}
+										/>
+										<button
+											type="button"
+											class="ibtn"
+											disabled={!cur || cur === hexv}
+											aria-label="Use current {SLOT_LABEL[s]} filament color"
+											title={cur ? `Lock to this build's ${cur}` : 'This build has no such slot'}
+											onclick={() => cur && lockSlot(s, cur)}>↺</button
+										>
+										<button
+											type="button"
+											class="ibtn"
+											disabled={!hexv}
+											aria-label="Clear {SLOT_LABEL[s]} (back to Auto)"
+											onclick={() => clearSlot(s)}>×</button
+										>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+					<div class="quick" role="group" aria-label="Quick colors">
+						{#each QUICK as q (q)}
+							<button
+								type="button"
+								class="qs"
+								class:on={FILL_ORDER.some((s) => locked[s] === q)}
+								aria-label="Color {q}"
+								title={selected ? `Fill ${SLOT_LABEL[selected]}` : 'Fill the next Auto slot'}
+								onclick={() => quickPick(q)}><span style="background-color:{q}"></span></button
+							>
+						{/each}
+					</div>
+					<div class="chips themes" role="group" aria-label="Theme">
+						<button
+							type="button"
+							class="chip"
+							aria-pressed={theme === 'all'}
+							title="Variations across every theme"
+							onclick={() => {
+								theme = 'all';
+								pages = 1;
+							}}>All themes</button
+						>
+						{#each HARMONIES as h (h.id)}
+							<button
+								type="button"
+								class="chip"
+								aria-pressed={theme === h.id}
+								title={h.hint}
+								onclick={() => {
+									theme = h.id;
+									pages = 1;
+								}}>{h.label}</button
+							>
+						{/each}
+					</div>
+
+					<h3>Variations</h3>
+					<p class="muted small sub">
+						{lockedSlots.length
+							? `Your ${lockedSlots.map((s) => SLOT_LABEL[s]).join(', ')}; the rest auto-filled.`
+							: 'All colors auto-filled.'}
+					</p>
+					<div
+						class="list"
+						role="group"
+						aria-label="Variations"
+						data-testid="variations"
+						onkeydown={(e) => rove(e, (i) => (varFocus = i))}
+					>
+						{#each variations.items as v, i (v.id)}
+							{@render card(
+								`gen:${v.id}`,
+								v.full,
+								v.label,
+								v.resolved,
+								v.targets,
+								lockedSlots,
+								i === varFocus,
+								() => (varFocus = i),
+								{ 'data-variation': v.id }
+							)}
+						{/each}
+					</div>
+					{#if variations.hasMore}
+						<div>
+							<button type="button" class="btn sm morebtn" onclick={() => pages++}
+								>More variations</button
+							>
+						</div>
+					{:else if !variations.items.length}
+						<p class="muted">No variations for these colors.</p>
+					{/if}
+				</div>
+			{/if}
+		</details>
+	{/if}
+
+	{#if preview}
+		<div class="pbar" role="region" aria-label="Palette preview" data-testid="palette-bar">
+			<div class="binfo">
+				<p class="bt" role="status">
+					<span class="muted small">Previewing</span>
+					<b>{preview.label}</b>
+				</p>
+				<ul class="brows" aria-label="Filaments in this palette">
+					{#each previewRows as row (row.slot)}
+						<li title="{SLOT_LABEL[row.slot]}: {row.name}">
+							<span
+								class="bd"
+								class:tpu={row.slot === 'soft' || row.slot === 'tire'}
+								style="background-color:{row.hex}"
+							></span>
+							<span class="sr">{SLOT_LABEL[row.slot]}: </span><span class="bn">{row.name}</span>
+						</li>
+					{/each}
+				</ul>
+			</div>
+			<div class="bacts">
+				<button type="button" class="btn" disabled={busy} onclick={cancel}>Cancel</button>
+				{#if canEdit}
+					<button type="button" class="btn primary" disabled={busy} onclick={() => apply(preview!)}>
+						Apply
+					</button>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </section>
@@ -460,74 +566,72 @@
 {#snippet card(
 	id: string,
 	label: string,
-	title: string | null,
+	name: string,
 	r: ResolvedPalette,
 	targets: PaletteTargets,
-	yours: SlotKey[] = []
+	yours: SlotKey[],
+	tab: boolean,
+	onfocus: () => void,
+	hook: Record<string, string>
 )}
-	<div class="pcard" class:previewing={preview?.id === id}>
-		{#if title}<b class="gtitle">{title}</b>{/if}
-		<ul class="chosen" aria-label="Matched filaments">
+	<button
+		type="button"
+		class="pcard"
+		class:on={preview?.id === id}
+		aria-pressed={preview?.id === id}
+		tabindex={tab ? 0 : -1}
+		data-card
+		{...hook}
+		{onfocus}
+		onclick={() => togglePreview(id, label, r)}
+	>
+		<span class="pname"><b>{name}</b></span>
+		<span class="dots">
 			{#each SLOTS as s (s)}
 				{@const m = r[s as SlotKey]}
-				<li title={m ? `Wanted ${targets[s]}, closest ΔE ${m.de.toFixed(1)}` : ''}>
+				<span
+					class="dotw"
+					title={m
+						? `${SLOT_LABEL[s]}: ${m.name}${yours.includes(s) ? ' (your color)' : ''}${m.relaxed && m.relaxedReason ? `. ${m.relaxedReason}` : ''}`
+						: ''}
+				>
 					<span
-						class="dot"
+						class="pdot"
 						class:tpu={s === 'soft' || s === 'tire'}
+						class:relaxed={m?.relaxed}
 						style="background-color:{m?.hex ?? targets[s]}"
 						aria-hidden="true"
 					></span>
-					<span class="lbl">
-						<span class="muted small">
-							{SLOT_LABEL[s]}
-							{#if yours.includes(s)}
-								<span class="mine" title="You chose this color" data-testid="yours-{s}">
-									<svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
-										<path
-											fill="currentColor"
-											d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1m-2 5V4.5a2 2 0 1 1 4 0V6z"
-										/>
-									</svg>yours</span
-								>
-							{/if}
+					{#if yours.includes(s)}
+						<span class="mine" data-testid="yours-{s}" aria-hidden="true">
+							<svg viewBox="0 0 16 16" width="8" height="8">
+								<path
+									fill="currentColor"
+									d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1m-2 5V4.5a2 2 0 1 1 4 0V6z"
+								/>
+							</svg>
 						</span>
+					{/if}
+					<span class="sr-only">
+						{SLOT_LABEL[s]}{yours.includes(s) ? ' (your color)' : ''}:
 						<span class="nm">{m?.name ?? 'No match'}</span>
 						{#if m?.relaxed && m.relaxedReason}
-							<span class="rnote small" data-testid="relaxed-note">{m.relaxedReason}</span>
+							<span data-testid="relaxed-note">{m.relaxedReason}</span>
 						{/if}
 					</span>
-				</li>
+				</span>
 			{/each}
-		</ul>
-		<div class="acts">
-			<button
-				type="button"
-				class="btn sm"
-				aria-pressed={preview?.id === id}
-				onclick={() => togglePreview(id, label, r)}
-			>
-				{preview?.id === id ? 'Stop preview' : 'Preview'}
-			</button>
-			{#if canEdit}
-				<button
-					type="button"
-					class="btn primary sm"
-					disabled={busy}
-					onclick={() => apply(id, label, r)}
-				>
-					Apply
-				</button>
-			{/if}
-		</div>
-	</div>
+		</span>
+	</button>
 {/snippet}
 
 <style>
 	.pal {
 		display: grid;
-		gap: 12px;
+		gap: 10px;
+		min-width: 0;
 	}
-	.head {
+	.phead {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -538,15 +642,19 @@
 	h3 {
 		margin: 0;
 	}
-	.intro {
+	h3 {
+		font-size: 15px;
+	}
+	.intro,
+	.sub {
 		margin: 0;
 		font-size: 13px;
 	}
-	.brand {
+	.brandpick {
 		position: relative;
 		font-size: 13px;
 	}
-	.brand summary {
+	.brandpick summary {
 		display: flex;
 		gap: 6px;
 		align-items: center;
@@ -559,14 +667,14 @@
 		list-style: none;
 		max-width: 100%;
 	}
-	.brand summary::-webkit-details-marker {
+	.brandpick summary::-webkit-details-marker {
 		display: none;
 	}
-	.brand summary::after {
+	.brandpick summary::after {
 		content: '▾';
 		color: var(--muted);
 	}
-	.brand summary b {
+	.brandpick summary b {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -598,15 +706,157 @@
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		min-height: 36px;
+		min-height: 44px;
 		cursor: pointer;
 	}
 	.bpop .chip {
 		justify-self: start;
 		cursor: pointer;
+		min-height: 36px;
 	}
+
+	/* ---- palette cards ---- */
+	.list {
+		display: grid;
+		gap: 8px;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+	}
+	.pcard {
+		display: grid;
+		gap: 8px;
+		align-content: space-between;
+		text-align: left;
+		min-height: 64px;
+		padding: 10px 12px;
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		background: var(--card);
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+		min-width: 0;
+	}
+	.pcard:hover {
+		border-color: var(--muted);
+	}
+	.pcard.on {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+		box-shadow: inset 0 0 0 1px var(--accent);
+	}
+	.pname {
+		min-width: 0;
+		font-size: 14px;
+		line-height: 1.25;
+	}
+	.pname b {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.pcard.on .pname b::before {
+		content: '✓ ';
+		color: var(--accent);
+	}
+	.dots {
+		display: flex;
+		gap: 6px;
+	}
+	.dotw {
+		position: relative;
+		display: inline-flex;
+	}
+	.pdot {
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		border: 2px solid var(--line);
+		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+		flex: none;
+	}
+	.pdot.relaxed {
+		border-style: dashed;
+		border-color: var(--muted);
+	}
+	.pdot.tpu,
+	.bd.tpu {
+		background-image: repeating-linear-gradient(
+			45deg,
+			rgba(255, 255, 255, 0.28) 0 3px,
+			transparent 3px 7px
+		) !important;
+	}
+	.mine {
+		position: absolute;
+		right: -3px;
+		bottom: -3px;
+		display: grid;
+		place-items: center;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--card);
+		border: 1px solid var(--line);
+		color: var(--ink);
+	}
+	.small {
+		font-size: 12px;
+	}
+
+	/* phone: one compact row per palette */
+	@media (max-width: 640px) {
+		.list {
+			grid-template-columns: 1fr;
+			gap: 6px;
+		}
+		.pcard {
+			grid-template-columns: minmax(0, 1fr) auto;
+			align-items: center;
+			min-height: 48px;
+			padding: 6px 12px;
+		}
+		.brandpick summary {
+			min-height: 44px;
+		}
+	}
+
+	/* ---- generator ---- */
 	.gen {
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		background: var(--card);
+	}
+	.gen > summary {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 8px;
+		flex-wrap: wrap;
+		min-height: 44px;
+		padding: 10px 12px;
+		cursor: pointer;
+		font-weight: 600;
+		list-style: none;
+	}
+	.gen > summary::-webkit-details-marker {
+		display: none;
+	}
+	.gen > summary::before {
+		content: '▸';
+		margin-right: 6px;
+		color: var(--muted);
+	}
+	.gen[open] > summary::before {
+		content: '▾';
+	}
+	.gen > summary > span:first-child {
+		flex: 1;
+	}
+	.genbody {
+		display: grid;
 		gap: 10px;
+		padding: 0 12px 12px;
 	}
 	.yours {
 		display: grid;
@@ -617,13 +867,15 @@
 	}
 	.tiles {
 		display: grid;
-		gap: 8px;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+		gap: 6px;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
 	}
 	.tile {
-		display: grid;
+		display: flex;
 		gap: 6px;
-		padding: 8px;
+		align-items: center;
+		flex-wrap: wrap;
+		padding: 4px 8px;
 		border: 1px dashed var(--line);
 		border-radius: 8px;
 		min-width: 0;
@@ -643,14 +895,15 @@
 		border: 0;
 		padding: 0;
 		text-align: left;
-		cursor: pointer;
 		color: inherit;
 		font: inherit;
-		min-height: 36px;
+		min-height: 44px;
+		flex: 1 1 96px;
+		min-width: 0;
 	}
 	.tdot {
-		width: 30px;
-		height: 30px;
+		width: 22px;
+		height: 22px;
 		border-radius: 50%;
 		flex: none;
 		border: 2px solid var(--line);
@@ -670,164 +923,181 @@
 		display: grid;
 		line-height: 1.2;
 		min-width: 0;
+		font-size: 13px;
 	}
 	.tctl {
 		display: flex;
-		gap: 6px;
+		gap: 4px;
 		align-items: center;
+		flex: 0 1 auto;
 	}
 	.tctl input[type='color'] {
-		width: 40px;
-		height: 34px;
-		padding: 0;
+		width: 44px;
+		height: 44px;
+		padding: 2px;
 		flex: none;
 	}
 	.hexin {
-		width: 0;
-		flex: 1;
-		min-width: 70px;
+		width: 78px;
+		min-height: 44px;
 		font-family: var(--f-mono);
+		font-size: 13px;
 	}
-	.x {
-		width: 32px;
-		height: 32px;
+	.ibtn {
+		width: 44px;
+		height: 44px;
 		flex: none;
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: 8px;
 		background: none;
 		color: inherit;
 		font-size: 18px;
 		line-height: 1;
-		cursor: pointer;
 	}
-	.linkbtn {
-		justify-self: start;
-		background: none;
-		border: 0;
-		padding: 2px 0;
-		color: var(--accent);
-		font: inherit;
-		font-size: 12px;
-		text-decoration: underline;
-		cursor: pointer;
-	}
-	.linkbtn:disabled {
-		color: var(--muted);
-		text-decoration: none;
+	.ibtn:disabled {
+		opacity: 0.4;
 		cursor: default;
-	}
-	.mine {
-		display: inline-flex;
-		align-items: center;
-		gap: 2px;
-		margin-left: 4px;
-		padding: 0 5px;
-		border: 1px solid var(--line);
-		border-radius: 999px;
-		font-size: 11px;
-		line-height: 1.5;
 	}
 	.quick {
 		display: flex;
-		gap: 6px;
+		gap: 0;
 		flex-wrap: wrap;
 	}
 	.qs {
-		width: 26px;
-		height: 26px;
+		width: 36px;
+		height: 36px;
+		padding: 0;
+		border: 0;
+		background: none;
+		display: grid;
+		place-items: center;
+	}
+	.qs span {
+		width: 24px;
+		height: 24px;
 		border-radius: 50%;
 		border: 2px solid var(--line);
-		padding: 0;
-		cursor: pointer;
 	}
-	.qs.on {
+	.qs.on span {
 		outline: 2px solid var(--accent);
-		outline-offset: 2px;
+		outline-offset: 1px;
 	}
-	.chip {
+	.themes .chip {
 		cursor: pointer;
+		min-height: 36px;
 	}
-	.list {
-		display: grid;
+	.morebtn {
+		min-height: 36px;
+	}
+	@media (max-width: 640px) {
+		.qs {
+			width: 44px;
+			height: 44px;
+		}
+		.themes {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			padding-bottom: 4px;
+		}
+		.themes .chip {
+			flex: none;
+			min-height: 44px;
+		}
+		.morebtn {
+			min-height: 44px;
+		}
+		.hexin {
+			width: 70px;
+		}
+	}
+
+	/* ---- sticky Apply / Cancel bar ---- */
+	.pbar {
+		position: sticky;
+		bottom: 0;
+		z-index: 15;
+		display: flex;
 		gap: 10px;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+		background: var(--card);
+		border: 1px solid var(--accent);
+		border-radius: 12px;
+		box-shadow: 0 -4px 18px rgb(0 0 0 / 0.14);
 	}
-	.pc {
-		gap: 8px;
-		padding: 12px;
-	}
-	.pname {
+	.binfo {
 		display: grid;
 		gap: 2px;
+		min-width: 0;
+		flex: 1 1 180px;
 	}
-	.pname .muted {
-		font-size: 13px;
+	.bt {
+		margin: 0;
+		display: flex;
+		gap: 6px;
+		align-items: baseline;
+		min-width: 0;
 	}
-	.pcard {
-		display: grid;
-		gap: 8px;
-		border-radius: 8px;
+	.bt b {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
-	.pcard.previewing {
-		outline: 2px solid var(--accent);
-		outline-offset: 4px;
-	}
-	.gtitle {
-		font-size: 14px;
-	}
-	.chosen {
+	.brows {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 8px 10px;
+		gap: 0 10px;
+		font-size: 12px;
 	}
-	.chosen li {
+	.brows li {
 		display: flex;
-		gap: 8px;
+		gap: 5px;
 		align-items: center;
 		min-width: 0;
 	}
-	.dot {
-		width: 34px;
-		height: 34px;
+	.bd {
+		width: 10px;
+		height: 10px;
 		border-radius: 50%;
 		flex: none;
-		border: 2px solid var(--line);
-		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+		border: 1px solid var(--line);
 	}
-	.dot.tpu {
-		background-image: repeating-linear-gradient(
-			45deg,
-			rgba(255, 255, 255, 0.28) 0 3px,
-			transparent 3px 7px
-		) !important;
-	}
-	.lbl {
-		display: grid;
-		min-width: 0;
-		line-height: 1.2;
-	}
-	.rnote {
-		color: var(--muted, inherit);
-		font-style: italic;
-		line-height: 1.3;
-	}
-	.nm {
-		font-size: 13px;
+	.bn {
 		display: -webkit-box;
+		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
-		-webkit-box-orient: vertical;
 		overflow: hidden;
+		line-height: 1.25;
 		overflow-wrap: anywhere;
 	}
-	.small {
-		font-size: 12px;
+	.sr {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
-	.acts {
+	@media (max-width: 640px) {
+		.brows {
+			display: none;
+		}
+		.binfo {
+			flex-basis: 120px;
+		}
+	}
+	.bacts {
 		display: flex;
 		gap: 8px;
+	}
+	.bacts .btn {
+		min-height: 44px;
+		min-width: 88px;
 	}
 </style>
