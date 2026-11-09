@@ -54,6 +54,13 @@ Save as design all work as on a build.
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
 
+## Phone layout fix (2026-11-09, r28)
+
+- `.now-card` grid had an implicit auto column that grew to its widest child (long run `<select>`, iOS
+  datetime-local), spilling the live box and step fields past the card and widening the page on iPhone. Now
+  `minmax(0,1fr)` tracks, shrinkable inputs/select (ellipsis). `e2e/printers.spec.ts` per-part test asserts no
+  overflow inside `.now-card` at 390/360 px.
+
 ## Palettes, picker, camera collapse (2026-11-09, r26; picker merge r27)
 
 - TPU slots renamed by role app-wide: kit roles `soft` = "Primary TPU" (cushions, soft headrest, grips), `tire` =
