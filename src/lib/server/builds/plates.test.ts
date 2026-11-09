@@ -22,7 +22,7 @@ import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { makeProjectThreeMf } from '../threemf/fixtures';
 import { parseThreeMfBytes } from '../threemf';
-import { addRun, setPartStatus } from './actions';
+import { addRun, printingAction, setPartStatus, syncPlateTime, updatePlate } from './actions';
 import { createBuild } from './create';
 import { repairTwinPlates } from './twin-repair';
 import {
@@ -344,6 +344,118 @@ describe('uploading a 3MF', () => {
 		const v = view(id);
 		expect(v.runs.map((x) => [x.plateNumber, x.partSlug])).toEqual([[null, 'handle-left']]);
 		expect(v.state['handle-left'].status).toBe('Printed');
+	});
+
+	describe('manual plate time', () => {
+		async function applied(id: string, mapOverride: Record<string, string | null> = {}) {
+			const up = await upload(id);
+			applyUpload(db, id, 'owner', up.uploadId, {
+				mapping: { ...up.suggestions.mapping, ...mapOverride },
+				filamentMap: up.suggestions.filamentMap,
+				variantChoices: up.suggestions.variantChoices
+			});
+			return up;
+		}
+		const plate1 = (id: string) => view(id).plates.find((p) => p.number === 1)!;
+
+		it('overrides the file time, exposes it as the base, and clears', async () => {
+			const id = mk();
+			await applied(id);
+			expect(plate1(id)).toMatchObject({ estSeconds: 47000, estSource: 'slicer' });
+			expect(plate1(id).baseEstSeconds).toBeUndefined();
+			updatePlate(db, id, 'owner', 1, { manualEstSeconds: 51600 });
+			expect(plate1(id)).toMatchObject({
+				estSeconds: 51600,
+				estSource: 'manual',
+				baseEstSeconds: 47000,
+				baseEstSource: 'slicer'
+			});
+			const a = db.select().from(activity).where(eq(activity.buildId, id)).all().at(-1)!;
+			expect(a.kind).toBe('plate.slicer');
+			expect(
+				describeActivity(
+					{ id: 'x', userId: 'owner', userName: 'Owen', kind: a.kind, payload: a.payload, at: '' },
+					view(id)
+				)
+			).toBe('Owen set the slicer time of plate 1 to 14h 20m');
+			expect(() => updatePlate(db, id, 'owner', 1, { manualEstSeconds: 1.5 })).toThrow(/seconds/);
+			expect(() => updatePlate(db, id, 'owner', 1, { manualEstSeconds: -5 })).toThrow(/seconds/);
+			updatePlate(db, id, 'owner', 1, { manualEstSeconds: null });
+			expect(plate1(id)).toMatchObject({ estSeconds: 47000, estSource: 'slicer' });
+			expect(plate1(id).baseEstSeconds).toBeUndefined();
+		});
+
+		it('survives a re-upload when the plate keeps its number and parts, else is dropped', async () => {
+			const id = mk();
+			const up = await applied(id);
+			updatePlate(db, id, 'owner', 1, { manualEstSeconds: 51600 });
+			await applied(id);
+			expect(plate1(id)).toMatchObject({
+				estSeconds: 51600,
+				estSource: 'manual',
+				baseEstSeconds: 47000
+			});
+			// the plate now carries another part: the typed time no longer describes it
+			const gadget = `1:${up.summary.plates.find((p) => p.index === 1)!.objects.find((o) => o.name === 'Mystery gadget')!.id}`;
+			await applied(id, { [gadget]: 'storage-left' });
+			expect(plate1(id)).toMatchObject({ estSeconds: 47000, estSource: 'slicer' });
+		});
+
+		it('takes the Now-card run time for a whole-plate run; a printer time never beats a typed one', async () => {
+			const id = mk();
+			await applied(id);
+			const all = plate1(id).parts;
+			const raw = () =>
+				db
+					.select()
+					.from(buildPlates)
+					.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 1)))
+					.get()!;
+			// a part subset leaves the plate alone
+			printingAction(db, id, 'owner', { action: 'setEstimate', slugs: [all[0]], seconds: 1000 });
+			expect(raw().manualEstSeconds).toBeNull();
+			// the typed run time of the whole plate becomes the plate's time
+			printingAction(db, id, 'owner', { action: 'setEstimate', slugs: all, seconds: 49140 });
+			expect(raw()).toMatchObject({ manualEstSeconds: 49140, manualEstSource: 'user' });
+			expect(plate1(id)).toMatchObject({ estSeconds: 49140, estSource: 'manual' });
+			// clearing the field leaves the plate's time
+			printingAction(db, id, 'owner', { action: 'setEstimate', slugs: all, seconds: null });
+			expect(raw().manualEstSeconds).toBe(49140);
+			// a printer job does not overwrite a typed time
+			expect(syncPlateTime(db, id, view(id), all, 40000, 'printer')).toBeNull();
+			expect(raw().manualEstSeconds).toBe(49140);
+			// a per-part-run plate is not synced
+			const rim = view(id).plates.find((p) => p.number === 2)!;
+			expect(syncPlateTime(db, id, view(id), rim.parts, 40000, 'user')).toBeNull();
+		});
+
+		it('a printer time fills an empty plate and a later printer time replaces it, but a typed one wins', async () => {
+			const id = mk();
+			await applied(id);
+			const all = plate1(id).parts;
+			const raw = () =>
+				db
+					.select()
+					.from(buildPlates)
+					.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 1)))
+					.get()!;
+			expect(syncPlateTime(db, id, view(id), all, 49140, 'printer')).toBe(1);
+			expect(raw()).toMatchObject({ manualEstSeconds: 49140, manualEstSource: 'printer' });
+			expect(syncPlateTime(db, id, view(id), all, 50000, 'printer')).toBe(1);
+			expect(raw().manualEstSeconds).toBe(50000);
+			expect(syncPlateTime(db, id, view(id), all, 51480, 'user')).toBe(1);
+			expect(raw()).toMatchObject({ manualEstSeconds: 51480, manualEstSource: 'user' });
+		});
+
+		it("stores the run's own time on the logged run", async () => {
+			const id = mk();
+			await applied(id);
+			const all = plate1(id).parts;
+			printingAction(db, id, 'owner', { action: 'setEstimate', slugs: all, seconds: 49140 });
+			run(id, { plateNumber: 1, hours: 13.6 });
+			const runs = view(id).runs;
+			expect(runs[0].estSeconds).toBe(49140);
+		});
 	});
 
 	it('validates the body and permissions', async () => {

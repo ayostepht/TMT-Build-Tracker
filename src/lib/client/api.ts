@@ -91,7 +91,12 @@ export const deleteRun = (id: string, runId: string, { recompute = true } = {}) 
 export const updatePlate = (
 	id: string,
 	number: number,
-	patch: { slicerGrams?: number | null; slicerByPart?: Record<string, number | null> }
+	patch: {
+		slicerGrams?: number | null;
+		slicerByPart?: Record<string, number | null>;
+		/** Seconds per run typed by hand; overrides the file's time. null clears. */
+		manualEstSeconds?: number | null;
+	}
 ) => call('PATCH', `${b(id)}/plates/${number}`, patch);
 
 export const updateFilament = (

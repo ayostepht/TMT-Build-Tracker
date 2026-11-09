@@ -94,7 +94,10 @@ export interface Plate {
 	filamentGrams: Record<string, number>; // grams per run by filament role key, from a sliced 3MF; {} when unknown
 	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>' | 'arranged'
 	/** Where `estSeconds` comes from: the slicer (uploaded plates as-is), the build's print template ("from your slice", per-part data learned from a sliced file), MakeGood's profile, or our estimate from MakeGood's X/P/A times. Absent/null = unknown. */
-	estSource?: 'slicer' | 'learned' | 'profile' | 'estimate' | null;
+	estSource?: 'manual' | 'slicer' | 'learned' | 'profile' | 'estimate' | null;
+	/** Only when a manual time is set: the time and source it overrides (the file's or the estimate). */
+	baseEstSeconds?: number | null;
+	baseEstSource?: 'slicer' | 'learned' | 'profile' | 'estimate' | null;
 	/** The estimate includes a gram-based guess for a part that is on no MakeGood plate. */
 	estRough?: boolean;
 }
@@ -113,6 +116,8 @@ export interface PrintRun {
 	result: RunResult;
 	grams: number | null;
 	hours: number | null;
+	/** The run's own planned time (seconds) when it was logged (the parts' run time); pace compares against it before the plate's time. */
+	estSeconds?: number | null;
 	printer: string | null;
 	userId: string | null;
 	userName: string | null;

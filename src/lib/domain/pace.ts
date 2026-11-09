@@ -44,17 +44,21 @@ export function paceOf(view: BuildView): Pace | null {
 		const h = Number(r.hours) || 0;
 		if (!(h > 0) || r.result !== 'Success' || r.plateNumber == null) continue;
 		const pl = view.plates.find((p) => p.number === r.plateNumber);
-		if (!pl?.estSeconds) continue;
+		// The run's own time (what was planned when it was logged) comes before the plate's.
+		const own = r.estSeconds && r.estSeconds > 0 ? r.estSeconds : 0;
+		const sec = own || pl?.estSeconds || 0;
+		if (!pl || !sec) continue;
 		// A subset of a plate's parts does not take the whole plate's time.
-		if (!pl.perPartRuns && r.partSlugs && r.partSlugs.length < pl.parts.length) continue;
-		const e = pl.estSeconds / 3600;
+		if (!own && !pl.perPartRuns && r.partSlugs && r.partSlugs.length < pl.parts.length) continue;
+		const e = sec / 3600;
 		// A time that is exactly the plate's own time is the log sheet's prefill, not a measurement.
 		if (h === Math.round(e * 10) / 10) continue;
 		if (h < e * PACE_OUTLIER_LOW || h > e * PACE_OUTLIER_HIGH) continue;
 		est += e;
 		actual += h;
 		runs++;
-		if (pl.estSource === 'slicer' || pl.estSource === 'learned') slicerEst += e;
+		if (own || pl.estSource === 'slicer' || pl.estSource === 'learned' || pl.estSource === 'manual')
+			slicerEst += e;
 	}
 	if (est < PACE_MIN_HOURS) return null;
 	const ratio = actual / est;
@@ -70,6 +74,7 @@ export function paceOf(view: BuildView): Pace | null {
 }
 
 const SOURCE: Record<string, string> = {
+	manual: 'your entry',
 	slicer: 'slicer',
 	learned: 'your slice',
 	profile: 'template profile',

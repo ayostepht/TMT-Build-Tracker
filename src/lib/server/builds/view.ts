@@ -184,7 +184,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		.where(eq(buildPlates.buildId, buildId))
 		.orderBy(asc(buildPlates.number))
 		.all();
-	// Time precedence: slicer (uploaded sliced 3MF) > MakeGood's profile time > our estimate.
+	// Time precedence: a manual entry (build_plates.manual_est_seconds) > slicer (uploaded sliced 3MF) > MakeGood's profile time > our estimate.
 	// Arranged plates carry no time of their own; estimate it from MakeGood's X/P/A times.
 	// The build's print template (per-part data learned from a sliced file) comes before MakeGood's numbers.
 	const { profiles: partProfiles, template: printTemplate } = resolveProfiles(
@@ -222,10 +222,9 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		p.source !== 'arranged' &&
 		arrangedEst.get(p.number)?.learned &&
 		learnedRows.some((r) => r.number === p.number);
-	const plates: Plate[] = rawPlates
-		.map((p) => ({
-			number: p.number,
-			name: p.name,
+	// Time before a manual entry overrides it.
+	const baseTime = (p: (typeof rawPlates)[number]) =>
+		({
 			...(p.source === 'arranged' || learnedPlate(p)
 				? {
 						estSeconds: arrangedEst.get(p.number)?.estSeconds ?? null,
@@ -244,7 +243,28 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 								: ('profile' as const)
 							: null,
 						estRough: false
-					}),
+					})
+		}) as {
+			estSeconds: number | null;
+			estSource: 'slicer' | 'learned' | 'profile' | 'estimate' | null;
+			estRough: boolean;
+		};
+	const plates: Plate[] = rawPlates
+		.map((p) => ({
+			number: p.number,
+			name: p.name,
+			...(() => {
+				const base = baseTime(p);
+				return p.manualEstSeconds
+					? {
+							estSeconds: p.manualEstSeconds,
+							estSource: 'manual' as const,
+							estRough: false,
+							baseEstSeconds: base.estSeconds,
+							baseEstSource: base.estSource
+						}
+					: base;
+			})(),
 			runs: p.runs,
 			runNote: noteFor(p.source, p.number),
 			perPartRuns: p.perPartRuns,
@@ -277,6 +297,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			result: r.result as RunResult,
 			grams: r.grams,
 			hours: r.hours,
+			estSeconds: r.estSeconds,
 			printer: r.printer,
 			userId: r.userId,
 			userName,

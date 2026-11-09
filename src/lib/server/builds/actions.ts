@@ -236,12 +236,48 @@ export function updatePart(
 	});
 }
 
+/**
+ * A run time for all of a plate's parts is the plate's real time: keep it as the plate's manual time
+ * too. A typed time ('user') always wins; a time read from a printer job ('printer') only fills a plate
+ * that has no manual time or whose manual time also came from a printer. Part-subset and per-part-run
+ * plates are left alone, and clearing a run time never clears the plate's. Returns the plate number
+ * that was set, or null.
+ */
+export function syncPlateTime(
+	tx: Db,
+	buildId: string,
+	view: BuildView,
+	slugs: string[],
+	seconds: number | null,
+	source: 'user' | 'printer'
+): number | null {
+	if (!seconds || seconds <= 0) return null;
+	const plate = view.plates.find(
+		(p) => slugs.length > 0 && slugs.every((s) => p.parts.includes(s))
+	);
+	if (!plate || plate.perPartRuns || !plate.parts.every((s) => slugs.includes(s))) return null;
+	const where = and(eq(buildPlates.buildId, buildId), eq(buildPlates.number, plate.number));
+	if (source === 'printer') {
+		const cur = tx
+			.select({ s: buildPlates.manualEstSeconds, src: buildPlates.manualEstSource })
+			.from(buildPlates)
+			.where(where)
+			.get();
+		if (cur?.s && cur.src !== 'printer') return null;
+	}
+	tx.update(buildPlates)
+		.set({ manualEstSeconds: Math.round(seconds), manualEstSource: source })
+		.where(where)
+		.run();
+	return plate.number;
+}
+
 export function printingAction(db: Db, buildId: string, userId: string, body: unknown): void {
 	if (!isObj(body)) bad('Invalid body');
 	const action = body.action;
 	if (!['start', 'stop', 'setStart', 'setEstimate'].includes(action as string))
 		bad('Unknown action');
-	mutateBuild(db, buildId, userId, (_tx, view, now) => {
+	mutateBuild(db, buildId, userId, (tx, view, now) => {
 		const slugs = slugList(body.slugs, view);
 		switch (action) {
 			case 'start':
@@ -263,9 +299,12 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 			}
 			default: {
 				const seconds = optNum(body.seconds, 'seconds') ?? null;
+				// A time a person types for a whole-plate run is the plate's real time: keep it as the
+				// plate's manual time too (clearing the field leaves the plate's time alone).
+				const synced = syncPlateTime(tx, buildId, view, slugs, seconds, 'user');
 				return {
 					kind: 'printing.setEstimate',
-					payload: { slugs, seconds },
+					payload: { slugs, seconds, ...(synced ? { plateNumber: synced } : {}) },
 					patches: setRunEstimate(view, slugs, seconds)
 				};
 			}
@@ -326,6 +365,10 @@ function runOutcome(
 				result: input.result,
 				grams: input.grams,
 				hours: input.hours,
+				estSeconds:
+					runTargets(view, input)
+						.map((s) => view.state[s]?.runEstSeconds)
+						.find((v): v is number => !!v) ?? null,
 				printer: input.printer,
 				userId,
 				note: input.note
@@ -403,6 +446,13 @@ export function updatePlate(
 		const set: Partial<typeof buildPlates.$inferInsert> = {};
 		const g = optNum(body.slicerGrams, 'slicerGrams');
 		if (g !== undefined) set.slicerGrams = g;
+		if (body.manualEstSeconds !== undefined) {
+			const m = body.manualEstSeconds;
+			if (m !== null && (typeof m !== 'number' || !Number.isInteger(m) || m < 0))
+				bad('manualEstSeconds must be a whole number of seconds >= 0, or null');
+			set.manualEstSeconds = m === 0 ? null : (m as number | null);
+			set.manualEstSource = set.manualEstSeconds ? 'user' : null;
+		}
 		if (body.slicerByPart !== undefined) {
 			if (!isObj(body.slicerByPart)) bad('slicerByPart must be an object');
 			const m: Record<string, number> = {};

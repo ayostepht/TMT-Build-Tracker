@@ -103,13 +103,15 @@
 	/** The plate's own time per run, used when the print has no start time. */
 	const planned = $derived(quick && !startedAt && plate?.estSeconds ? plate.estSeconds : null);
 	const plannedLabel = $derived(
-		plate?.estSource === 'slicer'
-			? 'From your slicer'
-			: plate?.estSource === 'learned'
-				? 'From your slice'
-				: plate?.estSource === 'profile'
-					? "From the template's profile"
-					: "Estimate from MakeGood's X/P/A times"
+		plate?.estSource === 'manual'
+			? 'Your entered time'
+			: plate?.estSource === 'slicer'
+				? 'From your slicer'
+				: plate?.estSource === 'learned'
+					? 'From your slice'
+					: plate?.estSource === 'profile'
+						? "From the template's profile"
+						: "Estimate from MakeGood's X/P/A times"
 	);
 	const runLine = $derived.by(() => {
 		if (!quick || !plate) return '';

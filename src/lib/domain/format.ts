@@ -63,3 +63,16 @@ export function toLocalInput(d: Date): string {
 export function today(now: Date = new Date()): string {
 	return `${now.getFullYear()}-${z(now.getMonth() + 1)}-${z(now.getDate())}`;
 }
+
+/**
+ * Parse a slicer time typed by a person into whole seconds: "14h20m", "14h 20" (a bare number after
+ * hours is minutes), "14:20", "14.3" (hours), "90m". Returns null when empty, unparseable or zero.
+ */
+export function parseSlicerTime(s: string): number | null {
+	const t = String(s ?? '')
+		.trim()
+		.toLowerCase();
+	const hm = t.match(/^(\d+)\s*h(?:ours?|rs?)?[\s,]*(\d{1,2})$/);
+	const sec = hm ? +hm[1] * 3600 + +hm[2] * 60 : parseDur(t);
+	return sec && sec > 0 ? Math.round(sec) : null;
+}

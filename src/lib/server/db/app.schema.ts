@@ -377,6 +377,10 @@ export const buildPlates = sqliteTable(
 			.notNull()
 			.default(sql`'[]'`),
 		slicerGrams: real('slicer_grams'),
+		/** Time typed in by hand (seconds per run); overrides the file's and every estimated time. */
+		manualEstSeconds: integer('manual_est_seconds'),
+		/** Who set the manual time: 'user' (typed) or 'printer' (from a linked printer job; a typed one is never overwritten by it). */
+		manualEstSource: text('manual_est_source').$type<'user' | 'printer'>(),
 		slicerByPart: text('slicer_by_part', { mode: 'json' })
 			.$type<Record<string, number>>()
 			.notNull()
@@ -407,6 +411,8 @@ export const printRuns = sqliteTable(
 		result: text('result').notNull(),
 		grams: real('grams'),
 		hours: real('hours'),
+		/** The run's own planned time (seconds) when it was logged, from the parts' run time; pace compares against it. */
+		estSeconds: integer('est_seconds'),
 		printer: text('printer'),
 		userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
 		note: text('note').notNull().default('')

@@ -11,6 +11,7 @@
 	} from '#lib/domain/index.ts';
 	import { printing, updatePlate } from '#lib/client/api.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
+	import type { Plate } from '#lib/domain/types.ts';
 	import RoleChip from './RoleChip.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
 	import PlateTime from './PlateTime.svelte';
@@ -23,6 +24,14 @@
 	const ctx = getBuildCtx();
 	const slugs = $derived(item.parts.map((p) => p.slug));
 	const plate = $derived(ctx.view.plates.find((p) => p.number === item.plate));
+	// While printing, the header shows this run's time (printer- or user-set), not the plate's file time.
+	function headPlate(p: Plate): Plate {
+		return {
+			...p,
+			estSeconds: item.estSeconds ?? p.estSeconds,
+			estSource: item.estSource === 'template' ? 'profile' : (item.estSource ?? p.estSource)
+		};
+	}
 	const fid = $derived(`now-${item.plate}`);
 	let sheetOpen = $state(false);
 	const pstore = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
@@ -43,7 +52,7 @@
 	const elapsedMs = $derived(item.startedAt ? ctx.now - Date.parse(item.startedAt) : 0);
 	// Pace-adjusted when the time is the slicer's, learned or an estimate and no printer reports its own.
 	const pace = $derived(
-		!liveJobs.length && ['slicer', 'learned', 'estimate'].includes(item.estSource ?? '')
+		!liveJobs.length && ['manual', 'slicer', 'learned', 'estimate'].includes(item.estSource ?? '')
 			? paceOf(ctx.view)
 			: null
 	);
@@ -102,7 +111,7 @@
 		<div class="now-meta">
 			{#each item.roles as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
 			{#if item.gramsPerRun}<span class="num">~{fmt(item.gramsPerRun)} g</span>{/if}
-			{#if plate}<PlateTime {plate} />{/if}
+			{#if plate}<PlateTime plate={headPlate(plate)} />{/if}
 		</div>
 	</div>
 	<div class="now-parts">
@@ -176,11 +185,13 @@
 					the ~{fmtH(estMs / 1000)} estimate{/if}
 			{/if}
 		{:else}
-			Estimate {item.estSource === 'slicer'
-				? 'from your slicer'
-				: item.estSource === 'learned'
-					? 'from your slice'
-					: "from the template's profile"}: ~{fmtH(estMs / 1000)}. Set the start time to see a
+			Estimate {item.estSource === 'manual'
+				? 'you entered'
+				: item.estSource === 'slicer'
+					? 'from your slicer'
+					: item.estSource === 'learned'
+						? 'from your slice'
+						: "from the template's profile"}: ~{fmtH(estMs / 1000)}. Set the start time to see a
 			countdown.
 		{/if}
 	</div>

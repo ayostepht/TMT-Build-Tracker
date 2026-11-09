@@ -160,6 +160,30 @@ export function signature(plates: Pick<ArrangedPlate, 'parts' | 'roles' | 'runs'
 /** The build's plate-attached print logs (they would be orphaned by replacing plates). */
 export const hasPlateRuns = (view: BuildView) => view.runs.some((r) => r.plateNumber != null);
 
+/**
+ * Manual plate times keyed for carrying over when plates are replaced: a new plate keeps the old
+ * plate's manual time only when it has the same number and the same set of parts.
+ */
+export function manualTimes(
+	tx: Db,
+	buildId: string
+): (
+	number: number,
+	parts: string[]
+) => { manualEstSeconds: number | null; manualEstSource: 'user' | 'printer' | null } {
+	const old = tx.select().from(buildPlates).where(eq(buildPlates.buildId, buildId)).all();
+	const key = (n: number, parts: string[]) => `${n}:${[...parts].sort().join(',')}`;
+	const m = new Map(
+		old
+			.filter((o) => o.manualEstSeconds)
+			.map((o) => [key(o.number, o.parts), { s: o.manualEstSeconds!, src: o.manualEstSource }])
+	);
+	return (number, parts) => {
+		const h = m.get(key(number, parts));
+		return { manualEstSeconds: h?.s ?? null, manualEstSource: h ? (h.src ?? 'user') : null };
+	};
+}
+
 /** Replace the build's plates with a plan. Callers must have dealt with plate-attached runs. */
 export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 	const tplId = tx
@@ -179,6 +203,7 @@ export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 				}))
 			)
 		: null;
+	const manualFor = manualTimes(tx, buildId);
 	tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 	for (const pl of plan.result.plates)
 		tx.insert(buildPlates)
@@ -190,6 +215,7 @@ export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 				runs: pl.runs,
 				perPartRuns: false,
 				parts: pl.parts,
+				...manualFor(pl.number, pl.parts),
 				source: ARRANGED_SOURCE,
 				arrangement: pl
 			})

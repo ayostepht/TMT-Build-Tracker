@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { printersHrefFor } from '#lib/workspace-links.ts';
-	import { fmt, runInfo } from '#lib/domain/index.ts';
+	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
 	import {
 		printing,
 		deleteRun,
@@ -22,6 +22,7 @@
 	import PlateTime from '#lib/components/PlateTime.svelte';
 	import StartOnPrinter from '#lib/components/StartOnPrinter.svelte';
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
+	import SlicerTimeInput from '#lib/components/SlicerTimeInput.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
@@ -191,6 +192,9 @@
 			? Object.values(pl.slicerByPart).reduce((a, b) => a + b, 0)
 			: (pl.slicerGrams ?? 0);
 		return per * pl.runs;
+	}
+	function saveTime(pl: Plate, seconds: number | null) {
+		return ctx.act(() => updatePlate(ctx.id, pl.number, { manualEstSeconds: seconds }));
 	}
 	function saveSlicer(pl: Plate, slug: string | null, v: number | null) {
 		if (slug) {
@@ -485,6 +489,20 @@
 						title="Grams your slicer shows for this plate{pl.runs > 1 ? ' (one run)' : ''}"
 						onsave={(v) => saveSlicer(pl, null, v)}
 					/>
+				{/if}
+				<SlicerTimeInput
+					label={pl.runs > 1 ? 'Slicer time per run' : 'Slicer time'}
+					value={pl.estSource === 'manual' ? pl.estSeconds : null}
+					placeholder={pl.baseEstSeconds || pl.estSeconds
+						? fmtH(pl.baseEstSeconds || pl.estSeconds || 0)
+						: 'e.g. 14h 20m'}
+					onsave={(s) => saveTime(pl, s)}
+				/>
+				{#if pl.estSource === 'manual' && pl.baseEstSeconds}
+					<span class="meta" data-testid="time-override"
+						>overrides {pl.baseEstSource === 'slicer' ? 'file' : 'estimate'}
+						{fmtH(pl.baseEstSeconds)}</span
+					>
 				{/if}
 				{#if !pl.slicerGrams && !Object.keys(pl.slicerByPart).length}
 					<span class="meta">Using BOM weights until you enter slicer grams.</span>

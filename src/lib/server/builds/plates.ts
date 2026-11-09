@@ -49,6 +49,7 @@ import {
 	loadFootprints,
 	planArrangement,
 	signature,
+	manualTimes,
 	writePlan
 } from './arrange-plan';
 import { loadBuildView } from './view';
@@ -552,6 +553,7 @@ export function applyUpload(
 		requireConversion(view, convertRuns);
 
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
+		const manualFor = manualTimes(tx, buildId);
 		tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 		clearBuildThumbs(buildId);
 		const twinPlates: ApplyResult['twinPlates'] = [];
@@ -582,6 +584,7 @@ export function applyUpload(
 					runs: plan.runs,
 					perPartRuns: plan.perPartRuns,
 					parts: slugs,
+					...manualFor(pl.index, slugs),
 					slicerGrams: pl.grams,
 					// twins: each part's grams per run are the plate's; accounting counts them under the part's own role
 					slicerByPart:

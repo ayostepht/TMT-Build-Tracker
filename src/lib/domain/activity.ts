@@ -183,6 +183,12 @@ function describeMarked(a: ActivityItem, view: Names): string {
 		case 'plate.slicer': {
 			const n = num(p.number);
 			const label = n !== null ? plateRef(n) : 'a plate';
+			if ('manualEstSeconds' in p) {
+				const s = num(p.manualEstSeconds);
+				return s !== null
+					? `${who} set the slicer time of ${label} to ${fmtHM(s)}`
+					: `${who} cleared the slicer time of ${label}`;
+			}
 			const g = num(p.slicerGrams);
 			if (g !== null) return `${who} set the slicer weight of ${label} to ${fmt(g)} g`;
 			if (p.slicerGrams === null) return `${who} cleared the slicer weight of ${label}`;

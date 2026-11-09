@@ -13,7 +13,13 @@ import { today } from '#lib/domain/format.ts';
 import type { BuildView, PartPatch } from '#lib/domain/types.ts';
 import type { PrinterJobView, PrinterStatus } from '#lib/printers/status.ts';
 import { ApiError } from '../access';
-import { addRun, addRunSystem, mutateBuild, mutateBuildSystem } from '../builds/actions';
+import {
+	addRun,
+	addRunSystem,
+	mutateBuild,
+	mutateBuildSystem,
+	syncPlateTime
+} from '../builds/actions';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
 import { builds, printerJobs, printers } from '../db/schema';
@@ -204,12 +210,17 @@ function attach(
 			.set({ buildId: c.view.build.id, plateNumber: c.plate, partSlugs: slugs })
 			.where(eq(printerJobs.id, job.id))
 			.run();
+		const live = job.status === 'printing' || job.status === 'paused';
+		const patches = live ? linkPatches(view, slugs, started, est) : [];
+		// the run time the printer reported is the plate's time too (never over a typed one)
+		if (live && est && patches.some((p) => p.runEstSeconds === est))
+			syncPlateTime(tx, c.view.build.id, view, slugs, est, 'printer');
 		return {
 			kind: auto ? 'printer.job.start' : 'printer.job.link',
 			payload,
 			patches:
 				job.status === 'printing' || job.status === 'paused'
-					? [...stopPrinting(view, dropped), ...linkPatches(view, slugs, started, est)]
+					? [...stopPrinting(view, dropped), ...patches]
 					: []
 		};
 	};

@@ -54,6 +54,16 @@ Save as design all work as on a build.
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
 
+## Manual plate times (2026-11-09, not deployed)
+
+- Migration 0012: `build_plates.manual_est_seconds` + `manual_est_source` ('user' | 'printer'), `print_runs.est_seconds`.
+- A manual time beats every other plate time (`estSource = 'manual'`, "your entry"; `baseEstSeconds/baseEstSource` keep
+  the overridden one for the "overrides file 32.7 h" hint). Set in Files → plate slicer row (`SlicerTimeInput`,
+  `parseSlicerTime`), by a typed Now-card Slicer time on a whole-plate run, or by a printer job link (never over a
+  'user' time). `syncPlateTime` in `builds/actions.ts`. Kept across re-upload/arrange when number + part set match.
+- Logged runs store the run time they printed against; `paceOf` compares each run with its own time first.
+- Why: a sliced project had plate 15 on the TPU slot (32.7 h) while the real print was PETG (13h 39m).
+
 ## Phone layout fix (2026-11-09, r28)
 
 - `.now-card` grid had an implicit auto column that grew to its widest child (long run `<select>`, iOS

@@ -9,6 +9,67 @@ function withRuns(over: Partial<PrintRun>[]): BuildView {
 }
 const est1 = (v: BuildView) => (v.plates.find((p) => p.number === 1)!.estSeconds ?? 0) / 3600;
 
+describe('pace with a manual plate time', () => {
+	const plateWith = (over: Record<string, unknown>) => {
+		const v = makeView();
+		return { v, pl: { ...v.plates[0], runs: 1, perPartRuns: false, ...over } };
+	};
+	it('compares a run to the manual time, not the file time', () => {
+		const { v, pl } = plateWith({
+			estSeconds: 51480, // 14.3 h typed
+			estSource: 'manual',
+			baseEstSeconds: 117720, // 32.7 h in the file
+			baseEstSource: 'slicer'
+		});
+		const view: BuildView = {
+			...v,
+			plates: [pl, ...v.plates.slice(1)],
+			runs: [run({ plateNumber: 1, hours: 14 })]
+		};
+		const p = paceOf(view)!;
+		expect(p.ratio).toBeCloseTo(14 / 14.3, 3);
+		expect(p.ratio).toBeGreaterThan(0.95);
+		expect(p.basis).toBe('slicer');
+	});
+	it('a 13.6 h run on a 13.65 h manual time is on pace', () => {
+		const { v, pl } = plateWith({ estSeconds: 49140, estSource: 'manual' });
+		const p = paceOf({
+			...v,
+			plates: [pl, ...v.plates.slice(1)],
+			runs: [run({ plateNumber: 1, hours: 13.6 })]
+		});
+		expect(p?.ratio).toBeCloseTo(13.6 / 13.65, 3);
+	});
+	it("compares a run to its own logged est_seconds before the plate's", () => {
+		const { v, pl } = plateWith({ estSeconds: 117720, estSource: 'slicer' });
+		const view: BuildView = {
+			...v,
+			plates: [pl, ...v.plates.slice(1)],
+			runs: [run({ plateNumber: 1, hours: 13.6, estSeconds: 49140 })]
+		};
+		expect(paceOf(view)?.ratio).toBeCloseTo(13.6 / 13.65, 3);
+		// without its own time the same run measures against the plate's 32.7 h
+		expect(paceOf({ ...view, runs: [run({ plateNumber: 1, hours: 13.6 })] })?.ratio).toBeCloseTo(
+			13.6 / 32.7,
+			3
+		);
+	});
+	it('labels the source', () => {
+		const { pl } = plateWith({ estSeconds: 51480, estSource: 'manual' });
+		expect(plateTimeBadge(pl, null)!.main).toBe('~14 h');
+		expect(
+			plateTimeBadge(pl, {
+				ratio: 0.98,
+				sampleHours: 14,
+				estHours: 14.3,
+				runs: 1,
+				basis: 'slicer',
+				text: ''
+			})!.base
+		).toBe('your entry 14 h');
+	});
+});
+
 describe('pace', () => {
 	it('waits for 12 estimated hours of usable runs', () => {
 		const v0 = makeView();
