@@ -29,6 +29,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Vendor store product data (Overture, Schoolhouse Spools)
+
+`src/lib/server/filaments/supplement.json` lists filament colors (names and hex values) read from the public
+product pages of [Overture](https://overture3d.com) and [Schoolhouse Spools](https://schoolhousespools.com),
+for colors that SpoolmanDB does not have yet. `scripts/fetch-vendor-filaments.mjs` builds it and
+`scripts/update-filaments.mjs` merges it into `catalog.json`. Only factual data (brand, material, color name,
+color value) is kept; no images, descriptions or prices. Each entry says whether its hex came from the store
+(`hexSource: "store"`) or was estimated from a product photo (`"image"`). Brand names belong to their
+owners; no endorsement is implied.
+
 ## 3D model pipeline (npm dependencies)
 
 The kit admin converts each install's own MakeGood STEP files into a web model. None of

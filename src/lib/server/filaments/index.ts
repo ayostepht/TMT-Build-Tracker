@@ -80,30 +80,33 @@ export function flagsOf(c: CatalogColor): string {
 }
 
 /**
- * Compact `[brand, color, #hex, material, flags?]` tuples for every color of a material family (swatch
- * grids). The 5th element is only present when the catalog marks the color matte, silk, translucent,
- * glow or multi-color, which keeps the payload small.
+ * Compact `[brand, color, #hex, material, flags?]` tuples for every color of a material family in a
+ * catalog (swatch grids). The 5th element is only present when the catalog marks the color matte, silk,
+ * translucent, glow or multi-color, which keeps the payload small.
  */
+export function swatchesOf(cat: FilamentCatalog, family: SwatchFamily): SwatchTuple[] {
+	const out: SwatchTuple[] = [];
+	const seen = new Set<string>();
+	for (const b of cat.brands)
+		for (const m of b.materials) {
+			if (materialFamily(m.material) !== family) continue;
+			for (const c of m.colors) {
+				if (!/^#[0-9a-fA-F]{6}$/.test(c.hex)) continue;
+				const key = `${b.name}|${c.name}|${c.hex}|${m.material}`.toLowerCase();
+				if (seen.has(key)) continue;
+				seen.add(key);
+				const t: SwatchTuple = [b.name, c.name, c.hex.toLowerCase(), m.material];
+				const flags = flagsOf(c);
+				if (flags) t.push(flags);
+				out.push(t);
+			}
+		}
+	return out;
+}
+
+/** {@link swatchesOf} for the bundled catalog, cached per family. */
 export function swatches(family: SwatchFamily): SwatchTuple[] {
 	let out = swatchCache.get(family);
-	if (!out) {
-		out = [];
-		const seen = new Set<string>();
-		for (const b of catalog.brands)
-			for (const m of b.materials) {
-				if (materialFamily(m.material) !== family) continue;
-				for (const c of m.colors) {
-					if (!/^#[0-9a-fA-F]{6}$/.test(c.hex)) continue;
-					const key = `${b.name}|${c.name}|${c.hex}|${m.material}`.toLowerCase();
-					if (seen.has(key)) continue;
-					seen.add(key);
-					const t: SwatchTuple = [b.name, c.name, c.hex.toLowerCase(), m.material];
-					const flags = flagsOf(c);
-					if (flags) t.push(flags);
-					out.push(t);
-				}
-			}
-		swatchCache.set(family, out);
-	}
+	if (!out) swatchCache.set(family, (out = swatchesOf(catalog, family)));
 	return out;
 }

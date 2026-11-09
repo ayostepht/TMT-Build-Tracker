@@ -1,0 +1,539 @@
+{
+	"brands": [
+		{
+			"name": "Overture",
+			"sourceUrl": "https://overture3d.com",
+			"fetchedAt": "2026-11-09T21:19:26.774Z",
+			"materials": [
+				{
+					"material": "PETG",
+					"colors": [
+						{
+							"name": "Army Green",
+							"hex": "#404720",
+							"hexSource": "store"
+						},
+						{
+							"name": "Black",
+							"hex": "#000000",
+							"hexSource": "store"
+						},
+						{
+							"name": "Blue",
+							"hex": "#034e89",
+							"hexSource": "store"
+						},
+						{
+							"name": "Brown",
+							"hex": "#a47c48",
+							"hexSource": "store"
+						},
+						{
+							"name": "Digital Blue",
+							"hex": "#0378d0",
+							"hexSource": "store"
+						},
+						{
+							"name": "Gold",
+							"hex": "#ce8d00",
+							"hexSource": "store"
+						},
+						{
+							"name": "Grass Green",
+							"hex": "#c4d802",
+							"hexSource": "store"
+						},
+						{
+							"name": "Green",
+							"hex": "#38af69",
+							"hexSource": "store"
+						},
+						{
+							"name": "Light Gray",
+							"hex": "#d5d8dd",
+							"hexSource": "store"
+						},
+						{
+							"name": "Magenta",
+							"hex": "#c80181",
+							"hexSource": "store"
+						},
+						{
+							"name": "Matte Digital Blue",
+							"hex": "#37b5f6",
+							"hexSource": "store",
+							"finish": "matte"
+						},
+						{
+							"name": "Orange",
+							"hex": "#ff854d",
+							"hexSource": "store"
+						},
+						{
+							"name": "Pink",
+							"hex": "#f79dbc",
+							"hexSource": "store"
+						},
+						{
+							"name": "Purple",
+							"hex": "#7142a3",
+							"hexSource": "store"
+						},
+						{
+							"name": "Red",
+							"hex": "#ff0000",
+							"hexSource": "store"
+						},
+						{
+							"name": "Rock White",
+							"hex": "#ffffff",
+							"hexSource": "store"
+						},
+						{
+							"name": "Space Gray",
+							"hex": "#76797d",
+							"hexSource": "store"
+						},
+						{
+							"name": "Sparkle Blue",
+							"hex": "#253f56",
+							"hexSource": "store"
+						},
+						{
+							"name": "Starry Blue",
+							"hex": "#142b4b",
+							"hexSource": "store"
+						},
+						{
+							"name": "Transparent Blue",
+							"hex": "#09048e",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Transparent Green",
+							"hex": "#019a45",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Transparent Red",
+							"hex": "#ce333e",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "White",
+							"hex": "#ffffff",
+							"hexSource": "store"
+						},
+						{
+							"name": "Yellow",
+							"hex": "#ffc946",
+							"hexSource": "store"
+						}
+					]
+				},
+				{
+					"material": "TPU",
+					"colors": [
+						{
+							"name": "95A Blue",
+							"hex": "#274e96",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Bright Pink",
+							"hex": "#ffbdd1",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Brown",
+							"hex": "#a47c48",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Digital Blue",
+							"hex": "#0378d0",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Green",
+							"hex": "#00eb75",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Light Green",
+							"hex": "#a0fd62",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Matte Black",
+							"hex": "#020303",
+							"hexSource": "store",
+							"finish": "matte"
+						},
+						{
+							"name": "95A Matte Gray",
+							"hex": "#cccccc",
+							"hexSource": "store",
+							"finish": "matte"
+						},
+						{
+							"name": "95A Matte Orange",
+							"hex": "#f78c45",
+							"hexSource": "store",
+							"finish": "matte"
+						},
+						{
+							"name": "95A Matte Space Gray",
+							"hex": "#a6a6a6",
+							"hexSource": "store",
+							"finish": "matte"
+						},
+						{
+							"name": "95A Matte White",
+							"hex": "#fcfcfc",
+							"hexSource": "store",
+							"finish": "matte"
+						},
+						{
+							"name": "95A Matte Yellow",
+							"hex": "#ffbf40",
+							"hexSource": "store",
+							"finish": "matte"
+						},
+						{
+							"name": "95A Neon Green",
+							"hex": "#2eff6d",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Neon Orange",
+							"hex": "#fa8e36",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Neon Red",
+							"hex": "#ff3f38",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Purple",
+							"hex": "#8b69ce",
+							"hexSource": "store"
+						},
+						{
+							"name": "95A Red",
+							"hex": "#d7021c",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Black",
+							"hex": "#000000",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Grass Green",
+							"hex": "#b1ff0a",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Gray",
+							"hex": "#cdcfd5",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Luminous Blue",
+							"hex": "#e9e7e7",
+							"hexSource": "store",
+							"glow": true
+						},
+						{
+							"name": "High Speed 95A Luminous Electric Indigo",
+							"hex": "#c3d3e0",
+							"hexSource": "store",
+							"glow": true
+						},
+						{
+							"name": "High Speed 95A Luminous Green",
+							"hex": "#ecf2e9",
+							"hexSource": "store",
+							"glow": true
+						},
+						{
+							"name": "High Speed 95A Luminous Orange",
+							"hex": "#e8e8e8",
+							"hexSource": "store",
+							"glow": true
+						},
+						{
+							"name": "High Speed 95A Luminous Pink",
+							"hex": "#dcdce4",
+							"hexSource": "store",
+							"glow": true
+						},
+						{
+							"name": "High Speed 95A Neon Magenta",
+							"hex": "#fb23af",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Neon Yellow",
+							"hex": "#fef71d",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Orange",
+							"hex": "#ff8b47",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Pastel Rose",
+							"hex": "#f5d0b7",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Pink",
+							"hex": "#ffa3c6",
+							"hexSource": "store"
+						},
+						{
+							"name": "High Speed 95A Translucent Blue",
+							"hex": "#386dff",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "High Speed 95A Translucent Green",
+							"hex": "#00e691",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "High Speed 95A Translucent Orange",
+							"hex": "#fa4616",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "High Speed 95A Translucent Purple",
+							"hex": "#8014c8",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "High Speed 95A Translucent Red",
+							"hex": "#c00000",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "High Speed 95A White",
+							"hex": "#ffffff",
+							"hexSource": "store"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Schoolhouse Spools",
+			"sourceUrl": "https://schoolhousespools.com",
+			"fetchedAt": "2026-11-09T21:19:27.585Z",
+			"materials": [
+				{
+					"material": "PCTG",
+					"colors": [
+						{
+							"name": "Black",
+							"hex": "#4a4d52",
+							"hexSource": "image"
+						},
+						{
+							"name": "Purple",
+							"hex": "#6a3278",
+							"hexSource": "image"
+						},
+						{
+							"name": "Red",
+							"hex": "#c33543",
+							"hexSource": "image"
+						},
+						{
+							"name": "White",
+							"hex": "#c0c3c8",
+							"hexSource": "image"
+						}
+					]
+				},
+				{
+					"material": "PETG",
+					"colors": [
+						{
+							"name": "Baby Blue",
+							"hex": "#7fa3d1",
+							"hexSource": "image"
+						},
+						{
+							"name": "Baby Pink",
+							"hex": "#b9788c",
+							"hexSource": "image"
+						},
+						{
+							"name": "Blue",
+							"hex": "#3047c7",
+							"hexSource": "image"
+						},
+						{
+							"name": "Dark Green",
+							"hex": "#107a18",
+							"hexSource": "image"
+						},
+						{
+							"name": "Green",
+							"hex": "#50b02f",
+							"hexSource": "image"
+						},
+						{
+							"name": "Grey",
+							"hex": "#707678",
+							"hexSource": "image"
+						},
+						{
+							"name": "Matte PETG Blue",
+							"hex": "#3b55ca",
+							"hexSource": "image",
+							"finish": "matte"
+						},
+						{
+							"name": "Matte PETG Green",
+							"hex": "#5eb729",
+							"hexSource": "image",
+							"finish": "matte"
+						},
+						{
+							"name": "Matte PETG Grey",
+							"hex": "#a4a29d",
+							"hexSource": "image",
+							"finish": "matte"
+						},
+						{
+							"name": "Military",
+							"hex": "#454324",
+							"hexSource": "image"
+						},
+						{
+							"name": "Orange",
+							"hex": "#d34719",
+							"hexSource": "image"
+						},
+						{
+							"name": "Pastel Green",
+							"hex": "#64ab8c",
+							"hexSource": "image"
+						},
+						{
+							"name": "Pearl Gold",
+							"hex": "#b38834",
+							"hexSource": "image"
+						},
+						{
+							"name": "Purple",
+							"hex": "#5f2967",
+							"hexSource": "image"
+						},
+						{
+							"name": "Red",
+							"hex": "#d23d49",
+							"hexSource": "image"
+						},
+						{
+							"name": "Slate Gray",
+							"hex": "#7b8285",
+							"hexSource": "image"
+						},
+						{
+							"name": "Teal",
+							"hex": "#038a89",
+							"hexSource": "image"
+						},
+						{
+							"name": "Transparent",
+							"hex": "#bcb8ad",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "Transparent Purple",
+							"hex": "#421043",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "White",
+							"hex": "#c4c6c8",
+							"hexSource": "image"
+						},
+						{
+							"name": "Yellow",
+							"hex": "#c9b00f",
+							"hexSource": "image"
+						}
+					]
+				},
+				{
+					"material": "TPU",
+					"colors": [
+						{
+							"name": "95A Blue",
+							"hex": "#3150c3",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Clear",
+							"hex": "#d4d4c8",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "95A Dark Green",
+							"hex": "#56b635",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Make Good Purple",
+							"hex": "#8e3380",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Orange",
+							"hex": "#e95612",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Pastel Blue",
+							"hex": "#83c0e0",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Pastel Green",
+							"hex": "#a6d450",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Pastel Yellow",
+							"hex": "#e2c554",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A White",
+							"hex": "#e4dfd5",
+							"hexSource": "image"
+						}
+					]
+				}
+			]
+		}
+	]
+}

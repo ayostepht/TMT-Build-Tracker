@@ -2,7 +2,7 @@
 // Downloads SpoolmanDB's compiled filaments.json and writes the compact catalog
 // the app ships with (src/lib/server/filaments/catalog.json).
 // SpoolmanDB: https://github.com/Donkie/SpoolmanDB (MIT, see THIRD_PARTY.md).
-import { writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -11,6 +11,13 @@ const OUT = resolve(
 	dirname(fileURLToPath(import.meta.url)),
 	'../src/lib/server/filaments/catalog.json'
 );
+
+const SUPPLEMENT = resolve(
+	dirname(fileURLToPath(import.meta.url)),
+	'../src/lib/server/filaments/supplement.json'
+);
+
+const SOURCE_BASE = 'SpoolmanDB (https://github.com/Donkie/SpoolmanDB)';
 
 const cmp = (a, b) =>
 	a.localeCompare(b, 'en', { sensitivity: 'base' }) || (a < b ? -1 : a > b ? 1 : 0);
@@ -50,7 +57,7 @@ export function normalise(rows, { fetchedAt = new Date().toISOString() } = {}) {
 		if (!cols.has(name.toLowerCase())) cols.set(name.toLowerCase(), color);
 	}
 	return {
-		source: 'SpoolmanDB (https://github.com/Donkie/SpoolmanDB)',
+		source: SOURCE_BASE,
 		license: 'MIT',
 		fetchedAt,
 		brands: [...brands.keys()].sort(cmp).map((name) => ({
@@ -63,10 +70,72 @@ export function normalise(rows, { fetchedAt = new Date().toISOString() } = {}) {
 	};
 }
 
+const lc = (s) => String(s).trim().toLowerCase();
+
+/**
+ * Merge the committed vendor supplement (src/lib/server/filaments/supplement.json, written by
+ * scripts/fetch-vendor-filaments.mjs) into a freshly normalised SpoolmanDB catalog, so regenerating the
+ * catalog never loses it. Brands and materials match case-insensitively. For a color that exists in both
+ * (same brand + material + color name) SpoolmanDB wins; the supplement only adds what is missing.
+ * Pure: returns a new catalog and does not touch its inputs. `source` names every contributing vendor store.
+ */
+export function mergeSupplement(catalog, supplement) {
+	const vendors = (Array.isArray(supplement?.brands) ? supplement.brands : []).filter(
+		(b) => b && b.name && Array.isArray(b.materials)
+	);
+	const brands = new Map();
+	for (const b of catalog.brands) {
+		const mats = new Map();
+		for (const m of b.materials)
+			mats.set(lc(m.material), { material: m.material, colors: [...m.colors] });
+		brands.set(lc(b.name), { name: b.name, mats });
+	}
+	for (const v of vendors) {
+		const brand = brands.get(lc(v.name)) ?? { name: v.name, mats: new Map() };
+		brands.set(lc(v.name), brand);
+		for (const m of v.materials) {
+			const mat = brand.mats.get(lc(m.material)) ?? { material: m.material, colors: [] };
+			brand.mats.set(lc(m.material), mat);
+			const have = new Set(mat.colors.map((c) => lc(c.name)));
+			for (const c of m.colors ?? []) {
+				if (!c?.name || !hex(c.hex) || have.has(lc(c.name))) continue;
+				have.add(lc(c.name));
+				mat.colors.push({ ...c, hex: hex(c.hex) });
+			}
+		}
+	}
+	const names = vendors.map((v) => v.name);
+	return {
+		...catalog,
+		source: names.length
+			? `${SOURCE_BASE}; vendor store catalogs: ${vendors.map((v) => `${v.name} (${v.sourceUrl})`).join(', ')}`
+			: catalog.source,
+		brands: [...brands.values()]
+			.sort((a, b) => cmp(a.name, b.name))
+			.map((b) => ({
+				name: b.name,
+				materials: [...b.mats.values()]
+					.sort((x, y) => cmp(x.material, y.material))
+					.map((m) => ({
+						material: m.material,
+						colors: [...m.colors].sort((x, y) => cmp(x.name, y.name))
+					}))
+			}))
+	};
+}
+
+async function readSupplement() {
+	try {
+		return JSON.parse(await readFile(SUPPLEMENT, 'utf8'));
+	} catch {
+		return { brands: [] };
+	}
+}
+
 async function main() {
 	const res = await fetch(SOURCE_URL);
 	if (!res.ok) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
-	const catalog = normalise(await res.json());
+	const catalog = mergeSupplement(normalise(await res.json()), await readSupplement());
 	await mkdir(dirname(OUT), { recursive: true });
 	await writeFile(OUT, JSON.stringify(catalog) + '\n');
 	const mats = catalog.brands.reduce((n, b) => n + b.materials.length, 0);
