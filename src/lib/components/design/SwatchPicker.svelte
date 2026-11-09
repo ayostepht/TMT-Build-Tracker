@@ -6,7 +6,12 @@
 	import { onMount } from 'svelte';
 	import { suggestName } from '#lib/filament-catalog.ts';
 	import type { SwatchTuple } from '#lib/domain/palettes.ts';
-	import { chipBrandList, pickerReason, pickerSwatches } from '#lib/domain/swatch-picker.ts';
+	import {
+		chipBrandList,
+		pickerReason,
+		pickerSwatches,
+		type PickerEntry
+	} from '#lib/domain/swatch-picker.ts';
 	import {
 		customBrands,
 		customFamily,
@@ -139,6 +144,17 @@
 	const isCurrent = (t: SwatchTuple) =>
 		current !== null && lc(current.name) === lc(nameOf(t)) && lc(current.hex) === t[2];
 	const detail = $derived(hover ?? items.find(isCurrent) ?? null);
+	// Same-looking swatches of other brands, by the representative they hide behind.
+	const othersOf = $derived(
+		new Map([...neutrals, ...colorful].filter((e) => e.others).map((e) => [e.t, e.others!]))
+	);
+	const detailOthers = $derived(detail ? (othersOf.get(detail) ?? []) : []);
+	/** "also 11 other brands" for a swatch standing for same-looking ones. */
+	function alsoText(t: SwatchTuple, others: PickerEntry[]): string {
+		const n =
+			new Set(others.map((o) => lc(o.t[0])).filter((b) => b !== lc(t[0]))).size || others.length;
+		return n ? `also ${n} other brand${n === 1 ? '' : 's'}` : '';
+	}
 	const detailWhy = $derived(detail ? pickerReason(detail) : '');
 
 	function pick(t: SwatchTuple) {
@@ -238,6 +254,7 @@
 <div
 	class="sheet"
 	class:tall={screen === 'form'}
+	class:roomy={screen === 'pick' && detailOthers.length > 0}
 	role="dialog"
 	aria-label={title}
 	data-testid="swatch-picker"
@@ -288,6 +305,9 @@
 					<b>{nameOf(detail)}</b>
 					<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
 					{#if detailWhy}<span class="why">Palettes skip it: {detailWhy}</span>{/if}
+					{#if detailOthers.length}<span class="muted" data-testid="swatch-also"
+							>{alsoText(detail, detailOthers)}</span
+						>{/if}
 				</span>
 			{:else if current}
 				<span class="dot" style="background-color:{current.hex}" aria-hidden="true"></span>
@@ -299,6 +319,30 @@
 				<span class="muted">Pick a swatch. Hover or focus one to see its name.</span>
 			{/if}
 		</div>
+
+		{#if detailOthers.length}
+			<details class="others" data-testid="other-brands">
+				<summary>Other brands ({detailOthers.length})</summary>
+				<ul>
+					{#each detailOthers as o (o.t[0] + o.t[1] + o.t[2] + o.t[3])}
+						<li>
+							<button
+								type="button"
+								class="opick"
+								data-testid="other-brand"
+								aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
+								onclick={() => pick(o.t)}
+							>
+								<span class="dot sm" style="background-color:{o.t[2]}" aria-hidden="true"></span>
+								<span class="mtxt"
+									><b>{o.t[0]} · {o.t[1]}</b> <span class="muted">{o.t[3]} · {o.t[2]}</span></span
+								>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</details>
+		{/if}
 
 		<div class="tools">
 			<input
@@ -454,7 +498,7 @@
 						<h3>Neutrals <span class="muted">{neutrals.length}</span></h3>
 						<div class="grid">
 							{#each neutrals.slice(0, cap) as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
-								{@render swatch(e.t)}
+								{@render swatch(e.t, e.others)}
 							{/each}
 						</div>
 					</section>
@@ -464,7 +508,7 @@
 						<h3>Colors <span class="muted">{colorful.length}</span></h3>
 						<div class="grid">
 							{#each colorful.slice(0, cap) as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
-								{@render swatch(e.t)}
+								{@render swatch(e.t, e.others)}
 							{/each}
 						</div>
 					</section>
@@ -483,22 +527,29 @@
 	{/if}
 </div>
 
-{#snippet swatch(t: SwatchTuple)}
+{#snippet swatch(t: SwatchTuple, others: PickerEntry[] = [])}
 	{@const why = pickerReason(t)}
+	{@const also = alsoText(t, others)}
 	<button
 		type="button"
 		class="sw"
 		class:on={isCurrent(t)}
 		class:excl={!!why}
 		style="background-color:{t[2]}"
-		aria-label="{nameOf(t)}, {t[3]}, {t[2]}{why ? `, not used by palettes: ${why}` : ''}"
+		aria-label="{nameOf(t)}, {t[3]}, {t[2]}{also ? `, ${also}` : ''}{why
+			? `, not used by palettes: ${why}`
+			: ''}"
 		aria-pressed={isCurrent(t)}
-		title="{nameOf(t)} · {t[3]} · {t[2]}{why ? ` · Not used by palettes: ${why}` : ''}"
+		title="{nameOf(t)} · {t[3]} · {t[2]}{also ? ` · ${also}` : ''}{why
+			? ` · Not used by palettes: ${why}`
+			: ''}"
 		data-testid="swatch"
 		onclick={() => pick(t)}
 		onpointerenter={() => (hover = t)}
 		onfocus={() => (hover = t)}
-		onpointerleave={() => (hover = null)}
+		onpointerleave={() => {
+			if (!others.length) hover = null;
+		}}
 	></button>
 {/snippet}
 
@@ -651,6 +702,35 @@
 		text-align: center;
 		pointer-events: none;
 	}
+	.others summary {
+		cursor: pointer;
+		font-size: 13px;
+		color: var(--muted);
+	}
+	.others ul {
+		list-style: none;
+		margin: 4px 0 0;
+		padding: 0;
+		max-height: 112px;
+		overflow-y: auto;
+		display: grid;
+		gap: 2px;
+	}
+	.opick {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		text-align: left;
+		background: none;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 2px 6px;
+		min-height: 36px;
+		cursor: pointer;
+		color: inherit;
+		font: inherit;
+	}
 	.why {
 		color: var(--muted);
 		font-size: 12px;
@@ -744,6 +824,12 @@
 	}
 	.sheet.tall {
 		max-height: 88vh;
+	}
+	.sheet.roomy {
+		max-height: 66vh;
+	}
+	.sheet > :not(.body) {
+		flex: none;
 	}
 	.small {
 		font-size: 12px;

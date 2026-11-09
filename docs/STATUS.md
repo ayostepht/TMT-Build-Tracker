@@ -54,7 +54,7 @@ Save as design all work as on a build.
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
 
-## Palettes, picker, camera collapse (2026-11-09, r26)
+## Palettes, picker, camera collapse (2026-11-09, r26; picker merge r27)
 
 - TPU slots renamed by role app-wide: kit roles `soft` = "Primary TPU" (cushions, soft headrest, grips), `tire` =
   "Accent TPU" (tires, harness/straps); palette `SLOT_LABEL` "Primary (TPU)" / "Accent (TPU)". Keys unchanged;
@@ -67,7 +67,10 @@ Save as design all work as on a build.
 - Swatch picker: `domain/swatch-picker.ts` `pickerSwatches` uses `exclusionReason` (TPU 95A only, no silk/matte/…)
   for both PETG and TPU; "Show all types" toggle (search also reaches hidden ones, tagged); same-brand duplicates
   (same hex / ΔE < 1) collapse; neutrals grouped by lightness; preferred brands first; brand chips multi-select.
-  Open: near-identical neutrals across brands still listed (~25 blacks) — follow-up.
+  r27: look-alike swatches merge across brands (`mergeAcrossBrands`, ΔE2000 < 3 leader clustering; representative
+  allowed > preferred > popular > nearest centre) with "Other brands (N)" in the detail; not with one brand chip
+  or a search. TPU neutrals 57 → 17. Caveat: in "new slot" mode a pick closes the sheet, so alternates are
+  reached via a brand chip or search there.
 - Camera tile collapses ("Camera" header, chevron), remembered per printer (`tmt-camera-collapsed:<id>`); no
   camera requests while collapsed.
 

@@ -24,8 +24,11 @@ describe('pickerSwatches', () => {
 	it('shows them, with a reason, when asked', () => {
 		const r = pickerSwatches(tpu, { showAll: true });
 		const all = [...r.neutrals, ...r.colorful];
-		expect(all).toHaveLength(4);
-		expect(all.find((e) => e.t[1] === 'Blue 93A')!.reason).toMatch(/95A/);
+		expect(all).toHaveLength(3);
+		// The excluded 93A blue looks like Overture's blue, so it sits behind it.
+		const blue = all.find((e) => e.t[1] === 'Blue')!;
+		expect(blue.others!.map((o) => o.t[1])).toEqual(['Blue 93A']);
+		expect(blue.others![0].reason).toMatch(/95A/);
 		expect(all.find((e) => e.t[1] === 'Silk Gold')!.reason).toMatch(/silk/);
 		expect(all.find((e) => e.t[1] === 'Blue')!.reason).toBe('');
 		expect(r.hidden).toBe(0);
@@ -70,17 +73,17 @@ describe('duplicates and ordering', () => {
 	it('neutrals group by lightness with preferred brands first', () => {
 		const items: SwatchTuple[] = [
 			['Zed', 'Black', '#101010', 'PETG'],
-			['Sunlu', 'Black', '#111111', 'PETG'],
+			['Sunlu', 'Black', '#2a2a2a', 'PETG'],
 			['Zed', 'White', '#f5f5f5', 'PETG'],
-			['Sunlu', 'White', '#f4f4f4', 'PETG'],
+			['Sunlu', 'White', '#e6e6e6', 'PETG'],
 			['Mid', 'Grey', '#808080', 'PETG']
 		];
 		expect(names(pickerSwatches(items, { preferred: ['Zed'] }))).toEqual([
 			'Zed White',
 			'Sunlu White',
 			'Mid Grey',
-			'Zed Black',
-			'Sunlu Black'
+			'Sunlu Black',
+			'Zed Black'
 		]);
 	});
 	it('colorful swatches of preferred brands come first', () => {
@@ -114,5 +117,98 @@ describe('chipBrandList', () => {
 		expect(
 			chipBrandList({ available, preferred: [], selected: ['Zzz'], recent: [], max: 1 })
 		).toEqual(['Zzz']);
+	});
+});
+
+describe('cross-brand merge', () => {
+	const brands10 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+	const blacks = brands10.map((b, i): SwatchTuple => [
+		b,
+		'Black',
+		i % 2 ? '#101010' : '#111112',
+		'PETG'
+	]);
+
+	it('identical blacks from 10 brands become one swatch with 9 alternates', () => {
+		const r = pickerSwatches(blacks);
+		expect(r.neutrals).toHaveLength(1);
+		expect(r.neutrals[0].others).toHaveLength(9);
+	});
+	it('the representative is preferred > popular > other, and allowed > excluded', () => {
+		const items: SwatchTuple[] = [
+			['Zeta', 'Red', '#d32f2f', 'PETG'],
+			['Elegoo', 'Red', '#d22f2f', 'PETG'],
+			['Sunlu', 'Red', '#d32f30', 'PETG']
+		];
+		expect(pickerSwatches(items).colorful.map((e) => e.t[0])).toEqual(['Elegoo']);
+		expect(pickerSwatches(items, { preferred: ['sunlu'] }).colorful.map((e) => e.t[0])).toEqual([
+			'Sunlu'
+		]);
+		const noPop: SwatchTuple[] = [
+			['Zeta', 'Red', '#d32f2f', 'PETG'],
+			['Yank', 'Red', '#d32f2f', 'PETG']
+		];
+		expect(pickerSwatches(noPop).colorful).toHaveLength(1);
+		const mixed: SwatchTuple[] = [
+			['Overture', 'Silk Red', '#d32f2f', 'PETG'],
+			['Zeta', 'Red', '#d32f2f', 'PETG']
+		];
+		const r = pickerSwatches(mixed, { showAll: true, preferred: ['Overture'] });
+		expect(r.colorful).toHaveLength(1);
+		expect(r.colorful[0].t[0]).toBe('Zeta');
+		expect(r.colorful[0].others![0].reason).toMatch(/silk/);
+	});
+	it('the representative of unranked brands is the one nearest the cluster centre', () => {
+		const items: SwatchTuple[] = [
+			['P', 'Grey', '#808080', 'PETG'],
+			['Q', 'Grey', '#848484', 'PETG'],
+			['R', 'Grey', '#888888', 'PETG']
+		];
+		const r = pickerSwatches(items);
+		expect(r.neutrals).toHaveLength(1);
+		expect(r.neutrals[0].t[0]).toBe('Q');
+	});
+	it('distinct shades stay separate', () => {
+		const items: SwatchTuple[] = [
+			['A', 'Black', '#000000', 'PETG'],
+			['B', 'Dark grey', '#2a2a2a', 'PETG'],
+			['C', 'Grey', '#808080', 'PETG'],
+			['D', 'Red', '#d32f2f', 'PETG'],
+			['E', 'Dark red', '#a02020', 'PETG']
+		];
+		const r = pickerSwatches(items);
+		expect(r.neutrals).toHaveLength(3);
+		expect(r.colorful).toHaveLength(2);
+	});
+	it('one selected brand: no cross-brand merge', () => {
+		const items: SwatchTuple[] = [...blacks, ['A', 'Grey', '#808080', 'PETG']];
+		const r = pickerSwatches(items, { brands: ['A'] });
+		expect(r.neutrals).toHaveLength(2);
+		expect(r.neutrals.every((e) => !e.others)).toBe(true);
+		expect(pickerSwatches(items, { brands: ['A', 'B'] }).neutrals).toHaveLength(2);
+	});
+	it('a search is not merged', () => {
+		const r = pickerSwatches(blacks, { query: 'black' });
+		expect(r.neutrals).toHaveLength(10);
+	});
+	it('is quick on a few thousand swatches and memoizes', () => {
+		const big: SwatchTuple[] = [];
+		for (let i = 0; i < 2500; i++) {
+			const v = (i * 2654435761) >>> 0;
+			const hex = `#${(v & 0xffffff).toString(16).padStart(6, '0')}`;
+			big.push([`Brand${i % 40}`, `C${i}`, hex, 'PETG']);
+		}
+		pickerSwatches(big, { showAll: true });
+		const t0 = performance.now();
+		const first = pickerSwatches(big, { showAll: false, preferred: ['x'] });
+		expect(performance.now() - t0).toBeLessThan(250);
+		expect(pickerSwatches(big, { showAll: false, preferred: ['x'] })).toBe(first);
+	});
+	it('real catalog: neutrals shrink a lot with all brands', () => {
+		const items = swatches('tpu');
+		const merged = pickerSwatches(items);
+		const sep = pickerSwatches(items, { brands: [...new Set(items.map((i) => i[0]))].slice(0, 1) });
+		expect(merged.neutrals.length).toBeLessThan(30);
+		expect(sep.neutrals.every((e) => !e.others)).toBe(true);
 	});
 });

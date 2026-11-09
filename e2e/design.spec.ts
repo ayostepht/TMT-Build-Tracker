@@ -204,3 +204,40 @@ test('the swatch picker hides types palettes never use until asked', async ({ pa
 		'false'
 	);
 });
+
+test('the swatch picker merges same-looking colors of other brands and lists them', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'pickermerge');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('button', { name: 'Add a color' }).click();
+	await page.getByRole('button', { name: /^TPU/ }).click();
+	const picker = page.getByTestId('swatch-picker');
+	await expect(picker.getByTestId('swatch').first()).toBeVisible();
+	// All brands: the many near-identical blacks and whites are one swatch each.
+	const merged = picker.locator('[data-testid="swatch"][aria-label*="other brands"]');
+	await expect(merged.first()).toBeVisible();
+	expect(await merged.count()).toBeGreaterThan(0);
+	expect(await picker.getByTestId('swatch').count()).toBeLessThan(110);
+	await expect(picker.getByTestId('other-brands')).toHaveCount(0);
+	await merged.first().hover();
+	await expect(picker.getByTestId('swatch-also')).toContainText(/also \d+ other brand/);
+	const disclosure = picker.getByTestId('other-brands');
+	await disclosure.locator('summary').click();
+	await expect(disclosure.locator('summary')).toContainText(/^Other brands \(\d+\)$/);
+	expect(await disclosure.getByTestId('other-brand').count()).toBeGreaterThan(0);
+	// One brand selected: no merging.
+	await picker.getByRole('button', { name: 'Overture', exact: true }).click();
+	await expect(picker.locator('[data-testid="swatch"][aria-label*="other brand"]')).toHaveCount(0);
+	// Picking an alternate from the list chooses that brand's filament.
+	await picker.getByRole('button', { name: 'Overture', exact: true }).click();
+	await merged.first().hover();
+	await picker.getByTestId('other-brands').locator('summary').click();
+	const alt = picker.getByTestId('other-brand').first();
+	const altLabel = (await alt.getAttribute('aria-label')) ?? '';
+	await alt.click();
+	await expect(picker).toHaveCount(0);
+	await expect(page.locator('li.slot').last()).toContainText(
+		altLabel.replace(/^Use /, '').split(',')[0].split(' ')[0]
+	);
+});
