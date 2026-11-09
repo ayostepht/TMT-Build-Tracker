@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after manual plate times (r29 deployed; plate 15 time set by hand to 13h 39m). Keep this file
+_Last updated: 2026-11-09, after the filament supplement (r30 deployed); design studio redesign in progress (uncommitted). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -53,6 +53,26 @@ Save as design all work as on a build.
   `kind = 'build'` and `setup_step = 5` (everything the wizard asks for already exists), writes `build.promote`,
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
+
+## Filament supplement (2026-11-09, r30)
+
+- SpoolmanDB lacks Schoolhouse Spools and Overture's regular 95A TPU line plus several High Speed 95A colors (Overture
+  "High Speed PETG" is just their current PETG, already covered). `src/lib/server/filaments/supplement.json` (per brand
+  `sourceUrl`, per color `hexSource` store | image | filascope) is merged by `mergeSupplement` in
+  `scripts/update-filaments.mjs` during `filaments:update`; SpoolmanDB wins exact duplicates.
+  `scripts/fetch-vendor-filaments.mjs` regenerates it (Shopify `products.json` is rate-limited fast: use
+  `--fetch-pages`/`--pages-dir`, `--sample-images` needs sharp, `--hex-overrides`). PETG/PCTG/TPU only, no PLA.
+- Overture: 28 TPU + Matte Digital Blue, store hexes. Schoolhouse: 34 (PETG, PCTG, TPU 95A, refill + matte kept),
+  hexes estimated from photos; maintainer will flag any that look wrong. Filascope hexes are category buckets: not used.
+- Next: SpoolmanDB PR (store-exact colors only), drafted for review before opening.
+
+## Design studio redesign (in progress, uncommitted)
+
+- From the UX audit (scratchpad report; maintainer approved D1-D6). Done in working tree: role labels (`ROLE_LABEL`,
+  `roleLabel` in labels.ts), Colors | Parts tabs with Palettes drawer, fixed two-pane desktop, pinned phone stage, compact
+  build header on Design, /designs + /studio pages. In progress: PalettePanel compact cards + Apply bar. Later: swatch picker,
+  part chip, Save/Share at top + apply saved design, a11y; fixups: PartSheet duplicate subtitle, slot order, gallery
+  `slotTitle.ts` → `roleLabel`.
 
 ## Manual plate times (2026-11-09, r29)
 
