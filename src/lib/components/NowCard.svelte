@@ -171,7 +171,7 @@
 			</label>
 		</div>
 		{#if !item.startedAt && ctx.canEdit}
-			<button class="linkbtn" type="button" onclick={() => setStart(toLocalInput(new Date()))}
+			<button class="btn ghost sm" type="button" onclick={() => setStart(toLocalInput(new Date()))}
 				>Started just now</button
 			>
 		{/if}

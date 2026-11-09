@@ -160,7 +160,7 @@
 			<option value="plate">Plate</option>
 		</select>
 	</label>
-	<button class="gbtn" type="button" onclick={() => ctx.openGuide(null)}>Open build guide</button>
+	<button class="btn sm" type="button" onclick={() => ctx.openGuide(null)}>Open build guide</button>
 </div>
 
 <main>

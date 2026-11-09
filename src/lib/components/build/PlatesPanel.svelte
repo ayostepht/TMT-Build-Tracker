@@ -311,8 +311,8 @@
 			<span class="muted">No bed chosen yet. Choose "Arrange for my bed" below.</span>
 		{/if}
 		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-		{#if printersHref}<a class="manage-printers" href={printersHref} data-testid="manage-printers"
-				>Manage printers</a
+		{#if printersHref}<a class="btn sm go" href={printersHref} data-testid="manage-printers"
+				>Manage printers <span class="btn-arrow" aria-hidden="true">→</span></a
 			>{/if}
 	</div>
 	{#if arr?.stale && ctx.canEdit && printer}

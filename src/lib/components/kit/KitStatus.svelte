@@ -61,10 +61,14 @@
 				{#each r.notes as n (n)}<div class="meta" data-testid="kit-note">{n}</div>{/each}
 				{#each r.hints as h (h)}<div class="hint">{h}</div>{/each}
 				{#if r.link}
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-					<a class="meta-link" href={r.link.href} target="_blank" rel="noopener noreferrer"
-						>{r.link.text}</a
+					<!-- eslint-disable svelte/no-navigation-without-resolve -->
+					<a
+						class="pill-link meta-link"
+						href={r.link.href}
+						target="_blank"
+						rel="noopener noreferrer">{r.link.text}</a
 					>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
 				{/if}
 			</li>
 		{/each}

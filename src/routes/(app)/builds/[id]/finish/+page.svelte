@@ -10,11 +10,14 @@
 <svelte:head><title>Finish · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
 <nav class="jump" aria-label="On this page">
-	<a href="#assembly">Assembly</a>
-	<a href="#photos">Photos</a>
-	<a href="#handoff">Handoff</a>
-	<a href={resolve('/(app)/builds/[id]/summary', { id: ctx.id })} data-testid="open-summary"
-		>Printable summary</a
+	<a class="pill-link" href="#assembly">Assembly</a>
+	<a class="pill-link" href="#photos">Photos</a>
+	<a class="pill-link" href="#handoff">Handoff</a>
+	<a
+		class="pill-link"
+		href={resolve('/(app)/builds/[id]/summary', { id: ctx.id })}
+		data-testid="open-summary"
+		>Printable summary <span class="btn-arrow" aria-hidden="true">→</span></a
 	>
 </nav>
 
@@ -25,8 +28,8 @@
 	.jump {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px 16px;
-		font-size: 14px;
+		gap: 8px;
+		align-items: center;
 		margin-bottom: 12px;
 	}
 	.anchor {

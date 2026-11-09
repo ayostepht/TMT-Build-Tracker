@@ -10,9 +10,9 @@
 <svelte:head><title>Files · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
 <nav class="jump" aria-label="On this page">
-	<a href="#plates">Printer and plates</a>
-	<a href="#export">Export</a>
-	<a href="#settings">Print settings</a>
+	<a class="pill-link" href="#plates">Printer and plates</a>
+	<a class="pill-link" href="#export">Export</a>
+	<a class="pill-link" href="#settings">Print settings</a>
 </nav>
 
 <div id="plates" class="anchor"><PlatesPanel /></div>
@@ -23,8 +23,8 @@
 	.jump {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px 16px;
-		font-size: 14px;
+		gap: 8px;
+		align-items: center;
 		margin-bottom: 12px;
 	}
 	.anchor {

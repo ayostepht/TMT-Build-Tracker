@@ -57,8 +57,11 @@
 <section class="stack">
 	{#if back}
 		<p>
-			<a href={resolve('/(app)/builds/[id]', { id: back.id })} data-testid="back-to-build-link"
-				>← Back to {back.name}</a
+			<a
+				class="btn ghost sm back"
+				href={resolve('/(app)/builds/[id]', { id: back.id })}
+				data-testid="back-to-build-link"
+				><span class="btn-arrow" aria-hidden="true">←</span> Back to {back.name}</a
 			>
 		</p>
 	{/if}
@@ -183,8 +186,8 @@
 	<div class="shared">
 		<div class="shead">
 			<h2>Shared designs</h2>
-			<a class="btn sm" href={resolve('/(app)/designs')} data-testid="browse-designs"
-				>Browse the design gallery</a
+			<a class="btn sm go" href={resolve('/(app)/designs')} data-testid="browse-designs"
+				>Browse the design gallery <span class="btn-arrow" aria-hidden="true">→</span></a
 			>
 		</div>
 		<p class="muted">

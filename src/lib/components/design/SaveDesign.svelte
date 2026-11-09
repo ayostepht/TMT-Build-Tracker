@@ -94,7 +94,9 @@
 				/>
 				<button type="button" class="btn sm" onclick={copy}>{copied ? 'Copied' : 'Copy'}</button>
 			</div>
-			<a href={resolve('/(app)/designs/[slug]', { slug: saved.slug })}>Open design page</a>
+			<a class="btn sm go" href={resolve('/(app)/designs/[slug]', { slug: saved.slug })}
+				>Open design page <span class="btn-arrow" aria-hidden="true">→</span></a
+			>
 		</div>
 	{/if}
 </section>

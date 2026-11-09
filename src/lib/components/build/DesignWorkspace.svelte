@@ -22,9 +22,10 @@
 	let { embedded = false }: { embedded?: boolean } = $props();
 	const ctx = getBuildCtx();
 
-	type Tab = 'colors' | 'parts';
+	type Tab = 'colors' | 'palettes' | 'parts';
 	const TABS: { id: Tab; label: string }[] = [
 		{ id: 'colors', label: 'Colors' },
+		{ id: 'palettes', label: 'Palettes' },
 		{ id: 'parts', label: 'Parts' }
 	];
 	let root = $state<HTMLElement>();
@@ -61,8 +62,6 @@
 		return () => ro.disconnect();
 	});
 	let tab = $state<Tab>('colors');
-	/** Colors mode: the palettes drawer replaces the slot list while open. */
-	let palettesOpen = $state(false);
 	let paletteSeen = $state(false);
 	/** Palette shown in 3D but not saved. */
 	let preview = $state<PalettePreview | null>(null);
@@ -115,18 +114,8 @@
 
 	function setTab(t: Tab) {
 		tab = t;
-		// Choosing a mode (also re-choosing Colors) returns to its main view and drops any preview.
-		palettesOpen = false;
-		preview = null;
-	}
-
-	function openPalettes() {
-		palettesOpen = true;
-		paletteSeen = true;
-	}
-
-	function closePalettes() {
-		palettesOpen = false;
+		// Choosing a tab (also re-choosing the current one) drops any un-applied palette preview.
+		if (t === 'palettes') paletteSeen = true;
 		preview = null;
 	}
 
@@ -319,14 +308,16 @@
 			{/each}
 		</div>
 
-		<p class="muted hint">
-			{#if part}
-				Pick a slot in the part card to move {part.name}.
-			{:else}
-				{ctx.view.model ? 'Tap a part in the 3D view' : 'Pick a part from the list'} to move it to another
-				color slot.
-			{/if}
-		</p>
+		{#if tab !== 'palettes'}
+			<p class="muted hint">
+				{#if part}
+					Pick a slot in the part card to move {part.name}.
+				{:else}
+					{ctx.view.model ? 'Tap a part in the 3D view' : 'Pick a part from the list'} to move it to another
+					color slot.
+				{/if}
+			</p>
+		{/if}
 
 		<div
 			role="tabpanel"
@@ -334,17 +325,10 @@
 			aria-labelledby="tab-colors"
 			hidden={tab !== 'colors'}
 		>
-			<div class="view" hidden={palettesOpen}>
-				<div class="palrow">
-					<span class="muted">Try a ready-made or generated color scheme.</span>
-					<button
-						type="button"
-						class="btn"
-						data-testid="open-palettes"
-						aria-expanded={palettesOpen}
-						onclick={openPalettes}>Palettes</button
-					>
-				</div>
+			<div class="view">
+				<button type="button" class="btn ghost sm step-aside" onclick={() => setTab('palettes')}
+					>Try a palette <span class="btn-arrow" aria-hidden="true">→</span></button
+				>
 				<SlotPanel
 					view={live}
 					{stats}
@@ -358,16 +342,17 @@
 					onadd={() => openPicker({ mode: 'new' })}
 				/>
 			</div>
+		</div>
 
+		<div
+			role="tabpanel"
+			id="tabpanel-palettes"
+			aria-labelledby="tab-palettes"
+			data-testid="palettes-drawer"
+			hidden={tab !== 'palettes'}
+		>
 			{#if paletteSeen}
-				<div class="view" data-testid="palettes-drawer" hidden={!palettesOpen}>
-					<div class="palhead">
-						<button type="button" class="btn sm" onclick={closePalettes}>
-							<span aria-hidden="true">←</span> Back to colors
-						</button>
-					</div>
-					<PalettePanel view={ctx.view} {preview} onpreview={(p) => (preview = p)} />
-				</div>
+				<PalettePanel view={ctx.view} {preview} onpreview={(p) => (preview = p)} />
 			{/if}
 		</div>
 
@@ -407,10 +392,13 @@
 			{/if}
 		</div>
 
-		{#if !embedded && !palettesOpen}
-			<section class="next" aria-label="Next steps">
-				<a href={resolve('/(app)/builds/[id]/files', { id: ctx.id })} data-testid="next-plates"
-					>Next: files and export →</a
+		{#if !embedded && tab !== 'palettes'}
+			<section class="step-next" aria-label="Next steps">
+				<a
+					class="btn go"
+					href={resolve('/(app)/builds/[id]/files', { id: ctx.id })}
+					data-testid="next-plates"
+					>Next: Files &amp; export <span class="btn-arrow" aria-hidden="true">→</span></a
 				>
 			</section>
 		{/if}
@@ -471,18 +459,12 @@
 	.hint {
 		margin: 0;
 	}
-	.next {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 10px 16px;
-		align-items: center;
-	}
 	h2 {
 		margin: 0;
 	}
 	.tabs {
 		display: grid;
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(3, 1fr);
 		gap: 4px;
 		padding: 4px;
 		background: var(--accent-soft);
@@ -515,20 +497,8 @@
 		gap: 16px;
 		min-width: 0;
 	}
-	[role='tabpanel'][hidden],
-	.view[hidden] {
+	[role='tabpanel'][hidden] {
 		display: none;
-	}
-	.palrow {
-		display: flex;
-		gap: 10px 14px;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
-	}
-	.palhead {
-		display: flex;
-		align-items: center;
 	}
 	/* The part chip floats over the bottom of the stage (above the credit line). Only its own box
 	   takes pointer events, so canvas touches around it still pick and orbit. */

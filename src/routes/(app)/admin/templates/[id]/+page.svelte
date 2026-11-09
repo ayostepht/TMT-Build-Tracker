@@ -15,12 +15,19 @@
 	<div class="kicker">Kit admin</div>
 	{#if back}
 		<p>
-			<a href={resolve('/(app)/builds/[id]', { id: back.id })} data-testid="back-to-build-link"
-				>← Back to {back.name}</a
+			<a
+				class="btn ghost sm back"
+				href={resolve('/(app)/builds/[id]', { id: back.id })}
+				data-testid="back-to-build-link"
+				><span class="btn-arrow" aria-hidden="true">←</span> Back to {back.name}</a
 			>
 		</p>
 	{/if}
-	<p><a href={resolve('/(app)/admin/templates')}>← Kits</a></p>
+	<p>
+		<a class="btn ghost sm back" href={resolve('/(app)/admin/templates')}
+			><span class="btn-arrow" aria-hidden="true">←</span> Kits</a
+		>
+	</p>
 	<h1>{data.template.name}</h1>
 
 	<div class="card stack">
@@ -30,10 +37,13 @@
 			To add or replace files, open a build and use Files, then Print settings. The setup steps of a
 			new build do the same in "Choose build template".
 			{#if back}
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-				<a href={resolve('/(app)/builds/[id]/files', { id: back.id }) + '#settings'}
-					>Open Print settings</a
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
+				<a
+					class="btn sm go"
+					href={resolve('/(app)/builds/[id]/files', { id: back.id }) + '#settings'}
+					>Open Print settings <span class="btn-arrow" aria-hidden="true">→</span></a
 				>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			{/if}
 		</p>
 	</div>

@@ -127,14 +127,18 @@
 						</div>
 						<div class="small">
 							{#if j.buildId && j.plateNumber != null}
-								<a href={resolve('/(app)/builds/[id]', { id: j.buildId })}>Plate {j.plateNumber}</a>
+								<a class="pill-link" href={resolve('/(app)/builds/[id]', { id: j.buildId })}
+									>Plate {j.plateNumber}</a
+								>
 								{#if j.runId && j.runId !== 'dismissed'}<span class="muted">
 										· logged</span
 									>{:else if j.pendingConfirm}<span class="muted">
 										· waiting for your print log</span
 									>{/if}
 								{#if data.canEdit && (j.status === 'printing' || j.status === 'paused')}
-									<button class="linkbtn" type="button" onclick={() => unlink(j.id)}>Unlink</button>
+									<button class="btn ghost sm" type="button" onclick={() => unlink(j.id)}
+										>Unlink</button
+									>
 								{/if}
 							{:else}
 								<span class="muted">Not linked to a plate</span>

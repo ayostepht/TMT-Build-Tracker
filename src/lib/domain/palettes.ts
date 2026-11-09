@@ -232,8 +232,9 @@ export function wantedBrands(opts: { brand?: string; brands?: string[] }): strin
 	return out;
 }
 
-/** Brands that most makers can actually buy; a small nudge when no brand is chosen. */
+/** Brands that most makers can actually buy (Schoolhouse Spools sells TMT kits); a small nudge when no brand is chosen. */
 export const POPULAR_BRANDS = [
+	'Schoolhouse Spools',
 	'Overture',
 	'Bambu Lab',
 	'Elegoo',

@@ -33,5 +33,9 @@
 		<button class="btn primary">Create chapter</button>
 	</form>
 
-	<p><a href={resolve('/(app)')}>Back to my builds</a></p>
+	<p>
+		<a class="btn ghost sm back" href={resolve('/(app)')}
+			><span class="btn-arrow" aria-hidden="true">←</span> Back to my builds</a
+		>
+	</p>
 </section>

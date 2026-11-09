@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after design studio redesign round 2 (r32 deployed). Keep this file
+_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r33 deployed). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -84,6 +84,10 @@ Save as design all work as on a build.
   slot strip overlaid on the stage (`PartSheet`), role filter chips + sticky groups in `PartList`; `share/DesignActions`
   above the tabs ("Saved automatically", Saved designs → apply with confirmation, Share / Save as design dialog); toasts
   top on phone, bottom-left on desktop. Playwright: use `--reporter=line` (html reporter hangs on failure).
+- r33: Palettes is its own tab (Colors | Palettes | Parts; leaving it cancels an un-applied preview). Schoolhouse
+  Spools first in `POPULAR_BRANDS` (brand chip; it was hidden by the cross-brand merge). Link sweep: action links are
+  `.btn.go` (→), `.btn.back` (←), `.btn.ghost`, clickable badges `.pill-link`; inline prose links only; `.linkbtn` gone
+  (inventory in data/link-sweep/INVENTORY.md, gitignored).
 - Still open:
   Options section placement (M6), a11y pass (L1-L4), `listDesigns` api helper; picker title stays the role (decided);
   editableTargets lacks `kind`.

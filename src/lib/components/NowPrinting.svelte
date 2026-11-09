@@ -21,7 +21,7 @@
 	<div class="now-top">
 		<h2 id="nowTitle">Now printing</h2>
 		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-		{#if printersHref}<a class="meta" href={printersHref} data-testid="now-printers-link"
+		{#if printersHref}<a class="pill-link" href={printersHref} data-testid="now-printers-link"
 				>Printers</a
 			>{/if}
 		<span class="meta"

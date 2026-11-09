@@ -51,7 +51,9 @@
 
 <article class="summary">
 	<div class="no-print bar-actions">
-		<a href={resolve('/(app)/builds/[id]/finish', { id: ctx.id })}>← Finish</a>
+		<a class="btn ghost sm back" href={resolve('/(app)/builds/[id]/finish', { id: ctx.id })}
+			><span class="btn-arrow" aria-hidden="true">←</span> Finish</a
+		>
 		<button type="button" class="btn primary" onclick={() => window.print()}
 			>Print / Save as PDF</button
 		>

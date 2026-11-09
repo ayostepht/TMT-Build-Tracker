@@ -3,9 +3,9 @@ import { ownerWithBuild } from './helpers';
 import { resolvePalette } from '../src/lib/domain/palettes.ts';
 import { swatches as serverSwatches } from '../src/lib/server/filaments/index.ts';
 
-/** Open the Palettes view from the Colors mode. */
+/** Open the Palettes tab. */
 async function openPalettes(page: import('@playwright/test').Page) {
-	await page.getByTestId('open-palettes').click();
+	await page.getByRole('tab', { name: 'Palettes' }).click();
 	await expect(page.getByTestId('palettes-drawer')).toBeVisible();
 }
 

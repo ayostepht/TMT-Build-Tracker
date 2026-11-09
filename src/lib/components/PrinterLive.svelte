@@ -99,7 +99,7 @@
 			>{/if}
 		{#if live?.nozzleC !== undefined}<span>Nozzle {Math.round(live.nozzleC)}°</span>{/if}
 		{#if live?.bedC !== undefined}<span>Bed {Math.round(live.bedC)}°</span>{/if}
-		{#if ctx.canEdit}<button class="linkbtn" type="button" disabled={busy} onclick={unlink}
+		{#if ctx.canEdit}<button class="btn ghost sm" type="button" disabled={busy} onclick={unlink}
 				>Not this plate</button
 			>{/if}
 	</div>

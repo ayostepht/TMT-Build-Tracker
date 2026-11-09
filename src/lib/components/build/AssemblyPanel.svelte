@@ -51,11 +51,7 @@
 			</span>
 		</div>
 		{#if !ready.ready}
-			<p class="muted">
-				You can start with the steps whose parts are done.
-				<a href={resolve('/(app)/builds/[id]/print', { id: ctx.id })}>Open the Print tab</a> to finish
-				printing:
-			</p>
+			<p class="muted">You can start with the steps whose parts are done. Still to print:</p>
 			<ul class="missing">
 				{#each ready.missing.slice(0, 8) as p (p.slug)}
 					<li>{p.name} isn't printed yet <span class="muted">({statusOf(p.slug)})</span></li>
@@ -64,6 +60,11 @@
 						and {ready.missing.length - 8} more
 					</li>{/if}
 			</ul>
+			<div class="step-next">
+				<a class="btn sm go" href={resolve('/(app)/builds/[id]/print', { id: ctx.id })}
+					>Open the Print tab <span class="btn-arrow" aria-hidden="true">→</span></a
+				>
+			</div>
 		{/if}
 		{#if !view.guidePages.some((g) => g.hasImage)}
 			<p class="muted" data-testid="guide-note">
@@ -103,13 +104,13 @@
 						{#if step.guidePage !== null}
 							<button
 								type="button"
-								class="gbtn guide"
+								class="pill-link guide"
 								class:withimg={!!img}
 								aria-label="Open guide page {step.guidePage}"
 								onclick={() => ctx.openGuidePage(step.guidePage!)}
 							>
 								{#if img}<img src={img} alt="" loading="lazy" />{/if}
-								<span>Guide p{step.guidePage}</span>
+								<span>Guide p. {step.guidePage}</span>
 							</button>
 						{/if}
 					</header>

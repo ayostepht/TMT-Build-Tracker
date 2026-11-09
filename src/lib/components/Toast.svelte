@@ -75,14 +75,18 @@
 		box-shadow: 0 6px 24px rgb(0 0 0 / 0.3);
 	}
 	.toast-act {
-		border: 0;
+		border: 1px solid currentColor;
+		border-radius: 999px;
 		background: transparent;
 		color: inherit;
 		font: inherit;
 		font-weight: 700;
-		text-decoration: underline;
 		cursor: pointer;
-		padding: 4px 6px;
+		padding: 6px 14px;
+		min-height: 36px;
+	}
+	.toast-act:hover:not(:disabled) {
+		background: color-mix(in srgb, currentColor 18%, transparent);
 	}
 	.toast-x {
 		border: 0;

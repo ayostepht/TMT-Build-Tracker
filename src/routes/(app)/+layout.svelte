@@ -209,7 +209,7 @@
 					</select>
 				</label>
 			{:else}
-				<a class="muted" href={resolve('/(app)/onboarding')}>Create a chapter</a>
+				<a class="btn sm" href={resolve('/(app)/onboarding')}>Create a chapter</a>
 			{/if}
 			{#if workspace}
 				<div class="menu-wrap ws-settings">

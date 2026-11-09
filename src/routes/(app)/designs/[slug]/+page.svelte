@@ -96,7 +96,9 @@
 <svelte:head><title>{d.name} · Designs · TMT Build Tracker</title></svelte:head>
 
 <section class="stack">
-	<a class="crumb" href={resolve('/(app)/designs')}>All designs</a>
+	<a class="btn ghost sm back" href={resolve('/(app)/designs')}
+		><span class="btn-arrow" aria-hidden="true">←</span> All designs</a
+	>
 	<div class="top">
 		<div class="titles">
 			<div class="kicker">{d.templateName}</div>

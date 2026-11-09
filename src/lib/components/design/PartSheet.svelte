@@ -54,7 +54,7 @@
 		{/if}
 		{#if part.guideRefs.length}
 			<a
-				class="guide"
+				class="pill-link guide"
 				href={resolve('/(app)/builds/[id]/print', { id: view.build.id })}
 				title="Open the Print tab (guide {guide})"><span class="wide">Guide </span>{guide}</a
 			>

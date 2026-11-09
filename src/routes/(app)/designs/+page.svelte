@@ -28,8 +28,11 @@
 <section class="stack">
 	{#if back}
 		<p>
-			<a href={resolve('/(app)/builds/[id]', { id: back.id })} data-testid="back-to-build-link"
-				>← Back to {back.name}</a
+			<a
+				class="btn ghost sm back"
+				href={resolve('/(app)/builds/[id]', { id: back.id })}
+				data-testid="back-to-build-link"
+				><span class="btn-arrow" aria-hidden="true">←</span> Back to {back.name}</a
 			>
 		</p>
 	{/if}

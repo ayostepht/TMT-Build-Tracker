@@ -21,8 +21,8 @@
 				<span class="set">{b.progress}% printed ({b.printed}/{b.total})</span>
 				{#if b.deliveryDate}<span class="set">Due {b.deliveryDate}</span>{/if}
 				{#if b.setupStep !== null && canEdit}
-					<a class="set" href={resolve('/(app)/builds/[id]/setup', { id: b.id })}
-						>Setup: step {b.setupStep} of 5</a
+					<a class="pill-link" href={resolve('/(app)/builds/[id]/setup', { id: b.id })}
+						>Setup: step {b.setupStep} of 5 <span class="btn-arrow" aria-hidden="true">→</span></a
 					>
 				{/if}
 			</div>
