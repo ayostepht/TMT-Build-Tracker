@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-07, after palette color locks + plate runs in part logs (dadd250, not deployed; r20 = Studio drafts). Keep this file
+_Last updated: 2026-11-09, after manual plate times (r29 deployed; plate 15 time set by hand to 13h 39m). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -54,7 +54,7 @@ Save as design all work as on a build.
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
 
-## Manual plate times (2026-11-09, not deployed)
+## Manual plate times (2026-11-09, r29)
 
 - Migration 0012: `build_plates.manual_est_seconds` + `manual_est_source` ('user' | 'printer'), `print_runs.est_seconds`.
 - A manual time beats every other plate time (`estSource = 'manual'`, "your entry"; `baseEstSeconds/baseEstSource` keep
