@@ -8,6 +8,9 @@
 	import type { SwatchTuple } from '#lib/domain/palettes.ts';
 	import {
 		chipBrandList,
+		closestMatches,
+		groupByFamily,
+		isApproxHex,
 		pickerReason,
 		pickerSwatches,
 		type PickerEntry
@@ -140,6 +143,90 @@
 		recent.filter((r) => items.some((i) => i[0] === r[0] && i[1] === r[1] && i[3] === r[3]))
 	);
 
+	// Layout: closest matches to the current color, recent picks, hue families, neutrals folded away.
+	let famFilter = $state('');
+	let neutralsOpen = $state(false);
+	let activeId = $state('');
+	let bodyEl = $state<HTMLDivElement>();
+	const groups = $derived(groupByFamily(colorful));
+	const effFam = $derived(
+		famFilter === 'neutral'
+			? neutrals.length
+				? 'neutral'
+				: ''
+			: groups.some((g) => g.id === famFilter)
+				? famFilter
+				: ''
+	);
+	const keyOf = (t: SwatchTuple) => `${t[0]}|${t[1]}|${t[2]}|${t[3]}`;
+	const idOf = (sid: string, t: SwatchTuple) => `${sid}|${keyOf(t)}`;
+	const toEntry = (t: SwatchTuple): PickerEntry => ({ t, reason: pickerReason(t) });
+	const plain = $derived(!searching && effFam === '');
+	const closest = $derived(
+		plain && current ? closestMatches([...colorful, ...neutrals], current.hex, 8) : []
+	);
+	const recentList = $derived(plain && !brands.length ? recentShown.map(toEntry) : []);
+	const neutralsOn = $derived(neutralsOpen || searching || effFam === 'neutral');
+	const sections = $derived.by(() => {
+		let budget = cap;
+		const out: { id: string; label: string; count?: number; entries: PickerEntry[] }[] = [];
+		if (closest.length)
+			out.push({ id: 'closest', label: 'Closest to the current color', entries: closest });
+		if (recentList.length) out.push({ id: 'recent', label: 'Recently used', entries: recentList });
+		for (const g of effFam === 'neutral' ? [] : groups.filter((x) => !effFam || x.id === effFam)) {
+			const entries = g.entries.slice(0, Math.max(0, budget));
+			budget -= entries.length;
+			if (entries.length) out.push({ id: g.id, label: g.label, count: g.entries.length, entries });
+		}
+		return out;
+	});
+	const moreColors = $derived(
+		(effFam === 'neutral'
+			? 0
+			: groups.reduce((n, g) => n + (!effFam || g.id === effFam ? g.entries.length : 0), 0)) > cap
+	);
+	const neutralShown = $derived(neutralsOn ? neutrals.slice(0, cap) : []);
+	/** Every swatch in the DOM, in order: one of them is the grid's single tab stop. */
+	const visibleIds = $derived([
+		...sections.flatMap((s) => s.entries.map((e) => idOf(s.id, e.t))),
+		...neutralShown.map((e) => idOf('neutral', e.t))
+	]);
+	const tabId = $derived(visibleIds.includes(activeId) ? activeId : (visibleIds[0] ?? ''));
+	const showNeutralsHead = $derived(neutrals.length > 0 && (effFam === '' || effFam === 'neutral'));
+
+	/** Arrow keys move through the swatches (rows by position), Home/End jump to the ends. */
+	function gridKey(e: KeyboardEvent) {
+		const el = e.target as HTMLElement;
+		if (!el.classList?.contains('sw') || !bodyEl) return;
+		if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+		const all = [...bodyEl.querySelectorAll<HTMLButtonElement>('button.sw')];
+		const i = all.indexOf(el as HTMLButtonElement);
+		if (i < 0) return;
+		e.preventDefault();
+		let next: HTMLButtonElement | undefined;
+		if (e.key === 'ArrowLeft') next = all[i - 1];
+		else if (e.key === 'ArrowRight') next = all[i + 1];
+		else if (e.key === 'Home') next = all[0];
+		else if (e.key === 'End') next = all[all.length - 1];
+		else {
+			const r = el.getBoundingClientRect();
+			const cx = r.left + r.width / 2;
+			const up = e.key === 'ArrowUp';
+			const rects = all.map((b) => ({ b, r: b.getBoundingClientRect() }));
+			const cand = rects.filter((x) => (up ? x.r.bottom <= r.top + 1 : x.r.top >= r.bottom - 1));
+			if (cand.length) {
+				const rowTop = up
+					? Math.max(...cand.map((x) => x.r.top))
+					: Math.min(...cand.map((x) => x.r.top));
+				const row = cand.filter((x) => Math.abs(x.r.top - rowTop) < 4);
+				next = row.reduce((a, x) =>
+					Math.abs(x.r.left + x.r.width / 2 - cx) < Math.abs(a.r.left + a.r.width / 2 - cx) ? x : a
+				).b;
+			}
+		}
+		next?.focus();
+	}
+
 	const nameOf = (t: SwatchTuple) => suggestName(t[0], t[1]);
 	const isCurrent = (t: SwatchTuple) =>
 		current !== null && lc(current.name) === lc(nameOf(t)) && lc(current.hex) === t[2];
@@ -156,6 +243,7 @@
 		return n ? `also ${n} other brand${n === 1 ? '' : 's'}` : '';
 	}
 	const detailWhy = $derived(detail ? pickerReason(detail) : '');
+	const detailApprox = $derived(detail ? isApproxHex(detail) : false);
 
 	function pick(t: SwatchTuple) {
 		hover = t;
@@ -238,6 +326,7 @@
 	function setFamily(f: Family) {
 		family = f;
 		brands = [];
+		famFilter = '';
 		cap = 480;
 	}
 </script>
@@ -251,11 +340,10 @@
 	}}
 />
 
+<!-- Fills the pane the workspace gives it (right pane on desktop, the area under the pinned chair on phones). -->
 <div
 	class="sheet"
-	class:tall={screen === 'form'}
-	class:roomy={screen === 'pick' && detailOthers.length > 0}
-	role="dialog"
+	role="region"
 	aria-label={title}
 	data-testid="swatch-picker"
 	tabindex="-1"
@@ -263,7 +351,7 @@
 >
 	<header>
 		<h2>{screen === 'form' ? (editing ? 'Edit filament' : 'Add a filament') : title}</h2>
-		<button type="button" class="btn sm" onclick={onclose}
+		<button type="button" class="btn sm done" onclick={onclose}
 			>{mode === 'new' ? 'Cancel' : 'Done'}</button
 		>
 	</header>
@@ -298,12 +386,103 @@
 			</div>
 		{/if}
 
+		<div class="searchrow">
+			<input
+				type="search"
+				placeholder="Search name, brand or hex"
+				aria-label="Search colors"
+				autocomplete="off"
+				bind:value={q}
+				bind:this={searchEl}
+				oninput={() => (cap = 480)}
+			/>
+			{#if organizationId}
+				<button
+					type="button"
+					class="btn sm add"
+					data-testid="add-filament"
+					aria-label="Add a filament"
+					title="Add your own brand, type and color"
+					onclick={() => openForm(null)}>+ Add</button
+				>
+			{/if}
+		</div>
+
+		<div class="filters" role="group" aria-label="Filters">
+			{#if hidden > 0 || allTypes}
+				<label
+					class="chip tog"
+					title={allTypes
+						? 'Tagged swatches are not used by palettes'
+						: `${hidden} hidden: silk, matte, other hardness, filled …`}
+				>
+					<input type="checkbox" bind:checked={allTypes} data-testid="show-all-types" /> All types{#if !allTypes}
+						<span class="muted">+{hidden}</span>{/if}
+				</label>
+			{/if}
+			{#if groups.length || neutrals.length}
+				<select
+					class="fam"
+					aria-label="Color family"
+					value={effFam}
+					onchange={(e) => {
+						famFilter = e.currentTarget.value;
+						cap = 480;
+					}}
+				>
+					<option value="">All colors</option>
+					{#each groups as g (g.id)}<option value={g.id}>{g.label} ({g.entries.length})</option
+						>{/each}
+					{#if neutrals.length}<option value="neutral"
+							>Whites, grays, blacks ({neutrals.length})</option
+						>{/if}
+				</select>
+			{/if}
+			<div class="chips brandchips" role="group" aria-label="Brands">
+				<button
+					type="button"
+					class="chip"
+					aria-pressed={brands.length === 0}
+					onclick={() => (brands = [])}
+				>
+					All brands
+				</button>
+				{#each chipBrands as b (b)}
+					<button
+						type="button"
+						class="chip"
+						aria-pressed={brands.includes(b)}
+						onclick={() => toggleBrand(b)}
+					>
+						{b}
+					</button>
+				{/each}
+				{#if moreBrands.length}
+					<select
+						aria-label="More brands"
+						value=""
+						onchange={(e) => {
+							const v = e.currentTarget.value;
+							e.currentTarget.value = '';
+							if (v && !brands.includes(v)) toggleBrand(v);
+						}}
+					>
+						<option value="">More brands ({moreBrands.length})</option>
+						{#each moreBrands as b (b)}<option value={b}>{b}</option>{/each}
+					</select>
+				{/if}
+			</div>
+		</div>
+
 		<div class="detail" aria-live="polite" data-testid="swatch-detail">
 			{#if detail}
 				<span class="dot" style="background-color:{detail[2]}" aria-hidden="true"></span>
 				<span class="dtxt">
 					<b>{nameOf(detail)}</b>
 					<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
+					{#if detailApprox}<span class="why" data-testid="swatch-approx"
+							>Approx. color: estimated from product photos</span
+						>{/if}
 					{#if detailWhy}<span class="why">Palettes skip it: {detailWhy}</span>{/if}
 					{#if detailOthers.length}<span class="muted" data-testid="swatch-also"
 							>{alsoText(detail, detailOthers)}</span
@@ -344,80 +523,15 @@
 			</details>
 		{/if}
 
-		<div class="tools">
-			<input
-				type="search"
-				placeholder="Search name, brand or hex"
-				aria-label="Search colors"
-				autocomplete="off"
-				bind:value={q}
-				bind:this={searchEl}
-				oninput={() => (cap = 480)}
-			/>
-			<div class="brands">
-				<div class="chips scroll" role="group" aria-label="Brands">
-					<button
-						type="button"
-						class="chip"
-						aria-pressed={brands.length === 0}
-						onclick={() => (brands = [])}
-					>
-						All brands
-					</button>
-					{#each chipBrands as b (b)}
-						<button
-							type="button"
-							class="chip"
-							aria-pressed={brands.includes(b)}
-							onclick={() => toggleBrand(b)}
-						>
-							{b}
-						</button>
-					{/each}
-					{#if moreBrands.length}
-						<select
-							aria-label="More brands"
-							value=""
-							onchange={(e) => {
-								const v = e.currentTarget.value;
-								e.currentTarget.value = '';
-								if (v && !brands.includes(v)) toggleBrand(v);
-							}}
-						>
-							<option value="">More brands ({moreBrands.length})</option>
-							{#each moreBrands as b (b)}<option value={b}>{b}</option>{/each}
-						</select>
-					{/if}
-				</div>
-			</div>
-			{#if hidden > 0 || allTypes}
-				<label class="check">
-					<input type="checkbox" bind:checked={allTypes} data-testid="show-all-types" /> Show all
-					types
-					<span class="muted"
-						>{allTypes
-							? '(tagged ones are not used by palettes)'
-							: `(${hidden} hidden: silk, matte, other hardness, filled …)`}</span
-					>
-				</label>
-			{:else if searching}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="body" bind:this={bodyEl} onkeydown={gridKey}>
+			{#if note}<p class="muted small" role="status">{note}</p>{/if}
+			{#if searching && !allTypes}
 				<p class="muted small">Search also finds types that palettes skip.</p>
 			{/if}
-		</div>
-
-		<div class="body">
-			{#if note}<p class="muted small" role="status">{note}</p>{/if}
-			{#if organizationId}
+			{#if organizationId && mine.length}
 				<section aria-label="My filaments" data-testid="my-filaments">
-					<div class="mhead">
-						<h3>My filaments <span class="muted">{myShown.length}</span></h3>
-						<button
-							type="button"
-							class="btn sm"
-							data-testid="add-filament"
-							onclick={() => openForm(null)}>+ Add a filament</button
-						>
-					</div>
+					<h3>My filaments <span class="muted">{myShown.length}</span></h3>
 					<ul class="mine">
 						{#each myShown as f (f.id)}
 							<li class:on={isCurrentMine(f)} data-testid="my-filament">
@@ -461,11 +575,7 @@
 								{/if}
 							</li>
 						{:else}
-							<li class="muted empty">
-								{mine.length
-									? `None for ${famLabel} yet.`
-									: 'Your own brand, type and color, saved for reuse.'}
-							</li>
+							<li class="muted empty">None for {famLabel} yet.</li>
 						{/each}
 					</ul>
 					{#if myOther.length}
@@ -480,37 +590,44 @@
 				<p class="muted">Loading colors…</p>
 			{:else if failed}
 				<p class="muted" role="alert">
-					The filament catalog could not be loaded. Add your own filament below.
+					The filament catalog could not be loaded. Add your own filament with + Add.
 				</p>
 			{:else}
-				{#if recentShown.length && !q && !brands.length}
-					<section aria-label="Recently used">
-						<h3>Recently used</h3>
+				{#each sections as s (s.id)}
+					<section aria-label={s.label}>
+						<h3>
+							{s.label}{#if s.count !== undefined}&nbsp;<span class="muted">{s.count}</span>{/if}
+						</h3>
 						<div class="grid">
-							{#each recentShown as t (t[0] + t[1] + t[3])}
-								{@render swatch(t)}
+							{#each s.entries as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
+								{@render swatch(s.id, e.t, e.others)}
 							{/each}
 						</div>
 					</section>
-				{/if}
-				{#if neutrals.length}
-					<section aria-label="Neutrals">
-						<h3>Neutrals <span class="muted">{neutrals.length}</span></h3>
-						<div class="grid">
-							{#each neutrals.slice(0, cap) as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
-								{@render swatch(e.t, e.others)}
-							{/each}
-						</div>
-					</section>
-				{/if}
-				{#if colorful.length}
-					<section aria-label="Colors">
-						<h3>Colors <span class="muted">{colorful.length}</span></h3>
-						<div class="grid">
-							{#each colorful.slice(0, cap) as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
-								{@render swatch(e.t, e.others)}
-							{/each}
-						</div>
+				{/each}
+				{#if showNeutralsHead}
+					<section aria-label="Whites, grays and blacks">
+						{#if searching || effFam === 'neutral'}
+							<h3>Whites, grays, blacks <span class="muted">{neutrals.length}</span></h3>
+						{:else}
+							<button
+								type="button"
+								class="nhead"
+								aria-expanded={neutralsOpen}
+								data-testid="neutrals-toggle"
+								onclick={() => (neutralsOpen = !neutralsOpen)}
+							>
+								<span aria-hidden="true">{neutralsOpen ? '▾' : '▸'}</span>
+								Whites, grays, blacks <span class="muted">{neutrals.length}</span>
+							</button>
+						{/if}
+						{#if neutralsOn}
+							<div class="grid">
+								{#each neutralShown as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
+									{@render swatch('neutral', e.t, e.others)}
+								{/each}
+							</div>
+						{/if}
 					</section>
 				{/if}
 				{#if nothing}
@@ -519,7 +636,7 @@
 							? `, or show all types (${hidden} hidden)`
 							: ''}.
 					</p>
-				{:else if neutrals.length > cap || colorful.length > cap}
+				{:else if moreColors || neutrals.length > cap}
 					<button type="button" class="btn sm" onclick={() => (cap += 600)}>Show more</button>
 				{/if}
 			{/if}
@@ -527,26 +644,35 @@
 	{/if}
 </div>
 
-{#snippet swatch(t: SwatchTuple, others: PickerEntry[] = [])}
+{#snippet swatch(sid: string, t: SwatchTuple, others: PickerEntry[] = [])}
 	{@const why = pickerReason(t)}
 	{@const also = alsoText(t, others)}
+	{@const id = idOf(sid, t)}
+	{@const approx = isApproxHex(t)}
 	<button
 		type="button"
 		class="sw"
 		class:on={isCurrent(t)}
 		class:excl={!!why}
 		style="background-color:{t[2]}"
-		aria-label="{nameOf(t)}, {t[3]}, {t[2]}{also ? `, ${also}` : ''}{why
-			? `, not used by palettes: ${why}`
-			: ''}"
+		aria-label="{nameOf(t)}, {t[3]}, {t[2]}{approx ? ', approximate color' : ''}{also
+			? `, ${also}`
+			: ''}{why ? `, not used by palettes: ${why}` : ''}"
 		aria-pressed={isCurrent(t)}
-		title="{nameOf(t)} · {t[3]} · {t[2]}{also ? ` · ${also}` : ''}{why
-			? ` · Not used by palettes: ${why}`
-			: ''}"
+		title="{nameOf(t)} · {t[3]} · {t[2]}{approx ? ' · approx. color' : ''}{also
+			? ` · ${also}`
+			: ''}{why ? ` · Not used by palettes: ${why}` : ''}"
 		data-testid="swatch"
-		onclick={() => pick(t)}
+		tabindex={tabId === id ? 0 : -1}
+		onclick={() => {
+			activeId = id;
+			pick(t);
+		}}
 		onpointerenter={() => (hover = t)}
-		onfocus={() => (hover = t)}
+		onfocus={() => {
+			activeId = id;
+			hover = t;
+		}}
 		onpointerleave={() => {
 			if (!others.length) hover = null;
 		}}
@@ -555,20 +681,16 @@
 
 <style>
 	.sheet {
-		position: fixed;
-		z-index: 1500;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		max-height: 46vh;
+		flex: 1;
+		min-height: 0;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
-		padding: 12px 16px 0;
+		gap: 8px;
+		padding: 10px 12px 0;
 		background: var(--card);
-		border-top: 1px solid var(--line);
-		border-radius: 14px 14px 0 0;
-		box-shadow: 0 -8px 30px rgb(0 0 0 / 0.22);
+		border: 1px solid var(--line);
+		border-radius: 12px;
 		outline: none;
 	}
 	header {
@@ -591,6 +713,49 @@
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: var(--muted);
+	}
+	.searchrow {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+	.searchrow input {
+		flex: 1;
+		min-width: 0;
+	}
+	.filters {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		padding-bottom: 4px;
+		scrollbar-width: thin;
+	}
+	.filters > * {
+		flex: none;
+	}
+	.chips {
+		display: flex;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+	.brandchips {
+		flex-wrap: nowrap;
+	}
+	.chip {
+		white-space: nowrap;
+		cursor: pointer;
+		flex: none;
+	}
+	.tog {
+		gap: 4px;
+	}
+	select {
+		max-width: 170px;
+	}
+	.fam {
+		max-width: 190px;
 	}
 	.detail {
 		display: flex;
@@ -616,37 +781,6 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.tools {
-		display: grid;
-		gap: 8px;
-	}
-	.brands {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-		min-width: 0;
-	}
-	.chips {
-		display: flex;
-		gap: 6px;
-		flex-wrap: wrap;
-	}
-	.chips.scroll {
-		flex-wrap: nowrap;
-		overflow-x: auto;
-		min-width: 0;
-		flex: 1;
-		padding-bottom: 4px;
-		scrollbar-width: thin;
-	}
-	.chip {
-		white-space: nowrap;
-		cursor: pointer;
-	}
-	select {
-		max-width: 150px;
-		flex: none;
-	}
 	.check {
 		display: flex;
 		gap: 6px;
@@ -655,12 +789,13 @@
 		flex-wrap: wrap;
 	}
 	.body {
+		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
 		display: grid;
 		gap: 14px;
 		align-content: start;
 		padding-bottom: 16px;
-		min-height: 120px;
 		overscroll-behavior: contain;
 	}
 	.grid {
@@ -668,8 +803,10 @@
 		grid-template-columns: repeat(auto-fill, 36px);
 		gap: 8px;
 		justify-content: space-between;
+		padding: 4px;
 	}
 	.sw {
+		position: relative;
 		width: 36px;
 		height: 36px;
 		border-radius: 50%;
@@ -682,9 +819,6 @@
 	.sw:focus-visible {
 		transform: scale(1.12);
 		border-color: var(--ink);
-	}
-	.sw {
-		position: relative;
 	}
 	/* Small tag on swatches that palettes never pick (silk, matte, other hardness ...). */
 	.sw.excl::after {
@@ -701,6 +835,31 @@
 		font: 700 10px/12px var(--f-body);
 		text-align: center;
 		pointer-events: none;
+	}
+	.sw.on {
+		border-color: var(--accent);
+		outline: 3px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.nhead {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+		width: 100%;
+		text-align: left;
+		background: none;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 6px 10px;
+		min-height: 36px;
+		font: 600 13px/1 var(--f-body);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--muted);
+		cursor: pointer;
+	}
+	.nhead + .grid {
+		margin-top: 10px;
 	}
 	.others summary {
 		cursor: pointer;
@@ -734,21 +893,6 @@
 	.why {
 		color: var(--muted);
 		font-size: 12px;
-	}
-	.sw.on {
-		border-color: var(--accent);
-		outline: 3px solid var(--accent);
-		outline-offset: 2px;
-	}
-	.mhead {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 8px;
-		margin-bottom: 6px;
-	}
-	.mhead h3 {
-		margin: 0;
 	}
 	.mine li.empty {
 		border: 0;
@@ -807,8 +951,8 @@
 		height: 28px;
 	}
 	.ico {
-		width: 40px;
-		height: 40px;
+		width: 44px;
+		height: 44px;
 		flex: none;
 		background: none;
 		border: 0;
@@ -822,31 +966,52 @@
 		background: var(--accent-soft);
 		color: var(--ink);
 	}
-	.sheet.tall {
-		max-height: 88vh;
-	}
-	.sheet.roomy {
-		max-height: 66vh;
-	}
 	.sheet > :not(.body) {
 		flex: none;
 	}
 	.small {
 		font-size: 12px;
-		margin: 6px 0 0;
+		margin: 0;
+	}
+	/* Phones: 44 px touch targets, a roomier swatch grid. */
+	@media (max-width: 899px) {
+		.sw {
+			width: 44px;
+			height: 44px;
+		}
+		.grid {
+			grid-template-columns: repeat(auto-fill, 44px);
+			gap: 6px;
+		}
+		.chip,
+		.btn.sm,
+		.nhead,
+		.opick,
+		.searchrow input,
+		select {
+			min-height: 44px;
+		}
+		.searchrow input {
+			padding: 0 10px;
+		}
+		.dot {
+			width: 32px;
+			height: 32px;
+		}
+		.detail {
+			min-height: 36px;
+		}
 	}
 	@media (min-width: 900px) {
-		.sheet,
-		.sheet.tall {
-			left: auto;
-			top: 0;
-			width: min(420px, 38vw);
-			max-height: none;
-			border: 0;
-			border-left: 1px solid var(--line);
-			border-radius: 0;
-			box-shadow: -8px 0 30px rgb(0 0 0 / 0.18);
-			padding: 16px 18px 0;
+		.sheet {
+			padding: 14px 16px 0;
+		}
+		.filters {
+			flex-wrap: wrap;
+			overflow: visible;
+		}
+		.brandchips {
+			display: contents;
 		}
 	}
 	@media (prefers-reduced-motion: no-preference) {

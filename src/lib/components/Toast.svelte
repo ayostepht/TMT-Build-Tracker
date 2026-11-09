@@ -42,12 +42,24 @@
 		position: fixed;
 		left: 16px;
 		right: 16px;
-		bottom: 16px;
+		/* Phones: top, under the nav, so toasts never sit on the sticky Apply bar, a bottom sheet or the
+		   in-page confirmations. Stacked toasts are laid out in a column, never on top of each other. */
+		top: 64px;
 		display: grid;
 		justify-items: center;
 		gap: 8px;
 		z-index: 2000;
 		pointer-events: none;
+	}
+	/* Desktop: bottom-left, away from the right-hand panel and its Apply / Cancel bar. */
+	@media (min-width: 900px) {
+		.toasts {
+			top: auto;
+			bottom: 16px;
+			right: auto;
+			max-width: min(440px, calc(100vw - 32px));
+			justify-items: start;
+		}
 	}
 	.toast {
 		pointer-events: auto;

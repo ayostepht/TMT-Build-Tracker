@@ -21,7 +21,8 @@
 		autoRotate = false,
 		siteAdmin = false,
 		addFilesHref = undefined,
-		label = 'Chair preview'
+		label = 'Chair preview',
+		raised = false
 	}: {
 		model: TemplateModelInfo | null;
 		colors: Record<string, string>;
@@ -36,6 +37,8 @@
 		/** Where the 3D files get added (the build's Print settings); shown in the empty state. */
 		addFilesHref?: string;
 		label?: string;
+		/** Move "Reset view" to the top right (a part chip floats over the bottom). */
+		raised?: boolean;
 	} = $props();
 
 	let viewer = $state<ReturnType<typeof ChairViewer>>();
@@ -54,9 +57,14 @@
 	export function focus(slug: string) {
 		viewer?.focus(slug);
 	}
+	/** Give keyboard focus back to the stage (after the part chip closes). */
+	export function focusStage() {
+		box?.focus();
+	}
+	let box = $state<HTMLElement>();
 </script>
 
-<div class="stage" role="group" aria-label={label}>
+<div class="stage" role="group" aria-label={label} tabindex="-1" bind:this={box}>
 	{#if model}
 		<ChairViewer
 			bind:this={viewer}
@@ -77,7 +85,7 @@
 				</div>
 			{/snippet}
 		</ChairViewer>
-		<button type="button" class="reset btn sm" onclick={() => viewer?.resetView()}>
+		<button type="button" class="reset btn sm" class:raised onclick={() => viewer?.resetView()}>
 			Reset view
 		</button>
 		<KitCredit class="credit" />
@@ -133,5 +141,12 @@
 		right: 10px;
 		bottom: 10px;
 		opacity: 0.9;
+	}
+	.reset.raised {
+		bottom: auto;
+		top: 10px;
+	}
+	.stage:focus {
+		outline: none;
 	}
 </style>

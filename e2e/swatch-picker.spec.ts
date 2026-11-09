@@ -1,0 +1,93 @@
+import { expect, test } from './fixtures';
+import { ownerWithBuild } from './helpers';
+
+test('swatch picker: opens inside the panel, one tab stop for the swatches, arrow keys, color families', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'pickerpane');
+	await page.goto(`/builds/${buildId}/design`);
+	await page
+		.locator('li.slot[data-role="primary"]')
+		.getByRole('button', { name: /^Change filament for/ })
+		.first()
+		.click();
+	const picker = page.getByTestId('swatch-picker');
+	await expect(picker).toBeVisible();
+	// Inside the right pane: the slot list is replaced, not covered.
+	await expect(page.locator('.panel [data-testid="swatch-picker"]')).toHaveCount(1);
+	await expect(page.locator('li.slot').first()).toBeHidden();
+	await expect(picker.getByRole('heading', { name: /Primary PETG/ })).toBeVisible();
+	// No "My filaments 0" before the user has any.
+	await expect(picker.getByTestId('my-filaments')).toHaveCount(0);
+	// Neutrals are folded away until asked.
+	const neutrals = picker.getByTestId('neutrals-toggle');
+	await expect(neutrals).toHaveAttribute('aria-expanded', 'false');
+	// The swatch grid is a single tab stop.
+	const stops = await picker
+		.locator('button.sw')
+		.evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex >= 0).length);
+	expect(stops).toBe(1);
+	// Arrow keys move between swatches and the tab stop follows.
+	const first = picker.locator('button.sw').first();
+	await first.focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(picker.locator('button.sw').nth(1)).toBeFocused();
+	await page.keyboard.press('ArrowDown');
+	await expect(picker.locator('button.sw:focus')).toHaveCount(1);
+	await page.keyboard.press('Home');
+	await expect(first).toBeFocused();
+	// The color-family filter narrows the list.
+	await picker.getByLabel('Color family').selectOption('red');
+	await expect(picker.getByRole('region', { name: 'Reds' })).toBeVisible();
+	await expect(picker.getByRole('region', { name: 'Blues' })).toHaveCount(0);
+	await picker.getByLabel('Color family').selectOption('');
+	await neutrals.click();
+	await expect(neutrals).toHaveAttribute('aria-expanded', 'true');
+	await expect(picker.getByRole('region', { name: 'Whites, grays and blacks' })).toBeVisible();
+	// Done returns to the slot list.
+	await picker.getByRole('button', { name: 'Done' }).click();
+	await expect(picker).toHaveCount(0);
+	await expect(page.locator('li.slot').first()).toBeVisible();
+});
+
+test('swatch picker: Schoolhouse colors say they are approximate', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'pickerapprox');
+	await page.goto(`/builds/${buildId}/design`);
+	await page
+		.locator('li.slot[data-role="primary"]')
+		.getByRole('button', { name: /^Change filament for/ })
+		.first()
+		.click();
+	const picker = page.getByTestId('swatch-picker');
+	await picker.getByLabel('Search colors').fill('schoolhouse');
+	await picker.getByTestId('swatch').first().focus();
+	await expect(picker.getByTestId('swatch-approx')).toContainText(/approx/i);
+	await picker.getByLabel('Search colors').fill('overture');
+	await picker.getByTestId('swatch').first().focus();
+	await expect(picker.getByTestId('swatch-approx')).toHaveCount(0);
+});
+
+test('swatch picker on a phone sits under the pinned chair', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'pickerphone');
+	await page.goto(`/builds/${buildId}/design`);
+	await page
+		.locator('li.slot[data-role="primary"]')
+		.getByRole('button', { name: /^Change filament for/ })
+		.first()
+		.click();
+	const picker = page.getByTestId('swatch-picker');
+	await expect(picker).toBeVisible();
+	const box = await picker.boundingBox();
+	const stage = await page.locator('.stagebox').boundingBox();
+	expect(box!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height - 1);
+	expect(box!.y + box!.height).toBeLessThanOrEqual(844 + 1);
+	// Touch targets are at least 44 px.
+	const sw = await picker.locator('button.sw').first().boundingBox();
+	expect(sw!.width).toBeGreaterThanOrEqual(44);
+	const scroll = await page.evaluate(
+		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+	);
+	expect(scroll).toBeLessThanOrEqual(0);
+});

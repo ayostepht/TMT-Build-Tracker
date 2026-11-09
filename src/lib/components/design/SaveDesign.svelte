@@ -52,10 +52,10 @@
 	}
 </script>
 
-<section class="card save" aria-label="Save as design">
-	<h2>Save as design</h2>
+<section class="save" aria-label="Share or save as design">
 	<p class="muted">
-		Keep these colors to reuse on another build, or share the link with other makers.
+		Your changes to this build are already saved. Save a copy of the colors as a design to reuse on
+		another build, or share its link with other makers.
 	</p>
 	{#if ctx.canEdit}
 		<form
@@ -106,7 +106,10 @@
 		align-items: flex-start;
 		font-size: 14px;
 	}
-	h2,
+	.save {
+		display: grid;
+		gap: 12px;
+	}
 	p {
 		margin: 0;
 	}

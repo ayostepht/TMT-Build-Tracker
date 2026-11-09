@@ -4,8 +4,15 @@
  * excluded ones, each carrying its reason. Same-brand duplicates collapse, and the grids are ordered
  * so near-identical blacks and whites do not bury everything else.
  */
-import { compareByHue, deltaE2000, hexToLab as rawHexToLab, isNeutral, type Lab } from './color.ts';
-import { exclusionReason, POPULAR_BRANDS, type SwatchTuple } from './palettes.ts';
+import {
+	compareByHue,
+	deltaE2000,
+	hexToLab as rawHexToLab,
+	hexToOklch,
+	isNeutral,
+	type Lab
+} from './color.ts';
+import { exclusionReason, FLAG_APPROX, POPULAR_BRANDS, type SwatchTuple } from './palettes.ts';
 
 export interface PickerEntry {
 	t: SwatchTuple;
@@ -242,4 +249,79 @@ export function pickerSwatches(items: SwatchTuple[], opts: PickerOptions = {}): 
 	const result = computePicker(items, opts);
 	memo = { items, key, result };
 	return result;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Layout of the picker: closest matches, color families, approximate hexes.
+// ---------------------------------------------------------------------------------------------
+
+export type FamilyId =
+	'red' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'purple' | 'pink' | 'brown';
+
+/** Color families in the order the picker lists them. */
+export const COLOR_FAMILIES: { id: FamilyId; label: string }[] = [
+	{ id: 'red', label: 'Reds' },
+	{ id: 'orange', label: 'Oranges' },
+	{ id: 'yellow', label: 'Yellows' },
+	{ id: 'green', label: 'Greens' },
+	{ id: 'teal', label: 'Teals' },
+	{ id: 'blue', label: 'Blues' },
+	{ id: 'purple', label: 'Purples' },
+	{ id: 'pink', label: 'Pinks' },
+	{ id: 'brown', label: 'Browns' }
+];
+
+/**
+ * The hue family of a chromatic color (OKLCH hue bands). Warm colors that are dark, muted or both
+ * (rust, copper, tan, brown) are Browns; red-orange neons (hue ~33-35) count as Reds up to 35, Oranges to 75.
+ */
+export function colorFamily(hex: string): FamilyId {
+	const { l, c, h } = hexToOklch(hex);
+	if (h >= 20 && h < 100) {
+		if (c < 0.09 && l < 0.88) return 'brown';
+		if (l < 0.5 && c < 0.11) return 'brown';
+		if (h >= 34 && l < 0.58 && c < 0.17) return 'brown';
+	}
+	if (h >= 12 && h < 35) return 'red';
+	if (h >= 35 && h < 75) return 'orange';
+	if (h >= 75 && h < 115) return 'yellow';
+	if (h >= 115 && h < 170) return 'green';
+	if (h >= 170 && h < 235) return 'teal';
+	if (h >= 235 && h < 280) return 'blue';
+	if (h >= 280 && h < 330) return 'purple';
+	return 'pink';
+}
+
+export interface FamilyGroup {
+	id: FamilyId;
+	label: string;
+	entries: PickerEntry[];
+}
+
+/** Chromatic entries grouped by hue family (empty families dropped); each group keeps the incoming order. */
+export function groupByFamily(entries: PickerEntry[]): FamilyGroup[] {
+	const by = new Map<FamilyId, PickerEntry[]>();
+	for (const e of entries) {
+		const id = colorFamily(e.t[2]);
+		const list = by.get(id);
+		if (list) list.push(e);
+		else by.set(id, [e]);
+	}
+	return COLOR_FAMILIES.filter((f) => by.has(f.id)).map((f) => ({ ...f, entries: by.get(f.id)! }));
+}
+
+/** The `n` entries closest to `hex` (CIEDE2000), skipping ones that are the same color already. */
+export function closestMatches(entries: PickerEntry[], hex: string, n = 8): PickerEntry[] {
+	const target = hexToLab(hex.toLowerCase());
+	return entries
+		.map((e) => ({ e, d: deltaE2000(target, hexToLab(e.t[2])) }))
+		.filter((x) => x.d >= 0.5)
+		.sort((a, b) => a.d - b.d)
+		.slice(0, n)
+		.map((x) => x.e);
+}
+
+/** True when a swatch's color is an approximation (the catalog flags it `approx`: estimated from product photos). */
+export function isApproxHex(t: SwatchTuple): boolean {
+	return (t[4] ?? '').split(/\s+/).includes(FLAG_APPROX);
 }

@@ -36,6 +36,8 @@ export const FLAG_GLOW = 'glow';
 export const FLAG_MULTI = 'multi';
 export const FLAG_SILK = 'silk';
 export const FLAG_SPARKLE = 'sparkle';
+/** The hex is estimated from product photos, not the maker's data. */
+export const FLAG_APPROX = 'approx';
 
 export const SLOTS = ['primary', 'accent', 'soft', 'tire'] as const;
 export type SlotKey = (typeof SLOTS)[number];

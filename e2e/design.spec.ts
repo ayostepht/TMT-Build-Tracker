@@ -24,7 +24,7 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await expect(sheet).toContainText('Wing Left');
 	// Wings are PETG parts: flexible slots are listed but disabled, with the reason.
 	await expect(sheet.locator('button[data-role="soft"]')).toBeDisabled();
-	await expect(sheet).toContainText('needs PETG');
+	await expect(sheet).toContainText('PETG only');
 
 	// "Apply to both sides" is on by default.
 	await sheet.locator('button[data-role="primary"]').click();
@@ -58,10 +58,24 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await expect(slot).toContainText('1 parts');
 
 	// Save as a public design.
-	await page.getByLabel('Design name').fill('E2E Blues');
-	await page.getByLabel(/Share publicly/).check();
-	await page.getByRole('button', { name: 'Save design' }).click();
+	await expect(page.getByTestId('autosave-status')).toContainText('Saved automatically');
+	await page.getByTestId('open-share').click();
+	const dlg = page.getByTestId('share-dialog');
+	await dlg.getByLabel('Design name').fill('E2E Blues');
+	await dlg.getByLabel(/Share publicly/).check();
+	await dlg.getByRole('button', { name: 'Save design' }).click();
 	await expect(page.getByTestId('design-saved')).toContainText('Saved "E2E Blues"');
+	await page.keyboard.press('Escape');
+	await expect(dlg).toHaveCount(0);
+
+	// Apply a saved design to this build: asks first, keeps print progress.
+	await page.getByTestId('open-apply').click();
+	await page.getByTestId('apply-design-select').selectOption({ label: 'E2E Blues (mine)' });
+	await page.getByRole('button', { name: 'Apply this design…' }).click();
+	await expect(page.getByTestId('apply-design')).toContainText('Your print progress');
+	await page.getByRole('button', { name: 'Replace colors' }).click();
+	await expect(page.getByTestId('apply-dialog')).toHaveCount(0);
+	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
 
 	// It shows up in the gallery, and a new build can start from it.
 	await page.goto('/designs');
@@ -103,6 +117,29 @@ test('design tab: Esc, the close button and picking the same part again deselect
 	await expect(sheet).toBeVisible();
 	await wing.click();
 	await expect(sheet).toHaveCount(0);
+});
+
+test('design tab: role filter chips narrow the parts list; Esc returns focus to the row', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'partfilter');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	const rows = page.locator('button.row[data-slug]');
+	const all = await rows.count();
+	await page.locator('[data-filter="accent"]').click();
+	const some = await rows.count();
+	expect(some).toBeGreaterThan(0);
+	expect(some).toBeLessThan(all);
+	await page.locator('[data-filter="all"]').click();
+	await expect(rows).toHaveCount(all);
+
+	const wing = page.locator('button.row[data-slug="wing-left"]');
+	await wing.click();
+	await expect(page.getByTestId('part-sheet')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByTestId('part-sheet')).toHaveCount(0);
+	await expect(wing).toBeFocused();
 });
 
 test('design tab: pick a catalog swatch for a slot, search, and add a slot from a swatch', async ({

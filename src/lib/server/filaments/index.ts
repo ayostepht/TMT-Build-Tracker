@@ -1,6 +1,7 @@
 import raw from './catalog.json' with { type: 'json' };
 import { materialFamily, suggestName } from '#lib/filament-catalog.ts';
 import {
+	FLAG_APPROX,
 	FLAG_GLOW,
 	FLAG_MATTE,
 	FLAG_MULTI,
@@ -75,6 +76,7 @@ export function flagsOf(c: CatalogColor): string {
 	if (c.finish === 'silk') f.push(FLAG_SILK);
 	if (c.translucent) f.push(FLAG_TRANSLUCENT);
 	if (c.glow) f.push(FLAG_GLOW);
+	if (c.hexSource === 'image') f.push(FLAG_APPROX);
 	if (c.hexes && c.hexes.length > 1) f.push(FLAG_MULTI);
 	return f.join(' ');
 }

@@ -122,7 +122,7 @@ describe('swatch flags', () => {
 			expect(t.length === 4 || t.length === 5).toBe(true);
 			if (t.length === 5)
 				expect(t[4]).toMatch(
-					/^(matte|silk|translucent|glow|multi)( (matte|silk|translucent|glow|multi))*$/
+					/^(matte|silk|translucent|glow|multi|approx)( (matte|silk|translucent|glow|multi|approx))*$/
 				);
 		}
 	});
@@ -141,5 +141,19 @@ describe('swatch flags', () => {
 			})
 		).toBe('matte translucent glow multi');
 		expect(flagsOf({ ...c, hexes: ['#000000'] })).toBe('');
+	});
+});
+
+describe('approximate hexes', () => {
+	it('flags colors whose hex was sampled from a product photo', () => {
+		const c = { name: 'X', hex: '#123456' };
+		expect(flagsOf({ ...c, hexSource: 'image' })).toBe('approx');
+		expect(flagsOf({ ...c, hexSource: 'store' })).toBe('');
+		expect(flagsOf({ ...c, finish: 'matte', hexSource: 'image' })).toBe('matte approx');
+	});
+	it('the bundled Schoolhouse Spools swatches carry it', () => {
+		const sh = swatches('petg').filter((t) => t[0] === 'Schoolhouse Spools');
+		expect(sh.length).toBeGreaterThan(10);
+		expect(sh.every((t) => (t[4] ?? '').split(' ').includes('approx'))).toBe(true);
 	});
 });

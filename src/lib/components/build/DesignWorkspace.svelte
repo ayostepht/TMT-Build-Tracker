@@ -11,7 +11,7 @@
 	import PalettePanel, { type PalettePreview } from '#lib/components/design/PalettePanel.svelte';
 	import PartList from '#lib/components/design/PartList.svelte';
 	import PartSheet from '#lib/components/design/PartSheet.svelte';
-	import SaveDesign from '#lib/components/design/SaveDesign.svelte';
+	import DesignActions from '#lib/components/design/share/DesignActions.svelte';
 	import SlotPanel from '#lib/components/design/SlotPanel.svelte';
 	import SwatchPicker, { type PickedFilament } from '#lib/components/design/SwatchPicker.svelte';
 
@@ -73,6 +73,9 @@
 	let selected = $state<string | null>(null);
 	let bothSides = $state(true);
 	let roleFilter = $state<string | null>(null);
+	let tabsH = $state(0);
+	/** Where the selection came from, so closing returns focus there. */
+	let origin: 'row' | 'canvas' = 'canvas';
 	/** slug → role the user just chose, shown at once while the save is in flight. */
 	let pending = $state<Record<string, string>>({});
 	let ready = $state<{ rendered: string[]; unplaced: string[] } | null>(null);
@@ -181,23 +184,31 @@
 		if (picker && (!ctx.canEdit || (picker.mode === 'edit' && !pickerSlot))) picker = null;
 	});
 
-	function pick(slug: string | null) {
+	function pick(slug: string | null, from: 'row' | 'canvas' = 'canvas') {
 		// Picking the selected part again toggles it off.
 		slug = slug === selected ? null : slug;
+		if (slug) origin = from;
 		selected = slug;
-		// Phones: the stage is pinned, so the model never scrolls away. Only bring the sheet into
-		// view if it is off-screen (it has a scroll-margin that clears the pinned stage).
-		if (slug && typeof window !== 'undefined' && window.matchMedia('(max-width: 899px)').matches) {
-			queueMicrotask(() =>
-				document.querySelector('[data-testid="part-sheet"]')?.scrollIntoView({ block: 'nearest' })
-			);
-		}
+	}
+
+	/** Deselect and hand focus back to where the selection started (its list row, else the stage). */
+	function closePart() {
+		const slug = selected;
+		selected = null;
+		queueMicrotask(() => {
+			const row =
+				origin === 'row' && slug
+					? document.querySelector<HTMLElement>(`button.row[data-slug="${CSS.escape(slug)}"]`)
+					: null;
+			if (row && row.offsetParent) row.focus();
+			else stage?.focusStage();
+		});
 	}
 </script>
 
 <svelte:window
 	onkeydown={(e) => {
-		if (e.key === 'Escape' && selected !== null && !picker) selected = null;
+		if (e.key === 'Escape' && selected !== null && !picker) closePart();
 	}}
 />
 
@@ -211,7 +222,7 @@
 	class:embedded
 	bind:this={root}
 	data-testid="design-workspace"
-	style="--stick:{stick}px;{fill ? `--fill:${fill}` : ''}"
+	style="--stick:{stick}px;--tabsh:{tabsH}px;{fill ? `--fill:${fill}` : ''}"
 >
 	<div class="stagecol">
 		<div class="stagebox">
@@ -222,14 +233,28 @@
 				{hidden}
 				{selected}
 				dimOthers={selected !== null}
-				onpick={pick}
+				onpick={(s) => pick(s, 'canvas')}
+				raised={part !== null}
 				onready={(info) => (ready = info)}
 				siteAdmin={page.data.siteAdmin === true}
 				addFilesHref={resolve('/(app)/builds/[id]/files', { id: ctx.id }) + '#settings'}
 			/>
+			{#if part}
+				<div class="chipwrap">
+					<PartSheet
+						view={live}
+						{part}
+						bind:bothSides
+						noPreview={noPreview.includes(part.slug)}
+						onmove={move}
+						onclose={closePart}
+					/>
+				</div>
+			{/if}
 			{#if preview}
 				<p
 					class="prev"
+					class:low={part !== null}
 					role="status"
 					data-testid="preview-banner"
 					data-hexes={Object.entries(preview.slots)
@@ -243,8 +268,43 @@
 		</div>
 	</div>
 
-	<div class="panel">
-		<div class="tabs" role="tablist" aria-label="Design panel" tabindex="-1" onkeydown={tabKey}>
+	<div class="panel" class:picking={picker !== null}>
+		<!-- Swatch picker (round 2): fills the panel while open, the rest of the panel is hidden (see .picking). -->
+		{#if picker?.mode === 'edit' && pickerSlot}
+			<div class="pickhost">
+				<SwatchPicker
+					title={roleLabel(pickerSlot.key, pickerSlot)}
+					family={pickerSlot.tpu ? 'tpu' : 'petg'}
+					current={{ name: pickerSlot.name, material: pickerSlot.material, hex: pickerSlot.hex }}
+					slotMaterial={pickerSlot.material}
+					organizationId={ctx.view.build.organizationId}
+					onpick={(v) => pickFilament(pickerSlot.key, v)}
+					onclose={() => (picker = null)}
+				/>
+			</div>
+		{:else if picker?.mode === 'new'}
+			<div class="pickhost">
+				<SwatchPicker
+					title="Add a color"
+					organizationId={ctx.view.build.organizationId}
+					mode="new"
+					onpick={(v) => addSlot(v)}
+					onclose={() => (picker = null)}
+				/>
+			</div>
+		{/if}
+		<DesignActions
+			{embedded}
+			snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
+		/>
+		<div
+			class="tabs"
+			role="tablist"
+			aria-label="Design panel"
+			tabindex="-1"
+			onkeydown={tabKey}
+			bind:offsetHeight={tabsH}
+		>
 			{#each TABS as t (t.id)}
 				<button
 					type="button"
@@ -259,21 +319,14 @@
 			{/each}
 		</div>
 
-		{#if part}
-			<PartSheet
-				view={live}
-				{part}
-				bind:bothSides
-				noPreview={noPreview.includes(part.slug)}
-				onmove={move}
-				onclose={() => (selected = null)}
-			/>
-		{:else}
-			<p class="muted hint">
+		<p class="muted hint">
+			{#if part}
+				Pick a slot in the part card to move {part.name}.
+			{:else}
 				{ctx.view.model ? 'Tap a part in the 3D view' : 'Pick a part from the list'} to move it to another
 				color slot.
-			</p>
-		{/if}
+			{/if}
+		</p>
 
 		<div
 			role="tabpanel"
@@ -325,23 +378,14 @@
 			aria-labelledby="tab-parts"
 			hidden={tab !== 'parts'}
 		>
-			{#if roleFilter}
-				<p class="muted filt">
-					Showing only the parts in the {roleLabel(
-						roleFilter,
-						live.filaments.find((f) => f.key === roleFilter)
-					)}
-					slot.
-					<button type="button" class="btn sm" onclick={() => (roleFilter = null)}>Show all</button>
-				</p>
-			{/if}
 			<PartList
 				view={live}
 				{selected}
 				{noPreview}
-				{roleFilter}
+				bind:roleFilter
+				visible={tab === 'parts'}
 				onselect={(slug) => {
-					pick(slug);
+					pick(slug, 'row');
 					if (selected) stage?.focus(slug);
 				}}
 			/>
@@ -363,12 +407,6 @@
 			{/if}
 		</div>
 
-		{#if !palettesOpen}
-			<SaveDesign
-				snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
-			/>
-		{/if}
-
 		{#if !embedded && !palettesOpen}
 			<section class="next" aria-label="Next steps">
 				<a href={resolve('/(app)/builds/[id]/files', { id: ctx.id })} data-testid="next-plates"
@@ -378,26 +416,6 @@
 		{/if}
 	</div>
 </div>
-
-{#if picker?.mode === 'edit' && pickerSlot}
-	<SwatchPicker
-		title={roleLabel(pickerSlot.key, pickerSlot)}
-		family={pickerSlot.tpu ? 'tpu' : 'petg'}
-		current={{ name: pickerSlot.name, material: pickerSlot.material, hex: pickerSlot.hex }}
-		slotMaterial={pickerSlot.material}
-		organizationId={ctx.view.build.organizationId}
-		onpick={(v) => pickFilament(pickerSlot.key, v)}
-		onclose={() => (picker = null)}
-	/>
-{:else if picker?.mode === 'new'}
-	<SwatchPicker
-		title="Add a color"
-		organizationId={ctx.view.build.organizationId}
-		mode="new"
-		onpick={(v) => addSlot(v)}
-		onclose={() => (picker = null)}
-	/>
-{/if}
 
 <style>
 	.design {
@@ -512,16 +530,39 @@
 		display: flex;
 		align-items: center;
 	}
-	.filt {
-		margin: 0;
+	/* The part chip floats over the bottom of the stage (above the credit line). Only its own box
+	   takes pointer events, so canvas touches around it still pick and orbit. */
+	.chipwrap {
+		position: absolute;
+		left: 8px;
+		right: 8px;
+		bottom: 26px;
+		z-index: 3;
 		display: flex;
-		gap: 8px;
-		align-items: center;
-		flex-wrap: wrap;
+		pointer-events: none;
 	}
-	/* The part sheet scrolls into view below the pinned stage and tab bar. */
-	.panel :global([data-testid='part-sheet']) {
-		scroll-margin-top: calc(var(--stick, 0px) + var(--stageh) + 64px);
+	.chipwrap > :global(*) {
+		pointer-events: auto;
+		flex: 1 1 auto;
+	}
+	.prev.low {
+		top: 48px;
+		right: 8px;
+	}
+	/* Sticky offsets for the parts list: just under the (sticky) tab bar. */
+	.partsTab {
+		--pt: calc(var(--stick, 0px) + var(--stageh) + 8px + var(--tabsh, 52px) + 4px);
+	}
+	/* Swatch picker: replaces the panel content while open. Phones: fills the area under the pinned stage. */
+	.panel.picking > :global(:not(.pickhost)) {
+		display: none;
+	}
+	.pickhost {
+		display: flex;
+		flex-direction: column;
+		height: max(320px, calc(100dvh - var(--stick, 0px) - var(--stageh) - 24px));
+		min-height: 0;
+		min-width: 0;
 	}
 	/* Desktop: fixed-viewport two panes. The stage fills the left, the panel scrolls on its own. */
 	@media (min-width: 900px) {
@@ -558,12 +599,19 @@
 		.panel > * {
 			flex: none;
 		}
+		.panel > .pickhost {
+			flex: 1 1 auto;
+			height: auto;
+		}
+		.panel.picking {
+			overflow: hidden;
+		}
 		.tabs {
 			top: 0;
 			margin: 0;
 		}
-		.panel :global([data-testid='part-sheet']) {
-			scroll-margin-top: 0;
+		.partsTab {
+			--pt: calc(var(--tabsh, 52px) + 4px);
 		}
 	}
 </style>

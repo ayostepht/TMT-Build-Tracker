@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
-	import { fmt, roleOptions, symmetryPeers } from '#lib/domain/index.ts';
+	import { roleLabel, sortRoles } from '#lib/domain/labels.ts';
+	import { roleOptions, symmetryPeers } from '#lib/domain/index.ts';
 	import type { BuildView, PartDef } from '#lib/domain/types.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 
+	/**
+	 * The selected part, as a compact floating chip with a slot-swatch strip. Mounted over the
+	 * bottom of the 3D stage, so it never moves the pinned stage, the tabs or the list.
+	 */
 	let {
 		view,
 		part,
@@ -25,75 +29,69 @@
 	const current = $derived(view.filaments.find((f) => f.key === part.role));
 	const peers = $derived(symmetryPeers(view, part.slug).filter((p) => p.slug !== part.slug));
 	const inactive = $derived(!view.parts.some((p) => p.slug === part.slug));
+	const slotName = $derived(roleLabel(part.role, current));
+	const guide = $derived(part.guideRefs.map((g) => `p. ${g.page}`).join(', '));
+	const mats = $derived(part.allowedMaterials.join(' or '));
+	const limited = $derived(options.some((o) => !o.ok));
 </script>
 
 <section class="sheet" aria-label="Part: {part.name}" data-testid="part-sheet">
-	<header>
-		<div>
-			<div class="kicker">{part.section}</div>
-			<h3>{part.name}</h3>
-		</div>
-		<button type="button" class="btn sm" onclick={onclose} aria-label="Close part details">
-			<span aria-hidden="true">×</span> Close
-		</button>
-	</header>
-	<p class="now">
+	<div class="cardtop">
 		{#if current}<Swatch hex={current.hex} tpu={current.tpu} size="mini" />{/if}
-		<span>In slot <b>{roleLabel(part.role, current)}</b></span>
-		{#if current && roleLabel(part.role, current) !== filamentLabel(current, part.role)}<span
-				class="muted">· {filamentLabel(current, part.role)}</span
-			>{/if}
-		{#if part.bomGrams}<span class="muted">· about {fmt(part.bomGrams)} g</span>{/if}
-	</p>
-	{#if noPreview}<p class="muted">This part has no 3D preview. Its color still counts.</p>{/if}
-	{#if inactive}
-		<p class="muted">
-			Not used by this build's current options, so it is hidden in 3D and left out of the totals.
-		</p>
-	{/if}
-	{#if part.allowedMaterials.length}
-		<p class="muted">Prints in {part.allowedMaterials.join(' or ')}.</p>
-	{/if}
-
-	{#if view.canEdit}
-		{#if peers.length}
-			<label class="both">
-				<input type="checkbox" bind:checked={bothSides} />
-				Apply to both sides ({peers.map((p) => p.name).join(', ')})
+		<span class="title" title="{part.name} · {slotName}">
+			<b>{part.name}</b><span class="muted">&nbsp;· {slotName}</span>
+		</span>
+		{#if limited}<span class="only" title="{part.name} needs {mats}">{mats} only</span>{/if}
+		{#if view.canEdit && peers.length}
+			<label class="both" title="Apply to both sides ({peers.map((p) => p.name).join(', ')})">
+				<input
+					type="checkbox"
+					bind:checked={bothSides}
+					aria-label="Apply to both sides ({peers.map((p) => p.name).join(', ')})"
+				/>
+				<span><span class="wide">Both sides</span><span class="narrow">Both</span></span>
 			</label>
 		{/if}
+		{#if part.guideRefs.length}
+			<a
+				class="guide"
+				href={resolve('/(app)/builds/[id]/print', { id: view.build.id })}
+				title="Open the Print tab (guide {guide})"><span class="wide">Guide </span>{guide}</a
+			>
+		{/if}
+		<button type="button" class="x" onclick={onclose} aria-label="Close part details">
+			<span aria-hidden="true">×</span>
+		</button>
+	</div>
+	{#if noPreview || inactive}
+		<p class="note muted">
+			{#if noPreview}No 3D preview for this part. Its color still counts.{/if}
+			{#if inactive}Not used by the current options, so it is hidden in 3D and left out of the
+				totals.{/if}
+		</p>
+	{/if}
+	{#if view.canEdit}
 		<div class="opts" role="group" aria-label="Move to a slot">
 			{#each sortRoles(options, (x) => x.filament.key) as o (o.filament.key)}
-				<div class="opt">
-					<button
-						type="button"
-						class="slotbtn"
-						class:cur={o.filament.key === part.role}
-						disabled={!o.ok}
-						aria-pressed={o.filament.key === part.role}
-						data-role={o.filament.key}
-						onclick={() => onmove(o.filament.key)}
-					>
-						<Swatch hex={o.filament.hex} tpu={o.filament.tpu} />
-						<span class="txt">
-							<b>{roleLabel(o.filament.key, o.filament)}</b>
-							{#if roleLabel(o.filament.key, o.filament) !== filamentLabel(o.filament, o.filament.key)}<span
-									class="muted">{filamentLabel(o.filament, o.filament.key)}</span
-								>{/if}
-						</span>
-					</button>
-					{#if o.reason}<span class="why">{o.reason}</span>{/if}
-				</div>
+				<button
+					type="button"
+					class="slotbtn"
+					class:cur={o.filament.key === part.role}
+					disabled={!o.ok}
+					aria-pressed={o.filament.key === part.role}
+					data-role={o.filament.key}
+					title={o.reason ?? undefined}
+					onclick={() => onmove(o.filament.key)}
+				>
+					<span class="lab">
+						<Swatch hex={o.filament.hex} tpu={o.filament.tpu} size="mini" />
+						<span class="rl">{roleLabel(o.filament.key, o.filament)}</span>
+					</span>
+				</button>
 			{/each}
 		</div>
 	{:else}
-		<p class="muted">You have view-only access, so colors cannot be changed.</p>
-	{/if}
-	{#if part.guideRefs.length}
-		<p class="muted">
-			Guide: {part.guideRefs.map((g) => `p. ${g.page}`).join(', ')}
-			· <a href={resolve('/(app)/builds/[id]/print', { id: view.build.id })}>Open Print tab</a>
-		</p>
+		<p class="note muted">View-only access: colors cannot be changed.</p>
 	{/if}
 </section>
 
@@ -102,55 +100,92 @@
 		background: var(--card);
 		border: 1px solid var(--accent);
 		border-radius: 10px;
-		padding: 12px 14px;
+		padding: 5px 6px;
 		display: grid;
-		gap: 8px;
+		gap: 6px;
+		box-shadow: 0 2px 10px rgb(0 0 0 / 0.25);
+		max-width: 100%;
+		box-sizing: border-box;
 	}
-	header {
-		display: flex;
-		justify-content: space-between;
-		gap: 10px;
-		align-items: start;
-	}
-	h3,
-	p {
-		margin: 0;
-	}
-	.now {
+	.cardtop {
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		flex-wrap: wrap;
+		min-width: 0;
+	}
+	.title {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 14px;
 	}
 	.both {
 		display: flex;
-		gap: 8px;
-		align-items: flex-start;
-		font-size: 14px;
+		gap: 4px;
+		align-items: center;
+		font-size: 13px;
+		flex: none;
+		min-height: 32px;
+		cursor: pointer;
+	}
+	.guide {
+		flex: none;
+		font-size: 13px;
+		white-space: nowrap;
+	}
+	.x {
+		flex: none;
+		width: 32px;
+		height: 32px;
+		border: 1px solid var(--line);
+		border-radius: 50%;
+		background: var(--paper);
+		color: var(--ink);
+		font: 600 18px/1 var(--f-body);
+		cursor: pointer;
+		padding: 0;
+	}
+	.x:hover {
+		border-color: var(--accent);
+	}
+	.note {
+		margin: 0;
+		font-size: 12px;
 	}
 	.opts {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-		gap: 8px;
-	}
-	.opt {
-		display: grid;
-		gap: 2px;
-		align-content: start;
+		display: flex;
+		gap: 6px;
+		overflow-x: auto;
+		scrollbar-width: thin;
 	}
 	.slotbtn {
+		flex: 1 1 0;
+		min-width: 74px;
 		display: flex;
-		gap: 8px;
 		align-items: center;
 		text-align: left;
-		padding: 8px 10px;
+		padding: 4px 6px;
 		min-height: 44px;
 		border: 1px solid var(--line);
 		border-radius: 8px;
 		background: var(--paper);
 		color: var(--ink);
 		font: inherit;
+		font-size: 12px;
 		cursor: pointer;
+	}
+	.lab {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+		min-width: 0;
+	}
+	.rl {
+		line-height: 1.1;
+		overflow-wrap: anywhere;
+		font-weight: 600;
 	}
 	.slotbtn:hover:not(:disabled) {
 		border-color: var(--accent);
@@ -160,15 +195,35 @@
 		background: var(--accent-soft);
 	}
 	.slotbtn:disabled {
-		opacity: 0.5;
+		opacity: 0.55;
 		cursor: not-allowed;
 	}
-	.txt {
-		display: grid;
-		min-width: 0;
-	}
-	.why {
-		font-size: 12px;
+	.only {
+		flex: none;
+		font: 600 11px/1 var(--f-body);
+		padding: 3px 6px;
+		border-radius: 999px;
+		border: 1px solid var(--warn);
 		color: var(--warn);
+		white-space: nowrap;
+	}
+	.narrow {
+		display: none;
+	}
+	@media (max-width: 520px) {
+		.wide {
+			display: none;
+		}
+		.narrow {
+			display: inline;
+		}
+		.title b {
+			font-size: 13px;
+		}
+	}
+	@media (min-width: 900px) {
+		.sheet {
+			max-width: 640px;
+		}
 	}
 </style>

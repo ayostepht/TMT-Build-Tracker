@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after design studio redesign round 1 (r31 deployed). Keep this file
+_Last updated: 2026-11-09, after design studio redesign round 2 (r32 deployed). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -79,8 +79,14 @@ Save as design all work as on a build.
   matched filament names, generator collapsed ("Build from your colors"). Global `.bar/.head/.dot/...` in app.css clash
   with component class names: use distinct names.
 - /designs, /designs/[slug] (#use card, sticky Use this design on phone), /studio (New draft, gallery strip).
-- Round 2 (not started): swatch picker (H4), part chip on stage (H3/M5/M6), Save/Share to header + apply a saved design
-  on the tab (D2), a11y pass. Open: picker title "Accent PETG" vs "Accent PETG color"; editableTargets lacks `kind`.
+- Round 2 (r32): picker inside the right pane / under the pinned stage (closest matches, recent, OKLCH hue families
+  in `colorFamily`, neutrals collapsed, one roving tab stop; `approx` flag from `hexSource === 'image'`); part chip +
+  slot strip overlaid on the stage (`PartSheet`), role filter chips + sticky groups in `PartList`; `share/DesignActions`
+  above the tabs ("Saved automatically", Saved designs → apply with confirmation, Share / Save as design dialog); toasts
+  top on phone, bottom-left on desktop. Playwright: use `--reporter=line` (html reporter hangs on failure).
+- Still open:
+  Options section placement (M6), a11y pass (L1-L4), `listDesigns` api helper; picker title stays the role (decided);
+  editableTargets lacks `kind`.
 
 ## Manual plate times (2026-11-09, r29)
 

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { swatches } from '../server/filaments/index.ts';
 import type { SwatchTuple } from './palettes.ts';
-import { chipBrandList, collapseDuplicates, pickerSwatches } from './swatch-picker.ts';
+import {
+	chipBrandList,
+	closestMatches,
+	collapseDuplicates,
+	colorFamily,
+	groupByFamily,
+	isApproxHex,
+	pickerSwatches
+} from './swatch-picker.ts';
 
 const names = (r: { neutrals: { t: SwatchTuple }[]; colorful: { t: SwatchTuple }[] }) =>
 	[...r.neutrals, ...r.colorful].map((e) => `${e.t[0]} ${e.t[1]}`);
@@ -210,5 +218,52 @@ describe('cross-brand merge', () => {
 		const sep = pickerSwatches(items, { brands: [...new Set(items.map((i) => i[0]))].slice(0, 1) });
 		expect(merged.neutrals.length).toBeLessThan(30);
 		expect(sep.neutrals.every((e) => !e.others)).toBe(true);
+	});
+});
+
+describe('picker layout helpers', () => {
+	it('puts colors into hue families', () => {
+		expect(colorFamily('#e53935')).toBe('red');
+		expect(colorFamily('#ff8c00')).toBe('orange');
+		expect(colorFamily('#f2d41c')).toBe('yellow');
+		expect(colorFamily('#2e9e4a')).toBe('green');
+		expect(colorFamily('#12a5a0')).toBe('teal');
+		expect(colorFamily('#1e60d2')).toBe('blue');
+		expect(colorFamily('#7b3fc4')).toBe('purple');
+		expect(colorFamily('#e8509f')).toBe('pink');
+		expect(colorFamily('#6b4423')).toBe('brown');
+	});
+	it('groups in family order and drops empty families', () => {
+		const r = pickerSwatches(
+			[
+				['A', 'Blue', '#1e60d2', 'PETG'],
+				['A', 'Red', '#e53935', 'PETG'],
+				['A', 'Blue2', '#2a50c0', 'PETG']
+			],
+			{}
+		);
+		const g = groupByFamily(r.colorful);
+		expect(g.map((x) => x.id)).toEqual(['red', 'blue']);
+		expect(g[1].entries).toHaveLength(2);
+	});
+	it('lists the closest other colors first', () => {
+		const r = pickerSwatches(
+			[
+				['A', 'Red', '#e53935', 'PETG'],
+				['B', 'Near red', '#ee6a5a', 'PETG'],
+				['C', 'Blue', '#1e60d2', 'PETG'],
+				['D', 'Same', '#e53935', 'PETG']
+			],
+			{ brands: ['A', 'B', 'C'] }
+		);
+		const c = closestMatches(r.colorful, '#e53935', 2);
+		expect(c.map((e) => e.t[1])).toEqual(['Near red', 'Blue']);
+	});
+	it('flags image-estimated hexes', () => {
+		expect(isApproxHex(['Schoolhouse Spools', 'Schoolbus', '#f2b705', 'PETG', 'approx'])).toBe(
+			true
+		);
+		expect(isApproxHex(['Overture', 'Red', '#e53935', 'PETG'])).toBe(false);
+		expect(isApproxHex(['X', 'Y', '#e53935', 'PETG', 'matte approx'])).toBe(true);
 	});
 });
