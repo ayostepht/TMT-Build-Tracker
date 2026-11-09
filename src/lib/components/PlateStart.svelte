@@ -37,6 +37,7 @@
 					aria-label="Start {name(slug)} run on plate {plate.number}"
 					onclick={() => start([slug])}>Start {name(slug)} run</button
 				>
+				<StartOnPrinter slugs={[slug]} plateNumber={plate.number} />
 			{/each}
 		{:else}
 			<button

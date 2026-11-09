@@ -88,6 +88,8 @@ export function setDeduction(
 export interface ExpectedPlate {
 	buildId: string;
 	plate: number;
+	/** The part(s) the next job covers (perPartRuns plates: one color per print). */
+	partSlugs?: string[];
 	at: number;
 }
 export function getExpected(db: Db, orgId: string, printerId: string): ExpectedPlate | null {

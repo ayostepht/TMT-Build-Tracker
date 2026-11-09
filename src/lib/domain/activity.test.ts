@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeActivity } from './activity.ts';
+import { describeActivity, describeActivitySegments } from './activity.ts';
 import { filamentLabel } from './labels.ts';
 import { makeView } from './fixtures.ts';
 import type { ActivityItem } from './types.ts';
@@ -146,5 +146,77 @@ describe('template role names', () => {
 		expect(filamentLabel({ name: 'Primary PETG', material: 'PETG' })).toBe('Primary PETG');
 		expect(filamentLabel({ name: 'Tire TPU', material: 'TPU 95A' })).toBe('Tire TPU');
 		expect(filamentLabel({ name: 'Overture Blue', material: 'PETG' })).toBe('PETG Overture Blue');
+	});
+});
+
+describe('describeActivitySegments', () => {
+	const segs = (kind: string, payload: Record<string, unknown> = {}) =>
+		describeActivitySegments(act(kind, payload), view);
+
+	it('joined text equals describeActivity for every kind', () => {
+		const rows: [string, Record<string, unknown>][] = [
+			['build.create', {}],
+			['part.status', { slug: part.slug, to: 'Printing' }],
+			['part.update', { slug: part.slug, assigneeUserId: 'u2' }],
+			['printing.start', { slugs: [part.slug, part2.slug] }],
+			['printing.stop', { slugs: [] }],
+			['run.add', { plateNumber: 13, result: 'Success', grams: 40 }],
+			['run.add', { partSlugs: [part.slug, 'nope'], result: 'Failed' }],
+			['run.update', { partSlug: part.slug, newPartSlug: part2.slug, note: 'x' }],
+			['run.delete', { plateNumber: 2, recomputed: [{ slug: part.slug, to: 'To print' }] }],
+			['run.undo', { plateNumber: 2 }],
+			['plate.slicer', { number: 4, slicerGrams: 12 }],
+			['printer.job.start', { printer: 'CC', plateNumber: 5, fileName: 'a.3mf' }],
+			['printer.job.done', { plateNumber: 5, auto: true, grams: 3 }],
+			['printer.job.link', { plateNumber: 6 }],
+			['printer.job.release', { plateNumber: 7 }],
+			['design.update', { moves: [{ slug: part.slug, role: 'accent', roleName: 'Blue' }] }],
+			['something.new', {}]
+		];
+		for (const [kind, payload] of rows) {
+			const a = act(kind, payload);
+			expect(
+				describeActivitySegments(a, view)
+					.map((s) => s.text)
+					.join('')
+			).toBe(describeActivity(a, view));
+		}
+	});
+
+	it('tags plate references in every kind that names a plate', () => {
+		const plateOf = (kind: string, payload: Record<string, unknown>) =>
+			segs(kind, payload).filter((s) => s.plate !== undefined);
+		for (const kind of ['run.add', 'run.update', 'run.delete', 'run.undo']) {
+			expect(plateOf(kind, { plateNumber: 13 })).toEqual([{ text: 'plate 13', plate: 13 }]);
+		}
+		for (const [kind, payload] of [
+			['plate.slicer', { number: 13, slicerGrams: 5 }],
+			['printer.job.start', { plateNumber: 13 }],
+			['printer.job.done', { plateNumber: 13 }],
+			['printer.job.link', { plateNumber: 13 }],
+			['printer.job.release', { plateNumber: 13 }]
+		] as const) {
+			expect(plateOf(kind, payload)).toEqual([{ text: 'plate 13', plate: 13 }]);
+		}
+		expect(plateOf('run.add', {})).toEqual([]);
+	});
+
+	it('tags known part names and leaves fallbacks and unknown slugs plain', () => {
+		expect(segs('part.status', { slug: part.slug, to: 'Printing' })).toEqual([
+			{ text: 'Steph set ' },
+			{ text: part.name, part: part.slug },
+			{ text: ' to Printing' }
+		]);
+		const multi = segs('printing.start', { slugs: [part.slug, part2.slug] });
+		expect(multi.filter((s) => s.part).map((s) => s.part)).toEqual([part.slug, part2.slug]);
+		const unknown = segs('part.status', { slug: 'no-such-part', to: 'Printed' });
+		expect(unknown.some((s) => s.part)).toBe(false);
+		expect(unknown.map((s) => s.text).join('')).toBe('Steph set a part to Printed');
+		expect(segs('printing.start', {}).some((s) => s.part)).toBe(false);
+	});
+
+	it('never lets payload text forge a link', () => {
+		const s = segs('build.update', { name: '\u0001plate:9\u0002fake\u0003' });
+		expect(s.every((x) => x.plate === undefined && x.part === undefined)).toBe(true);
 	});
 });

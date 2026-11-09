@@ -54,6 +54,20 @@ Save as design all work as on a build.
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
 
+## Run choice on per-part plates, Activity links (2026-11-08, r25)
+
+- perPartRuns plates (rims, plate 13) print one part per physical print. Printer job link/expect take optional
+  `partSlugs` (validated, editors); linking an already-linked job changes parts (dropped → `stopPrinting`).
+  Default without parts (`defaultRunParts`, `domain/run-choice.ts`): the one part already Printing, else the
+  first part not Printed with runs left; never all. `runBody` logs a single chosen part as `partSlug`.
+  UI: "Which run?" in `PrinterJobs`, "<part> · <color>, run X of Y" + Change in `PrinterLive`, StartOnPrinter
+  per part in `PlateStart`. Dismissing a job with no logged run releases its Printing parts
+  (`printer.job.release`) unless another active job covers them.
+- Activity links: `describeActivitySegments` (plates and known parts tagged; control chars stripped from
+  payload text so it can't forge links); `ActivityList` links to `/print#plate-N` / `#part-<slug>`. Print tab
+  applies non-persisted overrides (group Plate, role All, Hide printed off), scrolls and flashes 2 s; touching
+  a toolbar control drops its override. Unknown hashes do nothing.
+
 ## Printer camera (2026-11-07, r23)
 
 - Overview Now printing card (`PrinterLive` → `CameraTile.svelte`) shows the linked printer's camera while
@@ -265,6 +279,11 @@ Answered on 2026-11-04 (keep for context):
   LAN/Tailscale/NPM; printers often allow few stream clients); snapshot every few s by default, tap for
   live; per-printer camera URL, auto-filled for Elegoo (`http://<ip>:3031/video`, MJPEG, verified 200 on
   the maintainer's Centauri Carbon), Moonraker/OctoPrint webcam URLs, manual override.
+
+- In progress 2026-11-08 (not in r25): TPU slots renamed by role everywhere in the UI (`soft` → "Primary
+  (TPU)": cushions, soft headrest, grips; `tire` → "Accent (TPU)": tires, harness/straps; keys unchanged);
+  generator gives colored tires/straps (dark ~1 in 3), several ready-made palettes too; fix: preferred brand
+  no longer wins when another brand is much closer (locked #1e88e5 with Sunlu gave Sunlu Purple).
 
 ## Next steps (suggested order)
 

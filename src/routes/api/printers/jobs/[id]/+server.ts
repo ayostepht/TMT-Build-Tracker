@@ -26,7 +26,7 @@ export const POST: RequestHandler = (event) =>
 			case 'link': {
 				if (typeof body.buildId !== 'string' || typeof body.plateNumber !== 'number')
 					throw new ApiError(400, 'buildId and plateNumber are required');
-				linkJob(db, id, row.org, userId, body.buildId, body.plateNumber);
+				linkJob(db, id, row.org, userId, body.buildId, body.plateNumber, body.partSlugs);
 				return {};
 			}
 			case 'unlink':
@@ -43,7 +43,7 @@ export const POST: RequestHandler = (event) =>
 				return { runId, spoolmanWarning: sp.warning };
 			}
 			case 'dismiss':
-				dismissJob(db, id, row.org);
+				dismissJob(db, id, row.org, userId);
 				return {};
 			default:
 				throw new ApiError(400, 'Unknown action');

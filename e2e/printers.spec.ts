@@ -353,3 +353,79 @@ test('top nav Printers reaches the printers page from a build; a personal worksp
 	await page.getByRole('link', { name: 'Integrations', exact: true }).click();
 	await expect(page.getByTestId('autolog')).toBeVisible();
 });
+
+test('per-part plate: link a job to one rim color, Now printing shows it, Change moves it, a stopped print frees the part', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	const SHOTS_RUN = 'data/shots-run-choice';
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'runchoice');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Rim Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	const state = async (slug: string) =>
+		(await (await page.request.get(`/api/builds/${buildId}/view`)).json()).state[slug].status;
+
+	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+	mock.printing('rim-job.gcode', 8);
+
+	// Pick the rim plate: a "Which run?" chooser appears, defaulting to the first part with runs left.
+	const link = page.getByTestId('link-plate');
+	await expect(link).toBeVisible({ timeout: 20_000 });
+	await link.selectOption('13');
+	const chooser = page.getByTestId('run-chooser');
+	await expect(chooser).toBeVisible();
+	await expect(chooser).toContainText('Which run?');
+	await expect(page.getByTestId('link-run')).toHaveValue('rims-1-4');
+	await expect(chooser.locator('option').first()).toContainText('0 of 2 done');
+	await page.screenshot({ path: `${SHOTS_RUN}/chooser-390.png` });
+	await page.getByTestId('link-run').selectOption('rims-2-3');
+	await page.getByTestId('link-run-go').click();
+
+	const live = page.getByTestId('printer-live');
+	await expect(live).toBeVisible({ timeout: 15_000 });
+	await expect(live.getByTestId('live-part-text')).toContainText('run 1 of 2');
+	await expect(live.getByTestId('live-part-change')).toHaveValue('rims-2-3');
+	expect(await state('rims-2-3')).toBe('Printing');
+	expect(await state('rims-1-4')).not.toBe('Printing');
+	const before = await live.getByTestId('live-part-text').innerText();
+
+	// Change to the other color: Printing moves with it.
+	await live.getByTestId('live-part-change').selectOption('rims-1-4');
+	await expect(live.getByTestId('live-part-change')).toHaveValue('rims-1-4');
+	await expect(live.getByTestId('live-part-text')).not.toHaveText(before);
+	await expect.poll(() => state('rims-1-4')).toBe('Printing');
+	expect(await state('rims-2-3')).not.toBe('Printing');
+
+	await live.scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS_RUN}/now-printing-390.png` });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await live.scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS_RUN}/now-printing-1440.png` });
+
+	// Stopped print, prompt dismissed, nothing logged: the part is no longer Printing.
+	mock.set({ printStatus: 8, machineStatus: [0] });
+	await expect(page.getByTestId('confirm-print-log')).toContainText('was stopped', {
+		timeout: 15_000
+	});
+	await page.getByRole('button', { name: 'Dismiss' }).click();
+	await expect(page.getByTestId('confirm-print-log')).toBeHidden();
+	await expect.poll(() => state('rims-1-4')).toBe('To print');
+	mock.set({ printStatus: 0, machineStatus: [0], file: '' });
+});

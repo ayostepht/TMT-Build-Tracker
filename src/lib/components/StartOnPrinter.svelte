@@ -17,7 +17,9 @@
 	async function go(printerId: string) {
 		await ctx.act(async () => {
 			await printing(ctx.id, { action: 'start', slugs });
-			await expectOnPrinter(printerId, ctx.id, plateNumber);
+			// perPartRuns plates print one part (color) per job: tell the server which.
+			const perPart = ctx.view.plates.find((p) => p.number === plateNumber)?.perPartRuns;
+			await expectOnPrinter(printerId, ctx.id, plateNumber, perPart ? slugs : undefined);
 		});
 	}
 </script>

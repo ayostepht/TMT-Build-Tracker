@@ -7,6 +7,8 @@
  */
 import { and, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 import { fileMentionsBuild, matchPlate, plateRunGrams } from '#lib/domain/printer-match.ts';
+import { stopPrinting } from '#lib/domain/actions.ts';
+import { defaultRunParts } from '#lib/domain/run-choice.ts';
 import { today } from '#lib/domain/format.ts';
 import type { BuildView, PartPatch } from '#lib/domain/types.ts';
 import type { PrinterJobView, PrinterStatus } from '#lib/printers/status.ts';
@@ -49,6 +51,32 @@ function samePrinterBuild(view: BuildView, printer: PrinterRow): boolean {
 interface Candidate {
 	view: BuildView;
 	plate: number;
+	/** Parts the user chose (an expectation or a manual link); otherwise the default rule applies. */
+	partSlugs?: string[];
+}
+
+/**
+ * Validate a client-sent part list for a plate: a non-empty list of active parts on that plate.
+ * Returns undefined when none was sent.
+ */
+export function checkPartSlugs(
+	view: BuildView,
+	plateNumber: number,
+	raw: unknown
+): string[] | undefined {
+	if (raw === undefined || raw === null) return undefined;
+	const plate = view.plates.find((p) => p.number === plateNumber);
+	if (
+		!Array.isArray(raw) ||
+		!raw.length ||
+		raw.length > 100 ||
+		!raw.every((x) => typeof x === 'string')
+	)
+		throw new ApiError(400, 'partSlugs must be a non-empty list of part slugs');
+	const slugs = [...new Set(raw as string[])];
+	if (!plate || !slugs.every((s) => plate.parts.includes(s) && view.state[s]))
+		throw new ApiError(400, 'partSlugs must be active parts on that plate');
+	return slugs;
 }
 
 /** Find the build plate a printer file belongs to, or null when it is not clear. */
@@ -59,7 +87,11 @@ export function findPlateForFile(db: Db, printer: PrinterRow, fileName: string):
 	if (exp && Date.now() - exp.at < 12 * 3600_000) {
 		const v = loadBuildView(db, exp.buildId, actor);
 		if (v && v.build.kind === 'build' && v.plates.some((p) => p.number === exp.plate))
-			return { view: v, plate: exp.plate };
+			return {
+				view: v,
+				plate: exp.plate,
+				partSlugs: exp.partSlugs?.filter((s) => v.state[s])
+			};
 	}
 	const rows = db
 		.select({ id: builds.id, phase: builds.phase })
@@ -145,7 +177,15 @@ function attach(
 	setExpected(db, printer.organizationId, printer.id, null);
 	const plate = c.view.plates.find((p) => p.number === c.plate)!;
 	const printingNow = plate.parts.filter((s) => c.view.state[s]?.status === 'Printing');
-	const slugs = printingNow.length ? printingNow : plate.parts.filter((s) => c.view.state[s]);
+	const slugs = c.partSlugs?.length
+		? c.partSlugs
+		: (defaultRunParts(c.view, c.plate) ??
+			(printingNow.length ? printingNow : plate.parts.filter((s) => c.view.state[s])));
+	// Changing the parts of a job that is already linked: the dropped ones stop printing.
+	const dropped =
+		job.buildId === c.view.build.id && job.plateNumber === c.plate
+			? (job.partSlugs ?? []).filter((s) => !slugs.includes(s))
+			: [];
 	const started = job.startedAt ?? new Date();
 	const est =
 		status.elapsedSec != null && status.remainingSec != null
@@ -169,7 +209,7 @@ function attach(
 			payload,
 			patches:
 				job.status === 'printing' || job.status === 'paused'
-					? linkPatches(view, slugs, started, est)
+					? [...stopPrinting(view, dropped), ...linkPatches(view, slugs, started, est)]
 					: []
 		};
 	};
@@ -265,10 +305,15 @@ function runBody(
 	note?: string
 ) {
 	const plate = view.plates.find((p) => p.number === job.plateNumber);
+	// A perPartRuns plate counts runs per part: one part is logged as `partSlug`.
+	const single = plate?.perPartRuns && job.partSlugs?.length === 1 ? job.partSlugs[0] : null;
 	const subset =
-		job.partSlugs && plate && job.partSlugs.length < plate.parts.length ? job.partSlugs : null;
+		!single && job.partSlugs && plate && job.partSlugs.length < plate.parts.length
+			? job.partSlugs
+			: null;
 	return {
 		plateNumber: job.plateNumber,
+		partSlug: single,
 		partSlugs: subset,
 		date: today(now),
 		result,
@@ -457,7 +502,8 @@ export function linkJob(
 	orgId: string,
 	userId: string,
 	buildId: string,
-	plateNumber: number
+	plateNumber: number,
+	partSlugs?: unknown
 ): void {
 	const { job, printer } = getJobForOrg(db, jobId, orgId);
 	const b = db
@@ -471,11 +517,12 @@ export function linkJob(
 	if (view.build.kind === 'draft')
 		throw new ApiError(400, 'Drafts cannot be linked to print jobs.');
 	if (!view.plates.some((p) => p.number === plateNumber)) throw new ApiError(400, 'Unknown plate');
+	const chosen = checkPartSlugs(view, plateNumber, partSlugs);
 	const status = (printer.lastStatus ?? {
 		state: 'printing',
 		progress: job.progress
 	}) as unknown as PrinterStatus;
-	attach(db, printer, job, { view, plate: plateNumber }, status, false, userId);
+	attach(db, printer, job, { view, plate: plateNumber, partSlugs: chosen }, status, false, userId);
 	emitPrinterEvent(orgId, { type: 'job', printerId: printer.id });
 }
 
@@ -493,6 +540,44 @@ export function unlinkJob(db: Db, jobId: string, orgId: string): void {
 			at: new Date().toISOString()
 		});
 	emitPrinterEvent(orgId, { type: 'job', printerId: printer.id });
+}
+
+/**
+ * A job ended and nothing was logged for it: its parts that are still Printing (and that no other
+ * active job covers) go back to their status from before the print.
+ */
+function releaseParts(db: Db, printer: PrinterRow, job: JobRow, userId?: string) {
+	if (!job.buildId || !job.partSlugs?.length) return;
+	const buildId = job.buildId;
+	const others = db
+		.select()
+		.from(printerJobs)
+		.where(
+			and(
+				eq(printerJobs.buildId, buildId),
+				ne(printerJobs.id, job.id),
+				inArray(printerJobs.status, ['printing', 'paused'])
+			)
+		)
+		.all();
+	const held = new Set(others.flatMap((o) => o.partSlugs ?? []));
+	const slugs = job.partSlugs.filter((s) => !held.has(s));
+	const body = (_tx: Db, view: BuildView) => ({
+		kind: 'printer.job.release',
+		payload: {
+			printer: printer.name,
+			printerId: printer.id,
+			jobId: job.id,
+			plateNumber: job.plateNumber,
+			fileName: job.fileName
+		},
+		patches: stopPrinting(view, slugs)
+	});
+	if (userId) mutateBuild(db, buildId, userId, body);
+	else {
+		const actor = getMemberActor(db, printer.organizationId);
+		if (actor) mutateBuildSystem(db, buildId, actor, printer.name, body);
+	}
 }
 
 /** "Confirm print log": the user accepts or adjusts what a finished job should be logged as. */
@@ -540,11 +625,13 @@ export function confirmJob(
 	return runId;
 }
 
-export function dismissJob(db: Db, jobId: string, orgId: string): void {
+export function dismissJob(db: Db, jobId: string, orgId: string, userId?: string): void {
 	const { job, printer } = getJobForOrg(db, jobId, orgId);
 	if (job.status === 'printing' || job.status === 'paused')
 		throw new ApiError(409, 'The print is still running');
+	const unlogged = !job.runId;
 	db.update(printerJobs).set({ runId: DISMISSED }).where(eq(printerJobs.id, jobId)).run();
+	if (unlogged) releaseParts(db, printer, job, userId);
 	if (job.buildId)
 		emitBuildEvent(job.buildId, {
 			type: 'changed',

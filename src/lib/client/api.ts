@@ -653,7 +653,7 @@ export const buildPrinterJobs = (buildId: string) =>
 export const jobAction = (
 	jobId: string,
 	body:
-		| { action: 'link'; buildId: string; plateNumber: number }
+		| { action: 'link'; buildId: string; plateNumber: number; partSlugs?: string[] }
 		| { action: 'unlink' | 'dismiss' }
 		| {
 				action: 'confirm';
@@ -696,8 +696,17 @@ export const linkFilamentSpool = (
 	spoolName?: string
 ) =>
 	call('PUT', `${b(buildId)}/filaments/${encodeURIComponent(role)}/spool`, { spoolId, spoolName });
-export const expectOnPrinter = (printerId: string, buildId: string, plateNumber: number) =>
-	call('POST', `/api/printers/${encodeURIComponent(printerId)}/expect`, { buildId, plateNumber });
+export const expectOnPrinter = (
+	printerId: string,
+	buildId: string,
+	plateNumber: number,
+	partSlugs?: string[]
+) =>
+	call('POST', `/api/printers/${encodeURIComponent(printerId)}/expect`, {
+		buildId,
+		plateNumber,
+		partSlugs
+	});
 
 // ---- kit status (any signed-in user)
 

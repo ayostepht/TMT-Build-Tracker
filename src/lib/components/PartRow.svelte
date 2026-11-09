@@ -11,11 +11,15 @@
 	import PlateStart from './PlateStart.svelte';
 	import LogPlateButton from './LogPlateButton.svelte';
 
-	let { part }: { part: PartDef } = $props();
+	let { part, focus = false }: { part: PartDef; focus?: boolean } = $props();
 
 	const ctx = getBuildCtx();
 	let open = $state(false);
 	let copied = $state('Copy');
+	// Set by the Print tab when a #part-slug link points here: expand the detail and flash the row.
+	$effect(() => {
+		if (focus) open = true;
+	});
 
 	const st = $derived(ctx.view.state[part.slug]);
 	const fil = $derived(ctx.filament(part.role));
@@ -63,7 +67,7 @@
 	let editOpen = $state(false);
 </script>
 
-<div class="row" data-s={st?.status} data-id={part.slug}>
+<div class="row" class:flash={focus} id="part-{part.slug}" data-s={st?.status} data-id={part.slug}>
 	<div class="row-main">
 		<div>
 			<div class="pname">

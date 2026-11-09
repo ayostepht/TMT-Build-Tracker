@@ -733,6 +733,30 @@ label.field input {
 	display: grid;
 	gap: 6px;
 }
+.group,
+.row {
+	scroll-margin-top: 72px;
+}
+.flash {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+	border-radius: 8px;
+	animation: flash-fade 2s ease-out forwards;
+}
+@keyframes flash-fade {
+	0%,
+	60% {
+		outline-color: var(--accent);
+	}
+	100% {
+		outline-color: transparent;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.flash {
+		animation: none;
+	}
+}
 .row {
 	background: var(--card);
 	border: 1px solid var(--line);
@@ -1189,6 +1213,15 @@ label.field input {
 }
 .activity li:last-child {
 	border-bottom: 0;
+}
+.activity .alink {
+	color: var(--accent);
+	text-decoration: underline;
+	text-decoration-color: var(--line);
+	text-underline-offset: 2px;
+}
+.activity .alink:hover {
+	text-decoration-color: var(--accent);
 }
 .activity time {
 	color: var(--muted);

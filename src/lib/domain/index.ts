@@ -15,3 +15,4 @@ export * from './printer-match.ts';
 export * from './spool-split.ts';
 export * from './time-estimate.ts';
 export * from './pace.ts';
+export * from './run-choice.ts';

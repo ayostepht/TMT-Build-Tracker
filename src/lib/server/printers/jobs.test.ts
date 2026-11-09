@@ -318,3 +318,140 @@ describe('supervisor', () => {
 		sup.stop();
 	});
 });
+
+describe('per-part runs (wheel rims: one color per print)', () => {
+	const FILE = 'Plate 13 - Wheel Rim.gcode';
+	const jobPartSlugs = () => jobs()[0].partSlugs;
+	const startUnlinked = () => {
+		processStatus(db, printerId, printing('benchy.gcode', 5, 300), at(5));
+		db.update(printers)
+			.set({ lastStatus: printing('benchy.gcode', 5, 300) as never })
+			.run();
+		return jobs()[0].id;
+	};
+
+	it('auto-link picks one part, not the whole plate', () => {
+		processStatus(db, printerId, printing(FILE, 5, 300), at(5));
+		expect(jobs()[0]).toMatchObject({ buildId, plateNumber: 13 });
+		expect(jobPartSlugs()).toEqual(['rims-1-4']);
+		expect(partStatus('rims-1-4')).toBe('Printing');
+		expect(partStatus('rims-2-3')).toBe('To print');
+	});
+
+	it('auto-link uses the part that is already Printing', () => {
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['rims-2-3'] });
+		processStatus(db, printerId, printing(FILE, 5, 300), at(5));
+		expect(jobPartSlugs()).toEqual(['rims-2-3']);
+		expect(partStatus('rims-1-4')).toBe('To print');
+	});
+
+	it('links with chosen partSlugs and rejects bad ones', () => {
+		const id = startUnlinked();
+		for (const bad of [[], ['handle-left'], ['rims-1-4', 'nope'], 'rims-1-4', [3]])
+			expect(() => linkJob(db, id, 'org1', 'owner', buildId, 13, bad)).toThrow(/partSlugs/);
+		expect(jobs()[0].buildId).toBeNull();
+		linkJob(db, id, 'org1', 'owner', buildId, 13, ['rims-2-3']);
+		expect(jobPartSlugs()).toEqual(['rims-2-3']);
+		expect(partStatus('rims-2-3')).toBe('Printing');
+		expect(partStatus('rims-1-4')).toBe('To print');
+	});
+
+	it('changing the parts moves Printing to the new part', () => {
+		const id = startUnlinked();
+		linkJob(db, id, 'org1', 'owner', buildId, 13, ['rims-2-3']);
+		linkJob(db, id, 'org1', 'owner', buildId, 13, ['rims-1-4']);
+		expect(jobPartSlugs()).toEqual(['rims-1-4']);
+		expect(partStatus('rims-1-4')).toBe('Printing');
+		expect(partStatus('rims-2-3')).toBe('To print');
+		expect(
+			db.select().from(activity).where(eq(activity.kind, 'printer.job.link')).all()
+		).toHaveLength(2);
+	});
+
+	it('an expectation with partSlugs links the next job to that part', async () => {
+		const { setExpected } = await import('../org-settings');
+		setExpected(db, 'org1', printerId, {
+			buildId,
+			plate: 13,
+			partSlugs: ['rims-2-3'],
+			at: Date.now()
+		});
+		processStatus(db, printerId, printing('whatever.gcode', 5, 300), at(5));
+		expect(jobs()[0]).toMatchObject({ plateNumber: 13 });
+		expect(jobPartSlugs()).toEqual(['rims-2-3']);
+	});
+
+	it("finish logs a run only for the chosen part, with that part's grams", () => {
+		setOrgSettings(db, 'org1', { autoLogPrints: true });
+		updatePlate(db, buildId, 'owner', 13, { slicerByPart: { 'rims-1-4': 140, 'rims-2-3': 148 } });
+		const id = startUnlinked();
+		linkJob(db, id, 'org1', 'owner', buildId, 13, ['rims-2-3']);
+		processStatus(
+			db,
+			printerId,
+			{ state: 'done', progress: 100, fileName: 'benchy.gcode', elapsedSec: 7200 },
+			at(130)
+		);
+		const runs = db.select().from(printRuns).all();
+		expect(runs).toHaveLength(1);
+		expect(runs[0]).toMatchObject({
+			plateNumber: 13,
+			partSlug: 'rims-2-3',
+			partSlugs: null,
+			grams: 148,
+			result: 'Success'
+		});
+		// One of two runs for that part: still Printing; the other part untouched.
+		expect(partStatus('rims-2-3')).toBe('Printing');
+		expect(partStatus('rims-1-4')).toBe('To print');
+	});
+
+	it('dismissing a stopped print puts its parts back from Printing', () => {
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['rims-1-4', 'rims-2-3'] });
+		processStatus(db, printerId, printing(FILE, 5, 300), at(5));
+		// Both were Printing already; the job covers whatever it linked.
+		const covered = jobPartSlugs()!;
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 9, fileName: FILE },
+			at(20)
+		);
+		expect(jobs()[0].status).toBe('cancelled');
+		// Not released before the prompt is dismissed (the user may still log it).
+		for (const s of covered) expect(partStatus(s)).toBe('Printing');
+		dismissJob(db, jobs()[0].id, 'org1', 'owner');
+		expect(jobs()[0].runId).toBe('dismissed');
+		for (const s of covered) expect(partStatus(s)).toBe('To print');
+		expect(
+			db.select().from(activity).where(eq(activity.kind, 'printer.job.release')).all()
+		).toHaveLength(1);
+	});
+
+	it('dismissing keeps parts that another active job still covers', () => {
+		const id = startUnlinked();
+		linkJob(db, id, 'org1', 'owner', buildId, 13, ['rims-1-4']);
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 9, fileName: 'benchy.gcode' },
+			at(20)
+		);
+		const first = jobs()[0];
+		// A second job takes the same part.
+		processStatus(db, printerId, printing('b.gcode', 5, 300), at(30));
+		const second = jobs().find((j) => j.id !== first.id)!;
+		linkJob(db, second.id, 'org1', 'owner', buildId, 13, ['rims-1-4']);
+		dismissJob(db, first.id, 'org1', 'owner');
+		expect(partStatus('rims-1-4')).toBe('Printing');
+	});
+
+	it('confirm logs only the chosen part too', () => {
+		updatePlate(db, buildId, 'owner', 13, { slicerByPart: { 'rims-1-4': 140, 'rims-2-3': 148 } });
+		processStatus(db, printerId, printing(FILE, 5, 300), at(5));
+		processStatus(db, printerId, { state: 'done', progress: 100, fileName: FILE }, at(60));
+		confirmJob(db, jobs()[0].id, 'org1', 'owner', {});
+		const [run] = db.select().from(printRuns).all();
+		expect(run).toMatchObject({ partSlug: 'rims-1-4', grams: 140 });
+	});
+});

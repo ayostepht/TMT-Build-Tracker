@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { onMount, tick } from 'svelte';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { filamentLabel, groupParts } from '#lib/domain/index.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
@@ -36,6 +36,56 @@
 	} catch {
 		/* ignore */
 	}
+
+	// A #plate-N / #part-slug link (Activity feed) shows its target for this visit only: the
+	// overrides below win over the saved toolbar, are never written to localStorage, and are
+	// dropped as soon as the user touches the matching control.
+	let ovBy = $state<By | null>(null);
+	let ovRole = $state<string | null>(null);
+	let ovHide = $state<boolean | null>(null);
+	let flash = $state<string | null>(null);
+	let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+	const curBy = $derived(ovBy ?? by);
+	const curRole = $derived(ovRole ?? role);
+	const curHide = $derived(ovHide ?? hidePrinted);
+
+	async function followHash() {
+		const m = /^#(plate|part)-(.+)$/.exec(location.hash);
+		if (!m) return;
+		let slug = m[2];
+		try {
+			slug = decodeURIComponent(slug);
+		} catch {
+			/* keep raw */
+		}
+		const id = `${m[1]}-${slug}`;
+		if (m[1] === 'plate') {
+			if (!/^\d+$/.test(slug) || !ctx.view.plates.some((p) => String(p.number) === slug)) return;
+			ovBy = 'plate';
+		} else if (!ctx.view.parts.some((p) => p.slug === slug)) return;
+		ovRole = 'all';
+		ovHide = false;
+		flash = null;
+		await tick();
+		const el = document.getElementById(id);
+		if (!el) return;
+		const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+		el.scrollIntoView({ block: 'center', behavior: calm ? 'auto' : 'smooth' });
+		flash = id;
+		clearTimeout(flashTimer);
+		flashTimer = setTimeout(() => (flash = null), 2000);
+	}
+	afterNavigate(() => void followHash());
+	onMount(() => {
+		const on = () => void followHash();
+		window.addEventListener('hashchange', on);
+		return () => {
+			window.removeEventListener('hashchange', on);
+			clearTimeout(flashTimer);
+		};
+	});
+
 	$effect(() => {
 		const v = JSON.stringify({ role, hidePrinted, group: by });
 		try {
@@ -46,9 +96,13 @@
 	});
 
 	const activeRole = $derived(
-		role === 'all' || ctx.view.filaments.some((f) => f.key === role) ? role : 'all'
+		curRole === 'all' || ctx.view.filaments.some((f) => f.key === curRole) ? curRole : 'all'
 	);
-	const groups = $derived(groupParts(ctx.view, by, { role: activeRole, hidePrinted }));
+	const groups = $derived(groupParts(ctx.view, curBy, { role: activeRole, hidePrinted: curHide }));
+	const pickRole = (k: string) => {
+		role = k;
+		ovRole = null;
+	};
 </script>
 
 {#snippet startFor(key: string)}
@@ -64,24 +118,43 @@
 			class="chip"
 			type="button"
 			aria-pressed={activeRole === 'all'}
-			onclick={() => (role = 'all')}>All filament</button
+			onclick={() => pickRole('all')}>All filament</button
 		>
 		{#each ctx.view.filaments as f (f.key)}
 			<button
 				class="chip"
 				type="button"
 				aria-pressed={activeRole === f.key}
-				onclick={() => (role = f.key)}
+				onclick={() => pickRole(f.key)}
 			>
 				<Swatch hex={f.hex} tpu={f.tpu} size="mini" />
 				{filamentLabel(f)}
 			</button>
 		{/each}
 	</div>
-	<label class="tog"><input type="checkbox" bind:checked={hidePrinted} /> Hide printed</label>
+	<label class="tog"
+		><input
+			type="checkbox"
+			bind:checked={
+				() => curHide,
+				(v) => {
+					hidePrinted = v;
+					ovHide = null;
+				}
+			}
+		/> Hide printed</label
+	>
 	<label class="tog"
 		>Group by
-		<select bind:value={by}>
+		<select
+			bind:value={
+				() => curBy,
+				(v) => {
+					by = v;
+					ovBy = null;
+				}
+			}
+		>
 			<option value="role">Filament</option>
 			<option value="section">Section</option>
 			<option value="plate">Plate</option>
@@ -92,17 +165,22 @@
 
 <main>
 	{#each groups as g (g.key)}
-		<section class="group" style="margin-bottom:14px">
+		<section
+			class="group"
+			class:flash={flash !== null && flash === `plate-${g.key}`}
+			id={curBy === 'plate' && /^\d+$/.test(g.key) ? `plate-${g.key}` : undefined}
+			style="margin-bottom:14px"
+		>
 			<div class="group-head">
 				<h2>{g.title}</h2>
 				<span class="meta num">{g.meta}</span>
-				{#if by === 'plate'}
+				{#if curBy === 'plate'}
 					{@render startFor(g.key)}
 				{/if}
 			</div>
 			<div class="rows">
 				{#each g.parts as p (p.slug)}
-					<PartRow part={p} />
+					<PartRow part={p} focus={flash === `part-${p.slug}`} />
 				{/each}
 			</div>
 		</section>

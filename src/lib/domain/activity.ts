@@ -6,7 +6,39 @@ type Names = Pick<BuildView, 'parts' | 'filaments' | 'members' | 'runs'> &
 	Partial<Pick<BuildView, 'variantGroups'>>;
 type Obj = Record<string, unknown>;
 
-const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+// Link markers travel inside the plain strings built below and are split into segments at the end.
+// They use control characters, which are stripped from every user-supplied string first.
+const OPEN = '\u0001';
+const MID = '\u0002';
+const CLOSE = '\u0003';
+// eslint-disable-next-line no-control-regex
+const clean = (v: string): string => v.replace(/[\u0001-\u0003]/g, '');
+const mark = (kind: 'plate' | 'part', ref: string | number, text: string): string =>
+	`${OPEN}${kind}:${ref}${MID}${clean(text)}${CLOSE}`;
+const plateRef = (n: number): string => mark('plate', n, `plate ${n}`);
+
+/** A piece of an activity sentence; `plate` / `part` (slug) mark the pieces that can link to the Print tab. */
+export interface Segment {
+	text: string;
+	plate?: number;
+	part?: string;
+}
+
+const MARKED = new RegExp(`${OPEN}(plate|part):([^${MID}]*)${MID}([^${CLOSE}]*)${CLOSE}`, 'g');
+
+function toSegments(s: string): Segment[] {
+	const out: Segment[] = [];
+	let at = 0;
+	for (const m of s.matchAll(MARKED)) {
+		if (m.index > at) out.push({ text: s.slice(at, m.index) });
+		out.push(m[1] === 'plate' ? { text: m[3], plate: Number(m[2]) } : { text: m[3], part: m[2] });
+		at = m.index + m[0].length;
+	}
+	if (at < s.length) out.push({ text: s.slice(at) });
+	return out;
+}
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v ? clean(v) || null : null);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 function list(items: string[]): string {
@@ -31,14 +63,32 @@ function recomputedText(v: unknown, part: (slug: unknown) => string): string {
  * generic line so old or future rows never break the list.
  */
 export function describeActivity(a: ActivityItem, view: Names): string {
+	return describeActivitySegments(a, view)
+		.map((x) => x.text)
+		.join('');
+}
+
+/**
+ * The same sentence as `describeActivity`, split so plate references ("plate 13")
+ * and part names that exist in the view can be linked. "a part" / "some parts"
+ * fallbacks and unknown slugs stay plain text.
+ */
+export function describeActivitySegments(a: ActivityItem, view: Names): Segment[] {
+	return toSegments(describeMarked(a, view));
+}
+
+function describeMarked(a: ActivityItem, view: Names): string {
 	const p: Obj = a.payload ?? {};
-	const who = a.userName ?? (typeof p.by === 'string' && p.by ? p.by : 'Someone');
-	const part = (slug: unknown) => view.parts.find((x) => x.slug === slug)?.name ?? 'a part';
+	const who = clean(a.userName ?? (typeof p.by === 'string' && p.by ? p.by : 'Someone'));
+	const part = (slug: unknown) => {
+		const x = view.parts.find((y) => y.slug === slug);
+		return x ? mark('part', x.slug, x.name) : 'a part';
+	};
 	const parts = (slugs: unknown) =>
 		Array.isArray(slugs) && slugs.length ? list(slugs.map((s) => part(s))) : 'some parts';
 	const fil = (role: unknown) => {
 		const f = view.filaments.find((x) => x.key === role);
-		return f ? filamentLabel(f) : (str(role) ?? 'a filament');
+		return f ? clean(filamentLabel(f)) : (str(role) ?? 'a filament');
 	};
 
 	switch (a.kind) {
@@ -82,7 +132,7 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			if (p.comps) bits.push('ticked off components');
 			if ('assigneeUserId' in p) {
 				const m = view.members.find((x) => x.userId === p.assigneeUserId);
-				bits.push(m ? `assigned it to ${m.name}` : 'cleared the assignee');
+				bits.push(m ? `assigned it to ${clean(m.name)}` : 'cleared the assignee');
 			}
 			return `${who} updated ${part(p.slug)}${bits.length ? ` (${list(bits)})` : ''}`;
 		}
@@ -107,7 +157,7 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			const plate = num(p.plateNumber);
 			const target =
 				plate !== null
-					? `plate ${plate}`
+					? plateRef(plate)
 					: Array.isArray(p.partSlugs) && p.partSlugs.length
 						? parts(p.partSlugs)
 						: p.partSlug
@@ -132,7 +182,7 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 		}
 		case 'plate.slicer': {
 			const n = num(p.number);
-			const label = n !== null ? `plate ${n}` : 'a plate';
+			const label = n !== null ? plateRef(n) : 'a plate';
 			const g = num(p.slicerGrams);
 			if (g !== null) return `${who} set the slicer weight of ${label} to ${fmt(g)} g`;
 			if (p.slicerGrams === null) return `${who} cleared the slicer weight of ${label}`;
@@ -165,13 +215,13 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 			const pr = str(p.printer) ?? 'the printer';
 			const plate = num(p.plateNumber);
 			return plate !== null
-				? `${pr} started printing plate ${plate}${str(p.fileName) ? ` (${str(p.fileName)})` : ''}`
+				? `${pr} started printing ${plateRef(plate)}${str(p.fileName) ? ` (${str(p.fileName)})` : ''}`
 				: `${pr} started printing ${str(p.fileName) ?? 'a file'}`;
 		}
 		case 'printer.job.done': {
 			const pr = str(p.printer) ?? 'The printer';
 			const plate = num(p.plateNumber);
-			const target = plate !== null ? `plate ${plate}` : (str(p.fileName) ?? 'a print');
+			const target = plate !== null ? plateRef(plate) : (str(p.fileName) ?? 'a print');
 			const g = num(p.grams);
 			return p.auto
 				? `${pr} finished ${target}; the print was logged automatically${g !== null ? ` (${fmt(g)} g)` : ''}`
@@ -179,7 +229,11 @@ export function describeActivity(a: ActivityItem, view: Names): string {
 		}
 		case 'printer.job.link': {
 			const plate = num(p.plateNumber);
-			return `${who} linked ${str(p.printer) ?? 'a printer'}'s print to ${plate !== null ? `plate ${plate}` : 'a plate'}`;
+			return `${who} linked ${str(p.printer) ?? 'a printer'}'s print to ${plate !== null ? plateRef(plate) : 'a plate'}`;
+		}
+		case 'printer.job.release': {
+			const plate = num(p.plateNumber);
+			return `${who} dismissed ${str(p.printer) ?? 'the printer'}'s stopped print${plate !== null ? ` of ${plateRef(plate)}` : ''}; its parts are no longer marked as printing`;
 		}
 		case 'filament.spool': {
 			return p.spoolId == null

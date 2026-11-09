@@ -2,8 +2,10 @@
 	import { jobAction } from '#lib/client/api.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { fmtRemaining, type PrinterJobView } from '#lib/printers/status.ts';
+	import { defaultRunParts } from '#lib/domain/index.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import ConfirmPrintLog from './ConfirmPrintLog.svelte';
+	import { runChoices, runOptionLabel } from './run-label.ts';
 
 	/**
 	 * Above the Now printing cards: running jobs no one has linked to a plate yet ("Link to
@@ -21,11 +23,28 @@
 	let busy = $state<string | null>(null);
 	let err = $state('');
 
-	async function link(j: PrinterJobView, n: string) {
+	/** Per job: a perPartRuns plate was picked and the run (part) still has to be chosen. */
+	let picking = $state<Record<string, { plate: number; slug: string }>>({});
+
+	function pickPlate(j: PrinterJobView, n: string) {
+		const plate = ctx.view.plates.find((p) => p.number === Number(n));
+		if (plate?.perPartRuns) {
+			picking[j.id] = {
+				plate: plate.number,
+				slug: defaultRunParts(ctx.view, plate.number)?.[0] ?? plate.parts[0]
+			};
+		} else {
+			delete picking[j.id];
+			link(j, Number(n));
+		}
+	}
+
+	async function link(j: PrinterJobView, n: number, partSlugs?: string[]) {
 		busy = j.id;
 		err = '';
 		try {
-			await jobAction(j.id, { action: 'link', buildId: ctx.id, plateNumber: Number(n) });
+			await jobAction(j.id, { action: 'link', buildId: ctx.id, plateNumber: n, partSlugs });
+			delete picking[j.id];
 			await ctx.refresh();
 			await store.load();
 		} catch (e) {
@@ -51,14 +70,36 @@
 				<select
 					disabled={busy === j.id}
 					data-testid="link-plate"
-					onchange={(e) => e.currentTarget.value && link(j, e.currentTarget.value)}
+					onchange={(e) => e.currentTarget.value && pickPlate(j, e.currentTarget.value)}
 				>
 					<option value="">Link to plate…</option>
 					{#each ctx.view.plates as p (p.number)}
-						<option value={p.number}>Plate {p.number}{p.name ? ` · ${p.name}` : ''}</option>
+						<option value={p.number} selected={picking[j.id]?.plate === p.number}
+							>Plate {p.number}{p.name ? ` · ${p.name}` : ''}</option
+						>
 					{/each}
 				</select>
 			</label>
+			{#if picking[j.id]}
+				{@const pk = picking[j.id]}
+				<div class="runpick" data-testid="run-chooser">
+					<label class="sel"
+						><span class="lbl">Which run?</span>
+						<select data-testid="link-run" bind:value={pk.slug} disabled={busy === j.id}>
+							{#each runChoices(ctx.view, pk.plate) as c (c.slug)}
+								<option value={c.slug}>{runOptionLabel(ctx, c)}</option>
+							{/each}
+						</select>
+					</label>
+					<button
+						class="btn sm primary"
+						type="button"
+						data-testid="link-run-go"
+						disabled={busy === j.id}
+						onclick={() => link(j, pk.plate, [pk.slug])}>Link</button
+					>
+				</div>
+			{/if}
 		{/if}
 	</div>
 {/each}
@@ -84,6 +125,18 @@
 		font-family: var(--f-mono);
 		font-size: 12px;
 		overflow-wrap: anywhere;
+	}
+	.runpick {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: flex-end;
+	}
+	.lbl {
+		display: block;
+		font-size: 12px;
+		color: var(--muted);
+		margin-bottom: 2px;
 	}
 	.sel select {
 		padding: 8px;
