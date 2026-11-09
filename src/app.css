@@ -1060,6 +1060,13 @@ label.field input {
 	gap: 10px;
 	box-shadow: 0 0 0 3px var(--run-soft);
 	min-width: 0;
+	/* One shrinkable column: a grid's implicit auto column would grow to the min-content of
+	   the widest child (a long <select> option, an iOS datetime-local) and spill past the card. */
+	grid-template-columns: minmax(0, 1fr);
+}
+.now-card > * {
+	min-width: 0;
+	max-width: 100%;
 }
 .now-head {
 	display: flex;
@@ -1128,12 +1135,13 @@ label.field input {
 }
 .now-grid {
 	display: grid;
-	grid-template-columns: 1.4fr 1fr 1fr;
+	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
 	gap: 8px;
 }
 .now-grid label,
 .now-fin,
 .now-lab {
+	min-width: 0;
 	display: grid;
 	gap: 4px;
 	font-size: 12px;
@@ -1154,6 +1162,19 @@ label.field input {
 	background: var(--card);
 	font-size: 14px;
 	font-variant-numeric: tabular-nums;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+/* iOS Safari gives datetime-local its own intrinsic width and centres the text; let the grid size it. */
+.now-grid input[type='datetime-local'] {
+	-webkit-appearance: none;
+	appearance: none;
+	min-height: 34px;
+	text-align: left;
+}
+.now-grid input[type='datetime-local']::-webkit-date-and-time-value {
+	text-align: left;
 	min-width: 0;
 }
 .now-timer {

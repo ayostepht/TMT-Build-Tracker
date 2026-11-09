@@ -114,6 +114,8 @@
 		padding: 10px 12px;
 		display: grid;
 		gap: 6px;
+		min-width: 0;
+		box-sizing: border-box;
 	}
 	.live-head {
 		display: flex;
@@ -143,13 +145,26 @@
 		font-size: 13px;
 		font-weight: 600;
 	}
+	.chg {
+		min-width: 0;
+		max-width: 100%;
+		flex: 0 1 auto;
+	}
 	.chg select {
+		width: 100%;
+		min-width: 0;
+		text-overflow: ellipsis;
+		box-sizing: border-box;
 		padding: 4px 6px;
 		font-size: 13px;
 		border: 1px solid var(--line);
 		border-radius: 6px;
 		background: var(--paper);
 		max-width: 100%;
+	}
+	.which > span {
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.facts {
 		display: flex;

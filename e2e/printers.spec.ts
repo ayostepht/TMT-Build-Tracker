@@ -406,6 +406,42 @@ test('per-part plate: link a job to one rim color, Now printing shows it, Change
 	expect(await state('rims-1-4')).not.toBe('Printing');
 	const before = await live.getByTestId('live-part-text').innerText();
 
+	// Layout at phone widths: the card uses the full content width and nothing spills out of it.
+	const SHOTS_NOW = 'data/shots-mobile-now';
+	const tag = process.env.SHOT_TAG ?? 'after';
+	for (const w of [390, 360]) {
+		await page.setViewportSize({ width: w, height: 844 });
+		await expect(live).toBeVisible();
+		await page.locator('.now-card').scrollIntoViewIfNeeded();
+		await page.screenshot({ path: `${SHOTS_NOW}/${tag}-${w}.png` });
+		const m = await page.evaluate(() => {
+			const card = document.querySelector('.now-card')!.getBoundingClientRect();
+			const wrap = document.querySelector('.wrap')!;
+			const cs = getComputedStyle(wrap);
+			const contentW = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+			const out: string[] = [];
+			for (const el of document.querySelectorAll('.now-card *')) {
+				const r = el.getBoundingClientRect();
+				if (r.width > 0 && r.right > card.right + 1)
+					out.push(`${el.tagName}.${(el as HTMLElement).className} right=${r.right}`);
+			}
+			return {
+				cardW: card.width,
+				contentW,
+				out,
+				scroll: document.documentElement.scrollWidth,
+				client: document.documentElement.clientWidth
+			};
+		});
+		expect(m.out, `overflowing at ${w}px`).toEqual([]);
+		expect(m.cardW, `card width at ${w}px`).toBeGreaterThanOrEqual(m.contentW - 1);
+		expect(m.scroll, `page scroll at ${w}px`).toBeLessThanOrEqual(m.client);
+	}
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.locator('.now-card').scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS_NOW}/${tag}-1440.png` });
+	await page.setViewportSize({ width: 390, height: 844 });
+
 	// Change to the other color: Printing moves with it.
 	await live.getByTestId('live-part-change').selectOption('rims-1-4');
 	await expect(live.getByTestId('live-part-change')).toHaveValue('rims-1-4');
