@@ -64,7 +64,8 @@ Save as design all work as on a build.
   `--fetch-pages`/`--pages-dir`, `--sample-images` needs sharp, `--hex-overrides`). PETG/PCTG/TPU only, no PLA.
 - Overture: 28 TPU + Matte Digital Blue, store hexes. Schoolhouse: 34 (PETG, PCTG, TPU 95A, refill + matte kept),
   hexes estimated from photos; maintainer will flag any that look wrong. Filascope hexes are category buckets: not used.
-- Next: SpoolmanDB PR (store-exact colors only), drafted for review before opening.
+- SpoolmanDB PR: parked by the maintainer (2026-11-09). Draft branch `overture-tpu-95a` + `PR_DRAFT.md` in
+  `/workspace/spoolmandb-pr` (local only). Blocker: regular 95A spool_weight must be measured per their CONTRIBUTING.
 
 ## Design studio redesign (in progress, uncommitted)
 
