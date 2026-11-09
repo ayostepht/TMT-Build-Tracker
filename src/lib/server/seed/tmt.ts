@@ -55,7 +55,7 @@ export const tmtTemplate: TemplateSeed = {
 		},
 		{
 			key: 'soft',
-			name: 'Soft TPU',
+			name: 'Primary TPU',
 			material: 'TPU 95A',
 			hex: '#0378D0',
 			tpu: true,
@@ -63,7 +63,7 @@ export const tmtTemplate: TemplateSeed = {
 		},
 		{
 			key: 'tire',
-			name: 'Tire TPU',
+			name: 'Accent TPU',
 			material: 'TPU 95A',
 			hex: '#1c1c20',
 			tpu: true,
@@ -598,7 +598,7 @@ export const tmtTemplate: TemplateSeed = {
 			supports: 'No',
 			sourceFile: 'MakerWorld 3mf only (not in STEP pack)',
 			notes: [
-				'The BOM lists navy TPU for the harness; the template defaults it to the Tire TPU role, but any TPU 95A color works.'
+				'The BOM lists navy TPU for the harness; the template defaults it to the Accent TPU role, but any TPU 95A color works.'
 			],
 			components: [
 				{ name: 'Harness Right', settings: '2 walls · 8%' },

@@ -122,6 +122,43 @@ test('camera tile on Now printing: appears while printing, refreshes, goes live,
 	expect(cam.hits.filter((h) => h === '/video').length).toBe(1);
 	expect(cam.maxActive).toBe(1);
 
+	// Collapse: image gone, no camera requests while collapsed, remembered across reload, expand resumes.
+	{
+		await tile.getByTestId('camera-live').click(); // stream on, to prove it is dropped too
+		const toggle = tile.getByTestId('camera-toggle');
+		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+		expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+		await tile.scrollIntoViewIfNeeded();
+		await page.screenshot({ path: 'data/shots-camera-collapse/e2e-collapse-expanded-390.png' });
+		await toggle.click();
+		await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+		await expect(tile.getByTestId('camera-img')).toHaveCount(0);
+		await expect(tile.getByTestId('camera-live')).toHaveCount(0);
+		await page.screenshot({ path: 'data/shots-camera-collapse/e2e-collapse-collapsed-390.png' });
+		await page.waitForTimeout(500); // let an in-flight request settle
+		const reqs: string[] = [];
+		const onReq = (r: { url(): string }) => {
+			if (r.url().includes(`/api/printers/${printer.id}/camera/`)) reqs.push(r.url());
+		};
+		page.on('request', onReq);
+		await page.waitForTimeout(6000);
+		page.off('request', onReq);
+		expect(reqs).toEqual([]);
+		expect(
+			await page.evaluate((k) => localStorage.getItem(k), `tmt-camera-collapsed:${printer.id}`)
+		).toBe('1');
+		await page.reload();
+		await expect(page.getByTestId('printer-live')).toBeVisible({ timeout: 20_000 });
+		await expect(page.getByTestId('camera-toggle')).toHaveAttribute('aria-expanded', 'false');
+		await expect(page.getByTestId('camera-img')).toHaveCount(0);
+		await page.getByTestId('camera-toggle').click();
+		await expect(page.getByTestId('camera-img')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('camera-img')).not.toHaveAttribute('src', /camera\/stream/);
+		await expect(page.getByTestId('camera-live')).toHaveAttribute('aria-pressed', 'false');
+		await page.getByTestId('camera-live').click(); // back to live for the steps below
+		await expect(img).toHaveAttribute('src', /camera\/stream/);
+	}
+
 	// Enlarge: tap the image.
 	await img.click();
 	await expect(page.getByTestId('camera-lightbox-img')).toBeVisible();

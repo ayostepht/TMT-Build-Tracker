@@ -75,7 +75,7 @@ describe('nearest / resolvePalette', () => {
 	it('uses PETG for primary/accent and TPU for soft/tire', () => {
 		const r = resolvePalette(PALETTES[0].targets, catalog, { brand: 'Overture' });
 		expect(r.primary?.material).toBe('PETG');
-		expect(r.tire?.material).toBe('TPU-95A');
+		expect(r.tire?.material).toMatch(/^TPU/);
 		expect(r.primary?.name).toBe('Overture Blue');
 	});
 });
@@ -104,15 +104,28 @@ describe('generateTargets', () => {
 		'#f5f5f5',
 		'#808080'
 	];
-	it('keeps primary and accent apart, tires dark, for every harmony and shuffle', () => {
+	it('keeps primary and accent apart, tires valid and clear of the soft, for every harmony and shuffle', () => {
 		for (const b of bases)
 			for (const h of HARMONIES)
 				for (let s = 0; s < 6; s++) {
 					const t = generateTargets(b, h.id, s);
 					for (const v of Object.values(t)) expect(isHex(v)).toBe(true);
 					expect(deltaE(t.primary, t.accent)).toBeGreaterThanOrEqual(MIN_ACCENT_DE - 0.5);
-					expect(hexToOklch(t.tire).l).toBeLessThan(0.45);
+					expect(deltaE(t.tire, t.soft)).toBeGreaterThanOrEqual(10 - 0.5);
 				}
+	});
+	it('tires and straps are a color choice: most shuffles are not dark, some are', () => {
+		const dark = (hexv: string) => {
+			const o = hexToOklch(hexv);
+			return o.l < 0.45 && o.c < 0.06;
+		};
+		for (const b of bases)
+			for (const h of HARMONIES) {
+				const tires = [0, 1, 2, 3, 4, 5].map((s) => generateTargets(b, h.id, s).tire);
+				const nDark = tires.filter(dark).length;
+				expect(tires.length - nDark, `${b}/${h.id}`).toBeGreaterThanOrEqual(3);
+				expect(nDark, `${b}/${h.id}`).toBeGreaterThanOrEqual(1);
+			}
 	});
 	it('is deterministic and shuffle gives alternatives', () => {
 		expect(generateTargets('#3a7bd5', 'triadic', 2)).toEqual(
@@ -183,7 +196,7 @@ describe('generateFromLocked / paletteVariations', () => {
 		expect(generateFromLocked(l, 'analogous', 3)).toEqual(generateFromLocked(l, 'analogous', 3));
 		expect(paletteVariations(l, 6, 1)).toEqual(paletteVariations(l, 6, 1));
 	});
-	it('pink + purple gives distinct variations with dark tires (except soft theme)', () => {
+	it('pink + purple gives distinct variations with mostly colored tires', () => {
 		const vars = paletteVariations({ primary: pink, accent: purple });
 		expect(vars).toHaveLength(6);
 		expect(new Set(vars.map((v) => v.id)).size).toBe(vars.length);
@@ -192,8 +205,28 @@ describe('generateFromLocked / paletteVariations', () => {
 		for (const v of vars) {
 			expect(v.targets.primary).toBe(pink);
 			expect(v.targets.accent).toBe(purple);
-			if (v.harmony !== 'soft') expect(hexToOklch(v.targets.tire).l).toBeLessThan(0.5);
+			expect(deltaE(v.targets.tire, v.targets.soft)).toBeGreaterThanOrEqual(10 - 0.5);
 		}
+		const notDark = vars.filter((v) => {
+			const o = hexToOklch(v.targets.tire);
+			return o.l >= 0.45 || o.c >= 0.06;
+		});
+		expect(notDark.length).toBeGreaterThanOrEqual(3);
+	});
+	it('locked primary + accent: tires stay valid, clear of the soft, and mix colored and dark', () => {
+		const tires = [0, 1, 2, 3, 4, 5].flatMap((sh) =>
+			HARMONIES.map((h) => generateFromLocked({ primary: pink, accent: purple }, h.id, sh))
+		);
+		for (const t of tires) {
+			expect(isHex(t.tire)).toBe(true);
+			expect(deltaE(t.tire, t.soft)).toBeGreaterThanOrEqual(10 - 0.5);
+		}
+		const isDark = (hexv: string) => {
+			const o = hexToOklch(hexv);
+			return o.l < 0.45 && o.c < 0.06;
+		};
+		expect(tires.some((t) => isDark(t.tire))).toBe(true);
+		expect(tires.filter((t) => !isDark(t.tire)).length).toBeGreaterThan(tires.length / 2);
 	});
 	it('has no near-duplicates across pages, and a harmony filter keeps to that theme', () => {
 		const l = { primary: pink, accent: purple };

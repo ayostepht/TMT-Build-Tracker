@@ -167,3 +167,40 @@ test('design tab: the next step goes to Files, where the export lives', async ({
 	await expect(page.getByTestId('export-card')).toBeVisible();
 	await expect(page.getByTestId('export-flavor')).toBeVisible();
 });
+
+test('the swatch picker hides types palettes never use until asked', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'pickertypes');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('button', { name: 'Add a color' }).click();
+	await page.getByRole('button', { name: /^TPU/ }).click();
+	const picker = page.getByTestId('swatch-picker');
+	const labels = () =>
+		picker
+			.getByTestId('swatch')
+			.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
+	await expect(picker.getByTestId('swatch').first()).toBeVisible();
+	const clean = await labels();
+	expect(clean.length).toBeGreaterThan(10);
+	expect(
+		clean.filter((l) => /93A|silk|carbon|, TPU-?(85|90|93|98)A|\b(64|75)D\b/i.test(l))
+	).toEqual([]);
+	await picker.getByTestId('show-all-types').check();
+	await expect.poll(async () => (await labels()).length).toBeGreaterThan(clean.length);
+	await expect(picker.locator('.sw.excl').first()).toBeVisible();
+	expect((await labels()).some((l) => /not used by palettes/.test(l))).toBe(true);
+	// Brand chips are a multi-select.
+	await picker.getByRole('button', { name: 'Overture', exact: true }).click();
+	await picker.getByRole('button', { name: 'Sunlu', exact: true }).click();
+	await expect(picker.getByRole('button', { name: 'Overture', exact: true })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await expect(picker.getByRole('button', { name: 'Sunlu', exact: true })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await expect(picker.getByRole('button', { name: 'All brands' })).toHaveAttribute(
+		'aria-pressed',
+		'false'
+	);
+});

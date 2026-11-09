@@ -81,7 +81,7 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 	await expect(plate).toContainText('Print 2 times');
 	await expect(plate).toContainText('~2.0 h per run');
 	await expect(plate).toContainText('Primary PETG 120 g per run');
-	await expect(plate).toContainText('Soft TPU 30 g per run');
+	await expect(plate).toContainText('Primary TPU 30 g per run');
 	const img = plate.locator('img.plate-thumb');
 	await expect(img).toBeVisible();
 	await expect

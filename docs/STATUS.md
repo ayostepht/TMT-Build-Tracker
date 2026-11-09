@@ -54,6 +54,23 @@ Save as design all work as on a build.
   and the UI opens the setup wizard at the Export step with earlier steps one click away.
 - Draft Settings shows name, a printer/layout summary linking to Files (the pickers live there), and delete.
 
+## Palettes, picker, camera collapse (2026-11-09, r26)
+
+- TPU slots renamed by role app-wide: kit roles `soft` = "Primary TPU" (cushions, soft headrest, grips), `tire` =
+  "Accent TPU" (tires, harness/straps); palette `SLOT_LABEL` "Primary (TPU)" / "Accent (TPU)". Keys unchanged;
+  existing builds keep their own role names (copied at creation; maintainer: fine, no migration).
+- Generator: `softOfPrimary` (TPU primary follows the primary family), `pickTire` colored tires/straps 4 of 6, dark
+  2 of 6; >= `MIN_TIRE_SOFT_DE` 10 from soft. No ready-made palette has near-black tires (maintainer request).
+- Brand matching: a preferred brand wins only within `max(best + BRAND_MARGIN_DE 6, BRAND_OK_DE 10)`; else the
+  closer brand, relaxed "No close Sunlu match; using …". Preferred brands are a list (`loadPreferredBrands`,
+  localStorage `tmt.preferredBrands.v2`, old single value migrated); `resolvePalette(…, { brands })`.
+- Swatch picker: `domain/swatch-picker.ts` `pickerSwatches` uses `exclusionReason` (TPU 95A only, no silk/matte/…)
+  for both PETG and TPU; "Show all types" toggle (search also reaches hidden ones, tagged); same-brand duplicates
+  (same hex / ΔE < 1) collapse; neutrals grouped by lightness; preferred brands first; brand chips multi-select.
+  Open: near-identical neutrals across brands still listed (~25 blacks) — follow-up.
+- Camera tile collapses ("Camera" header, chevron), remembered per printer (`tmt-camera-collapsed:<id>`); no
+  camera requests while collapsed.
+
 ## Run choice on per-part plates, Activity links (2026-11-08, r25)
 
 - perPartRuns plates (rims, plate 13) print one part per physical print. Printer job link/expect take optional

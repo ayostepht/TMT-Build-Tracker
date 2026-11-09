@@ -43,8 +43,8 @@ export type PaletteTargets = Record<SlotKey, string>;
 export const SLOT_LABEL: Record<SlotKey, string> = {
 	primary: 'Primary',
 	accent: 'Accent',
-	soft: 'Soft (TPU)',
-	tire: 'Tires (TPU)'
+	soft: 'Primary (TPU)',
+	tire: 'Accent (TPU)'
 };
 
 export interface Palette {
@@ -68,119 +68,119 @@ export const PALETTES: Palette[] = [
 	P(
 		'columbus-blues',
 		'Columbus Blues',
-		'The original: deep blue frame, bright blue accents, black tires.',
+		'The original colors: deep blue frame, bright blue accents, sky blue tires and straps.',
 		'#034e89',
 		'#0378d0',
 		'#0378d0',
-		'#1c1c20'
+		'#5fb4f0'
 	),
 	P(
 		'ocean',
 		'Ocean',
-		'Teal and aqua, like a shallow reef.',
+		'Teal and aqua with coral tires and straps, like a shallow reef.',
 		'#0e7c86',
 		'#7fd6e8',
 		'#2aa5c7',
-		'#14202b'
+		'#ff8a65'
 	),
 	P(
 		'sunset',
 		'Sunset',
-		'Warm orange frame with golden accents.',
+		'Warm orange frame with golden accents and raspberry tires.',
 		'#e8553d',
 		'#ffb347',
 		'#f0788f',
-		'#2a1f24'
+		'#c2185b'
 	),
 	P(
 		'forest',
 		'Forest',
-		'Deep green with fresh leaf accents.',
+		'Deep green with fresh leaf accents and bark brown tires.',
 		'#2f6b3a',
 		'#a3c46b',
 		'#6b8f4e',
-		'#1d1f1a'
+		'#8b5a2b'
 	),
 	P(
 		'candy',
 		'Candy',
-		'Bubblegum pink, sky blue and lilac. Very toddler.',
+		'Bubblegum pink, sky blue and lilac with sunny yellow tires. Very toddler.',
 		'#ff5fa2',
 		'#5fd3ff',
 		'#b388ff',
-		'#2b2b33'
+		'#ffe14d'
 	),
 	P(
 		'galaxy',
 		'Galaxy',
-		'Midnight purple with cyan and violet glow.',
+		'Midnight purple with cyan and violet glow, magenta tires.',
 		'#2a1b5e',
 		'#36d1dc',
 		'#7a4dff',
-		'#111118'
+		'#e040a0'
 	),
 	P(
 		'fire-truck',
 		'Fire Truck',
-		'Engine red, white trim, safety yellow.',
+		'Engine red, white trim, safety yellow, red tires and straps.',
 		'#d31f26',
 		'#f2f2f2',
 		'#ffc20e',
-		'#111111'
+		'#d31f26'
 	),
 	P(
 		'mono-graphite',
 		'Mono Graphite',
-		'Understated grays, easy on the eye.',
+		'Understated grays with slate tires, easy on the eye.',
 		'#3a3d44',
 		'#c9ccd2',
 		'#8a8f99',
-		'#17181b'
+		'#5c616b'
 	),
 	P(
 		'pastel',
 		'Pastel',
-		'Soft pink, baby blue and lavender.',
+		'Soft pink, baby blue and lavender with peach tires.',
 		'#f4a6c1',
 		'#a8d8ea',
 		'#c3b1e1',
-		'#5a5a66'
+		'#ffc99a'
 	),
 	P(
 		'superhero',
 		'Superhero',
-		'Hero blue, cape red and a yellow flash.',
+		'Hero blue, cape red and a yellow flash, red tires and straps.',
 		'#1f4fd8',
 		'#e11d2e',
 		'#ffd400',
-		'#111111'
+		'#d81f2a'
 	),
 	P(
 		'princess-pink',
 		'Princess Pink',
-		'Rose pink, gold trim and lilac.',
+		'Rose pink, gold trim and lilac with plum tires.',
 		'#ec6fa6',
 		'#f9d36b',
 		'#c58ce6',
-		'#4a2c4f'
+		'#9c3d8f'
 	),
 	P(
 		'camo',
 		'Camo',
-		'Olive and tan with dark green tires.',
+		'Olive and tan with khaki tires and straps.',
 		'#5a6b3c',
 		'#8b7355',
 		'#3f4a2c',
-		'#1e1e1a'
+		'#a0875f'
 	),
 	P(
 		'sunshine',
 		'Sunshine',
-		'Happy yellow with sky blue.',
+		'Happy yellow with sky blue and red tires.',
 		'#f7c52b',
 		'#3aa0e0',
 		'#ff9f43',
-		'#222226'
+		'#e53935'
 	)
 ];
 
@@ -205,6 +205,8 @@ export interface Match {
 export interface MatchOptions {
 	/** Brand to prefer (case-insensitive); a small penalty for others, not a hard filter. */
 	brand?: string;
+	/** Several preferred brands: a match from any of them counts as preferred. Combined with `brand`. */
+	brands?: string[];
 	/** Entries already used by another slot. */
 	exclude?: Set<string>;
 	/** Colors the match must stay clear of (the primary when matching the accent). */
@@ -212,6 +214,20 @@ export interface MatchOptions {
 }
 
 const BRAND_PENALTY = 12;
+
+/** The preferred brands of the options, trimmed and de-duplicated (case-insensitive, first spelling kept). */
+export function wantedBrands(opts: { brand?: string; brands?: string[] }): string[] {
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const b of [...(opts.brands ?? []), ...(opts.brand ? [opts.brand] : [])]) {
+		const t = b.trim();
+		if (t && !seen.has(t.toLowerCase())) {
+			seen.add(t.toLowerCase());
+			out.push(t);
+		}
+	}
+	return out;
+}
 
 /** Brands that most makers can actually buy; a small nudge when no brand is chosen. */
 export const POPULAR_BRANDS = [
@@ -357,6 +373,11 @@ function materialPenalty(material: string): number {
 	}
 }
 
+/** The preferred brand wins only within this many ΔE of the best match of any brand ... */
+export const BRAND_MARGIN_DE = 6;
+/** ... or when it is this close in absolute terms (a barely visible difference). */
+export const BRAND_OK_DE = 10;
+
 /** A match farther than this (CIEDE2000) triggers the relaxed fallback tiers. */
 export const MAX_STANDARD_DE = 25;
 
@@ -365,11 +386,11 @@ function pick(
 	items: SwatchTuple[],
 	opts: MatchOptions,
 	allowMatte: boolean,
-	onlyBrand?: string
+	want: Set<string>,
+	onlyBrands = false
 ): Match | null {
 	const t = hexToLab(target);
 	const L = labsOf(items);
-	const want = opts.brand?.trim().toLowerCase();
 	const avoid = (opts.avoid ?? []).map((a) => ({ lab: hexToLab(a.hex), min: a.minDe }));
 	let best = -1;
 	let bestScore = Infinity;
@@ -377,7 +398,7 @@ function pick(
 	for (let i = 0; i < items.length; i++) {
 		const it = items[i];
 		if (opts.exclude?.has(tupleKey(it))) continue;
-		if (onlyBrand && it[0].toLowerCase() !== onlyBrand) continue;
+		if (onlyBrands && !want.has(it[0].toLowerCase())) continue;
 		if (!isAllowedFilament(it, allowMatte)) continue;
 		if (avoid.some((a) => deltaE2000(L[i], a.lab) < a.min)) continue;
 		const de = deltaE2000(t, L[i]);
@@ -385,8 +406,8 @@ function pick(
 			de +
 			materialPenalty(it[3]) * 0.5 +
 			(allowMatte && exclusionReason(it) ? 3 : 0) +
-			(want
-				? it[0].toLowerCase() !== want
+			(want.size
+				? !want.has(it[0].toLowerCase())
 					? BRAND_PENALTY
 					: 0
 				: POPULAR.has(it[0].toLowerCase())
@@ -421,12 +442,18 @@ export function nearest(
 	items: SwatchTuple[],
 	opts: MatchOptions = {}
 ): Match | null {
-	const want = opts.brand?.trim().toLowerCase();
+	const names = wantedBrands(opts);
+	const want = new Set(names.map((b) => b.toLowerCase()));
+	const hasWant = want.size > 0;
 	const tiers: { m: Match | null; note: string }[] = [];
-	if (want) tiers.push({ m: pick(target, items, opts, false, want), note: '' });
-	tiers.push({ m: pick(target, items, opts, false), note: 'other brand' });
-	tiers.push({ m: pick(target, items, opts, true), note: 'matte' });
-	const ok = tiers.find((x) => x.m && x.m.de <= MAX_STANDARD_DE);
+	if (hasWant) tiers.push({ m: pick(target, items, opts, false, want, true), note: '' });
+	tiers.push({ m: pick(target, items, opts, false, want), note: 'other brand' });
+	tiers.push({ m: pick(target, items, opts, true, want), note: 'matte' });
+	// The preferred brand only wins when it is nearly as close as the best match of any brand.
+	const anyBest = Math.min(...tiers.slice(hasWant ? 1 : 0).map((x) => x.m?.de ?? Infinity));
+	const brandFar =
+		hasWant && !!tiers[0].m && tiers[0].m.de > Math.max(anyBest + BRAND_MARGIN_DE, BRAND_OK_DE);
+	const ok = tiers.find((x, i) => x.m && x.m.de <= MAX_STANDARD_DE && !(brandFar && i === 0));
 	let chosen = ok;
 	if (!chosen) {
 		for (const x of tiers) if (x.m && (!chosen || x.m.de < chosen.m!.de - 1e-9)) chosen = x;
@@ -439,13 +466,17 @@ export function nearest(
 	const how =
 		chosen.note === 'matte'
 			? ' (matte)'
-			: chosen.note && want
-				? ` (not ${opts.brand!.trim()})`
+			: chosen.note && hasWant
+				? ` (not ${names.join(', ')})`
 				: '';
 	const reason =
-		m.de > MAX_STANDARD_DE
-			? `Closest standard filament isn't close (ΔE ${m.de.toFixed(0)}); using ${m.name}${how}`
-			: `No close standard filament; using ${m.name}${how}`;
+		hasWant && chosen.note === 'other brand' && m.de <= MAX_STANDARD_DE
+			? names.length === 1
+				? `No close ${names[0]} match; using ${m.name}`
+				: `No close match in ${names.join(', ')}; using ${m.name}`
+			: m.de > MAX_STANDARD_DE
+				? `Closest standard filament isn't close (ΔE ${m.de.toFixed(0)}); using ${m.name}${how}`
+				: `No close standard filament; using ${m.name}${how}`;
 	return { ...m, relaxed: true, relaxedReason: reason };
 }
 
@@ -463,7 +494,7 @@ export const MIN_SLOT_GAP = 14;
 export function resolvePalette(
 	targets: PaletteTargets,
 	catalog: CatalogSwatches,
-	opts: { brand?: string } = {}
+	opts: { brand?: string; brands?: string[] } = {}
 ): ResolvedPalette {
 	const used = new Set<string>();
 	const out: ResolvedPalette = {};
@@ -475,7 +506,12 @@ export function resolvePalette(
 				: slot === 'tire' && out.soft
 					? [{ hex: out.soft.hex, minDe: 6 }]
 					: undefined;
-		const m = nearest(targets[slot], items, { brand: opts.brand, exclude: used, avoid });
+		const m = nearest(targets[slot], items, {
+			brand: opts.brand,
+			brands: opts.brands,
+			exclude: used,
+			avoid
+		});
 		if (m) {
 			out[slot] = m;
 			used.add(tupleKey([m.brand, m.colorName, m.hex, m.material]));
@@ -532,6 +568,72 @@ function rng(seed: number) {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const hex = (o: Oklch) => oklchToHex({ ...o, l: clamp(o.l, 0, 1) });
 const dE = (a: string, b: string) => deltaE2000(hexToLab(a), hexToLab(b));
+
+/** Primary (TPU) target: the primary color family, as is, a touch lighter, or a touch darker and shifted. */
+function softOfPrimary(p: Oklch, variant: number, primaryHex: string): string {
+	if (variant === 0) return primaryHex;
+	if (variant === 1) return hex({ ...p, l: Math.min(0.9, p.l + 0.1) });
+	return hex({ l: clamp(p.l - 0.08, 0.3, 0.88), c: Math.max(p.c * 0.9, 0.06), h: p.h + 15 });
+}
+
+/** What the Accent (TPU) tire/strap color follows, in rotation: the accent hue, a third hue, or near black. */
+const TIRE_PLAN = ['accent', 'accent', 'dark', 'third', 'accent', 'dark'] as const;
+
+/** Smallest CIEDE2000 gap kept between the tire and soft targets. */
+export const MIN_TIRE_SOFT_DE = 10;
+
+/** Nudge `tire` in lightness until it is at least MIN_TIRE_SOFT_DE from `otherHex`. */
+function apartFromHex(tire: Oklch, otherHex: string): string {
+	let out = hex(tire);
+	if (dE(out, otherHex) >= MIN_TIRE_SOFT_DE) return out;
+	const dark = tire.l < 0.45 && tire.c < 0.06;
+	const dls = dark ? [0.06, 0.12, 0.18] : [0.12, -0.12, 0.2, -0.2, 0.28, -0.28];
+	const dhs = dark ? [0] : [0, 25, -25, 50, -50];
+	for (const dh of dhs)
+		for (const dl of dls) {
+			const cand = hex({ ...tire, l: clamp(tire.l + dl, 0.12, 0.92), h: tire.h + dh });
+			const d = dE(cand, otherHex);
+			if (d >= MIN_TIRE_SOFT_DE) return cand;
+			if (d > dE(out, otherHex)) out = cand;
+		}
+	return out;
+}
+
+/**
+ * Tire/strap target. Colored (accent hue, primary hue or a third hue, at TPU-friendly lightness and
+ * chroma) in about two of three variations, near black in the rest ("contrast" uses true black).
+ * Deterministic in (harmony, shuffle); kept {@link MIN_TIRE_SOFT_DE} away from the soft target.
+ */
+function pickTire(o: {
+	harmony: Harmony;
+	shuffle: number;
+	hi: number;
+	pHue: number;
+	aHue: number;
+	softHex: string;
+	jit: (amp: number) => number;
+}): string {
+	const { harmony, shuffle, pHue, aHue, softHex, jit } = o;
+	const kind = TIRE_PLAN[(shuffle + o.hi) % TIRE_PLAN.length];
+	if (kind === 'dark') {
+		let t: Oklch = { l: 0.22, c: 0.01, h: 270 };
+		if (harmony === 'contrast') t = { l: 0.18, c: 0.005, h: 270 };
+		else if (harmony === 'soft') t = { l: 0.4, c: 0.015, h: 270 };
+		else if (harmony === 'monochrome') t = { l: 0.24, c: 0.035, h: pHue };
+		else if (shuffle % 2 === 1) t = { l: 0.25, c: 0.04, h: pHue };
+		return apartFromHex(t, softHex);
+	}
+	const diff = ((aHue - pHue + 540) % 360) - 180;
+	let h: number;
+	if (harmony === 'monochrome') h = pHue;
+	else if (kind === 'accent') h = aHue;
+	else h = Math.abs(diff) > 150 ? pHue + 90 : pHue + diff / 2 + 180;
+	const t: Oklch =
+		harmony === 'soft'
+			? { l: 0.74 + jit(0.03), c: 0.08 + Math.abs(jit(0.02)), h }
+			: { l: 0.6 + jit(0.08), c: 0.13 + jit(0.03), h };
+	return apartFromHex(t, softHex);
+}
 
 /**
  * Propose primary/accent (PETG) and soft/tire (TPU) target colors from a base color and a
@@ -597,26 +699,20 @@ export function generateTargets(baseHex: string, harmony: Harmony, shuffle = 0):
 		accent = hex(a);
 	}
 
-	// Soft TPU follows the accent; the variants keep "shuffle" interesting.
-	const sv = shuffle % 3;
-	const soft =
-		sv === 0
-			? accent
-			: sv === 1
-				? hex({ ...hexToOklch(accent), l: Math.min(0.9, hexToOklch(accent).l + 0.1) })
-				: hex({ l: clamp(p.l + 0.12, 0.45, 0.88), c: Math.max(p.c * 0.9, 0.06), h: hue + 20 });
+	// Primary (TPU) is the primary color family; the variants keep "shuffle" interesting.
+	const soft = softOfPrimary(p, shuffle % 3, primary);
 
-	// Tires: near black unless the theme asks for something gentler.
-	const tv = shuffle % 3;
-	let tire: Oklch = { l: 0.22, c: 0.01, h: 270 };
-	if (harmony === 'contrast') tire = { l: 0.18, c: 0.005, h: 270 };
-	else if (harmony === 'soft') tire = { l: 0.4, c: 0.015, h: 270 };
-	else if (harmony === 'monochrome') tire = { l: 0.24, c: 0.035, h: hue };
-	if (shuffle > 0 && harmony !== 'contrast') {
-		if (tv === 1) tire = { l: 0.32, c: 0.012, h: 270 };
-		else if (tv === 2) tire = { l: 0.25, c: 0.04, h: hue };
-	}
-	return { primary, accent, soft, tire: hex(tire) };
+	// Tires and straps: a real color choice, with black in some variations.
+	const tire = pickTire({
+		harmony,
+		shuffle,
+		hi: HARMONIES.findIndex((h) => h.id === harmony),
+		pHue: hue,
+		aHue: hexToOklch(accent).h,
+		softHex: soft,
+		jit
+	});
+	return { primary, accent, soft, tire };
 }
 
 // ---- generator with locked colors
@@ -625,6 +721,11 @@ export function generateTargets(baseHex: string, harmony: Harmony, shuffle = 0):
 export type LockedTargets = Partial<PaletteTargets>;
 
 const DEFAULT_ANCHOR = '#1e88e5';
+
+/** A generated tire, nudged clear of a soft color the user locked (no-op without one). */
+function tireApart(tireHex: string, lockedSoft?: string): string {
+	return lockedSoft ? apartFromHex(hexToOklch(tireHex), lockedSoft) : tireHex;
+}
 
 /** Keep only valid hexes, normalized (lowercase, with #). */
 function cleanLocked(locked: LockedTargets): LockedTargets {
@@ -635,8 +736,6 @@ function cleanLocked(locked: LockedTargets): LockedTargets {
 	}
 	return out;
 }
-
-const hueGap = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
 
 /** Push an accent (Oklch) away from `primaryHex` until the gap is at least MIN_ACCENT_DE. */
 function withGap(primaryHex: string, a: Oklch): string {
@@ -668,33 +767,10 @@ function deriveSoftTire(
 	const a = hexToOklch(accent);
 	const pHue = isNeutral(primary) ? a.h : p.h;
 	const aHue = isNeutral(accent) ? p.h : a.h;
-	const sv = (shuffle + hi) % 4;
-	let soft: string;
-	if (sv === 0) soft = accent;
-	else if (sv === 1) soft = hex({ ...a, l: Math.min(0.9, a.l + 0.1 + Math.abs(jit(0.04))) });
-	else if (sv === 2)
-		soft = hex({
-			l: clamp((p.l + a.l) / 2 + 0.06 + jit(0.05), 0.45, 0.88),
-			c: Math.max(p.c * 0.9, 0.07),
-			h: pHue + 20 + jit(10)
-		});
-	else {
-		// A hue between the two, or opposite the primary when they are close together.
-		const diff = hueGap(pHue, aHue);
-		const mid = diff < 60 ? pHue + 180 : pHue + (((aHue - pHue + 540) % 360) - 180) / 2;
-		soft = hex({ l: clamp(0.7 + jit(0.06), 0.5, 0.88), c: Math.max(0.1, (p.c + a.c) / 2), h: mid });
-	}
+	const soft = softOfPrimary({ ...p, h: pHue }, (shuffle + hi) % 3, primary);
 
-	const tv = (shuffle + hi) % 3;
-	let tire: Oklch = { l: 0.22, c: 0.01, h: 270 };
-	if (harmony === 'contrast') tire = { l: 0.18, c: 0.005, h: 270 };
-	else if (harmony === 'soft') tire = { l: 0.4, c: 0.015, h: 270 };
-	else if (harmony === 'monochrome') tire = { l: 0.24, c: 0.035, h: pHue };
-	if (harmony !== 'contrast' && harmony !== 'soft') {
-		if (tv === 1) tire = { l: 0.3 + jit(0.02), c: 0.012, h: 270 };
-		else if (tv === 2) tire = { l: 0.25, c: 0.04, h: pHue };
-	}
-	return { soft, tire: hex(tire) };
+	const tire = pickTire({ harmony, shuffle, hi, pHue, aHue, softHex: soft, jit });
+	return { soft, tire };
 }
 
 /**
@@ -722,7 +798,7 @@ export function generateFromLocked(
 			primary: locked.primary,
 			accent,
 			soft: locked.soft ?? g.soft,
-			tire: locked.tire ?? g.tire
+			tire: locked.tire ?? tireApart(g.tire, locked.soft)
 		};
 	}
 
@@ -743,7 +819,12 @@ export function generateFromLocked(
 		locked.primary || locked.accent
 			? deriveSoftTire(primary, accent, harmony, shuffle)
 			: { soft: g.soft, tire: g.tire };
-	return { primary, accent, soft: locked.soft ?? st.soft, tire: locked.tire ?? st.tire };
+	return {
+		primary,
+		accent,
+		soft: locked.soft ?? st.soft,
+		tire: locked.tire ?? tireApart(st.tire, locked.soft)
+	};
 }
 
 export interface PaletteVariation {

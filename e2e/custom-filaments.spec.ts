@@ -66,7 +66,7 @@ test('custom filaments: add from the swatch picker, reuse on another build, edit
 
 	// Delete with a confirmation.
 	await picker2.getByRole('button', { name: 'Delete TestBrand Lime Burst' }).click();
-	await picker2.getByRole('button', { name: 'Keep' }).click();
+	await picker2.getByRole('button', { name: 'Keep', exact: true }).click();
 	await expect(picker2.getByTestId('my-filament')).toHaveCount(1);
 	await picker2.getByRole('button', { name: 'Delete TestBrand Lime Burst' }).click();
 	await picker2.getByRole('button', { name: 'Delete', exact: true }).click();

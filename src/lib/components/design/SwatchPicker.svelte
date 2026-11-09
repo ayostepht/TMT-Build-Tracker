@@ -5,8 +5,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { suggestName } from '#lib/filament-catalog.ts';
-	import { compareByHue, isNeutral } from '#lib/domain/color.ts';
 	import type { SwatchTuple } from '#lib/domain/palettes.ts';
+	import { chipBrandList, pickerReason, pickerSwatches } from '#lib/domain/swatch-picker.ts';
 	import {
 		customBrands,
 		customFamily,
@@ -16,7 +16,7 @@
 	import { deleteCustomFilament, listCustomFilaments } from '#lib/client/custom-filaments.ts';
 	import CustomFilamentForm from './CustomFilamentForm.svelte';
 	import {
-		POPULAR_BRANDS,
+		loadPreferredBrands,
 		loadRecent,
 		loadSwatches,
 		rememberRecent,
@@ -38,7 +38,7 @@
 		mode?: 'edit' | 'new';
 		family?: Family;
 		current?: PickedFilament | null;
-		/** The slot's material ("TPU 95A"); decides which types show by default. */
+		/** The slot's material ("TPU 95A"), passed on to the add-a-filament form. */
 		slotMaterial?: string;
 		/** The build's workspace: its custom filaments show first and "Add a filament" saves into it. */
 		organizationId?: string;
@@ -51,7 +51,8 @@
 	let items = $state<SwatchTuple[]>([]);
 	let failed = $state(false);
 	let loading = $state(true);
-	let brand = $state('');
+	let brands = $state<string[]>([]);
+	let preferred = $state<string[]>([]);
 	let q = $state('');
 	let allTypes = $state(false);
 	let recent = $state<SwatchTuple[]>([]);
@@ -70,6 +71,7 @@
 
 	onMount(() => {
 		recent = loadRecent();
+		preferred = loadPreferredBrands();
 		if (organizationId)
 			listCustomFilaments(organizationId).then(
 				(l) => (mine = l),
@@ -101,44 +103,34 @@
 	});
 
 	const lc = (s: string) => s.toLowerCase();
-	const norm = (m: string) => m.toLowerCase().replace(/[^a-z0-9]/g, '');
 	const famLabel = $derived(family === 'tpu' ? 'TPU' : 'PETG');
-	const wantMat = $derived(norm(slotMaterial));
-	const isBase = (m: string) => {
-		const n = norm(m);
-		return n === 'petg' || n === 'tpu' || (wantMat !== '' && n === wantMat);
-	};
-	const hasOther = $derived(items.some((i) => !isBase(i[3])));
 
-	// Brand chips: the user's recent brands, then popular ones, the rest in a menu.
+	// Brand chips: preferred and selected brands, then the user's recent ones, then popular ones; the rest in a menu.
 	const brandList = $derived([...new Set(items.map((i) => i[0]))]);
-	const byLc = $derived(
-		Object.fromEntries(brandList.map((b) => [lc(b), b])) as Record<string, string | undefined>
+	const chipBrands = $derived(
+		chipBrandList({
+			available: brandList,
+			preferred,
+			selected: brands,
+			recent: recent.map((r) => r[0])
+		})
 	);
-	const chipBrands = $derived.by(() => {
-		const out: string[] = [];
-		const add = (b?: string) => b && !out.includes(b) && out.push(b);
-		for (const r of recent) add(byLc[lc(r[0])]);
-		for (const p of POPULAR_BRANDS) add(byLc[lc(p)]);
-		return out.slice(0, 9);
-	});
 	const moreBrands = $derived(
 		brandList.filter((b) => !chipBrands.includes(b)).sort((a, b) => a.localeCompare(b))
 	);
+	function toggleBrand(b: string) {
+		brands = brands.includes(b) ? brands.filter((x) => x !== b) : [...brands, b];
+		cap = 480;
+	}
 
-	const sorted = $derived([...items].sort((a, b) => compareByHue(a[2], b[2])));
-	const shown = $derived.by(() => {
-		const words = lc(q.replace(/^#/, '')).split(/\s+/).filter(Boolean);
-		return sorted.filter((i) => {
-			if (!allTypes && !isBase(i[3])) return false;
-			if (brand && i[0] !== brand) return false;
-			if (!words.length) return true;
-			const hay = `${i[0]} ${i[1]} ${i[3]} ${i[2].slice(1)}`.toLowerCase();
-			return words.every((w) => hay.includes(w));
-		});
-	});
-	const neutrals = $derived(shown.filter((i) => isNeutral(i[2])));
-	const colorful = $derived(shown.filter((i) => !isNeutral(i[2])));
+	const result = $derived(
+		pickerSwatches(items, { showAll: allTypes, brands, preferred, query: q })
+	);
+	const neutrals = $derived(result.neutrals);
+	const colorful = $derived(result.colorful);
+	const hidden = $derived(result.hidden);
+	const searching = $derived(q.trim() !== '');
+	const nothing = $derived(!neutrals.length && !colorful.length);
 	const recentShown = $derived(
 		recent.filter((r) => items.some((i) => i[0] === r[0] && i[1] === r[1] && i[3] === r[3]))
 	);
@@ -147,6 +139,7 @@
 	const isCurrent = (t: SwatchTuple) =>
 		current !== null && lc(current.name) === lc(nameOf(t)) && lc(current.hex) === t[2];
 	const detail = $derived(hover ?? items.find(isCurrent) ?? null);
+	const detailWhy = $derived(detail ? pickerReason(detail) : '');
 
 	function pick(t: SwatchTuple) {
 		hover = t;
@@ -228,7 +221,7 @@
 
 	function setFamily(f: Family) {
 		family = f;
-		brand = '';
+		brands = [];
 		cap = 480;
 	}
 </script>
@@ -294,6 +287,7 @@
 				<span class="dtxt">
 					<b>{nameOf(detail)}</b>
 					<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
+					{#if detailWhy}<span class="why">Palettes skip it: {detailWhy}</span>{/if}
 				</span>
 			{:else if current}
 				<span class="dot" style="background-color:{current.hex}" aria-hidden="true"></span>
@@ -321,8 +315,8 @@
 					<button
 						type="button"
 						class="chip"
-						aria-pressed={brand === ''}
-						onclick={() => (brand = '')}
+						aria-pressed={brands.length === 0}
+						onclick={() => (brands = [])}
 					>
 						All brands
 					</button>
@@ -330,8 +324,8 @@
 						<button
 							type="button"
 							class="chip"
-							aria-pressed={brand === b}
-							onclick={() => (brand = b)}
+							aria-pressed={brands.includes(b)}
+							onclick={() => toggleBrand(b)}
 						>
 							{b}
 						</button>
@@ -339,8 +333,12 @@
 					{#if moreBrands.length}
 						<select
 							aria-label="More brands"
-							value={moreBrands.includes(brand) ? brand : ''}
-							onchange={(e) => (brand = e.currentTarget.value)}
+							value=""
+							onchange={(e) => {
+								const v = e.currentTarget.value;
+								e.currentTarget.value = '';
+								if (v && !brands.includes(v)) toggleBrand(v);
+							}}
 						>
 							<option value="">More brands ({moreBrands.length})</option>
 							{#each moreBrands as b (b)}<option value={b}>{b}</option>{/each}
@@ -348,11 +346,18 @@
 					{/if}
 				</div>
 			</div>
-			{#if hasOther}
+			{#if hidden > 0 || allTypes}
 				<label class="check">
-					<input type="checkbox" bind:checked={allTypes} /> Show all {famLabel} types
-					<span class="muted">(carbon-filled, other hardness)</span>
+					<input type="checkbox" bind:checked={allTypes} data-testid="show-all-types" /> Show all
+					types
+					<span class="muted"
+						>{allTypes
+							? '(tagged ones are not used by palettes)'
+							: `(${hidden} hidden: silk, matte, other hardness, filled …)`}</span
+					>
 				</label>
+			{:else if searching}
+				<p class="muted small">Search also finds types that palettes skip.</p>
 			{/if}
 		</div>
 
@@ -434,7 +439,7 @@
 					The filament catalog could not be loaded. Add your own filament below.
 				</p>
 			{:else}
-				{#if recentShown.length && !q && !brand}
+				{#if recentShown.length && !q && !brands.length}
 					<section aria-label="Recently used">
 						<h3>Recently used</h3>
 						<div class="grid">
@@ -448,8 +453,8 @@
 					<section aria-label="Neutrals">
 						<h3>Neutrals <span class="muted">{neutrals.length}</span></h3>
 						<div class="grid">
-							{#each neutrals.slice(0, cap) as t (t[0] + t[1] + t[2] + t[3])}
-								{@render swatch(t)}
+							{#each neutrals.slice(0, cap) as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
+								{@render swatch(e.t)}
 							{/each}
 						</div>
 					</section>
@@ -458,14 +463,18 @@
 					<section aria-label="Colors">
 						<h3>Colors <span class="muted">{colorful.length}</span></h3>
 						<div class="grid">
-							{#each colorful.slice(0, cap) as t (t[0] + t[1] + t[2] + t[3])}
-								{@render swatch(t)}
+							{#each colorful.slice(0, cap) as e (e.t[0] + e.t[1] + e.t[2] + e.t[3])}
+								{@render swatch(e.t)}
 							{/each}
 						</div>
 					</section>
 				{/if}
-				{#if !shown.length}
-					<p class="muted">No {famLabel} colors match. Try another brand or search.</p>
+				{#if nothing}
+					<p class="muted">
+						No {famLabel} colors match. Try another brand or search{hidden
+							? `, or show all types (${hidden} hidden)`
+							: ''}.
+					</p>
 				{:else if neutrals.length > cap || colorful.length > cap}
 					<button type="button" class="btn sm" onclick={() => (cap += 600)}>Show more</button>
 				{/if}
@@ -475,14 +484,16 @@
 </div>
 
 {#snippet swatch(t: SwatchTuple)}
+	{@const why = pickerReason(t)}
 	<button
 		type="button"
 		class="sw"
 		class:on={isCurrent(t)}
+		class:excl={!!why}
 		style="background-color:{t[2]}"
-		aria-label="{nameOf(t)}, {t[3]}, {t[2]}"
+		aria-label="{nameOf(t)}, {t[3]}, {t[2]}{why ? `, not used by palettes: ${why}` : ''}"
 		aria-pressed={isCurrent(t)}
-		title="{nameOf(t)} · {t[3]} · {t[2]}"
+		title="{nameOf(t)} · {t[3]} · {t[2]}{why ? ` · Not used by palettes: ${why}` : ''}"
 		data-testid="swatch"
 		onclick={() => pick(t)}
 		onpointerenter={() => (hover = t)}
@@ -620,6 +631,29 @@
 	.sw:focus-visible {
 		transform: scale(1.12);
 		border-color: var(--ink);
+	}
+	.sw {
+		position: relative;
+	}
+	/* Small tag on swatches that palettes never pick (silk, matte, other hardness ...). */
+	.sw.excl::after {
+		content: '!';
+		position: absolute;
+		right: -4px;
+		top: -4px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--card);
+		color: var(--ink);
+		border: 1px solid var(--ink);
+		font: 700 10px/12px var(--f-body);
+		text-align: center;
+		pointer-events: none;
+	}
+	.why {
+		color: var(--muted);
+		font-size: 12px;
 	}
 	.sw.on {
 		border-color: var(--accent);

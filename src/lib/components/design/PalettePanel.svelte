@@ -26,7 +26,7 @@
 		type ResolvedPalette,
 		type SlotKey
 	} from '#lib/domain/palettes.ts';
-	import { loadCatalog, loadPreferredBrand, savePreferredBrand } from '#lib/client/swatches.ts';
+	import { loadCatalog, loadPreferredBrands, savePreferredBrands } from '#lib/client/swatches.ts';
 
 	let {
 		view,
@@ -43,7 +43,7 @@
 
 	let catalog = $state<CatalogSwatches | null>(null);
 	let failed = $state(false);
-	let brand = $state('');
+	let preferred = $state<string[]>([]);
 	let busy = $state(false);
 
 	// Generator
@@ -100,7 +100,7 @@
 	};
 
 	onMount(() => {
-		brand = loadPreferredBrand();
+		preferred = loadPreferredBrands();
 		const p = view.filaments.find((f) => f.key === 'primary');
 		if (p && isHex(p.hex)) setLocked({ primary: normHex(p.hex) });
 		loadCatalog(view.build.organizationId).then(
@@ -110,19 +110,24 @@
 		return () => clearTimeout(settleTimer);
 	});
 
-	const brands = $derived.by(() => {
+	const allBrands = $derived.by(() => {
 		if (!catalog) return [];
 		return [...new Set([...catalog.petg, ...catalog.tpu].map((t) => t[0]))].sort((a, b) =>
 			a.localeCompare(b)
 		);
 	});
 
+	function setPreferred(next: string[]) {
+		preferred = next;
+		savePreferredBrands(next);
+	}
+
 	const slotMap = $derived(paletteSlots(view.filaments));
 	const resolvedPremade = $derived.by(() => {
 		const c = catalog;
 		if (!c) return {} as Record<string, ResolvedPalette | undefined>;
 		return Object.fromEntries(
-			PALETTES.map((p) => [p.id, resolvePalette(p.targets, c, { brand })])
+			PALETTES.map((p) => [p.id, resolvePalette(p.targets, c, { brands: preferred })])
 		) as Record<string, ResolvedPalette | undefined>;
 	});
 
@@ -130,15 +135,16 @@
 	let memo: Record<string, ResolvedPalette> = {};
 	let memoSize = 0;
 	function resolveMemo(c: CatalogSwatches, t: PaletteTargets): ResolvedPalette {
-		const key = `${brand}|${SLOTS.map((s) => t[s]).join(',')}`;
-		let r = memo[key];
+		const key = `${preferred.join('|')}#`;
+		const k2 = `${key}|${SLOTS.map((s) => t[s]).join(',')}`;
+		let r = memo[k2];
 		if (!r) {
 			if (memoSize > 300) {
 				memo = {};
 				memoSize = 0;
 			}
-			r = resolvePalette(t, c, { brand });
-			memo[key] = r;
+			r = resolvePalette(t, c, { brands: preferred });
+			memo[k2] = r;
 			memoSize++;
 		}
 		return r;
@@ -247,20 +253,45 @@
 <section class="pal" aria-label="Palettes">
 	<div class="head">
 		<h2>Palettes</h2>
-		<label class="brand">
-			<span class="muted">Prefer brand</span>
-			<select
-				aria-label="Preferred brand"
-				value={brand}
-				onchange={(e) => {
-					brand = e.currentTarget.value;
-					savePreferredBrand(brand);
-				}}
+		<details class="brand" data-testid="brand-pref">
+			<summary
+				aria-label="Preferred brands: {preferred.length ? preferred.join(', ') : 'Any brand'}"
 			>
-				<option value="">Any brand</option>
-				{#each brands as b (b)}<option value={b}>{b}</option>{/each}
-			</select>
-		</label>
+				<span class="muted">Prefer brand</span>
+				<b
+					>{preferred.length === 0
+						? 'Any brand'
+						: preferred.length === 1
+							? preferred[0]
+							: `${preferred[0]} +${preferred.length - 1}`}</b
+				>
+			</summary>
+			<div class="bpop" role="group" aria-label="Preferred brands">
+				<button
+					type="button"
+					class="chip"
+					aria-pressed={preferred.length === 0}
+					onclick={() => setPreferred([])}>Any brand</button
+				>
+				<ul>
+					{#each allBrands as b (b)}
+						<li>
+							<label>
+								<input
+									type="checkbox"
+									checked={preferred.includes(b)}
+									onchange={(e) =>
+										setPreferred(
+											e.currentTarget.checked ? [...preferred, b] : preferred.filter((x) => x !== b)
+										)}
+								/>
+								{b}
+							</label>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		</details>
 	</div>
 	<p class="muted intro">
 		A palette fills the primary, accent, soft and tire slots with the closest real filaments from
@@ -512,13 +543,67 @@
 		font-size: 13px;
 	}
 	.brand {
+		position: relative;
+		font-size: 13px;
+	}
+	.brand summary {
 		display: flex;
 		gap: 6px;
 		align-items: center;
-		font-size: 13px;
+		cursor: pointer;
+		min-height: 36px;
+		padding: 0 10px;
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		background: var(--card);
+		list-style: none;
+		max-width: 100%;
 	}
-	.brand select {
-		max-width: 170px;
+	.brand summary::-webkit-details-marker {
+		display: none;
+	}
+	.brand summary::after {
+		content: '▾';
+		color: var(--muted);
+	}
+	.brand summary b {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 160px;
+	}
+	.bpop {
+		position: absolute;
+		right: 0;
+		z-index: 20;
+		margin-top: 4px;
+		width: min(280px, calc(100vw - 32px));
+		display: grid;
+		gap: 8px;
+		padding: 10px;
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+	}
+	.bpop ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 260px;
+		overflow-y: auto;
+		display: grid;
+	}
+	.bpop label {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		min-height: 36px;
+		cursor: pointer;
+	}
+	.bpop .chip {
+		justify-self: start;
+		cursor: pointer;
 	}
 	.gen {
 		gap: 10px;

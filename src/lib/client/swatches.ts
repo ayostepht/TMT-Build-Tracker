@@ -67,17 +67,68 @@ export function rememberRecent(t: SwatchTuple): SwatchTuple[] {
 
 export { POPULAR_BRANDS } from '#lib/domain/palettes.ts';
 
-const BRAND_KEY = 'tmt.preferredBrand.v1';
-export function loadPreferredBrand(): string {
+const BRAND_KEY = 'tmt.preferredBrands.v2';
+/** The single-brand key of the first version; read once and migrated. */
+const OLD_BRAND_KEY = 'tmt.preferredBrand.v1';
+
+type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+const cleanBrands = (v: unknown): string[] => {
+	if (!Array.isArray(v)) return [];
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const b of v) {
+		const t = typeof b === 'string' ? b.trim() : '';
+		if (t && !seen.has(t.toLowerCase())) {
+			seen.add(t.toLowerCase());
+			out.push(t);
+		}
+	}
+	return out;
+};
+
+/**
+ * Preferred brands from storage. A value saved by the old single-brand setting is migrated
+ * transparently (written in the new format, old key dropped).
+ */
+export function readPreferredBrands(storage: StorageLike): string[] {
 	try {
-		return localStorage.getItem(BRAND_KEY) ?? '';
+		const raw = storage.getItem(BRAND_KEY);
+		if (raw !== null) return cleanBrands(JSON.parse(raw));
+		const old = (storage.getItem(OLD_BRAND_KEY) ?? '').trim();
+		if (!old) return [];
+		const list = [old];
+		try {
+			storage.setItem(BRAND_KEY, JSON.stringify(list));
+			storage.removeItem(OLD_BRAND_KEY);
+		} catch {
+			/* read-only storage: the migrated value is still returned */
+		}
+		return list;
 	} catch {
-		return '';
+		return [];
 	}
 }
-export function savePreferredBrand(b: string) {
+
+export function writePreferredBrands(storage: StorageLike, brands: string[]) {
 	try {
-		localStorage.setItem(BRAND_KEY, b);
+		storage.setItem(BRAND_KEY, JSON.stringify(cleanBrands(brands)));
+		storage.removeItem(OLD_BRAND_KEY);
+	} catch {
+		/* private mode or storage blocked: the choice just doesn't persist */
+	}
+}
+
+export function loadPreferredBrands(): string[] {
+	try {
+		return readPreferredBrands(localStorage);
+	} catch {
+		return [];
+	}
+}
+export function savePreferredBrands(brands: string[]) {
+	try {
+		writePreferredBrands(localStorage, brands);
 	} catch {
 		/* ignore */
 	}

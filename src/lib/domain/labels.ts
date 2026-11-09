@@ -4,7 +4,7 @@ import type { FilamentRole } from './types.ts';
  * Display label for a filament: its name, plus the material only when the name
  * does not already mention it. "Primary PETG" stays as is; "Overture Blue" becomes
  * "PETG Overture Blue". A name that carries the material's base word counts as
- * mentioning it ("Tire TPU" for "TPU 95A"). Case-insensitive.
+ * mentioning it ("Accent TPU" for "TPU 95A"). Case-insensitive.
  */
 export function filamentLabel(
 	f: Pick<FilamentRole, 'name' | 'material'> | undefined | null,

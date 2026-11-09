@@ -100,13 +100,13 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 
 test('filament labels do not repeat the material', async ({ page }) => {
 	await ownerWithBuild(page, 'labels');
-	await expect(page.locator('body')).not.toContainText(/PETG Primary PETG|TPU 95A Tire TPU/);
+	await expect(page.locator('body')).not.toContainText(/PETG Primary PETG|TPU 95A Accent TPU/);
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	await expect(page.locator('.chips').first().locator('.chip')).toHaveText([
 		'All filament',
 		'Accent PETG',
 		'Primary PETG',
-		'Soft TPU',
-		'Tire TPU'
+		'Primary TPU',
+		'Accent TPU'
 	]);
 });

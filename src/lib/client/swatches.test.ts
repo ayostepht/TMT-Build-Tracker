@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadRecent, rememberRecent } from './swatches.ts';
+import {
+	loadPreferredBrands,
+	loadRecent,
+	rememberRecent,
+	savePreferredBrands
+} from './swatches.ts';
 
 const store = new Map<string, string>();
 Object.defineProperty(globalThis, 'localStorage', {
@@ -32,5 +37,36 @@ describe('loadRecent', () => {
 		expect(loadRecent()).toEqual([]);
 		rememberRecent(['B', 'Blue', '#0000ff', 'PETG', 'matte']);
 		expect(loadRecent()).toEqual([['B', 'Blue', '#0000ff', 'PETG', 'matte']]);
+	});
+});
+
+describe('preferred brands', () => {
+	afterEach(() => store.clear());
+	it('round-trips a list', () => {
+		savePreferredBrands(['Sunlu', 'Overture', 'sunlu', ' ']);
+		expect(loadPreferredBrands()).toEqual(['Sunlu', 'Overture']);
+		savePreferredBrands([]);
+		expect(loadPreferredBrands()).toEqual([]);
+	});
+	it('migrates the old single brand transparently', () => {
+		store.set('tmt.preferredBrand.v1', 'Polymaker');
+		expect(loadPreferredBrands()).toEqual(['Polymaker']);
+		expect(store.has('tmt.preferredBrand.v1')).toBe(false);
+		expect(JSON.parse(store.get('tmt.preferredBrands.v2')!)).toEqual(['Polymaker']);
+		expect(loadPreferredBrands()).toEqual(['Polymaker']);
+	});
+	it('the new value wins over a stale old one, and an empty old value means none', () => {
+		store.set('tmt.preferredBrands.v2', JSON.stringify(['Sunlu']));
+		store.set('tmt.preferredBrand.v1', 'Polymaker');
+		expect(loadPreferredBrands()).toEqual(['Sunlu']);
+		store.clear();
+		store.set('tmt.preferredBrand.v1', '');
+		expect(loadPreferredBrands()).toEqual([]);
+	});
+	it('junk is ignored', () => {
+		store.set('tmt.preferredBrands.v2', '{nope');
+		expect(loadPreferredBrands()).toEqual([]);
+		store.set('tmt.preferredBrands.v2', JSON.stringify(['A', 5, null]));
+		expect(loadPreferredBrands()).toEqual(['A']);
 	});
 });

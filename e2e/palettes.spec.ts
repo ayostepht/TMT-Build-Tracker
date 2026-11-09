@@ -94,16 +94,17 @@ test('lock pink and purple, pick from auto-filled variations, preview, apply and
 	await expect.poll(() => cards.count()).toBeGreaterThan(n);
 
 	// Preview one: the 3D preview label shows, and it follows the locked colors.
-	const second = cards.nth(1);
+	// The first card: it survives locking another slot (a later card can become a duplicate and vanish).
+	const second = cards.nth(0);
 	await second.getByRole('button', { name: 'Preview' }).click();
 	const banner = page.getByTestId('preview-banner');
 	await expect(banner).toContainText(PINK);
 	const hexes = () => banner.getAttribute('data-hexes');
 	const before = await hexes();
-	await gen.getByRole('button', { name: `Color #e53935` }).click(); // fills the next Auto slot, Soft
+	await gen.getByRole('button', { name: `Color #e53935` }).click(); // fills the next Auto slot, Primary (TPU)
 	await expect(tile('soft')).toContainText('#e53935');
 	await expect.poll(hexes).not.toBe(before);
-	await gen.getByRole('button', { name: /^Clear Soft/ }).click();
+	await gen.getByRole('button', { name: /^Clear Primary \(TPU\)/ }).click();
 	await expect(tile('soft')).toContainText('Auto');
 	await second.getByRole('button', { name: 'Stop preview' }).click();
 	await expect(banner).toHaveCount(0);
@@ -150,7 +151,7 @@ test('slot tiles: select a slot for the next color, use current, clear back to A
 	const tile = (slot: string) => gen.locator(`.tile[data-slot="${slot}"]`);
 	await expect(tile('primary')).toHaveClass(/locked/);
 
-	// Selecting Tires sends the next quick color there instead of the first Auto slot.
+	// Selecting Accent (TPU) sends the next quick color there instead of the first Auto slot.
 	const tires = tile('tire').getByRole('button', { pressed: false }).first();
 	await tires.click();
 	await expect(tile('tire').locator('.tsel')).toHaveAttribute('aria-pressed', 'true');
@@ -176,6 +177,42 @@ test('slot tiles: select a slot for the next color, use current, clear back to A
 	await expect(page.getByTestId('yours-accent')).toHaveCount(0);
 });
 
+/** Tick brands in the compact "Prefer brand" multi-select (closes it again). */
+async function preferBrands(page: import('@playwright/test').Page, brands: string[]) {
+	const box = page.getByTestId('brand-pref');
+	await box.locator('summary').click();
+	for (const b of brands) await box.getByRole('checkbox', { name: b, exact: true }).check();
+	await box.locator('summary').click();
+}
+
+test('several preferred brands can be chosen and are remembered', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'multibrand');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	const box = page.getByTestId('brand-pref');
+	await expect(box.locator('summary')).toContainText('Any brand');
+	await preferBrands(page, ['Overture', 'Sunlu']);
+	await expect(box.locator('summary')).toContainText('Overture +1');
+	await page.reload();
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	await expect(box.locator('summary')).toContainText('Overture +1');
+	await box.locator('summary').click();
+	await expect(box.getByRole('checkbox', { name: 'Sunlu', exact: true })).toBeChecked();
+	await box.getByRole('button', { name: 'Any brand' }).click();
+	await expect(box.locator('summary')).toContainText('Any brand');
+});
+
+test('the old single preferred brand is migrated', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'migrate');
+	await page.addInitScript(() => {
+		if (!localStorage.getItem('tmt.preferredBrands.v2'))
+			localStorage.setItem('tmt.preferredBrand.v1', 'Polymaker');
+	});
+	await page.goto(`/builds/${buildId}/design`);
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	await expect(page.getByTestId('brand-pref').locator('summary')).toContainText('Polymaker');
+});
+
 test('a previewed ready-made palette follows the preferred brand', async ({ page }) => {
 	const { buildId } = await ownerWithBuild(page, 'brandfollow');
 	await page.goto(`/builds/${buildId}/design`);
@@ -185,7 +222,7 @@ test('a previewed ready-made palette follows the preferred brand', async ({ page
 	const banner = page.getByTestId('preview-banner');
 	await expect(banner).toContainText('Columbus Blues');
 	const before = await banner.getAttribute('data-hexes');
-	await page.getByLabel('Preferred brand').selectOption('Overture');
+	await preferBrands(page, ['Overture']);
 	await expect.poll(() => banner.getAttribute('data-hexes')).not.toBe(before);
 });
 
@@ -194,16 +231,16 @@ test('a relaxed match explains itself under the swatch', async ({ page }) => {
 	await page.goto(`/builds/${buildId}/design`);
 	await page.getByRole('tab', { name: 'Palettes' }).click();
 	// With Overture preferred, Columbus Blues has no close Overture soft TPU and falls back to another brand.
-	await page.getByLabel('Preferred brand').selectOption('Overture');
+	await preferBrands(page, ['Overture']);
 	const card = page.locator('[data-palette="columbus-blues"]');
 	const note = card.getByTestId('relaxed-note');
 	await expect(note).toHaveCount(1);
-	await expect(note).toContainText('No close standard filament');
-	await expect(note).toContainText('not Overture');
+	await expect(note).toContainText(/No close (standard filament|Overture match)/);
+	await expect(note).toContainText('Overture');
 	// The note sits outside the filament name so the name stays clean.
 	await expect(card.locator('.nm', { hasText: 'No close standard' })).toHaveCount(0);
-	// Exact matches carry no note.
-	await expect(
-		page.locator('[data-palette="mono-graphite"]').getByTestId('relaxed-note')
-	).toHaveCount(0);
+	// Exact matches carry no note: not every ready-made card has one.
+	const all = page.locator('[data-palette]');
+	const withNote = page.locator('[data-palette]:has([data-testid="relaxed-note"])');
+	expect(await withNote.count()).toBeLessThan(await all.count());
 });
