@@ -1,7 +1,10 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r36 deployed: printer status refresh). Keep this file
-current: update it at the end of every work session, and before a context reset._
+_Last updated: 2026-11-10, after the design studio redesign (r31-r33), filament supplement (r30), mobile
+performance (r34-r35) and printer status refresh (r36, deployed, commit ac72cda). Keep this file current: update it
+at the end of every work session, and before a context reset._
+
+**Pick up here:** see "Next steps" at the bottom; the maintainer's phone checks for r35/r36 are still unanswered.
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
 specifics (test copy, printer IP, deploy routine) are in the untracked
@@ -29,6 +32,9 @@ Milestone 8 (release) has not started.
 | Spoolman (optional)                                                                                                           | Done, mock-tested only                                                                                                                  |
 | Log a whole plate (Print tab: plate groups, part detail; Ready to print + bulk log removed in r22), pace-adjusted plate times | Done (r19): `LogPlateButton`, `LogRunSheet quick`, `domain/pace.ts`, `PlateTime`; e2e `log-plate`. No screenshots of the multi-run flow |
 | Studio drafts (Studio nav, `builds.kind = 'draft'`, draft tabs, Make this a build)                                            | Done (r20): `/studio`, `drafts.test.ts`, e2e `studio`; open: printer/layout pickers only in Files, not draft Settings                   |
+| Design studio redesign (UX audit: Colors · Palettes · Parts tabs, two-pane desktop, pinned phone stage, picker, part chip)    | Done (r31-r33); open: a11y pass, Options placement, see section below                                                                   |
+| Filament supplement (Schoolhouse Spools, missing Overture TPU), catalog revalidation                                          | Done (r30, r34)                                                                                                                         |
+| Mobile performance and stability (3D updates, palettes, iOS focus zoom, gzip, printer status refresh)                         | Done (r35, r36); awaiting the maintainer's real-iPhone checks                                                                           |
 | Release (Unraid template, domain, public repo)                                                                                | Not started                                                                                                                             |
 
 Latest real-geometry result (Elegoo Centauri Carbon, 256 × 256 with the cutter
@@ -67,7 +73,7 @@ Save as design all work as on a build.
 - SpoolmanDB PR: parked by the maintainer (2026-11-09). Draft branch `overture-tpu-95a` + `PR_DRAFT.md` in
   `/workspace/spoolmandb-pr` (local only). Blocker: regular 95A spool_weight must be measured per their CONTRIBUTING.
 
-## Design studio redesign, round 1 (2026-11-09, r31)
+## Design studio redesign and mobile fixes (2026-11-09/10, r31-r36)
 
 - From a UX audit (Design tab Palettes was 7,013 px / 8.3 phone screens). Maintainer approved D1-D6.
 - Role labels everywhere: `ROLE_LABEL`, `roleLabel(key, filament?)`, `sortRoles` in labels.ts (Primary PETG, Accent
@@ -99,9 +105,18 @@ Save as design all work as on a build.
 - r36: printer store (`printer-store.svelte.ts`) ignored load errors and never refetched after an SSE reconnect, so a
   phone back from background showed a Now card with no PrinterLive/camera. Now: sequence-guarded `load()`, refetch on
   SSE reopen / visibilitychange / online / focus, 30 s poll while acquired, "Printer status unavailable · Retry".
-- Still open:
-  Options section placement (M6), a11y pass (L1-L4), `listDesigns` api helper; picker title stays the role (decided);
-  editableTargets lacks `kind`.
+- Still open (design studio): Options section placement at the bottom of the Parts tab (audit M6, needs a layout
+  decision), a11y pass (audit L1-L4: contrast, focus order, aria), the "3D model and print files: MakeGood · CC0"
+  credit wraps over the chair at 360 px, `listDesigns` helper in `client/api.ts` (`share/ApplyDesign` uses raw fetch),
+  `editableTargets` lacks `kind` (design detail "copy into a build or draft" can't tell them apart), no "start a draft
+  from this design", draft cards have no 3D snapshot. On phone a selected part's chip (94 px) covers the lower third
+  of the 287 px stage; phone toasts sit over the top of the stage for ~8 s (maintainer not yet asked to change).
+- Awaiting the maintainer (asked 2026-11-10): on a real iPhone, does focusing the picker search still zoom/pan
+  sideways; do orbit and tap-to-select feel right; after backgrounding the home-screen app, does the 3D view come
+  back lit (or offer "Reload 3D view") and do colors load (or offer "Try again"); does the Now card show PrinterLive
+  and the camera after a reload (r36). Product calls offered, not answered: a PWA manifest/standalone mode.
+- UX audit report: `docs/ux-audit-design-studio-2026-11.md` (findings C1-L4, wireframes, decisions D1-D7; its
+  screenshots were in a session scratchpad and are gone).
 
 ## Manual plate times (2026-11-09, r29)
 
@@ -220,6 +235,14 @@ Save as design all work as on a build.
 - Palettes/generator exclude matte, silk, transparent, glow, marble, wood, glitter, rock
   textures, multi-color, CF/GF and non-95A TPU (strength). Manual picks are unrestricted.
 - Spoolman stays optional ("just another thing to update").
+- Design tab (2026-11-09): tabs Colors | Palettes | Parts (Palettes was a drawer in r31-r32; the maintainer wanted it
+  more visible). Slots always show the role ("Primary PETG", "Accent PETG", "Primary TPU", "Accent TPU") with the
+  filament as subtitle; the picker title is the role (keep). "Save as design" is for sharing (edits autosave); undo
+  stays palette-only; the generator is collapsed by default.
+- Filament catalog: PETG/PCTG/TPU only from vendor supplements, no PLA. Schoolhouse Spools stays (estimated hexes,
+  marked "Approx. color"; the maintainer flags wrong ones) and is a popular brand (sells TMT kits).
+- Action links are buttons or clickable badges (`.btn.go`, `.btn.back`, `.btn.ghost`, `.pill-link`); plain text
+  links only inside sentences.
 - Printers are read-only. The one exception (maintainer, 2026-11-07): Elegoo SDCP Cmd 386 `{"Enable":1}` to turn the
   camera stream on when someone views it (the printer answers "camera not ready" otherwise; OctoEverywhere does
   the same). Never send anything that moves, heats, pauses, stops or starts a print.
@@ -373,6 +396,8 @@ Answered on 2026-11-04 (keep for context):
 
 ## Next steps (suggested order)
 
+0. Act on the maintainer's answers to the r35/r36 phone checks (see "Design studio redesign and mobile fixes"),
+   then the design studio a11y pass and the Options placement; small: credit overlap at 360 px.
 1. Maintainer re-tests the export in Elegoo Slicer; fix what comes back.
 2. Milestone 8 release: Unraid template XML (+ Community Apps), NPM + Authentik on the
    maintainer's copy, README/install docs, make the repo public, CI e2e green on GitHub.
@@ -383,8 +408,14 @@ Answered on 2026-11-04 (keep for context):
 - The main session orchestrates: plans, splits work into Sonnet subagents with explicit
   file ownership, reviews, verifies and is the only one that commits/deploys.
 - Every change set: `npm run check`, `npm run lint`, `npx vitest run`, `npm run build`,
-  full e2e (twice before deploys), migration rehearsal on a copy of the test data when
-  schema/seed/startup changes, backup, deploy, then a short summary to the maintainer.
+  the relevant e2e specs (subagents run their own; the maintainer asked not to re-run the full
+  ~6 min suite before every deploy when agents validated), migration rehearsal on a copy of the
+  test data when schema/seed/startup changes, backup, deploy, then a short summary to the maintainer.
+- Parallel agents share one e2e port/build dir: wrap every e2e run in
+  `flock /app/node_modules/.e2e.lock …` and use `--reporter=line` (the html reporter hangs on failure).
+- Agents never `rm` and never copy the live DB; the orchestrator deletes scratch with the maintainer's OK.
+- Global class names in `src/app.css` (`.bar`, `.head`, `.chip`, `.group`, `.dot`, `.more`, `.brand`, `.tabs`,
+  `.seg button`) leak into components: give component classes distinct names.
 - UI work is checked at 390 px and 1440/1920 px, light and dark.
 - This file is the handoff: update it when a session ends or before clearing context.
 
