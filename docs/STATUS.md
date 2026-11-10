@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r35 deployed: mobile performance). Keep this file
+_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r36 deployed: printer status refresh). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -96,6 +96,9 @@ Save as design all work as on a build.
   resolve one per task (Palettes tab 1.6 s → 0.1 s long task at 4x); `loadSwatches` 20 s timeout + retry + "Try
   again"; fields 16 px on coarse pointers (iOS focus zoom); `overscroll-behavior-x: contain` on scrollers;
   `src/lib/server/compress.ts` gzips html/json in hooks and GLBs (cached). Not a PWA (no manifest/SW).
+- r36: printer store (`printer-store.svelte.ts`) ignored load errors and never refetched after an SSE reconnect, so a
+  phone back from background showed a Now card with no PrinterLive/camera. Now: sequence-guarded `load()`, refetch on
+  SSE reopen / visibilitychange / online / focus, 30 s poll while acquired, "Printer status unavailable · Retry".
 - Still open:
   Options section placement (M6), a11y pass (L1-L4), `listDesigns` api helper; picker title stays the role (decided);
   editableTargets lacks `kind`.

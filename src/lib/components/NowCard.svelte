@@ -127,6 +127,12 @@
 	</div>
 
 	{#each liveJobs as j (j.id)}<PrinterLive job={j} store={pstore} />{/each}
+	{#if pstore.error}
+		<p class="muted" role="status" data-testid="printer-status-error">
+			Printer status unavailable ·
+			<button type="button" class="btn sm" onclick={() => void pstore.load()}>Retry</button>
+		</p>
+	{/if}
 
 	<div class="now-step">
 		<div class="now-step-title">1 · Sent to printer</div>

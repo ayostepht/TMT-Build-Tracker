@@ -465,3 +465,68 @@ test('per-part plate: link a job to one rim color, Now printing shows it, Change
 	await expect.poll(() => state('rims-1-4')).toBe('To print');
 	mock.set({ printStatus: 0, machineStatus: [0], file: '' });
 });
+
+test('Now printing shows the live printer box and camera tile at 390 and 1440, and recovers from a failed first load', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	const SHOTS_CAM = 'data/cam-fix';
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'camfix');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Cam Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	mock.printing(FILE, 81);
+
+	// The first printer-jobs request fails (a dropped connection on a phone): the card says so and Retry recovers.
+	let failed = false;
+	await page.route('**/api/builds/*/printer-jobs', async (route) => {
+		if (!failed) {
+			failed = true;
+			return route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: '{"error":"boom"}'
+			});
+		}
+		return route.continue();
+	});
+	await page.goto(`/builds/${buildId}`);
+	const live = page.getByTestId('printer-live');
+	const err = page.getByTestId('printer-status-error');
+	await expect(err.or(live)).toBeVisible({ timeout: 20_000 });
+	if (await err.isVisible()) {
+		await expect(err).toContainText('Printer status unavailable');
+		await err.getByRole('button', { name: 'Retry' }).click();
+	}
+	await expect(live).toBeVisible({ timeout: 20_000 });
+	await expect(err).toBeHidden();
+	await expect(page.getByTestId('camera-tile')).toBeVisible();
+	await expect(page.getByTestId('camera-tile')).toContainText(
+		/Camera unavailable|Retry|Updates every|Streaming/
+	);
+	for (const [w, h] of [
+		[390, 844],
+		[1440, 900]
+	]) {
+		await page.setViewportSize({ width: w, height: h });
+		await live.scrollIntoViewIfNeeded();
+		await expect(live).toBeVisible();
+		await expect(page.getByTestId('camera-tile')).toBeVisible();
+		await page.screenshot({ path: `${SHOTS_CAM}/now-printing-${w}.png` });
+	}
+	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+});

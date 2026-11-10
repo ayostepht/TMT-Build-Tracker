@@ -21,14 +21,22 @@ export class PrinterStore {
 		readonly buildId?: string
 	) {}
 
+	private seq = 0;
+	private pollTimer: ReturnType<typeof setInterval> | undefined;
+	private wired = false;
+
 	async load() {
+		// Overlapping loads (first load + an SSE-triggered reload) can finish out of order: only the newest counts.
+		const my = ++this.seq;
 		try {
 			if (this.buildId) {
 				const r = await buildPrinterJobs(this.buildId);
+				if (my !== this.seq) return;
 				this.printers = r.printers;
 				this.jobs = r.jobs;
 			} else {
 				const r = await listPrinters(this.org);
+				if (my !== this.seq) return;
 				this.printers = r.printers;
 				this.jobs = r.jobs;
 				this.canEdit = r.canEdit;
@@ -36,10 +44,16 @@ export class PrinterStore {
 			}
 			this.error = null;
 		} catch (e) {
+			if (my !== this.seq) return;
 			this.error = e instanceof Error ? e.message : 'Could not load printers';
 		}
 		this.loaded = true;
 	}
+
+	private resync = () => {
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+		void this.load();
+	};
 
 	status(id: string): PrinterStatus | null {
 		return this.printers.find((p) => p.id === id)?.status ?? null;
@@ -51,6 +65,14 @@ export class PrinterStore {
 		if (this.refs === 1) {
 			void this.load();
 			this.open();
+			// A phone suspends the stream in the background and misses events: refetch when it is back.
+			if (typeof document !== 'undefined' && !this.wired) {
+				this.wired = true;
+				document.addEventListener('visibilitychange', this.resync);
+				window.addEventListener('online', this.resync);
+				window.addEventListener('focus', this.resync);
+				this.pollTimer = setInterval(this.resync, 30_000);
+			}
 		}
 		return () => {
 			this.refs--;
@@ -62,6 +84,12 @@ export class PrinterStore {
 		if (typeof EventSource === 'undefined') return;
 		const es = new EventSource(`/api/printers/events?org=${encodeURIComponent(this.org)}`);
 		this.es = es;
+		let opened = false;
+		es.onopen = () => {
+			// A reconnect may have skipped events.
+			if (opened) this.resync();
+			opened = true;
+		};
 		es.onmessage = (m) => {
 			try {
 				const e = JSON.parse(m.data) as {
@@ -88,6 +116,13 @@ export class PrinterStore {
 
 	private close() {
 		clearTimeout(this.reloadTimer);
+		clearInterval(this.pollTimer);
+		if (this.wired && typeof document !== 'undefined') {
+			document.removeEventListener('visibilitychange', this.resync);
+			window.removeEventListener('online', this.resync);
+			window.removeEventListener('focus', this.resync);
+		}
+		this.wired = false;
 		this.es?.close();
 		this.es = null;
 	}
