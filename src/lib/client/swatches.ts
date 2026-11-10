@@ -9,7 +9,8 @@ const cache: Partial<Record<Family, Promise<SwatchTuple[]>>> = {};
 
 /** All colors of a material family (about 11 kB gzipped for PETG, 2 kB for TPU); fetched once per page load. */
 export function loadSwatches(family: Family): Promise<SwatchTuple[]> {
-	cache[family] ??= fetch(`/api/filaments/swatches?family=${family}`)
+	// `v=2`: busts responses cached for a day before the endpoint switched to revalidation (r34).
+	cache[family] ??= fetch(`/api/filaments/swatches?family=${family}&v=2`)
 		.then((r) =>
 			r.ok ? r.json() : Promise.reject(new Error('The filament catalog is unavailable.'))
 		)

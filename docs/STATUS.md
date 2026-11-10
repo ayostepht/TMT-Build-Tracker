@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r33 deployed). Keep this file
+_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r34 deployed: catalog cache fix). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -88,6 +88,8 @@ Save as design all work as on a build.
   Spools first in `POPULAR_BRANDS` (brand chip; it was hidden by the cross-brand merge). Link sweep: action links are
   `.btn.go` (→), `.btn.back` (←), `.btn.ghost`, clickable badges `.pill-link`; inline prose links only; `.linkbtn` gone
   (inventory in data/link-sweep/INVENTORY.md, gitignored).
+- r34: filament catalog endpoints were `max-age=86400`, so phones kept the pre-r30 catalog (no Schoolhouse). Now
+  `private, no-cache` + ETag from the catalog `fetchedAt` (304 when unchanged); client URL has `v=2` to bust old caches.
 - Still open:
   Options section placement (M6), a11y pass (L1-L4), `listDesigns` api helper; picker title stays the role (decided);
   editableTargets lacks `kind`.
