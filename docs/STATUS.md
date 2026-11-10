@@ -113,8 +113,9 @@ Save as design all work as on a build.
   of the 287 px stage; phone toasts sit over the top of the stage for ~8 s (maintainer not yet asked to change).
 - Awaiting the maintainer (asked 2026-11-10): on a real iPhone, does focusing the picker search still zoom/pan
   sideways; do orbit and tap-to-select feel right; after backgrounding the home-screen app, does the 3D view come
-  back lit (or offer "Reload 3D view") and do colors load (or offer "Try again"); does the Now card show PrinterLive
-  and the camera after a reload (r36). Product calls offered, not answered: a PWA manifest/standalone mode.
+  back lit (or offer "Reload 3D view") and do colors load (or offer "Try again"). Confirmed 2026-11-10: the Now card
+  shows PrinterLive and the camera again after a reload (r36).
+- Roadmap (maintainer, 2026-11-10): make it a proper PWA (see Next steps).
 - UX audit report: `docs/ux-audit-design-studio-2026-11.md` (findings C1-L4, wireframes, decisions D1-D7; its
   screenshots were in a session scratchpad and are gone).
 
@@ -402,6 +403,14 @@ Answered on 2026-11-04 (keep for context):
 2. Milestone 8 release: Unraid template XML (+ Community Apps), NPM + Authentik on the
    maintainer's copy, README/install docs, make the repo public, CI e2e green on GitHub.
 3. OctoEverywhere webhooks; printer supervisor live test.
+4. Proper PWA (maintainer wants it, 2026-11-10): web app manifest (name, icons incl. maskable and
+   apple-touch-icon, theme/background colors for light and dark, `display: standalone`, start_url `/`), iOS meta
+   (`apple-mobile-web-app-capable`, status bar style, splash), a service worker that caches the app shell and
+   immutable assets/GLBs but never API data (catalog is `no-cache` + ETag; printer status must stay live), an
+   offline fallback page, update prompt on a new deploy, safe-area insets in standalone mode, and re-checking the
+   r35/r36 resume behaviour (WebGL context restore, SSE reconnect, catalog retry) in standalone mode on an iPhone.
+   Works over plain http on the LAN only partly (service workers need https or localhost): pair it with the
+   release's NPM/Authentik https setup.
 
 ## How work is done here
 
