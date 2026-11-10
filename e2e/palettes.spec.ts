@@ -12,6 +12,15 @@ async function openPalettes(page: import('@playwright/test').Page) {
 /** The panel sticky Apply / Cancel bar. */
 const bar = (page: import('@playwright/test').Page) => page.getByTestId('palette-bar');
 
+/** Open the collapsed "Ready-made palettes" disclosure (no-op when already open). */
+async function openReadyMade(page: import('@playwright/test').Page) {
+	const list = page.getByRole('group', { name: 'Ready-made palettes' });
+	if (!(await list.isVisible()))
+		await page.getByTestId('readymade-toggle').locator('summary').click();
+	await expect(list).toBeVisible();
+	return list;
+}
+
 /** Open the collapsed "Build from your colors" disclosure and return the generator. */
 async function openGenerator(page: import('@playwright/test').Page) {
 	const gen = page.getByTestId('generator');
@@ -32,6 +41,7 @@ test('apply a pre-made palette: matched filaments show on Overview, Undo restore
 		.then((t) => t.replace(/\s+/g, ' ').trim());
 
 	await openPalettes(page);
+	await openReadyMade(page);
 	const card = page.locator('[data-palette="fire-truck"]');
 	await expect(card).toBeVisible();
 	const names = await card.locator('.nm').allInnerTexts();
@@ -57,6 +67,7 @@ test('apply a pre-made palette: matched filaments show on Overview, Undo restore
 
 	// Apply saves all four slots.
 	await openPalettes(page);
+	await openReadyMade(page);
 	await page.locator('[data-palette="fire-truck"]').click();
 	await bar(page).getByRole('button', { name: 'Apply' }).click();
 	await expect(page.getByText('Applied Fire Truck')).toBeVisible();
@@ -67,6 +78,7 @@ test('apply a pre-made palette: matched filaments show on Overview, Undo restore
 	// Undo puts the old filaments back.
 	await page.goto(`/builds/${buildId}/design`);
 	await openPalettes(page);
+	await openReadyMade(page);
 	await page.locator('[data-palette="camo"]').click();
 	await bar(page).getByRole('button', { name: 'Apply' }).click();
 	await page.getByRole('button', { name: 'Undo' }).click();
@@ -247,6 +259,7 @@ test('a previewed ready-made palette follows the preferred brand', async ({ page
 	const { buildId } = await ownerWithBuild(page, 'brandfollow');
 	await page.goto(`/builds/${buildId}/design`);
 	await openPalettes(page);
+	await openReadyMade(page);
 	// (Ocean: a palette whose matches change with Overture preferred in the bundled catalog.)
 	const card = page.locator('[data-palette="ocean"]');
 	await card.click();
@@ -261,6 +274,7 @@ test('a relaxed match explains itself under the swatch', async ({ page }) => {
 	const { buildId } = await ownerWithBuild(page, 'relaxed');
 	await page.goto(`/builds/${buildId}/design`);
 	await openPalettes(page);
+	await openReadyMade(page);
 	// With Overture preferred, Columbus Blues has no close Overture soft TPU and falls back to another brand.
 	await preferBrands(page, ['Overture']);
 	const card = page.locator('[data-palette="columbus-blues"]');
@@ -282,6 +296,7 @@ test('palette cards are one tab stop with arrow-key navigation and aria-pressed'
 	const { buildId } = await ownerWithBuild(page, 'a11y');
 	await page.goto(`/builds/${buildId}/design`);
 	await openPalettes(page);
+	await openReadyMade(page);
 	const cards = page.locator('[data-palette]');
 	await expect(cards.first()).toBeVisible();
 	await expect(page.locator('[data-palette][tabindex="0"]')).toHaveCount(1);
@@ -295,4 +310,18 @@ test('palette cards are one tab stop with arrow-key navigation and aria-pressed'
 	// Escape cancels the preview.
 	await page.keyboard.press('Escape');
 	await expect(page.getByTestId('palette-bar')).toHaveCount(0);
+});
+
+test('both palette sections start collapsed', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'collapsed');
+	await page.goto(`/builds/${buildId}/design`);
+	await openPalettes(page);
+	for (const id of ['readymade-toggle', 'generator-toggle']) {
+		await expect(page.getByTestId(id)).toBeVisible();
+		await expect(page.getByTestId(id)).not.toHaveAttribute('open', /.*/);
+	}
+	await expect(page.locator('[data-palette]').first()).toBeHidden();
+	await expect(page.getByTestId('generator')).toBeHidden();
+	await page.getByTestId('readymade-toggle').locator('summary').click();
+	await expect(page.locator('[data-palette]').first()).toBeVisible();
 });

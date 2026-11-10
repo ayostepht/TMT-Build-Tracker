@@ -47,8 +47,10 @@
 	let attempt = $state(0);
 	let preferred = $state<string[]>([]);
 	let busy = $state(false);
+	// Both sections start closed; a preview already active at mount opens its own section.
 	/** The "Build from your colors" disclosure; variations are only computed while it is open. */
-	let genOpen = $state(false);
+	let genOpen = $state(untrack(() => !!preview?.id.startsWith('gen:')));
+	let readyOpen = $state(untrack(() => PALETTES.some((p) => p.id === preview?.id)));
 	/** Roving tabindex: the one card per list that is a tab stop (arrow keys move between cards). */
 	let readyFocus = $state(0);
 	let varFocus = $state(0);
@@ -381,39 +383,47 @@
 	{:else if !catalog}
 		<p class="muted">Loading the filament catalog…</p>
 	{:else}
-		<div
-			class="list"
-			role="group"
-			aria-label="Ready-made palettes"
-			onkeydown={(e) => rove(e, (i) => (readyFocus = i))}
-		>
-			{#each PALETTES as p, i (p.id)}
-				{@const r = resolvedPremade[p.id]}
-				{#if !r}
-					<div class="pcard pending" aria-hidden="true" data-testid="palette-pending">
-						<span class="pname"><b>{p.name}</b></span>
-						<span class="dots"
-							>{#each SLOTS as s (s)}<span class="dotw"><span class="pdot"></span></span
-								>{/each}</span
-						>
-					</div>
-				{:else}
-					{@render card(
-						p.id,
-						p.name,
-						p.name,
-						r,
-						p.targets,
-						[],
-						i === readyFocus,
-						() => (readyFocus = i),
-						{
-							'data-palette': p.id
-						}
-					)}
-				{/if}
-			{/each}
-		</div>
+		<details class="gen" data-testid="readymade-toggle" bind:open={readyOpen}>
+			<summary>
+				<span>Ready-made palettes</span>
+				<span class="muted small">{PALETTES.length} curated sets</span>
+			</summary>
+			<div class="readybody">
+				<div
+					class="list"
+					role="group"
+					aria-label="Ready-made palettes"
+					onkeydown={(e) => rove(e, (i) => (readyFocus = i))}
+				>
+					{#each PALETTES as p, i (p.id)}
+						{@const r = resolvedPremade[p.id]}
+						{#if !r}
+							<div class="pcard pending" aria-hidden="true" data-testid="palette-pending">
+								<span class="pname"><b>{p.name}</b></span>
+								<span class="dots"
+									>{#each SLOTS as s (s)}<span class="dotw"><span class="pdot"></span></span
+										>{/each}</span
+								>
+							</div>
+						{:else}
+							{@render card(
+								p.id,
+								p.name,
+								p.name,
+								r,
+								p.targets,
+								[],
+								i === readyFocus,
+								() => (readyFocus = i),
+								{
+									'data-palette': p.id
+								}
+							)}
+						{/if}
+					{/each}
+				</div>
+			</div>
+		</details>
 
 		<details class="gen" data-testid="generator-toggle" bind:open={genOpen}>
 			<summary>
@@ -894,6 +904,9 @@
 	}
 	.gen > summary > span:first-child {
 		flex: 1;
+	}
+	.readybody {
+		padding: 0 12px 12px;
 	}
 	.genbody {
 		display: grid;

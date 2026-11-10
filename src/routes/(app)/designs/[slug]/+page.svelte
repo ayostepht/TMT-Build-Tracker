@@ -6,6 +6,7 @@
 	import ModelStage from '#lib/components/design/ModelStage.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
+	import { tick } from 'svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -38,6 +39,32 @@
 		if (!target) target = data.targets.builds[0]?.id ?? '';
 		if (!buildName) buildName = `${d.name} chair`;
 	});
+
+	let useCard = $state<HTMLElement>();
+	let useHeading = $state<HTMLElement>();
+	let nameInput = $state<HTMLInputElement>();
+	let targetSelect = $state<HTMLSelectElement>();
+	let flash = $state(false);
+	let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+	/** The primary button: bring the Use card into view, focus its first control, and flash it. */
+	async function goToUse() {
+		if (!useCard) return;
+		const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const phone = window.matchMedia('(max-width: 899px)').matches;
+		useCard.scrollIntoView({
+			behavior: reduce ? 'auto' : 'smooth',
+			block: phone ? 'start' : 'nearest'
+		});
+		(nameInput ?? targetSelect ?? useHeading)?.focus({ preventScroll: true });
+		// Restart the highlight even on a repeat click.
+		clearTimeout(flashTimer);
+		flash = false;
+		await tick();
+		void useCard.offsetWidth;
+		flash = true;
+		flashTimer = setTimeout(() => (flash = false), 1400);
+	}
 
 	async function run(fn: () => Promise<void>) {
 		error = null;
@@ -109,13 +136,21 @@
 					: 'private'}
 			</p>
 		</div>
-		<a class="btn primary usebtn" href="#use" data-testid="use-design">Use this design</a>
+		<button class="btn primary usebtn" data-testid="use-design" onclick={goToUse}
+			>Use this design</button
+		>
 	</div>
 
 	<div class="cols">
 		<div class="stagebox">
 			{#if data.model}
-				<ModelStage model={data.model} {colors} siteAdmin={data.siteAdmin} label="Design preview" />
+				<ModelStage
+					model={data.model}
+					{colors}
+					hidden={data.hidden}
+					siteAdmin={data.siteAdmin}
+					label="Design preview"
+				/>
 			{:else if d.hasSnapshot}
 				<img class="snap" src="/api/designs/{d.id}/snapshot.png" alt="Preview of {d.name}" />
 			{:else}
@@ -146,8 +181,8 @@
 			{#if error}<div class="error" role="alert">{error}</div>{/if}
 			{#if note}<div class="muted" role="status">{note}</div>{/if}
 
-			<section class="card" id="use">
-				<h2>Use this design</h2>
+			<section class="card" id="use" class:flash bind:this={useCard}>
+				<h2 tabindex="-1" bind:this={useHeading}>Use this design</h2>
 				<div class="opt">
 					<h3>Start a new build</h3>
 					{#if data.targets.workspaces.length}
@@ -160,7 +195,7 @@
 						</label>
 						<label class="field">
 							Build name
-							<input bind:value={buildName} maxlength="200" />
+							<input bind:value={buildName} bind:this={nameInput} maxlength="200" />
 						</label>
 						<button class="btn primary" disabled={busy} onclick={start}>Start a build</button>
 					{:else}
@@ -177,7 +212,7 @@
 						</p>
 						<label class="field">
 							Build or draft
-							<select bind:value={target}>
+							<select bind:value={target} bind:this={targetSelect}>
 								{#each data.targets.builds as b (b.id)}
 									<option value={b.id}>{b.name} ({b.workspaceName})</option>
 								{/each}
@@ -296,6 +331,32 @@
 		scroll-margin-top: 12px;
 		gap: 16px;
 	}
+	#use h2:focus {
+		outline: none;
+	}
+	#use.flash {
+		animation: use-flash 1.4s ease-out;
+	}
+	@keyframes use-flash {
+		0%,
+		60% {
+			outline: 3px solid var(--accent);
+			outline-offset: 2px;
+			box-shadow: 0 0 0 8px var(--accent-soft);
+		}
+		100% {
+			outline: 3px solid transparent;
+			outline-offset: 2px;
+			box-shadow: 0 0 0 8px transparent;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		#use.flash {
+			animation: none;
+			outline: 3px solid var(--accent);
+			outline-offset: 2px;
+		}
+	}
 	.opt {
 		display: grid;
 		gap: 10px;
@@ -323,6 +384,9 @@
 	}
 	/* The primary action stays reachable on a phone while the page scrolls. */
 	@media (max-width: 899px) {
+		#use {
+			scroll-margin-top: 80px;
+		}
 		.top {
 			position: sticky;
 			top: 0;
@@ -343,6 +407,14 @@
 	@media (min-width: 900px) {
 		.cols {
 			grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+		}
+		/* The primary action sits next to the button that leads to it. */
+		#use {
+			order: -2;
+		}
+		.side > :global([role='alert']),
+		.side > :global([role='status']) {
+			order: -1;
 		}
 		.stagebox {
 			height: min(70vh, 680px);

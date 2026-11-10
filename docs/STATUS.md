@@ -1,7 +1,7 @@
 # Project status and handoff
 
 _Last updated: 2026-11-10, after the design studio redesign (r31-r33), filament supplement (r30), mobile
-performance (r34-r35) and printer status refresh (r36, deployed, commit ac72cda). Keep this file current: update it
+performance (r34-r35), printer status refresh (r36) and design page fixes (r37, deployed). Keep this file current: update it
 at the end of every work session, and before a context reset._
 
 **Pick up here:** see "Next steps" at the bottom; the maintainer's phone checks for r35/r36 are still unanswered.
@@ -105,6 +105,13 @@ Save as design all work as on a build.
 - r36: printer store (`printer-store.svelte.ts`) ignored load errors and never refetched after an SSE reconnect, so a
   phone back from background showed a Now card with no PrinterLive/camera. Now: sequence-guarded `load()`, refetch on
   SSE reopen / visibilitychange / online / focus, 30 s poll while acquired, "Printer status unavailable · Retry".
+- r37: Palettes tab has two matching collapsed disclosures, "Ready-made palettes" (`readymade-toggle`) and "Build
+  from your colors"; an active preview at mount opens its own section. Design detail page (`/designs/[slug]`):
+  "Use this design" is a button that scrolls to the Use card, focuses Build name and flashes the card (was a `#use`
+  anchor, a no-op when the card was already on screen); on desktop the Use card is first in the side column; e2e
+  `design-use`. The design preview drew every variant alternative (standard + smaller rims, ...), whose coplanar
+  faces z-fought on the wheel; it now hides `inactiveSlugs(groups, null)`. The kit admin PlacementEditor still
+  draws all variants on purpose.
 - Still open (design studio): Options section placement at the bottom of the Parts tab (audit M6, needs a layout
   decision), a11y pass (audit L1-L4: contrast, focus order, aria), the "3D model and print files: MakeGood · CC0"
   credit wraps over the chair at 360 px, `listDesigns` helper in `client/api.ts` (`share/ApplyDesign` uses raw fetch),

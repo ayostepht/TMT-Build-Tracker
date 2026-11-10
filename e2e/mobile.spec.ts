@@ -106,6 +106,7 @@ for (const width of [360, 390]) {
 		await check('colors');
 
 		await page.getByRole('tab', { name: 'Palettes' }).click();
+		await page.getByTestId('readymade-toggle').locator('summary').click();
 		await expect(page.locator('[data-palette]')).toHaveCount(13);
 		await check('palettes');
 		await page.locator('[data-palette]').first().click();
