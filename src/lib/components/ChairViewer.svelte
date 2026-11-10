@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import { onMount, tick, type Snippet } from 'svelte';
 	import type { PartPlacement, TemplateModelInfo } from '#lib/domain/types.ts';
 	import type { ChairScene } from '#lib/client/three/chair-scene.ts';
 
@@ -46,34 +46,67 @@
 	let progress = $state(0);
 	let errorText = $state('');
 
-	onMount(() => {
-		let dead = false;
-		let created: ChairScene | null = null;
-		(async () => {
-			try {
-				const mod = await import('#lib/client/three/chair-scene.ts');
-				if (dead) return;
-				if (!mod.webglAvailable()) {
-					status = 'nowebgl';
-					return;
-				}
-				const libs = await mod.loadLibs();
-				if (dead || !host || !canvas) return;
-				created = new mod.ChairScene(libs, canvas, host, {
-					onpick: (s) => onpick?.(s),
-					onready: (i) => onready?.(i),
-					onprogress: (f) => (progress = f)
-				});
-				scene = created;
-				// Debug / test handle (screenshots, e2e): the scene object on the host element.
-				(host as unknown as { __scene?: ChairScene }).__scene = created;
-			} catch (e) {
+	/** The device took the WebGL context and has not given it back yet (iOS does this under memory pressure). */
+	let lost = $state(false);
+	let lostTimer: ReturnType<typeof setTimeout> | undefined;
+	/** A new canvas is needed after a lost context: the old one can never get a context again. */
+	let epoch = $state(0);
+	let dead = false;
+	let created: ChairScene | null = null;
+
+	async function start() {
+		try {
+			const mod = await import('#lib/client/three/chair-scene.ts');
+			if (dead) return;
+			if (!mod.webglAvailable()) {
 				status = 'nowebgl';
-				errorText = e instanceof Error ? e.message : String(e);
+				return;
 			}
-		})();
+			const libs = await mod.loadLibs();
+			if (dead || !host || !canvas) return;
+			created = new mod.ChairScene(libs, canvas, host, {
+				onpick: (s) => onpick?.(s),
+				onready: (i) => onready?.(i),
+				onprogress: (f) => (progress = f),
+				oncontext: (state) => {
+					clearTimeout(lostTimer);
+					if (state === 'restored') {
+						lost = false;
+						return;
+					}
+					// Usually back within a moment; only then say anything.
+					lostTimer = setTimeout(() => (lost = true), 2000);
+				}
+			});
+			scene = created;
+			// Debug / test handle (screenshots, e2e): the scene object on the host element.
+			(host as unknown as { __scene?: ChairScene }).__scene = created;
+		} catch (e) {
+			status = 'nowebgl';
+			errorText = e instanceof Error ? e.message : String(e);
+		}
+	}
+
+	/** "Reload 3D view": throw the dead canvas away and build the scene again (the GLB is cached). */
+	async function reload() {
+		clearTimeout(lostTimer);
+		lost = false;
+		created?.dispose();
+		created = null;
+		scene = null;
+		status = 'loading';
+		progress = 0;
+		epoch++;
+		await tick();
+		await start();
+	}
+
+	onMount(() => {
+		dead = false;
+		void start();
 		return () => {
 			dead = true;
+			clearTimeout(lostTimer);
 			created?.dispose();
 			scene = null;
 		};
@@ -153,7 +186,15 @@
 			</div>
 		{/if}
 	{:else}
-		<canvas bind:this={canvas} class="cv-canvas"></canvas>
+		{#key epoch}
+			<canvas bind:this={canvas} class="cv-canvas"></canvas>
+		{/key}
+		{#if lost}
+			<div class="cv-msg lost" role="alert" data-testid="gl-lost">
+				<span>The 3D view was paused by your device.</span>
+				<button type="button" class="btn sm" onclick={reload}>Reload 3D view</button>
+			</div>
+		{/if}
 		{#if status === 'loading'}
 			<div class="cv-msg" aria-live="polite">
 				Loading the 3D model{progress > 0 && progress < 1 ? ` ${Math.round(progress * 100)}%` : '…'}
@@ -194,5 +235,11 @@
 		color: var(--muted, #6b7280);
 		font-size: 0.9rem;
 		pointer-events: none;
+	}
+	.cv-msg.lost {
+		background: color-mix(in srgb, var(--card, #fff) 85%, transparent);
+	}
+	.cv-msg.lost .btn {
+		pointer-events: auto;
 	}
 </style>

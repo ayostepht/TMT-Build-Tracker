@@ -7,19 +7,47 @@ export type Family = 'petg' | 'tpu';
 
 const cache: Partial<Record<Family, Promise<SwatchTuple[]>>> = {};
 
-/** All colors of a material family (about 11 kB gzipped for PETG, 2 kB for TPU); fetched once per page load. */
+/** A stalled phone connection must end in an error with a Retry button, not "Loading..." forever. */
+const FETCH_TIMEOUT_MS = 20_000;
+
+async function fetchSwatches(family: Family): Promise<SwatchTuple[]> {
+	const ctl = new AbortController();
+	const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+	try {
+		// `v=2`: busts responses cached for a day before the endpoint switched to revalidation (r34).
+		const r = await fetch(`/api/filaments/swatches?family=${family}&v=2`, { signal: ctl.signal });
+		if (!r.ok) throw new Error('The filament catalog is unavailable.');
+		return ((await r.json()) as { swatches: SwatchTuple[] }).swatches;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/**
+ * All colors of a material family (about 11 kB gzipped for PETG, 2 kB for TPU); fetched once per page
+ * load. One quiet retry covers a connection that was asleep (a home-screen app coming back to the
+ * foreground); a second failure rejects, and the next call tries again.
+ */
 export function loadSwatches(family: Family): Promise<SwatchTuple[]> {
-	// `v=2`: busts responses cached for a day before the endpoint switched to revalidation (r34).
-	cache[family] ??= fetch(`/api/filaments/swatches?family=${family}&v=2`)
-		.then((r) =>
-			r.ok ? r.json() : Promise.reject(new Error('The filament catalog is unavailable.'))
-		)
-		.then((j: { swatches: SwatchTuple[] }) => j.swatches)
+	cache[family] ??= fetchSwatches(family)
+		.catch(() => new Promise((r) => setTimeout(r, 700)).then(() => fetchSwatches(family)))
 		.catch((e) => {
 			delete cache[family];
 			throw e;
 		});
 	return cache[family]!;
+}
+
+/** Start the catalog download while the phone is idle, so the picker and the palettes open fast. */
+export function prefetchSwatches() {
+	const go = () => {
+		for (const f of ['petg', 'tpu'] as const) loadSwatches(f).catch(() => {});
+	};
+	const w = globalThis as {
+		requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void;
+	};
+	if (w.requestIdleCallback) w.requestIdleCallback(go, { timeout: 2000 });
+	else setTimeout(go, 800);
 }
 
 /** Catalog colors plus the workspace's own filaments (custom ones first), for the palette matcher. */

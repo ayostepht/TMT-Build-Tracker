@@ -260,6 +260,39 @@ function labsOf(items: SwatchTuple[]): Lab[] {
 export const tupleKey = (t: SwatchTuple) => `${t[0]}|${t[1]}|${t[3]}`;
 
 /**
+ * Per-swatch facts `pick` needs on every call, computed once per catalog array: the exclusion tests are
+ * a dozen regexes, which made a ready-made palette batch take over a second on a throttled phone.
+ */
+interface Meta {
+	key: string;
+	brand: string;
+	/** Allowed in the standard tier / when matte is allowed (the fallback tier). */
+	ok: boolean;
+	okMatte: boolean;
+	penalty: number;
+	popular: boolean;
+}
+const metas = new WeakMap<SwatchTuple[], Meta[]>();
+function metaOf(items: SwatchTuple[]): Meta[] {
+	let m = metas.get(items);
+	if (!m) {
+		m = items.map((it) => {
+			const brand = it[0].toLowerCase();
+			return {
+				key: tupleKey(it),
+				brand,
+				ok: isAllowedFilament(it, false),
+				okMatte: isAllowedFilament(it, true),
+				penalty: materialPenalty(it[3]),
+				popular: POPULAR.has(brand)
+			};
+		});
+		metas.set(items, m);
+	}
+	return m;
+}
+
+/**
  * Filaments the palettes and the generator never pick on their own. The chair is a load-bearing
  * kids' mobility device, so we skip anything weaker or less consistent than plain PETG / TPU 95A,
  * and anything whose single catalog hex misleads (multi-color, glitter, glow, translucent).
@@ -395,26 +428,27 @@ function pick(
 ): Match | null {
 	const t = hexToLab(target);
 	const L = labsOf(items);
+	const M = metaOf(items);
 	const avoid = (opts.avoid ?? []).map((a) => ({ lab: hexToLab(a.hex), min: a.minDe }));
 	let best = -1;
 	let bestScore = Infinity;
 	let bestDe = 0;
 	for (let i = 0; i < items.length; i++) {
-		const it = items[i];
-		if (opts.exclude?.has(tupleKey(it))) continue;
-		if (onlyBrands && !want.has(it[0].toLowerCase())) continue;
-		if (!isAllowedFilament(it, allowMatte)) continue;
+		const mt = M[i];
+		if (opts.exclude?.has(mt.key)) continue;
+		if (onlyBrands && !want.has(mt.brand)) continue;
+		if (!(allowMatte ? mt.okMatte : mt.ok)) continue;
 		if (avoid.some((a) => deltaE2000(L[i], a.lab) < a.min)) continue;
 		const de = deltaE2000(t, L[i]);
 		const score =
 			de +
-			materialPenalty(it[3]) * 0.5 +
-			(allowMatte && exclusionReason(it) ? 3 : 0) +
+			mt.penalty * 0.5 +
+			(allowMatte && !mt.ok ? 3 : 0) +
 			(want.size
-				? !want.has(it[0].toLowerCase())
+				? !want.has(mt.brand)
 					? BRAND_PENALTY
 					: 0
-				: POPULAR.has(it[0].toLowerCase())
+				: mt.popular
 					? 0
 					: UNKNOWN_BRAND_PENALTY);
 		if (score < bestScore) {

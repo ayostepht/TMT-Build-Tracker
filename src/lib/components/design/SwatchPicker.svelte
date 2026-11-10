@@ -59,6 +59,8 @@
 	let items = $state<SwatchTuple[]>([]);
 	let failed = $state(false);
 	let loading = $state(true);
+	/** Bumped by "Try again" to run the catalog load once more. */
+	let attempt = $state(0);
 	let brands = $state<string[]>([]);
 	let preferred = $state<string[]>([]);
 	let q = $state('');
@@ -92,6 +94,7 @@
 
 	$effect(() => {
 		const fam = family;
+		void attempt;
 		loading = true;
 		failed = false;
 		let live = true;
@@ -592,6 +595,9 @@
 				<p class="muted" role="alert">
 					The filament catalog could not be loaded. Add your own filament with + Add.
 				</p>
+				<button type="button" class="btn sm" data-testid="catalog-retry" onclick={() => attempt++}
+					>Try again</button
+				>
 			{:else}
 				{#each sections as s (s.id)}
 					<section aria-label={s.label}>
@@ -729,6 +735,7 @@
 		align-items: center;
 		flex-wrap: nowrap;
 		overflow-x: auto;
+		overscroll-behavior-x: contain;
 		padding-bottom: 4px;
 		scrollbar-width: thin;
 	}

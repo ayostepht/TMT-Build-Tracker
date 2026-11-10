@@ -65,6 +65,8 @@ export interface SceneCallbacks {
 	onpick(slug: string | null): void;
 	onready(info: { rendered: string[]; unplaced: string[] }): void;
 	onprogress(fraction: number): void;
+	/** The browser took the WebGL context away (iOS does under memory pressure) or gave it back. */
+	oncontext?(state: 'lost' | 'restored'): void;
 }
 
 interface Prim {
@@ -125,6 +127,11 @@ export class ChairScene {
 	private loadGen = 0;
 	private lastInfo = '';
 
+	private placementsKey = '';
+	/** Caster mount frames per mount position (ray casting is the one costly step of stand-ins). */
+	private frameCache = new Map<string, (MountFrame | null)[]>();
+	private casterJob: ReturnType<typeof setTimeout> | 0 = 0;
+
 	private raf = 0;
 	private dirty = true;
 	private inView = true;
@@ -159,10 +166,7 @@ export class ChairScene {
 		this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
 		this.renderer.toneMappingExposure = 1.0;
 		this.scene = new THREE.Scene();
-		const pmrem = new THREE.PMREMGenerator(this.renderer);
-		this.env = pmrem.fromScene(new libs.RoomEnvironment(), 0.04).texture;
-		pmrem.dispose();
-		this.scene.environment = this.env;
+		this.buildEnvironment();
 		this.scene.environmentIntensity = 0.55;
 		const key = new THREE.DirectionalLight(0xffffff, 1.6);
 		key.position.set(600, 900, 700);
@@ -211,8 +215,18 @@ export class ChairScene {
 			this.pick(pe.clientX, pe.clientY);
 		});
 		this.listen(canvas, 'pointercancel', () => (this.down = null));
-		this.listen(canvas, 'webglcontextlost', (e) => e.preventDefault());
-		this.listen(canvas, 'webglcontextrestored', () => (this.dirty = true));
+		this.listen(canvas, 'webglcontextlost', (e) => {
+			e.preventDefault(); // lets the browser restore it
+			this.cb.oncontext?.('lost');
+		});
+		this.listen(canvas, 'webglcontextrestored', () => {
+			// three.js re-uploads geometry and materials by itself (its own listener ran first), but the
+			// environment map is a render target: its pixels are gone and must be drawn again.
+			this.buildEnvironment();
+			this.dirty = true;
+			this.kick();
+			this.cb.oncontext?.('restored');
+		});
 
 		this.ro = new ResizeObserver(() => this.resize());
 		this.ro.observe(host);
@@ -224,6 +238,15 @@ export class ChairScene {
 		this.listen(document, 'visibilitychange', () => this.kick());
 		this.resize();
 		this.kick();
+	}
+
+	private buildEnvironment() {
+		const pmrem = new this.THREE.PMREMGenerator(this.renderer);
+		const old = this.env;
+		this.env = pmrem.fromScene(new this.libs.RoomEnvironment(), 0.04).texture;
+		pmrem.dispose();
+		this.scene.environment = this.env;
+		old?.dispose();
 	}
 
 	private listen(target: EventTarget, type: string, fn: (e: Event) => void) {
@@ -348,6 +371,7 @@ export class ChairScene {
 		this.hwOwned = [];
 		this.prims.clear();
 		this.fitted = false;
+		this.frameCache.clear();
 		this.hardware.clear();
 	}
 
@@ -415,10 +439,13 @@ export class ChairScene {
 				mat.color.set(this.colors[slug] || NEUTRAL);
 				mat.emissive.set(isSel ? HIGHLIGHT : 0x000000);
 				mat.emissiveIntensity = isSel ? 0.35 : 0;
-				mat.transparent = dimmed;
+				// A shader rebuild is only needed when the material switches between opaque and blended.
+				if (mat.transparent !== dimmed) {
+					mat.transparent = dimmed;
+					mat.needsUpdate = true;
+				}
 				mat.opacity = dimmed ? 0.16 : 1;
 				mat.depthWrite = !dimmed;
-				mat.needsUpdate = true;
 				for (const m of inst.meshes) {
 					m.visible = !hidden;
 					// Dimmed parts stay pickable: a tap on one switches the selection to it.
@@ -428,14 +455,14 @@ export class ChairScene {
 		}
 		this.pickables = pick;
 		const dimHw = this.dim && this.selected !== null;
-		this.hwMaterial.transparent = dimHw;
-		this.hwMaterial.opacity = dimHw ? 0.12 : 1;
-		this.hwMaterial.depthWrite = !dimHw;
-		this.hwMaterial.needsUpdate = true;
-		this.treadMaterial.transparent = dimHw;
-		this.treadMaterial.opacity = dimHw ? 0.12 : 1;
-		this.treadMaterial.depthWrite = !dimHw;
-		this.treadMaterial.needsUpdate = true;
+		for (const m of [this.hwMaterial, this.treadMaterial]) {
+			if (m.transparent !== dimHw) {
+				m.transparent = dimHw;
+				m.needsUpdate = true;
+			}
+			m.opacity = dimHw ? 0.12 : 1;
+			m.depthWrite = !dimHw;
+		}
 		this.dirty = true;
 	}
 
@@ -487,7 +514,20 @@ export class ChairScene {
 		});
 	}
 
+	private frameKey(slug: string): string {
+		if (this.hidden.has(slug)) return 'hidden';
+		return (this.instances.get(slug) ?? [])
+			.map((i) =>
+				i.meshes
+					.map((m) => m.matrixWorld.elements.map((n) => Math.round(n * 100)).join(','))
+					.join(';')
+			)
+			.join('|');
+	}
+
 	private removeStandins() {
+		if (this.casterJob) clearTimeout(this.casterJob);
+		this.casterJob = 0;
 		for (const key of ['harness', 'buckles']) {
 			const list = this.instances.get(key);
 			if (!list) continue;
@@ -529,14 +569,30 @@ export class ChairScene {
 			ground
 		);
 		const mountBoxes = boxesOf(['front-caster-mount']);
-		const anchors = [
-			...frontCasterAnchors(mountBoxes, this.mountFrames('front-caster-mount'), ground),
-			...(rear ? [rear] : [])
-		];
-		for (const a of anchors)
-			this.casters.add(
-				buildCaster(THREE, a, { metal: this.hwMaterial, tread: this.treadMaterial })
-			);
+		const addCasters = (anchors: ReturnType<typeof frontCasterAnchors>) => {
+			for (const a of anchors)
+				this.casters.add(
+					buildCaster(THREE, a, { metal: this.hwMaterial, tread: this.treadMaterial })
+				);
+			this.dirty = true;
+		};
+		if (rear) addCasters([rear]);
+		// The front casters need ~400 rays per mount against the mount's triangles: seconds on a phone.
+		// Draw the chair first, add them a moment later, and remember the result for the next rebuild.
+		const fkey = this.frameKey('front-caster-mount');
+		const cached = this.frameCache.get(fkey);
+		if (cached || !mountBoxes.length) {
+			addCasters(frontCasterAnchors(mountBoxes, cached ?? [], ground));
+		} else {
+			this.casterJob = setTimeout(() => {
+				this.casterJob = 0;
+				if (this.disposed) return;
+				const frames = this.mountFrames('front-caster-mount');
+				this.frameCache.set(fkey, frames);
+				addCasters(frontCasterAnchors(mountBoxes, frames, ground));
+				this.kick();
+			}, 150);
+		}
 
 		// Harness: needs a seat and a back to hang on.
 		const rendered: string[] = [];
@@ -584,6 +640,10 @@ export class ChairScene {
 	}
 
 	setPlacements(p: PartPlacement[]) {
+		// The view is re-fetched after every change (and on every live update); the placements rarely are.
+		const key = JSON.stringify(p.map((x) => [x.slug, x.placed, x.matrix, x.instances]));
+		if (key === this.placementsKey) return;
+		this.placementsKey = key;
 		this.placements = p.map((x) => ({ ...x }));
 		this.rebuild();
 	}
@@ -592,7 +652,9 @@ export class ChairScene {
 		this.applyLook();
 	}
 	setHidden(h: string[]) {
-		this.hidden = new Set(h);
+		const next = new Set(h);
+		if (next.size === this.hidden.size && [...next].every((x) => this.hidden.has(x))) return;
+		this.hidden = next;
 		// Stand-ins hang on whichever seat/back/mount variants are visible.
 		if (this.loaded) this.buildStandins();
 		this.applyLook();
@@ -834,6 +896,7 @@ export class ChairScene {
 	dispose() {
 		if (this.disposed) return;
 		this.disposed = true;
+		if (this.casterJob) clearTimeout(this.casterJob);
 		cancelAnimationFrame(this.raf);
 		this.io?.disconnect();
 		this.ro?.disconnect();

@@ -14,6 +14,7 @@
 	import DesignActions from '#lib/components/design/share/DesignActions.svelte';
 	import SlotPanel from '#lib/components/design/SlotPanel.svelte';
 	import SwatchPicker, { type PickedFilament } from '#lib/components/design/SwatchPicker.svelte';
+	import { prefetchSwatches } from '#lib/client/swatches.ts';
 
 	/**
 	 * `embedded`: shown inside the setup wizard's Colors step. Same workspace and behaviour; it
@@ -61,6 +62,8 @@
 		ro.observe(nav);
 		return () => ro.disconnect();
 	});
+	// Warm the catalog while the phone is idle, so the picker and the palettes open without a wait.
+	$effect(() => prefetchSwatches());
 	let tab = $state<Tab>('colors');
 	let paletteSeen = $state(false);
 	/** Palette shown in 3D but not saved. */
@@ -472,6 +475,8 @@
 		position: sticky;
 		top: calc(var(--stick, 0px) + var(--stageh) + 8px);
 		z-index: 5;
+		/* Not a scroller (the global .tabs rule makes it one): three fixed columns, nothing to pan. */
+		overflow: visible;
 	}
 	.tab {
 		border: 0;

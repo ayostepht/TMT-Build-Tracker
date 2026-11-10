@@ -1,6 +1,6 @@
 # Project status and handoff
 
-_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r34 deployed: catalog cache fix). Keep this file
+_Last updated: 2026-11-09, after design studio redesign round 2 + Palettes tab and button sweep (r35 deployed: mobile performance). Keep this file
 current: update it at the end of every work session, and before a context reset._
 
 Read this first, then `CLAUDE.md` (rules, layout, conventions). Maintainer-machine
@@ -90,6 +90,12 @@ Save as design all work as on a build.
   (inventory in data/link-sweep/INVENTORY.md, gitignored).
 - r34: filament catalog endpoints were `max-age=86400`, so phones kept the pre-r30 catalog (no Schoolhouse). Now
   `private, no-cache` + ETag from the catalog `fetchedAt` (304 when unchanged); client URL has `v=2` to bust old caches.
+- r35 mobile perf (measured under 4-6x CPU throttle, DPR 3): ChairViewer rebuilt stand-ins + ~400 rays per caster on
+  every view change (now skipped when unchanged, ray frames cached, first caster pass deferred); env map rebuilt on
+  `webglcontextrestored`, "Reload 3D view" after 2 s of lost context; palettes precompute per-swatch metadata and
+  resolve one per task (Palettes tab 1.6 s → 0.1 s long task at 4x); `loadSwatches` 20 s timeout + retry + "Try
+  again"; fields 16 px on coarse pointers (iOS focus zoom); `overscroll-behavior-x: contain` on scrollers;
+  `src/lib/server/compress.ts` gzips html/json in hooks and GLBs (cached). Not a PWA (no manifest/SW).
 - Still open:
   Options section placement (M6), a11y pass (L1-L4), `listDesigns` api helper; picker title stays the role (decided);
   editableTargets lacks `kind`.

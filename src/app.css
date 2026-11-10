@@ -160,6 +160,17 @@ select {
 	font: inherit;
 	color: inherit;
 }
+/* iOS Safari zooms the page when a focused field is under 16px, and the page then stays zoomed and
+   pans sideways. Touch screens get 16px fields everywhere (the layouts were checked at 360 to 430px). */
+@media (pointer: coarse) {
+	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not(
+			[type='file']
+		),
+	select,
+	textarea {
+		font-size: 16px !important;
+	}
+}
 button {
 	cursor: pointer;
 }
@@ -565,6 +576,8 @@ a.pill-link {
 	display: flex;
 	gap: 4px;
 	overflow-x: auto;
+	/* A swipe past the end of a sideways scroller must not drag the page (or iOS's back swipe) along. */
+	overscroll-behavior-x: contain;
 	position: sticky;
 	top: 0;
 	z-index: 10;
@@ -1039,6 +1052,7 @@ a.pill-link {
 }
 .logscroll {
 	overflow-x: auto;
+	overscroll-behavior-x: contain;
 }
 .logform {
 	display: grid;
@@ -1435,6 +1449,7 @@ label.field select {
 	display: flex;
 	gap: 6px;
 	overflow-x: auto;
+	overscroll-behavior-x: contain;
 	padding: 0 14px 10px;
 	border-bottom: 1px solid var(--line);
 }

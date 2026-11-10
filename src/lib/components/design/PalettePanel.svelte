@@ -43,6 +43,8 @@
 
 	let catalog = $state<CatalogSwatches | null>(null);
 	let failed = $state(false);
+	/** Bumped by "Try again" to load the catalog once more. */
+	let attempt = $state(0);
 	let preferred = $state<string[]>([]);
 	let busy = $state(false);
 	/** The "Build from your colors" disclosure; variations are only computed while it is open. */
@@ -108,11 +110,18 @@
 		preferred = loadPreferredBrands();
 		const p = view.filaments.find((f) => f.key === 'primary');
 		if (p && isHex(p.hex)) setLocked({ primary: normHex(p.hex) });
-		loadCatalog(view.build.organizationId).then(
-			(c) => (catalog = c),
-			() => (failed = true)
-		);
 		return () => clearTimeout(settleTimer);
+	});
+
+	$effect(() => {
+		void attempt;
+		failed = false;
+		let live = true;
+		loadCatalog(untrack(() => view.build.organizationId)).then(
+			(c) => live && (catalog = c),
+			() => live && (failed = true)
+		);
+		return () => (live = false);
 	});
 
 	const allBrands = $derived.by(() => {
@@ -128,12 +137,30 @@
 	}
 
 	const slotMap = $derived(paletteSlots(view.filaments));
-	const resolvedPremade = $derived.by(() => {
+	/**
+	 * The ready-made palettes, matched against the catalog (CIEDE2000). Resolved one per task, so a
+	 * phone never freezes for the whole batch: cards appear as they are ready (placeholders until then),
+	 * and a changed brand preference replaces them one by one instead of blanking the list.
+	 */
+	let resolvedPremade = $state<Record<string, ResolvedPalette | undefined>>({});
+	$effect(() => {
 		const c = catalog;
-		if (!c) return {} as Record<string, ResolvedPalette | undefined>;
-		return Object.fromEntries(
-			PALETTES.map((p) => [p.id, resolvePalette(p.targets, c, { brands: preferred })])
-		) as Record<string, ResolvedPalette | undefined>;
+		const brands = [...preferred];
+		if (!c) {
+			resolvedPremade = {};
+			return;
+		}
+		let i = 0;
+		let timer: ReturnType<typeof setTimeout>;
+		const step = () => {
+			const p = PALETTES[i++];
+			if (!p) return;
+			const r = resolvePalette(p.targets, c, { brands });
+			resolvedPremade = { ...untrack(() => resolvedPremade), [p.id]: r };
+			timer = setTimeout(step, 0);
+		};
+		timer = setTimeout(step, 0);
+		return () => clearTimeout(timer);
 	});
 
 	// resolvePalette is CIEDE2000 over the catalog: remember results per targets and brand.
@@ -348,6 +375,9 @@
 	</p>
 	{#if failed}
 		<p class="muted" role="alert">The filament catalog could not be loaded.</p>
+		<button type="button" class="btn sm" data-testid="catalog-retry" onclick={() => attempt++}
+			>Try again</button
+		>
 	{:else if !catalog}
 		<p class="muted">Loading the filament catalog…</p>
 	{:else}
@@ -359,7 +389,15 @@
 		>
 			{#each PALETTES as p, i (p.id)}
 				{@const r = resolvedPremade[p.id]}
-				{#if r}
+				{#if !r}
+					<div class="pcard pending" aria-hidden="true" data-testid="palette-pending">
+						<span class="pname"><b>{p.name}</b></span>
+						<span class="dots"
+							>{#each SLOTS as s (s)}<span class="dotw"><span class="pdot"></span></span
+								>{/each}</span
+						>
+					</div>
+				{:else}
 					{@render card(
 						p.id,
 						p.name,
@@ -721,6 +759,10 @@
 		gap: 8px;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
 	}
+	.pcard.pending {
+		opacity: 0.55;
+		pointer-events: none;
+	}
 	.pcard {
 		display: grid;
 		gap: 8px;
@@ -997,6 +1039,7 @@
 		.themes {
 			flex-wrap: nowrap;
 			overflow-x: auto;
+			overscroll-behavior-x: contain;
 			padding-bottom: 4px;
 		}
 		.themes .chip {

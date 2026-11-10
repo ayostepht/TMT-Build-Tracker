@@ -3,6 +3,7 @@ import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import type { RequestEvent } from '@sveltejs/kit';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { startup } from '#lib/server/startup.ts';
+import { compressResponse } from '#lib/server/compress.ts';
 
 export const init: ServerInit = () => {
 	if (!building) startup();
@@ -33,5 +34,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
 	event.locals.session = session?.session ?? null;
 	event.locals.user = session?.user ?? null;
-	return resolve(event);
+	return compressResponse(event.request, await resolve(event));
 };

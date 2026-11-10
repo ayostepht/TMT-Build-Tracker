@@ -158,6 +158,7 @@
 		display: flex;
 		gap: 6px;
 		overflow-x: auto;
+		overscroll-behavior-x: contain;
 		scrollbar-width: thin;
 	}
 	.slotbtn {
