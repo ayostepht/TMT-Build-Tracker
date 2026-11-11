@@ -13,6 +13,7 @@ import { ApiError } from '../access';
 import { planArrangement } from '../builds/arrange-plan';
 import { createBuild } from '../builds/create';
 import { setPrinter } from '../builds/actions';
+import { arrangeForPrinter, buildArrangement } from '../builds/plates';
 import { loadBuildView } from '../builds/view';
 import { openDb, runMigrations, type Db } from '../db';
 import { buildPlates, member, organization, templates, user } from '../db/schema';
@@ -24,6 +25,7 @@ import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { parseThreeMfBytes } from '../threemf/index';
 import {
+	PlanError,
 	buildExportPlan,
 	exportBuild3mf,
 	exportFilename,
@@ -679,19 +681,72 @@ describe('exportBuild3mf with a database', () => {
 		expect(v.printer?.name).toBe('Elegoo Centauri Carbon');
 	});
 
-	it('a null item in a stored arrangement does not throw (re-arranges instead)', () => {
-		const id = mk();
-		setPrinter(db, id, 'owner', { printer: cc });
-		importSynthetic();
-		const row = db.select().from(buildPlates).where(eq(buildPlates.buildId, id)).all()[0];
-		if (row?.arrangement) {
-			const bad = { ...row.arrangement, items: [null, ...row.arrangement.items] } as never;
+	describe('a corrupt stored arrangement', () => {
+		/** Arrange for the printer, then damage the stored items of the first arranged plate. */
+		function corrupt(damage: (items: unknown[]) => unknown) {
+			const id = mk();
+			setPrinter(db, id, 'owner', { printer: cc });
+			importSynthetic();
+			arrangeForPrinter(db, id, 'owner');
+			const row = db
+				.select()
+				.from(buildPlates)
+				.where(eq(buildPlates.buildId, id))
+				.all()
+				.find((r) => r.arrangement)!;
+			expect(row.arrangement!.items.length).toBeGreaterThan(0);
 			db.update(buildPlates)
-				.set({ arrangement: bad })
+				.set({
+					arrangement: { ...row.arrangement!, items: damage(row.arrangement!.items) } as never
+				})
 				.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, row.number)))
 				.run();
+			return id;
 		}
-		expect(() => prepareExport(db, id, 'owner', { flavor: 'orca' })).not.toThrow();
+		const damages: [string, (items: unknown[]) => unknown][] = [
+			['a null item', (items) => [null, ...items]],
+			['a non-object item', (items) => ['junk', 7, ...items]],
+			['an item without a slug', (items) => [{ x: 1, y: 2 }, ...items]]
+		];
+		for (const [name, damage] of damages) {
+			it(`${name}: the build page shows stale and the export re-arranges`, () => {
+				const id = corrupt(damage);
+				const clean = mk();
+				expect(buildArrangement(db, id, 'owner').stale).toBe(true);
+				expect(buildArrangement(db, clean, 'owner').stale).toBe(false);
+				const prepared = prepareExport(db, id, 'owner', { flavor: 'orca' });
+				expect(prepared.plan.plates.length).toBeGreaterThan(0);
+				expect(prepared.plan.warnings.some((w) => w.code === 'arrangement')).toBe(true);
+			});
+		}
+		it('a healthy arrangement is not stale', () => {
+			const id = mk();
+			setPrinter(db, id, 'owner', { printer: cc });
+			importSynthetic();
+			arrangeForPrinter(db, id, 'owner');
+			expect(buildArrangement(db, id, 'owner').stale).toBe(false);
+		});
+		it('buildExportPlan fails cleanly (PlanError, never a TypeError) on a bad item', () => {
+			const view = viewFor(['wing-left']);
+			const plates = [
+				{
+					number: 1,
+					name: 'P',
+					parts: ['wing-left'],
+					roles: ['primary'],
+					runs: 1,
+					items: [null]
+				}
+			] as unknown as ArrangedPlate[];
+			let thrown: unknown;
+			try {
+				buildExportPlan({ view, plates, footprints: new Map(), flavor: 'orca' });
+			} catch (e) {
+				thrown = e;
+			}
+			expect(thrown).toBeInstanceOf(PlanError);
+			expect((thrown as Error).message).toMatch(/arrangement/i);
+		});
 	});
 });
 

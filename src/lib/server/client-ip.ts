@@ -50,12 +50,17 @@ export function normaliseClientAddress(raw: string): string | null {
 	return address;
 }
 
-const PROXY_HINT_HEADERS = ['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host'];
+/**
+ * Set by `scripts/proxy-origin.mjs` (after stripping any client copy) when the incoming
+ * request really carried forwarding headers. That script rewrites `x-forwarded-proto` on
+ * every request, so the headers themselves say nothing. Only for the hint below.
+ */
+export const FORWARDED_MARKER_HEADER = 'x-tmt-forwarded-original';
 
 /**
- * Whether to log the "a reverse proxy appears to be in front" hint: the request carries a
- * forwarding header, no trusted proxy is configured, and the hint was not logged yet.
- * The caller records that it logged. Pure: the headers only decide, nothing is echoed.
+ * Whether to log the "a reverse proxy appears to be in front" hint: the client sent
+ * forwarding headers (per the preload's marker), no trusted proxy is configured, and the hint
+ * was not logged yet. The caller records that it logged. Pure: nothing is echoed.
  */
 export function shouldWarnUndeclaredProxy(
 	headers: Headers,
@@ -63,7 +68,7 @@ export function shouldWarnUndeclaredProxy(
 	alreadyWarned: boolean
 ): boolean {
 	if (alreadyWarned || proxyTrusted) return false;
-	return PROXY_HINT_HEADERS.some((h) => headers.has(h));
+	return headers.get(FORWARDED_MARKER_HEADER) === '1';
 }
 
 export const UNDECLARED_PROXY_WARNING =

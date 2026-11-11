@@ -29,7 +29,7 @@
 {#if groups.length}
 	<div class="variants">
 		{#each groups as g (g.key)}
-			<fieldset class="group" {disabled}>
+			<fieldset class="vc-group" {disabled}>
 				<legend>{g.name}</legend>
 				{#each g.options as o (o.key)}
 					<label class="opt" class:on={chosen(g) === o.key}>
@@ -63,7 +63,7 @@
 		display: grid;
 		gap: 0.75rem;
 	}
-	.group {
+	.vc-group {
 		display: grid;
 		gap: 0.4rem;
 		margin: 0;

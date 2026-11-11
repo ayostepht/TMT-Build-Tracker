@@ -1,8 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 
-	/** Small modal: centered card on desktop, bottom sheet on phones. Escape or the backdrop closes it. */
+	/**
+	 * Small modal: a native <dialog> opened with showModal() (the browser provides the focus trap,
+	 * the inert page behind it, Escape and focus restore). Centered card on desktop, bottom sheet on
+	 * phones (`ds-modal--sheet`). Escape, the backdrop or the close button call `onclose`.
+	 */
 	let {
 		title,
 		onclose,
@@ -10,62 +13,49 @@
 		testid
 	}: { title: string; onclose: () => void; children: Snippet; testid?: string } = $props();
 
-	let box = $state<HTMLElement>();
 	const uid = $props.id();
+
+	function modal(node: HTMLDialogElement) {
+		let gone = false;
+		node.showModal();
+		// Safe control first: the field, else the primary action, else the first focusable.
+		node
+			.querySelector<HTMLElement>('input, select, button.primary')
+			?.focus({ preventScroll: true });
+		// Native Escape closes the dialog and fires `close`; ignore the one our own teardown causes.
+		const onnative = () => {
+			if (!gone) onclose();
+		};
+		node.addEventListener('close', onnative);
+		return {
+			destroy() {
+				gone = true;
+				if (node.open) node.close();
+			}
+		};
+	}
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && isTopTrap(box)) onclose();
-	}}
-/>
-
-<div class="back" role="presentation" onclick={onclose}>
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div
-		class="dlg"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="{uid}-title"
-		tabindex="-1"
-		data-testid={testid}
-		bind:this={box}
-		use:trapFocus={{ initial: 'input, select, button.primary' }}
-		onclick={(e) => e.stopPropagation()}
-	>
-		<header>
-			<h2 id="{uid}-title">{title}</h2>
-			<button type="button" class="x" aria-label="Close" onclick={onclose}>×</button>
-		</header>
-		<div class="body">{@render children()}</div>
-	</div>
-</div>
+<dialog
+	class="ds-modal ds-modal--sheet"
+	aria-labelledby="{uid}-title"
+	data-testid={testid}
+	use:modal
+	onclick={(e) => e.target === e.currentTarget && onclose()}
+>
+	<header class="ds-modal__head dlg-head">
+		<h2 id="{uid}-title">{title}</h2>
+		<button type="button" class="x" aria-label="Close" onclick={onclose}>×</button>
+	</header>
+	<div class="ds-modal__body dlg-body">{@render children()}</div>
+</dialog>
 
 <style>
-	.back {
-		position: fixed;
-		inset: 0;
-		z-index: 1500;
-		background: var(--scrim);
-		display: flex;
-		align-items: flex-end;
-		justify-content: center;
-	}
-	.dlg {
-		background: var(--card);
-		color: var(--ink);
-		width: 100%;
-		max-height: 88dvh;
-		display: flex;
-		flex-direction: column;
-		border-radius: var(--r-xl) var(--r-xl) 0 0;
-		box-shadow: var(--shadow-sheet);
-	}
-	header {
+	.dlg-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--sp-7) var(--sp-8) var(--sp-3);
+		padding-bottom: var(--sp-3);
 	}
 	h2 {
 		margin: 0;
@@ -86,20 +76,9 @@
 		outline-offset: -2px;
 		border-radius: var(--r-md);
 	}
-	.body {
-		padding: var(--sp-3) var(--sp-8) var(--sp-9);
-		overflow-y: auto;
+	.dlg-body {
+		padding-top: var(--sp-3);
 		display: grid;
 		gap: var(--sp-7);
-	}
-	@media (min-width: 761px) {
-		.back {
-			align-items: center;
-		}
-		.dlg {
-			width: min(480px, calc(100vw - 32px));
-			border-radius: var(--r-xl);
-			box-shadow: var(--shadow-3);
-		}
 	}
 </style>

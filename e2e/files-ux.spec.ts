@@ -86,15 +86,23 @@ test('upload sheet is a real modal: focus in, Tab trapped, Escape closes, focus 
 	await expect(dlg).toBeVisible();
 	// focus moved into the dialog
 	await expect(dlg.locator(':focus')).toHaveCount(1);
-	// Tab and Shift+Tab never leave it
+	// Tab and Shift+Tab never reach the page behind: a native modal dialog may hand focus to the
+	// browser chrome at its ends, but the page is inert, so focus is inside the dialog or nowhere
+	const behind = () =>
+		page.evaluate(() => {
+			const a = document.activeElement;
+			return !!a && a !== document.body && !a.closest('dialog[open]');
+		});
 	for (let i = 0; i < 6; i++) {
 		await page.keyboard.press('Tab');
-		await expect(dlg.locator(':focus')).toHaveCount(1);
+		expect(await behind()).toBe(false);
 	}
 	for (let i = 0; i < 6; i++) {
 		await page.keyboard.press('Shift+Tab');
-		await expect(dlg.locator(':focus')).toHaveCount(1);
+		expect(await behind()).toBe(false);
 	}
+	// back inside the dialog before Escape
+	await dlg.getByRole('button', { name: 'Cancel' }).first().focus();
 	await page.keyboard.press('Escape');
 	await expect(dlg).toBeHidden();
 	await expect(page.getByTestId('use-own-sliced')).toBeFocused();

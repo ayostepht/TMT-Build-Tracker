@@ -38,7 +38,10 @@
 	<div class="bh-title">
 		<div class="kicker bh-kicker">{kicker}</div>
 		<h1>
-			<span class="bh-name">{b.name}</span><span class="phase">{b.phase}</span>
+			<span class="bh-name">{b.name}</span><span
+				class="ds-badge ds-badge--accent bh-phase"
+				data-testid="build-phase">{b.phase}</span
+			>
 		</h1>
 	</div>
 	<div
@@ -95,6 +98,10 @@
 </header>
 
 <style>
+	.bh-phase {
+		margin-left: var(--sp-4);
+		vertical-align: middle;
+	}
 	.bh-more {
 		display: none;
 	}
@@ -151,7 +158,7 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 		}
-		.bh .phase {
+		.bh .bh-phase {
 			flex: none;
 			margin-left: 0;
 		}

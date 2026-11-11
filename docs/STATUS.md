@@ -1,8 +1,8 @@
 # Project status
 
 _Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`. Test copy is
-on r43 = eba0e72 (Stage 4 wave 2). A third Stage 4 wave was IN FLIGHT and uncommitted when
-the session's context was reset: see Pick up here)._
+on r43 = eba0e72 (Stage 4 wave 2). Stage 4 wave 3 (the whole app on the shared `ds-*` styles,
+native dialogs) is on `main` and NOT deployed yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -11,36 +11,26 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **Finish the in-flight Stage 4 wave 3** (started 2026-11-11, context reset mid-wave).
-   The maintainer approved the new shared styles ("They look good!"), so six agents were
-   dispatched to make the whole app use `ds-seg` / `ds-badge` / `ds-modal` / `ds-card`
-   instead of the deprecated globals in `app.css`. Their edits may be complete, partial or
-   absent in the working tree: run `git status` and `git diff --stat` first. The brief they
-   shared is saved (untracked) at `.playwright-mcp/stage4-wave3-common.md`. Scopes:
-   build-state (`PartRow` status control and `LogRunSheet` results → `ds-seg`; log and
-   Filter sheets → `ds-modal`; `.chip`, `.set`, `.now-card`); plates-3mf (plate view toggle,
-   `.plate-card`, upload sheet and `BedPicker` dialog → native `<dialog class="ds-modal">`
-   if feasible; an arrangement with an invalid item becomes `stale`); app-shell (`.tpl`,
-   `.set`, `.phase`, `.verdict`, `GuideViewer`, the shared `design/share/Dialog.svelte` and
-   `AskDialog` → `ds-modal`, `.crumb`/`.mini`, `VariantChooser` `.group`); printers (status
-   pills → `ds-badge`, camera dialog head); design-studio-ui (additive `app.css` support
-   such as a compact `ds-seg`, `.card`/`ds-card` unified, a leak-guard unit test, a removal
-   plan for the deprecated globals: NOT deleted yet); release-pwa (false "reverse proxy"
-   startup hint found on r42: base it on headers the client sent; `backPath` host check and
-   a wrong comment in `write-rate.ts`).
-   To finish: if agents' reports are lost, re-dispatch each owner with "review the
-   uncommitted changes in your files against the saved brief, complete them, run your
-   checks, report"; then `verifier` (full gate) and `security-reviewer` (only
-   `write-rate.ts`, `client-ip.ts`, `proxy-origin.mjs`, dialogs); commit; push (standing
-   OK to push verified work); then dispatch design-studio-ui to delete the deprecated
-   globals from `app.css` once nothing uses them, gate again, push.
-2. Remaining Stage 4 after that: `three`/`pdfjs-dist` to devDependencies (a dependency
+1. **Delete the deprecated globals from `app.css`** [design-studio-ui]: nothing uses them
+   any more (verifier grep, 2026-11-11). Blocks: `.seg`, `.chip`, `.tile` (+ `.tiles`,
+   `.tile-*`, `.tbar`), `.verdict`, `.tpl` (keep `.tpl-list`, a plain list reset), `.set`,
+   `.phase`, `.plate-card` rules (the class name stays as a spec hook), `.now-card`,
+   `.now-run`, `.placeholder`, `.gbtn`, `.viewer`/`.vbox`/`.vhead`/`.vclose`/`.vtabs`/
+   `.vtab`/`.vnav`/`.vimg`/`.vfoot`, `.crumb`, `.mini`. Re-read line numbers and re-run the
+   grep from the wave 3 design report first; `.spools`/`.clock` are still used by
+   `FilamentTiles`. `client/focus-trap.ts` (`trapFocus`) has no users left: remove it in the
+   same pass (a deletion: maintainer's OK). Then `verifier`, push.
+2. **Deploy wave 3 as r44** (maintainer's OK needed; from the Unraid dev container), then
+   look on the test copy at what could not be seen locally: the plate view toggle and the
+   "rotated N°" badge (need print geometry), the Now card while printing, printer badges
+   other than "Printing", toasts over dialogs on a phone.
+3. Remaining Stage 4 after that: `three`/`pdfjs-dist` to devDependencies (a dependency
    change: runs alone); legacy redirects; duplicate helpers. Then Stage 5 from Next steps.
-3. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
+4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
    (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
    test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
    public (then turn on branch protection at once; Dependabot is otherwise tidy).
-4. Wait for (or ask about) the maintainer's phone checks below, then act on them.
+5. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
 
@@ -73,6 +63,12 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
+- (2026-11-11) Look at the wave 3 controls (after r44, or in `.playwright-mcp/stage4c-*/`):
+  the selected `ds-seg` option now has an accent underline as well as the raised pill
+  (dark mode needed it); the part status control and the log sheet's Result use it, so the
+  selected option is the same accent colour whatever the status (Failed looks like
+  Success); the camera dialog's title is small on desktop.
+
 - (2026-11-11) Keep or delete the GitHub release asset for kit pack 1.0.0 (no longer baked
   into the image)? (The 21-plate re-check after the re-orientation removal passed on r42.)
 
@@ -102,19 +98,21 @@ Route each to the agent named in brackets.
   `editableTargets` lacks `kind` (can't tell builds from drafts); no "start a draft from
   this design"; draft cards have no 3D snapshot. Not yet raised with the maintainer: a
   selected part's chip covers the lower third of the phone stage; phone toasts cover the
-  stage top for ~8 s.
+  stage top for ~8 s. Destructive confirmations (`AskDialog` via `share/Dialog.svelte`)
+  focus the confirm button first, so a stray Enter confirms (security Low, older than
+  wave 3): focus Cancel first on destructive asks.
 - **Leftovers**: SDCP `PrintInfo.Status` 20 mid-print is unlabelled, needs the real
   printer [printers]; a one-off `ECONNRESET` on a PATCH in `printers.spec.ts` (suspected
   keep-alive reuse; retry in the spec if it recurs) [e2e-playwright]; the update prompt's
   worker hand-over is unit-tested only [release-pwa]; each landing build polls its view
   every 20 s and its printer jobs every 30 s (a shared chapter-level jobs fetch would cut
   the bursts) [printers, app-shell]; `KitFilesImport` and `GuideMapper` were restyled
-  without screenshots (need installed kit files) [app-shell].
+  without screenshots (need installed kit files) [app-shell]; the New-printer dialog has
+  no title bar or close button of its own (the form's heading is its header) [plates-3mf];
+  `PartRow` could carry a `data-testid` on its status group (`viewer.spec.ts` selects it
+  by role) [build-state]; a local `npm run dev`/built server without release credentials
+  logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Startup log** [release-pwa]: the "a reverse proxy appears to be in front" hint fires on
-  every direct install: `scripts/proxy-origin.mjs` always sets `x-forwarded-proto`, which
-  `client-ip.ts` `shouldWarnUndeclaredProxy` then sees. Base the hint on headers the client
-  actually sent.
 - **Files tab** [plates-3mf, app-shell]: on one r43 load the plate-layout heading read
   "MakeGood profile" while the select showed "Your uploaded 3MF" (greyed); an earlier load
   headed "Your uploaded 3MF". Heading and select can disagree; reproduce before fixing.
@@ -209,6 +207,10 @@ Route each to the agent named in brackets.
   site-admin only on a public instance. `MAX_3MF_MB` defaults to 256 there.
 - Account deletion removes the personal workspace and the user's drafts in chapters;
   chapter builds they created pass to another owner (2026-11-11).
+- **Shared styles** (2026-11-11): one segmented control (`ds-seg`), badge (`ds-badge`),
+  modal/sheet (`ds-modal`, always a native `<dialog>` opened with `showModal()`) and card
+  (`.card` = `ds-card`) for the whole app. While a dialog is open a toast shows above it but
+  cannot be clicked (Undo waits until the dialog closes): accepted as is.
 - Git history is kept as is when the repo goes public (private-range LAN addresses in old
   commits are accepted; no rewrite). Branch protection (no force push, no deletion,
   required `test` + `e2e`) is set the moment the repo is public: GitHub refuses it on a
@@ -232,18 +234,14 @@ package server): re-run before reading it as a code failure.
 
 1. **Stage 4, cleanup and design system** (nearly done). Done: prototype import and 3D
    re-orientation code removed, kit pack 1.0.0 dropped from the image, unused components
-   removed, scales and primitives in `app.css`, component styles on the tokens (shell,
-   build, plates, printers, design), leaked class names renamed, contrast guard, focus
-   trapping with an inert background, keyboard paths, one printer stream per chapter
-   (landing shows up to 6 builds). Left: retire the deprecated globals in `app.css`
-   (`.seg`, `.chip`, `.tile`, `.tpl`, `.set`, `.card`…; usage table in the 2026-11-11
-   design report: `.card` alone is in about 26 files) and move the status control and the
-   log/filter sheets to `ds-seg`/`ds-modal` (changes their look: needs the maintainer's eye);
-   two leaked selectors (`.row` in `share/ApplyDesign`, `.group` in `VariantChooser`);
-   `.crumb`/`.mini` in the `(app)` layout; `three`/`pdfjs-dist` to devDependencies (a
-   dependency change: runs alone); legacy redirects; duplicate helpers; a null item in a
-   stored arrangement fails an export with a 500 (treat as stale and re-arrange).
-   Open: squash migrations (needs a journal reset on the test copy; would also fix
+   removed, scales and primitives in `app.css`, component styles on the tokens, leaked class
+   names renamed with a guard test (`domain/style-leaks.test.ts`), contrast guard, native
+   dialogs everywhere (browser focus trap, inert background), keyboard paths, one printer
+   stream per chapter, every screen on `ds-seg`/`ds-badge`/`ds-modal`/`ds-card`, a damaged
+   stored arrangement is treated as stale (no more 500 on export), the false reverse-proxy
+   startup hint fixed. Left: delete the deprecated globals (Pick up here 1);
+   `three`/`pdfjs-dist` to devDependencies (runs alone); legacy redirects; duplicate
+   helpers. Open: squash migrations (needs a journal reset on the test copy; would also fix
    `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision);
    TypeScript 7 (Dependabot PR #11 fails check: a deliberate upgrade).
 2. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,

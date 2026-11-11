@@ -64,7 +64,7 @@
 
 <svelte:head><title>Studio · TMT Build Tracker</title></svelte:head>
 
-<section class="stack">
+<section class="page-stack">
 	{#if back}
 		<p>
 			<a
@@ -103,7 +103,7 @@
 		</div>
 	{:else if creating}
 		<form
-			class="ds-card stack narrow"
+			class="ds-card page-stack narrow"
 			method="post"
 			action="?/create"
 			use:enhance
@@ -253,7 +253,7 @@
 {/if}
 
 <style>
-	section.stack {
+	section.page-stack {
 		display: grid;
 		gap: var(--sp-8);
 	}

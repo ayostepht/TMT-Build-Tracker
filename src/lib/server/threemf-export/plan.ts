@@ -164,6 +164,10 @@ export function buildExportPlan(input: PlanInput): ExportPlan {
 		const items: PlannedItem[] = [];
 		if (!pl.items.length) for (const s of pl.parts) missing.set(s, partOf.get(s)?.name ?? s);
 		for (const it of pl.items) {
+			if (typeof it !== 'object' || it === null || typeof it.slug !== 'string')
+				throw new PlanError(
+					'The stored plate arrangement is damaged. Re-arrange the plates on the Print tab.'
+				);
 			const part = partOf.get(it.slug);
 			const piece = footprints.get(it.slug)?.pieces[it.piece];
 			const fil = slotOf.get(it.role);

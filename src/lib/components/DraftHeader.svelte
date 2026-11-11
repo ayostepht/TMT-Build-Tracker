@@ -28,7 +28,9 @@
 	<div>
 		<div class="kicker">{kicker}</div>
 		<h1>
-			{b.name}<span class="phase" data-testid="draft-badge">Draft</span>
+			{b.name}<span class="ds-badge ds-badge--accent draft-phase" data-testid="draft-badge"
+				>Draft</span
+			>
 		</h1>
 		<p class="muted desc">
 			A scratch design: nothing here is tracked and it stays out of your build lists.
@@ -46,6 +48,10 @@
 </header>
 
 <style>
+	.draft-phase {
+		margin-left: var(--sp-4);
+		vertical-align: middle;
+	}
 	.draft-head {
 		display: flex;
 		flex-wrap: wrap;

@@ -164,9 +164,11 @@
 
 	const badge = (key: string) => {
 		const m = up?.suggestions.matches[key];
-		if (!mapping[key]) return { cls: 'none', text: 'No match' };
-		if (mapping[key] !== m?.slug) return { cls: 'manual', text: 'Your pick' };
-		return m.confidence >= 0.8 ? { cls: 'high', text: 'Match' } : { cls: 'check', text: 'Check' };
+		if (!mapping[key]) return { cls: 'ds-badge--warn', text: 'No match' };
+		if (mapping[key] !== m?.slug) return { cls: 'ds-badge--accent', text: 'Your pick' };
+		return m.confidence >= 0.8
+			? { cls: 'ds-badge--ok', text: 'Match' }
+			: { cls: 'ds-badge--warn', text: 'Check' };
 	};
 
 	async function apply() {
@@ -226,7 +228,7 @@
 </script>
 
 <AskDialog ask={asking} />
-<section class="card upload" aria-label="Upload a 3MF">
+<section class="upload" aria-label="Upload a 3MF">
 	<div class="up-head">
 		<h2>Upload my sliced 3MF</h2>
 		<button class="btn sm" type="button" onclick={cancel} disabled={phase === 'applying'}
@@ -297,7 +299,7 @@
 
 		<h3>What should this file do?</h3>
 		<div class="outcome" role="radiogroup" aria-label="What this file is used for">
-			<label class="opt" class:on={outcome === 'plates'}>
+			<label class="ds-card ds-card--compact opt" class:on={outcome === 'plates'}>
 				<input
 					type="radio"
 					name="outcome"
@@ -311,7 +313,11 @@
 					>
 				</span>
 			</label>
-			<label class="opt" class:on={outcome === 'template'} class:off={!s.sliced}>
+			<label
+				class="ds-card ds-card--compact opt"
+				class:on={outcome === 'template'}
+				class:off={!s.sliced}
+			>
 				<input
 					type="radio"
 					name="outcome"
@@ -386,7 +392,7 @@
 		</p>
 		<div class="plates">
 			{#each s.plates as pl (pl.index)}
-				<article class="rp">
+				<article class="ds-card ds-card--compact rp">
 					<div class="rp-head">
 						{#if pl.hasThumbnail}
 							<img
@@ -413,7 +419,7 @@
 							<li class:unmatched={!mapping[key]}>
 								<div class="oname" title={up.suggestions.matches[key]?.reason}>
 									{o.name}{#if o.count > 1}<b> ×{o.count}</b>{/if}
-									<span class="up-badge {b.cls}">{b.text}</span>
+									<span class="ds-badge ds-badge--sm up-badge {b.cls}">{b.text}</span>
 								</div>
 								<select bind:value={mapping[key]} aria-label="Part for {o.name}">
 									<option value={null}>No match (skip)</option>
@@ -490,8 +496,11 @@
 </section>
 
 <style>
+	/* The content of the upload sheet (a ds-modal): the sheet is the surface, this pads and spaces it */
 	.upload {
+		display: grid;
 		gap: var(--sp-7);
+		padding: var(--sp-8);
 	}
 	.up-head {
 		display: flex;
@@ -557,13 +566,9 @@
 		gap: var(--sp-4);
 	}
 	.opt {
-		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: var(--sp-5);
 		align-items: start;
-		padding: var(--sp-5) var(--sp-6);
-		border: 1px solid var(--line);
-		border-radius: var(--r-lg);
 		background: var(--paper);
 		cursor: pointer;
 	}
@@ -607,11 +612,6 @@
 		flex-wrap: wrap;
 	}
 	.rp {
-		border: 1px solid var(--line);
-		border-radius: var(--r-lg);
-		padding: var(--sp-5);
-		display: grid;
-		gap: var(--sp-4);
 		background: var(--paper);
 	}
 	.rp-head {
@@ -673,26 +673,8 @@
 		font-size: var(--fs-md);
 	}
 	.up-badge {
-		display: inline-block;
-		font-size: var(--fs-xs);
-		font-weight: 600;
-		padding: 1px var(--sp-3);
-		border-radius: var(--r-lg);
 		margin-left: var(--sp-2);
 		vertical-align: 1px;
-	}
-	.up-badge.high {
-		background: var(--ok-soft);
-		color: var(--ok);
-	}
-	.up-badge.check,
-	.up-badge.none {
-		background: var(--warn-soft);
-		color: var(--warn);
-	}
-	.up-badge.manual {
-		background: var(--accent-soft);
-		color: var(--accent);
 	}
 	.actions {
 		display: flex;
@@ -701,6 +683,7 @@
 		position: sticky;
 		bottom: 0;
 		padding: var(--sp-4) 0;
+		margin-bottom: calc(-1 * var(--sp-4));
 		background: var(--card);
 	}
 	@media (min-width: 761px) {

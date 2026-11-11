@@ -39,10 +39,19 @@ const first = (value) =>
 		.split(',')[0]
 		.trim();
 
+// Private marker for the "reverse proxy in front" log hint only (client-ip.ts). This file adds
+// x-forwarded-proto itself on every request, so the hint cannot look at that header: the
+// marker records whether the CLIENT sent forwarding headers. Any inbound copy of the marker
+// is stripped first, so it cannot be spoofed. Never trust it for anything else.
+const FORWARD_MARKER = 'x-tmt-forwarded-original';
+const FORWARD_HEADERS = ['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host', 'forwarded'];
+
 const emit = http.Server.prototype.emit;
 http.Server.prototype.emit = function (event, req, ...rest) {
 	if (event === 'request' && req?.headers) {
 		const h = req.headers;
+		delete h[FORWARD_MARKER];
+		if (FORWARD_HEADERS.some((name) => name in h)) h[FORWARD_MARKER] = '1';
 		if (fixed) {
 			h['x-forwarded-proto'] = fixed.protocol.slice(0, -1);
 			h['x-forwarded-host'] = fixed.host;

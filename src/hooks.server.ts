@@ -97,7 +97,8 @@ const handleLimited = async (event: RequestEvent, resolve: Parameters<Handle>[0]
 		event.url.pathname,
 		undefined,
 		undefined,
-		event.request.headers
+		event.request.headers,
+		event.url.host
 	);
 	if (limited) return limited;
 	return compressResponse(event.request, await resolve(event));

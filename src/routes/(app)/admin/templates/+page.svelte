@@ -29,17 +29,17 @@
 	</p>
 	<ul class="tpl-list">
 		{#each data.templates as t (t.id)}
-			<li class="tpl">
+			<li class="ds-card ds-card--compact">
 				<h3>
 					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 					<a href={resolve('/(app)/admin/templates/[id]', { id: t.id }) + from}>{t.name}</a>
 				</h3>
 				<div class="muted">{t.version}{t.owned ? ' · chapter copy' : ''}</div>
 				<div class="counts">
-					<span class="set">{t.parts} parts</span>
-					<span class="set">{t.plates} plates</span>
-					<span class="set">{t.variantGroups} variant groups</span>
-					<span class="set">
+					<span class="ds-badge ds-badge--sm">{t.parts} parts</span>
+					<span class="ds-badge ds-badge--sm">{t.plates} plates</span>
+					<span class="ds-badge ds-badge--sm">{t.variantGroups} variant groups</span>
+					<span class="ds-badge ds-badge--sm">
 						{t.model ? `3D model v${t.model.version.slice(0, 8)}` : 'No 3D model yet'}
 					</span>
 				</div>

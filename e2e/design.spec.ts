@@ -9,7 +9,7 @@ test('design tab: move parts between slots, add a color, share a design and star
 
 	// Overview tile of the first slot before any change.
 	await page.goto(`/builds/${buildId}`);
-	const tile = page.locator('.tile').first();
+	const tile = page.getByTestId('filament-tile').first();
 	await expect(tile).toBeVisible();
 	const beforeTile = await tile.innerText();
 
@@ -36,7 +36,7 @@ test('design tab: move parts between slots, add a color, share a design and star
 
 	// The Overview filament tile changed (the wings moved onto the first slot).
 	await page.goto(`/builds/${buildId}`);
-	await expect(page.locator('.tile').first()).not.toHaveText(beforeTile);
+	await expect(page.getByTestId('filament-tile').first()).not.toHaveText(beforeTile);
 
 	// Add a color through the swatch picker (a custom filament here, a catalog swatch below).
 	await page.goto(`/builds/${buildId}/design`);

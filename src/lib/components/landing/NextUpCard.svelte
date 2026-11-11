@@ -24,7 +24,7 @@
 	);
 </script>
 
-<article class="nu-card" data-testid="next-up-card" data-plate={plate.number}>
+<article class="ds-card ds-card--compact" data-testid="next-up-card" data-plate={plate.number}>
 	<div class="nu-head">
 		<div class="nu-build">
 			<a href={resolve('/(app)/builds/[id]', { id: ctx.id })}>{ctx.view.build.name}</a>
@@ -40,15 +40,6 @@
 </article>
 
 <style>
-	.nu-card {
-		background: var(--card);
-		border: 1px solid var(--line);
-		border-radius: var(--r-lg);
-		padding: 14px;
-		display: grid;
-		gap: 10px;
-		min-width: 0;
-	}
 	.nu-build {
 		font: 600 var(--fs-xs)/1 var(--f-body);
 		letter-spacing: 0.08em;

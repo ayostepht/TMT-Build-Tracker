@@ -162,7 +162,7 @@
 		<h2>Recent prints</h2>
 		<ul class="tpl-list" data-testid="job-list">
 			{#each store.jobs as j (j.id)}
-				<li class="tpl jobrow">
+				<li class="ds-card ds-card--compact jobrow">
 					<div>
 						<b>{j.fileName || 'Unnamed print'}</b>
 						<div class="muted small">

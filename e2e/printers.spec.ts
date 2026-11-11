@@ -421,15 +421,15 @@ test('per-part plate: link a job to one rim color, Now printing shows it, Change
 	for (const w of [390, 360]) {
 		await page.setViewportSize({ width: w, height: 844 });
 		await expect(live).toBeVisible();
-		await page.locator('.now-card').scrollIntoViewIfNeeded();
+		await page.getByTestId('now-card').scrollIntoViewIfNeeded();
 		await page.screenshot({ path: `${SHOTS_NOW}/${tag}-${w}.png` });
 		const m = await page.evaluate(() => {
-			const card = document.querySelector('.now-card')!.getBoundingClientRect();
+			const card = document.querySelector('[data-testid="now-card"]')!.getBoundingClientRect();
 			const wrap = document.querySelector('.wrap')!;
 			const cs = getComputedStyle(wrap);
 			const contentW = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
 			const out: string[] = [];
-			for (const el of document.querySelectorAll('.now-card *')) {
+			for (const el of document.querySelectorAll('[data-testid="now-card"] *')) {
 				const r = el.getBoundingClientRect();
 				if (r.width > 0 && r.right > card.right + 1)
 					out.push(`${el.tagName}.${(el as HTMLElement).className} right=${r.right}`);
@@ -447,7 +447,7 @@ test('per-part plate: link a job to one rim color, Now printing shows it, Change
 		expect(m.scroll, `page scroll at ${w}px`).toBeLessThanOrEqual(m.client);
 	}
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.locator('.now-card').scrollIntoViewIfNeeded();
+	await page.getByTestId('now-card').scrollIntoViewIfNeeded();
 	await page.screenshot({ path: `${SHOTS_NOW}/${tag}-1440.png` });
 	await page.setViewportSize({ width: 390, height: 844 });
 

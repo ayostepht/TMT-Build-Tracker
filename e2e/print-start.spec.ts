@@ -23,7 +23,7 @@ test('Start printing works from the Print tab: plate grouping and part detail', 
 
 	await page.getByRole('link', { name: 'Overview' }).click();
 	await expect(page.getByRole('heading', { name: 'Now printing' })).toBeVisible();
-	await expect(page.locator('.now-card')).toContainText(`Plate ${plateNo}`);
+	await expect(page.getByTestId('now-card')).toContainText(`Plate ${plateNo}`);
 	await expect(page.locator('.overall-top')).toContainText('printing');
 
 	// Start a second plate from its group.

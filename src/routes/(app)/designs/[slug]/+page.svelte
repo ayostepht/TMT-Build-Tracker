@@ -131,7 +131,7 @@
 
 <svelte:head><title>{d.name} · Designs · TMT Build Tracker</title></svelte:head>
 
-<section class="stack">
+<section class="page-stack">
 	<a class="btn ghost sm back" href={resolve('/(app)/designs')}
 		><span class="btn-arrow" aria-hidden="true">←</span> All designs</a
 	>
@@ -301,7 +301,7 @@
 	.confirm p {
 		margin: 0;
 	}
-	section.stack {
+	section.page-stack {
 		display: grid;
 		gap: var(--sp-8);
 	}

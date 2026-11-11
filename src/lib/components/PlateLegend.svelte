@@ -48,7 +48,7 @@
 					{#if r.rotated != null}
 						<span class="note"
 							><span
-								class="tag"
+								class="ds-badge ds-badge--sm ds-badge--warn"
 								title="{r.name}: rotated {r.rotated}° flat on the bed (fits better, same face down)"
 								><svg class="glyph" viewBox="-6 -6 12 12" aria-hidden="true"
 									><path
@@ -62,7 +62,7 @@
 					{#if r.approx}
 						<span class="note"
 							><span
-								class="tag approx"
+								class="ds-badge ds-badge--sm"
 								title="No exact outline: shown as a box. Import print geometry for exact shapes."
 								>approx.</span
 							></span
@@ -144,16 +144,6 @@
 		color: var(--muted);
 		line-height: 1.35;
 	}
-	.tag {
-		display: inline-block;
-		padding: 0 var(--sp-3);
-		border-radius: var(--r-pill);
-		background: var(--warn-soft);
-		color: var(--warn);
-		font-weight: 600;
-		font-size: var(--fs-xs);
-		line-height: 17px;
-	}
 	.glyph {
 		width: 12px;
 		height: 12px;
@@ -164,9 +154,5 @@
 		stroke-width: 1.6px;
 		stroke-linecap: round;
 		stroke-linejoin: round;
-	}
-	.tag.approx {
-		background: var(--line);
-		color: var(--muted);
 	}
 </style>

@@ -434,11 +434,11 @@
 				<div class="genbody" data-testid="generator">
 					<div class="yours" role="group" aria-label="Your colors">
 						<span class="kicker">Your colors</span>
-						<div class="tiles">
+						<div class="ptiles">
 							{#each FILL_ORDER as s (s)}
 								{@const hexv = locked[s]}
 								{@const cur = currentHex(s)}
-								<div class="tile" class:locked={!!hexv} class:sel={selected === s} data-slot={s}>
+								<div class="ptile" class:locked={!!hexv} class:sel={selected === s} data-slot={s}>
 									<button
 										type="button"
 										class="tsel"
@@ -920,12 +920,13 @@
 	.yours .kicker {
 		margin: 0;
 	}
-	.tiles {
+	.ptiles {
 		display: grid;
 		gap: var(--sp-3);
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
 	}
-	.tile {
+	.ptile {
+		background: var(--card);
 		display: flex;
 		gap: var(--sp-3);
 		align-items: center;
@@ -935,10 +936,10 @@
 		border-radius: var(--r-lg);
 		min-width: 0;
 	}
-	.tile.locked {
+	.ptile.locked {
 		border-style: solid;
 	}
-	.tile.sel {
+	.ptile.sel {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}

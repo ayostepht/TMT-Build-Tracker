@@ -29,7 +29,6 @@
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 	import AskDialog from '#lib/components/AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
-	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 
 	/** Setup wizard: plate pictures only, no print log or slicer grams. */
 	let { wizard = false }: { wizard?: boolean } = $props();
@@ -41,7 +40,6 @@
 	let uploading = $state(false);
 	let notice = $state<string | null>(null);
 	let upload = $state<PlateUpload>();
-	let sheet = $state<HTMLElement>();
 	// The control that opened the upload sheet. The "Use my own sliced file" card is replaced while
 	// the sheet is open, so focus goes back to the control with the same test id when it closes.
 	let openerId: string | null = null;
@@ -57,6 +55,15 @@
 		const a = document.activeElement;
 		if (openerId && (!a || a === document.body))
 			document.querySelector<HTMLElement>(`[data-testid="${openerId}"]`)?.focus();
+	}
+	/** Opens the upload sheet as a modal <dialog>: native focus trap, inert page and Escape. */
+	function modal(node: HTMLDialogElement) {
+		node.showModal();
+		return {
+			destroy() {
+				if (node.open) node.close();
+			}
+		};
 	}
 	// A sliced project dropped in the kit drop zone opens the upload with that file.
 	$effect(() => {
@@ -280,9 +287,6 @@
 <AskDialog ask={asking} />
 
 <svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && uploading && isTopTrap(sheet)) upload?.close();
-	}}
 	onhashchange={() => void openFromHash()}
 	ondragover={onDragOver}
 	ondragleave={(e) => {
@@ -423,31 +427,31 @@
 </section>
 
 {#if uploading && ctx.canEdit}
-	<div class="upload-backdrop" role="presentation">
-		<div
-			class="upload-sheet"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Use my own sliced file"
-			tabindex="-1"
-			data-testid="upload-dialog"
-			bind:this={sheet}
-			use:trapFocus
-		>
-			<PlateUpload
-				bind:this={upload}
-				view={ctx.view}
-				initialFile={ctx.slicedFile}
-				oninitial={() => (ctx.slicedFile = null)}
-				onclose={closeUpload}
-				ondone={(msg) => {
-					void closeUpload();
-					notice = msg;
-					ctx.refresh();
-				}}
-			/>
-		</div>
-	</div>
+	<!-- Escape asks the upload first (it discards a parsed file); a confirmation inside is its own
+	     dialog on top and takes the Escape itself -->
+	<dialog
+		class="ds-modal ds-modal--sheet upload-sheet"
+		aria-label="Use my own sliced file"
+		data-testid="upload-dialog"
+		use:modal
+		oncancel={(e) => {
+			e.preventDefault();
+			upload?.close();
+		}}
+	>
+		<PlateUpload
+			bind:this={upload}
+			view={ctx.view}
+			initialFile={ctx.slicedFile}
+			oninitial={() => (ctx.slicedFile = null)}
+			onclose={closeUpload}
+			ondone={(msg) => {
+				void closeUpload();
+				notice = msg;
+				ctx.refresh();
+			}}
+		/>
+	</dialog>
 {/if}
 
 {#snippet plateExport(pl: Plate)}
@@ -512,7 +516,11 @@
 			</span>
 		</div>
 	{:else}
-		<section class="plate-card" id="plate-{pl.number}" aria-label="Plate {pl.number}">
+		<section
+			class="ds-card ds-card--compact plate-card"
+			id="plate-{pl.number}"
+			aria-label="Plate {pl.number}"
+		>
 			<div class="group-head">
 				<h2>Plate {pl.number} · {pl.name}</h2>
 				<span class="meta num"
@@ -542,16 +550,14 @@
 			{#if arranged(pl.number) && arr}
 				{@const ap = arranged(pl.number)!}
 				{#if pl.thumbnailPath}
-					<div class="view-toggle" role="group" aria-label="Plate {pl.number} view">
+					<div class="ds-seg view-toggle" role="group" aria-label="Plate {pl.number} view">
 						<button
 							type="button"
-							class="pl-seg"
 							aria-pressed={!diagramOn[pl.number]}
 							onclick={() => (diagramOn[pl.number] = false)}>Slicer preview</button
 						>
 						<button
 							type="button"
-							class="pl-seg"
 							aria-pressed={!!diagramOn[pl.number]}
 							onclick={() => (diagramOn[pl.number] = true)}>Diagram</button
 						>
@@ -828,27 +834,7 @@
 		color: var(--bad);
 	}
 	.view-toggle {
-		display: inline-flex;
 		justify-self: start;
-		border: 1px solid var(--line);
-		border-radius: var(--r-lg);
-		overflow: hidden;
-	}
-	.pl-seg {
-		display: inline-flex;
-		border: 0;
-		border-radius: var(--r-md);
-		background: transparent;
-		color: var(--muted);
-		font: inherit;
-		font-size: var(--fs-sm);
-		padding: var(--sp-2) var(--sp-6);
-		cursor: pointer;
-	}
-	.pl-seg[aria-pressed='true'] {
-		background: var(--accent-soft);
-		color: var(--accent);
-		font-weight: 600;
 	}
 	.fil-grams {
 		display: flex;
@@ -901,19 +887,9 @@
 		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
-	.upload-backdrop {
-		position: fixed;
-		inset: 0 0 var(--bottom-bar-h, 0px) 0;
-		z-index: 90;
-		display: grid;
-		align-items: start;
-		justify-items: center;
-		padding: var(--sp-6);
-		overflow-y: auto;
-		background: var(--scrim);
-	}
-	.upload-sheet {
-		width: min(760px, 100%);
-		margin: 4vh 0;
+	@media (min-width: 761px) {
+		.upload-sheet {
+			width: min(760px, calc(100vw - 32px));
+		}
 	}
 </style>

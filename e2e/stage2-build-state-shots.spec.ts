@@ -94,9 +94,9 @@ test('Print tab and Now card screenshots; content share at 390 x 844', async ({ 
 				await page.getByRole('button', { name: 'Done' }).click();
 			}
 			await page.goto(`/builds/${buildId}`);
-			await expect(page.locator('.now-card').first()).toBeVisible();
+			await expect(page.getByTestId('now-card').first()).toBeVisible();
 			await page.waitForLoadState('networkidle');
-			await page.locator('.now-card').first().scrollIntoViewIfNeeded();
+			await page.getByTestId('now-card').first().scrollIntoViewIfNeeded();
 			await page.screenshot({ path: `${SHOTS}/now-card-${vp.tag}-${scheme}.png` });
 		}
 	}
@@ -133,7 +133,9 @@ test('compact Now card on the landing and overflow of the full card at 360', asy
 		const over = await page.evaluate(() => {
 			const bad: string[] = [];
 			const vw = document.documentElement.clientWidth;
-			for (const el of document.querySelectorAll('.now-card, .now-card *')) {
+			for (const el of document.querySelectorAll(
+				'[data-testid="now-card"], [data-testid="now-card"] *'
+			)) {
 				const r = el.getBoundingClientRect();
 				if (r.width && (r.right > vw + 0.5 || r.left < -0.5))
 					bad.push(`${el.tagName}.${(el as HTMLElement).className} ${Math.round(r.right)}`);

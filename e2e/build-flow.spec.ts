@@ -22,7 +22,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 
 	await page.getByRole('link', { name: 'Overview' }).click();
 	await expect(page.getByRole('heading', { name: 'Now printing' })).toBeVisible();
-	await expect(page.locator('.now-card')).toContainText(name);
+	await expect(page.getByTestId('now-card')).toContainText(name);
 	await expect(header).toContainText('1 printing');
 
 	// Finishing opens the sheet with Success preselected (Save enabled); nothing is logged until saved.
@@ -85,7 +85,9 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await sheet.getByRole('button', { name: 'Success' }).click();
 	await save.click();
 	await expect(row(page, slug)).toHaveAttribute('data-s', 'Printed');
-	await expect(row(page, slug).locator('.seg button[aria-pressed="true"]')).toHaveText('Printed');
+	await expect(row(page, slug).locator('.part-seg button[aria-pressed="true"]')).toHaveText(
+		'Printed'
+	);
 
 	// Undo puts the previous status back and removes the run again.
 	await page.locator('.toasts').getByRole('button', { name: 'Undo' }).last().click();
@@ -111,7 +113,7 @@ test('filament labels do not repeat the material', async ({ page }) => {
 	await ownerWithBuild(page, 'labels');
 	await expect(page.locator('body')).not.toContainText(/PETG Primary PETG|TPU 95A Accent TPU/);
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
-	await expect(page.locator('.ptb-chips').first().locator('.chip')).toHaveText([
+	await expect(page.locator('.ptb-chips').first().locator('button')).toHaveText([
 		'All filament',
 		'Accent PETG',
 		'Primary PETG',

@@ -180,7 +180,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - Silhouettes are profile-only (`ensureSilhouettes` is the only lazy geometry fill; key
   `slug:piece`). Old footprint JSON and kit pack 1.0.1 still carry `orient` / `sil.poses`
   keys: readers ignore them (`domain/legacy-footprint.test.ts`). A stored arrangement with a
-  legacy `pose` is stale and is re-arranged flat.
+  legacy `pose` is stale and is re-arranged flat. `buildArrangement` (`builds/plates.ts`)
+  also drops damaged stored items (null, non-object, no `slug`/`piece`, non-list `items`)
+  and flags the arrangement `stale`; `buildExportPlan` throws a `PlanError`, never a
+  TypeError; `time-model.ts` treats a non-array `items` as empty. The upload sheet routes
+  Escape through the dialog's `cancel` event to `PlateUpload.close()`.
 - **Uploads**: 3MF upload is a raw body only (`?name=`; multipart gets 415 before the body is
   read; curl uses `--data-binary`). Order on the plates route: upload slot (429), workspace
   already over (409), disk floor (507), stream. The raw 3MF is never kept; thumbnails under
@@ -264,7 +268,9 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - **Client store** (`client/printer-store.svelte.ts`): one `OrgStream` (a single
   `EventSource`, the window listeners and the 30 s poll) per organization, reference
   counted and shared by every `PrinterStore` on the page; stores still load their own
-  data. `CameraTile` takes a `name` for its labels.
+  data. `CameraTile` takes a `name` for its labels; its enlarged view is a `ds-modal`
+  dialog with a head and Close button. `PrinterCard`'s status pill is a `ds-badge` with a
+  state-to-tone map.
 - **Job linking UI**: `JobLinkControl` (core; never guesses a plate), used by `PrinterJobs`
   (build page) and `PrinterJobLink` (Printers page, build picker first). `GET
 /api/printers?org=` returns `builds` and `expected` for editors only;
@@ -301,6 +307,13 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   a workspace with the author), gallery `/designs`, `/designs/[slug]` ("Use this design"
   scrolls to and focuses the Use card), `/studio` (New draft, gallery strip).
 - Toasts: top on phone, bottom-left on desktop.
+- **Shared styles** (`app.css`, markup comments above each): `ds-seg` (+ `--fill`, `--sm`;
+  the selected option has a raised surface and an accent underline, plus forced-colors
+  rules), `ds-badge` (tones `--ok/--warn/--bad/--run/--accent`), `ds-modal` (+ `--sheet`;
+  sticky `__head`/`__foot`, safe-area padding; never set `display` on it), and the card:
+  `.card` and `.ds-card` are one definition (`.card` is the supported name; `--compact`,
+  `--flush`, `--dashed` on both). `domain/style-leaks.test.ts` fails when a component
+  `<style>` uses a class name that a global rule in `app.css` would leak into.
 
 - `DesignWorkspace` shows a dismissible "Plates and export are out of date" notice from the
   same `arrangement.stale` flag Files uses (real builds, with a printer, editors).
@@ -393,11 +406,18 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - **Accessibility**: the root layout holds the skip link; the `(app)` layout wraps pages in
   `<main id="main" tabindex="-1">` (signed-out pages and the standalone error page carry
   their own); one `<h1>` and a distinct `<title>` per route. Top-bar menus are disclosures
-  (`aria-expanded`, `aria-controls`; no `role=menu`). Modals use `trapFocus` from
-  `client/focus-trap.ts` (traps stack; everything outside the top trap is `inert` except
-  elements marked `data-keep-active`, i.e. the toast host; a portalled dialog applies
-  `use:portal` before `use:trapFocus`; inline confirms use `inlineConfirm` or `focusIn`). Guard:
-  `e2e/a11y.spec.ts`.
+  (`aria-expanded`, `aria-controls`; no `role=menu`). Every modal and sheet is a
+  native `<dialog class="ds-modal">` opened with `showModal()` (the browser traps focus, makes
+  the page inert, handles Escape and restores focus): the shared `design/share/Dialog.svelte`
+  (and `AskDialog` on top of it), `GuideViewer`, the photo lightbox, the log and Filter
+  sheets, the upload sheet, the New-printer dialog and the camera dialog. Tab may leave to
+  the browser chrome at a dialog's ends, never to the page behind. A confirmation nested in a
+  dialog must `preventDefault` on Escape or the outer dialog closes too (`ApplyDesign`).
+  The `<Toast />` host is a `popover="manual"` in the top layer, so a toast shows above an
+  open dialog; it is not clickable until the dialog closes (accepted, STATUS Decisions).
+  `client/focus-trap.ts` has no users left. Inline confirms use `inlineConfirm` or
+  `focusIn`. Guard: `e2e/a11y.spec.ts` (hit-test based `reachable()` helper). Test ids added
+  in wave 3: `build-phase`, `member-row`, `filament-tile`, `now-card`.
 - **Shell**: `(app)/+layout.svelte` has a one-row phone top bar (`.navpanel` is a panel
   behind `nav-toggle` on phones; phone specs call `openNav(page)`), the `<Toast />` host
   (phones: above the bottom bar) and a navigation progress bar. `TabBar` is one nav with two
@@ -416,7 +436,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Release and deployment (`release-pwa`)
 
-- Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`).
+- Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`). The preload
+  strips any inbound `x-tmt-forwarded-original` and sets it only when the client itself sent
+  a forwarding header; `client-ip.ts` `shouldWarnUndeclaredProxy` reads only that marker for
+  the one-time "reverse proxy" log hint (never for trust). `writeRateResponse` gets the host
+  for its back link from `event.url.host`.
 - Image: `ghcr.io/ayostepht/tmt-build-tracker` (`latest`, semver, `sha-<short>`), kit pack
   baked in, `VOLUME /data`, `HEALTHCHECK` on `/api/health`, `BODY_SIZE_LIMIT=1100M`.
 - Unraid template `unraid/tmt-build-tracker.xml`; install guide in `README.md`.

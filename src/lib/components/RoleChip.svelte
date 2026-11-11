@@ -6,7 +6,7 @@
 	let { filament, role = '' }: { filament: FilamentRole | undefined; role?: string } = $props();
 </script>
 
-<span class="chip static">
+<span class="ds-badge ds-badge--sm">
 	{#if filament}<Swatch hex={filament.hex} tpu={filament.tpu} size="mini" />{/if}
 	{filamentLabel(filament, role)}
 </span>

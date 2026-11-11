@@ -104,23 +104,23 @@
 			</div>
 		</div>
 		<div class="settings">
-			{#if plate}<span class="set plate" title="Plate in the print profile"
+			{#if plate}<span class="pset plate" title="Plate in the print profile"
 					>Plate {plate.number}</span
 				>{/if}
-			{#if part.qty}<span class="set">×{part.qty}</span>{/if}
-			{#if part.walls != null}<span class="set">{part.walls} walls</span>{/if}
-			{#if part.infill}<span class="set">{part.infill}</span>{/if}
-			{#if part.supports}<span class="set"
+			{#if part.qty}<span class="pset">×{part.qty}</span>{/if}
+			{#if part.walls != null}<span class="pset">{part.walls} walls</span>{/if}
+			{#if part.infill}<span class="pset">{part.infill}</span>{/if}
+			{#if part.supports}<span class="pset"
 					>{part.supports === 'Yes' ? 'supports' : 'no supports'}</span
 				>{/if}
-			{#if part.brim}<span class="set hot">{part.brim} brim</span>{/if}
+			{#if part.brim}<span class="pset hot">{part.brim} brim</span>{/if}
 			{#if part.components.length}
-				<span class="set" class:hot={doneComps < part.components.length}
+				<span class="pset" class:hot={doneComps < part.components.length}
 					>{doneComps}/{part.components.length} pieces</span
 				>
 			{/if}
 		</div>
-		<div class="seg part-seg" role="group" aria-label="Status for {part.name}">
+		<div class="ds-seg part-seg" role="group" aria-label="Status for {part.name}">
 			{#each PART_STATUSES as s (s)}
 				<button
 					type="button"
@@ -184,7 +184,7 @@
 					<div class="chips">
 						{#each pages as g (g.page)}
 							<button
-								class="chip"
+								class="ds-badge"
 								type="button"
 								title={g.text}
 								onclick={() => ctx.openGuide(part.slug)}
@@ -247,9 +247,44 @@
 </div>
 
 <style>
-	/* The current status is not shown by colour alone: an underline in the text colour marks it. */
-	.part-seg button[aria-pressed='true'] {
-		box-shadow: inset 0 -2px 0 currentColor;
+	/* Compact status control: four options on one line down to a 360 px phone. */
+	.part-seg > button {
+		padding: var(--sp-6) var(--sp-4);
+		font-size: var(--fs-sm);
+		white-space: nowrap;
+	}
+	/* The current status is not shown by colour alone: the raised option also gets an underline. */
+	.part-seg > button[aria-pressed='true'] {
+		box-shadow:
+			var(--shadow-1),
+			inset 0 -2px 0 currentColor;
+	}
+	@media (max-width: 760px) {
+		.part-seg {
+			grid-column: 1 / -1;
+			order: 4;
+			display: grid;
+			width: 100%;
+		}
+	}
+	/* Part settings tags (was the global .set). */
+	.pset {
+		font: 500 var(--fs-xs) / 1 var(--f-mono);
+		background: var(--paper);
+		border: 1px solid var(--line);
+		border-radius: var(--r-sm);
+		padding: var(--sp-2) var(--sp-3);
+	}
+	.pset.plate {
+		background: var(--accent-soft);
+		color: var(--accent);
+		border-color: transparent;
+		font-weight: 600;
+	}
+	.pset.hot {
+		background: var(--warn-soft);
+		color: var(--warn);
+		border-color: transparent;
 	}
 	.just-now {
 		font-weight: 600;

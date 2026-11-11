@@ -38,12 +38,12 @@
 {/if}
 <ul class="tpl-list">
 	{#each data.builds as b (b.id)}
-		<li class="tpl">
+		<li class="ds-card ds-card--compact">
 			<h3><a href={resolve('/(app)/builds/[id]', { id: b.id })}>{b.name}</a></h3>
 			<div class="counts">
-				<span class="set">{b.phase}</span>
-				<span class="set">{b.progress}% printed ({b.printed}/{b.total})</span>
-				{#if b.deliveryDate}<span class="set">Due {b.deliveryDate}</span>{/if}
+				<span class="ds-badge ds-badge--sm">{b.phase}</span>
+				<span class="ds-badge ds-badge--sm">{b.progress}% printed ({b.printed}/{b.total})</span>
+				{#if b.deliveryDate}<span class="ds-badge ds-badge--sm">Due {b.deliveryDate}</span>{/if}
 				{#if b.setupStep !== null && canEdit}
 					<a class="pill-link" href={resolve('/(app)/builds/[id]/setup', { id: b.id })}
 						>Setup: step {b.setupStep} of 5 <span class="btn-arrow" aria-hidden="true">→</span></a

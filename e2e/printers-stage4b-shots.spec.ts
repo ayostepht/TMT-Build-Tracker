@@ -6,7 +6,7 @@ import { createBuild, ownerWithBuild } from './helpers';
 // Visual guard for the Stage 4 second wave (printer components). Runs only with
 // STAGE4_SHOTS=before|after; files land in the gitignored .playwright-mcp/stage4b-printers/.
 const PHASE = process.env.STAGE4_SHOTS;
-const DIR = `.playwright-mcp/stage4b-printers/${PHASE}`;
+const DIR = `.playwright-mcp/${process.env.STAGE4_SHOTS_DIR ?? 'stage4b-printers'}/${PHASE}`;
 test.skip(!PHASE, 'set STAGE4_SHOTS=before|after');
 
 test('stage 4b printers screenshots', async ({ page, browser }) => {

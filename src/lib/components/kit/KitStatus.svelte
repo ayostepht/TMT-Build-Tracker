@@ -51,7 +51,12 @@
 				<div class="ks-head">
 					<span class="ks-dot" aria-hidden="true"></span>
 					<strong>{r.title}</strong>
-					<span class="ks-chip">{mark[r.state]}</span>
+					<span
+						class="ds-badge ds-badge--sm ks-chip"
+						class:ds-badge--ok={r.state === 'ok'}
+						class:ds-badge--warn={r.state === 'partial'}
+						class:ds-badge--bad={r.state === 'missing'}>{mark[r.state]}</span
+					>
 				</div>
 				{#if !compact}
 					{#each r.lines as l (l)}<div class="meta">{l}</div>{/each}
@@ -124,28 +129,12 @@
 	}
 	.ks-chip {
 		margin-left: auto;
-		font-size: var(--fs-xs);
-		color: var(--muted);
-		/* the look the leaked global .chip gave this label */
-		border: 1px solid var(--line);
-		background: var(--card);
-		border-radius: var(--r-pill);
-		padding: var(--sp-3) var(--sp-6);
-		display: inline-flex;
-		align-items: center;
-		gap: var(--sp-3);
-	}
-	li.ok .ks-chip {
-		color: var(--ok);
 	}
 	li.info .ks-dot {
 		background: var(--line);
 	}
 	.meta-link {
 		font-size: var(--fs-sm);
-	}
-	li.missing .ks-chip {
-		color: var(--bad);
 	}
 	.meta {
 		font-size: var(--fs-sm);

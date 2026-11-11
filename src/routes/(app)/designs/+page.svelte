@@ -25,7 +25,7 @@
 
 <svelte:head><title>Designs · TMT Build Tracker</title></svelte:head>
 
-<section class="stack">
+<section class="page-stack">
 	{#if back}
 		<p>
 			<a
@@ -111,7 +111,7 @@
 </section>
 
 <style>
-	section.stack {
+	section.page-stack {
 		display: grid;
 		gap: var(--sp-8);
 	}

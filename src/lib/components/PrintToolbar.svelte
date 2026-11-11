@@ -59,12 +59,15 @@
 
 {#snippet controls(prefix: string)}
 	<div class="ptb-chips">
-		<button class="chip" type="button" aria-pressed={role === 'all'} onclick={() => onrole('all')}
-			>All filament</button
+		<button
+			class="ds-badge"
+			type="button"
+			aria-pressed={role === 'all'}
+			onclick={() => onrole('all')}>All filament</button
 		>
 		{#each ctx.view.filaments as f (f.key)}
 			<button
-				class="chip"
+				class="ds-badge"
 				type="button"
 				aria-pressed={role === f.key}
 				onclick={() => onrole(f.key)}
@@ -113,14 +116,14 @@
 
 <dialog
 	bind:this={dlg}
-	class="ptb-sheet"
+	class="ds-modal ds-modal--sheet"
 	aria-labelledby="{uid}-t"
 	{onclose}
 	onclick={(e) => e.target === dlg && (open = false)}
 >
 	{#if open}
 		<div class="ptb-body">
-			<header>
+			<header class="ptb-head">
 				<h2 id="{uid}-t">Filter parts</h2>
 				<button class="ptb-x" type="button" aria-label="Close" onclick={() => (open = false)}
 					>×</button
@@ -187,25 +190,12 @@
 		text-overflow: ellipsis;
 		min-width: 0;
 	}
-	.ptb-sheet {
-		border: 1px solid var(--line);
-		border-radius: var(--r-xl);
-		background: var(--card);
-		color: var(--ink);
-		padding: 0;
-		width: min(480px, calc(100vw - 32px));
-		max-height: calc(100dvh - 32px);
-		overflow: auto;
-	}
-	.ptb-sheet::backdrop {
-		background: var(--scrim);
-	}
 	.ptb-body {
 		display: grid;
 		gap: var(--sp-7);
 		padding: var(--sp-8);
 	}
-	.ptb-body header {
+	.ptb-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -247,13 +237,6 @@
 		.ptb-guide {
 			flex: none;
 			white-space: nowrap;
-		}
-		.ptb-sheet {
-			width: 100%;
-			max-width: 100%;
-			margin: auto 0 0;
-			border-radius: var(--r-xl) var(--r-xl) 0 0;
-			max-height: 92dvh;
 		}
 	}
 	@media (min-width: 761px) {

@@ -275,7 +275,7 @@ test('invites default to editor, copy the link, and removing a member asks first
 	const joined = await joinViaInvite(browser, link, 'Ed Editor', email);
 	await joined.context.close();
 	await page.reload();
-	const row = page.locator('li.tpl', { hasText: 'Ed Editor' });
+	const row = page.getByTestId('member-row').filter({ hasText: 'Ed Editor' });
 	await row.getByTestId('remove-member').click();
 	const dlg = page.getByTestId('remove-member-dialog');
 	await expect(dlg).toContainText('Remove Ed Editor?');
@@ -285,7 +285,7 @@ test('invites default to editor, copy the link, and removing a member asks first
 	await expect(row).toHaveCount(1);
 	await row.getByTestId('remove-member').click();
 	await page.getByTestId('confirm-remove-member').click();
-	await expect(page.locator('li.tpl', { hasText: 'Ed Editor' })).toHaveCount(0);
+	await expect(page.getByTestId('member-row').filter({ hasText: 'Ed Editor' })).toHaveCount(0);
 });
 
 test('wizard: Continue is blocked on Files until a printer is chosen', async ({ page }) => {

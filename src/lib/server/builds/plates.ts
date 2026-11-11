@@ -33,7 +33,7 @@ import { toStoredSummary, type StoredSummary, type ThreeMfSummary } from '#lib/d
 import type { BuildView } from '#lib/domain/types.ts';
 import { deltaE } from '#lib/domain/color.ts';
 import { inactiveSlugs, resolveChoices, validateChoices } from '#lib/domain/variants.ts';
-import type { ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
+import type { ArrangedPlate, ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { Silhouette } from '#lib/domain/silhouette.ts';
 import { ApiError, buildAccess } from '../access';
@@ -726,18 +726,45 @@ export function templateColorsChanged(view: BuildView): boolean {
 	return false;
 }
 
+/** A stored arrangement item the exporter can read: an object with a slug and a piece index. */
+const validItem = (i: unknown): boolean =>
+	typeof i === 'object' &&
+	i !== null &&
+	typeof (i as { slug?: unknown }).slug === 'string' &&
+	typeof (i as { piece?: unknown }).piece === 'number';
+
 export function buildArrangement(db: Db, buildId: string, userId: string): ArrangementInfo {
 	const view = loadBuildView(db, buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
 	const row = db.select().from(builds).where(eq(builds.id, buildId)).get();
-	const stored = db
+	const raw = db
 		.select()
 		.from(buildPlates)
 		.where(eq(buildPlates.buildId, buildId))
 		.orderBy(asc(buildPlates.number))
 		.all()
 		.filter((p) => p.source === ARRANGED_SOURCE && p.arrangement)
-		.map((p) => p.arrangement!);
+		.map((p) => p.arrangement as unknown);
+	// Corrupt stored data (an arrangement that is not an object, a null or non-object item, items
+	// or parts that are not lists) is treated like a legacy arrangement: the plates are shown
+	// without the bad parts, `stale` is set, and the export re-arranges flat.
+	let corrupt = false;
+	const stored: ArrangedPlate[] = [];
+	for (const a of raw) {
+		if (typeof a !== 'object' || a === null) {
+			corrupt = true;
+			continue;
+		}
+		const pl = a as ArrangedPlate;
+		const itemsOk = Array.isArray(pl.items) && pl.items.every(validItem);
+		const partsOk = Array.isArray(pl.parts) && pl.parts.every((x) => typeof x === 'string');
+		if (!itemsOk || !partsOk) corrupt = true;
+		stored.push({
+			...pl,
+			items: Array.isArray(pl.items) ? pl.items.filter(validItem) : [],
+			parts: Array.isArray(pl.parts) ? pl.parts.filter((x) => typeof x === 'string') : []
+		});
+	}
 	// Outlines for the diagram: only what is on the plates; computed once, then cached in the row.
 	const onPlates = new Set(stored.flatMap((pl) => pl.parts));
 	ensureSilhouettes(db, view.build.templateId, onPlates);
@@ -779,6 +806,7 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 				}
 			: null,
 		stale:
+			corrupt ||
 			// arrangements stored before the 3D re-orientation code was removed carry a legacy `pose`
 			stored.some((pl) =>
 				pl.items.some((i) => typeof i === 'object' && i !== null && 'pose' in i)

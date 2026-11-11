@@ -223,15 +223,20 @@
 
 	<dialog
 		bind:this={dlg}
-		class="lightbox"
-		aria-label={label}
+		class="ds-modal camdlg"
+		aria-labelledby="{bodyId}-title"
 		onclick={onbackdrop}
 		onclose={onclosed}
 	>
-		{#if zoomed && shown}
-			<img src={shown} alt="{label}, enlarged" data-testid="camera-lightbox-img" />
-		{/if}
-		<button class="btn sm close" type="button" onclick={() => dlg?.close()}>Close</button>
+		<header class="ds-modal__head camdlg-head">
+			<h2 id="{bodyId}-title">{label}</h2>
+			<button class="btn sm camdlg-close" type="button" onclick={() => dlg?.close()}>Close</button>
+		</header>
+		<div class="ds-modal__body camdlg-body">
+			{#if zoomed && shown}
+				<img src={shown} alt="{label}, enlarged" data-testid="camera-lightbox-img" />
+			{/if}
+		</div>
 	</dialog>
 {/if}
 
@@ -318,27 +323,33 @@
 	.muted {
 		color: var(--muted);
 	}
-	.lightbox {
-		border: 0;
-		padding: 0;
-		background: transparent;
-		max-width: 96vw;
-		max-height: 96vh;
+	.camdlg {
+		width: min(960px, calc(100vw - 32px));
 	}
-	.lightbox::backdrop {
-		background: var(--scrim-strong);
+	.camdlg-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--sp-4);
+		padding: var(--sp-5) var(--sp-8);
+		border-bottom: 1px solid var(--line);
 	}
-	.lightbox img {
+	.camdlg-head h2 {
+		margin: 0;
+		font-size: var(--fs-md);
+	}
+	.camdlg-body {
+		padding: var(--sp-5);
+	}
+	.camdlg-body img {
 		display: block;
-		max-width: 96vw;
-		max-height: 88vh;
+		width: 100%;
+		max-height: 80vh;
+		object-fit: contain;
 		border-radius: var(--r-md);
 	}
-	.close {
-		margin-top: var(--sp-4);
-	}
 	@media (pointer: coarse) {
-		.close {
+		.camdlg-close {
 			min-height: 44px;
 			min-width: 44px;
 		}

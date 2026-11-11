@@ -81,9 +81,15 @@
 			busy = false;
 		}
 	}
+	const tone: Record<string, string> = {
+		ready: 'ds-badge--ok',
+		installing: 'ds-badge--warn',
+		partial: 'ds-badge--warn',
+		missing: 'ds-badge--bad'
+	};
 </script>
 
-<section class="card tpl" aria-labelledby="tpl-h" data-testid="template-step">
+<section class="ds-card" aria-labelledby="tpl-h" data-testid="template-step">
 	<h2 id="tpl-h">Choose build template</h2>
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 
@@ -103,8 +109,10 @@
 				<span class="sub">The standard kit, built in</span>
 			</span>
 			{#if baseState}
-				<span class="tpl-chip {baseState}" data-testid="makegood-status" data-state={baseState}
-					>{label[baseState]}</span
+				<span
+					class="ds-badge ds-badge--sm {tone[baseState]} tpl-chip"
+					data-testid="makegood-status"
+					data-state={baseState}>{label[baseState]}</span
 				>
 			{/if}
 		</label>
@@ -219,30 +227,6 @@
 	}
 	.tpl-chip {
 		margin-left: auto;
-		font-size: var(--fs-xs);
-		font-weight: 600;
-		padding: 4px 10px;
-		border-radius: var(--r-pill);
-		background: var(--line);
-		color: var(--muted);
-		white-space: nowrap;
-		/* the look the leaked global .chip gave this label */
-		border: 1px solid var(--line);
-		display: inline-flex;
-		align-items: center;
-	}
-	.tpl-chip.ready {
-		background: var(--ok-soft);
-		color: var(--ok);
-	}
-	.tpl-chip.installing,
-	.tpl-chip.partial {
-		background: var(--warn-soft);
-		color: var(--warn);
-	}
-	.tpl-chip.missing {
-		background: var(--bad-soft);
-		color: var(--bad);
 	}
 	.body {
 		display: grid;

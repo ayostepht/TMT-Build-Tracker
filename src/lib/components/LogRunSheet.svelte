@@ -358,7 +358,7 @@
 
 <dialog
 	bind:this={dlg}
-	class="sheet"
+	class="ds-modal ds-modal--sheet"
 	aria-labelledby="{uid}-t"
 	{onclose}
 	{oncancel}
@@ -366,151 +366,153 @@
 >
 	{#if open}
 		<form onsubmit={save}>
-			<header>
+			<header class="ds-modal__head lrs-head">
 				<h2 id="{uid}-t">{title}</h2>
 				<button class="x" type="button" aria-label="Cancel" onclick={() => (open = false)}>×</button
 				>
 			</header>
 
-			<fieldset class="res">
-				<legend>Result</legend>
-				<div class="segbtns" role="group" aria-label="Result">
-					{#each RUN_RESULTS as r (r)}
-						<button
-							type="button"
-							data-v={r}
-							aria-pressed={result === r}
-							onclick={() => (result = r)}>{r}</button
-						>
-					{/each}
-				</div>
-			</fieldset>
-
-			{#if pickable}
-				<label class="f" for="{uid}-part"
-					>Which color/part was this print
-					<select id="{uid}-part" bind:value={picked}>
-						{#each slugs as s (s)}
-							<option value={s}
-								>{partOf(s)?.name} ({filLabel(
-									ctx.filament(partOf(s)?.role ?? ''),
-									partOf(s)?.role
-								)})</option
+			<div class="ds-modal__body lrs-body">
+				<fieldset class="res">
+					<legend>Result</legend>
+					<div class="ds-seg ds-seg--fill lrs-seg" role="group" aria-label="Result">
+						{#each RUN_RESULTS as r (r)}
+							<button
+								type="button"
+								data-v={r}
+								aria-pressed={result === r}
+								onclick={() => (result = r)}>{r}</button
 							>
 						{/each}
-					</select>
-				</label>
-			{/if}
-
-			{#if editRun}
-				<label class="f" for="{uid}-date"
-					>Date
-					<input id="{uid}-date" type="date" max={today()} required bind:value={editDate} />
-				</label>
-			{:else}
-				<label class="f" for="{uid}-fin"
-					>Finished at
-					<span class="inline">
-						<input
-							id="{uid}-fin"
-							type="datetime-local"
-							max={toLocalInput(new Date())}
-							value={fin}
-							onchange={(e) => setFin(e.currentTarget.value)}
-						/>
-						<button class="btn sm" type="button" onclick={setNow}>Now</button>
-					</span>
-				</label>
-			{/if}
-
-			<label class="f" for="{uid}-dur"
-				>Total print time
-				<input
-					id="{uid}-dur"
-					type="text"
-					inputmode="text"
-					autocomplete="off"
-					placeholder="e.g. 13h 07m, 13:07 or 1.5"
-					aria-invalid={durInvalid}
-					value={dur}
-					oninput={(e) => {
-						dur = e.currentTarget.value;
-						durEdited = true;
-					}}
-				/>
-				{#if durInvalid}<small class="err">Try 13h 07m, 13:07 or 1.5 (hours).</small>
-				{:else if startedAt && !durEdited}<small>From the start time to finish.</small>
-				{:else if planned && !durEdited}<small>{plannedLabel}; edit if different.</small>{/if}
-			</label>
-
-			<label class="f" for="{uid}-g"
-				>Filament used (g)
-				<input
-					id="{uid}-g"
-					type="number"
-					min="0"
-					step="1"
-					inputmode="decimal"
-					placeholder={result === 'Failed'
-						? 'optional'
-						: bomEstimate > 0
-							? `BOM ~${fmt(bomEstimate)}`
-							: 'g'}
-					value={gramsShown}
-					oninput={(e) => {
-						grams = e.currentTarget.value;
-						gramsEdited = true;
-					}}
-				/>
-				{#if result === 'Failed' && !gramsEdited}<small
-						>Optional: grams actually used. Left empty it counts as 0 g.</small
-					>
-				{:else if slicerDefault != null && !gramsEdited && !editRun}<small>{gramsSource}</small
-					>{/if}
-			</label>
-
-			<label class="f" for="{uid}-n"
-				>Notes
-				<textarea
-					id="{uid}-n"
-					rows="3"
-					placeholder="Warping, stringing, fit…"
-					maxlength="2000"
-					bind:value={note}></textarea>
-			</label>
-
-			<p class="summary" aria-live="polite">
-				{summary || 'Choose a result to see what saving will do.'}
-			</p>
-			{#if error}<p class="err" role="alert">{error}</p>{/if}
-
-			{#if editRun && confirmDelete}
-				<div
-					class="confirm"
-					role="alertdialog"
-					aria-label="Confirm delete"
-					use:focusIn={'[data-keep]'}
-				>
-					<p>
-						Delete this log?
-						{#if deleteChanges.length && !keepStatuses}{sentence(deleteChanges)}.{:else}Part
-							statuses stay as they are.{/if}
-					</p>
-					{#if deleteChanges.length}
-						<label class="chk"
-							><input type="checkbox" bind:checked={keepStatuses} /> Keep part statuses as they are</label
-						>
-					{/if}
-					<div class="confirm-acts">
-						<button class="btn" type="button" data-keep onclick={keepLog}>Keep it</button>
-						<button class="btn danger" type="button" disabled={busy} onclick={remove}
-							>Delete log</button
-						>
 					</div>
-				</div>
-			{/if}
+				</fieldset>
 
-			<footer>
+				{#if pickable}
+					<label class="f" for="{uid}-part"
+						>Which color/part was this print
+						<select id="{uid}-part" bind:value={picked}>
+							{#each slugs as s (s)}
+								<option value={s}
+									>{partOf(s)?.name} ({filLabel(
+										ctx.filament(partOf(s)?.role ?? ''),
+										partOf(s)?.role
+									)})</option
+								>
+							{/each}
+						</select>
+					</label>
+				{/if}
+
+				{#if editRun}
+					<label class="f" for="{uid}-date"
+						>Date
+						<input id="{uid}-date" type="date" max={today()} required bind:value={editDate} />
+					</label>
+				{:else}
+					<label class="f" for="{uid}-fin"
+						>Finished at
+						<span class="inline">
+							<input
+								id="{uid}-fin"
+								type="datetime-local"
+								max={toLocalInput(new Date())}
+								value={fin}
+								onchange={(e) => setFin(e.currentTarget.value)}
+							/>
+							<button class="btn sm" type="button" onclick={setNow}>Now</button>
+						</span>
+					</label>
+				{/if}
+
+				<label class="f" for="{uid}-dur"
+					>Total print time
+					<input
+						id="{uid}-dur"
+						type="text"
+						inputmode="text"
+						autocomplete="off"
+						placeholder="e.g. 13h 07m, 13:07 or 1.5"
+						aria-invalid={durInvalid}
+						value={dur}
+						oninput={(e) => {
+							dur = e.currentTarget.value;
+							durEdited = true;
+						}}
+					/>
+					{#if durInvalid}<small class="err">Try 13h 07m, 13:07 or 1.5 (hours).</small>
+					{:else if startedAt && !durEdited}<small>From the start time to finish.</small>
+					{:else if planned && !durEdited}<small>{plannedLabel}; edit if different.</small>{/if}
+				</label>
+
+				<label class="f" for="{uid}-g"
+					>Filament used (g)
+					<input
+						id="{uid}-g"
+						type="number"
+						min="0"
+						step="1"
+						inputmode="decimal"
+						placeholder={result === 'Failed'
+							? 'optional'
+							: bomEstimate > 0
+								? `BOM ~${fmt(bomEstimate)}`
+								: 'g'}
+						value={gramsShown}
+						oninput={(e) => {
+							grams = e.currentTarget.value;
+							gramsEdited = true;
+						}}
+					/>
+					{#if result === 'Failed' && !gramsEdited}<small
+							>Optional: grams actually used. Left empty it counts as 0 g.</small
+						>
+					{:else if slicerDefault != null && !gramsEdited && !editRun}<small>{gramsSource}</small
+						>{/if}
+				</label>
+
+				<label class="f" for="{uid}-n"
+					>Notes
+					<textarea
+						id="{uid}-n"
+						rows="3"
+						placeholder="Warping, stringing, fit…"
+						maxlength="2000"
+						bind:value={note}></textarea>
+				</label>
+
+				<p class="summary" aria-live="polite">
+					{summary || 'Choose a result to see what saving will do.'}
+				</p>
+				{#if error}<p class="err" role="alert">{error}</p>{/if}
+
+				{#if editRun && confirmDelete}
+					<div
+						class="confirm"
+						role="alertdialog"
+						aria-label="Confirm delete"
+						use:focusIn={'[data-keep]'}
+					>
+						<p>
+							Delete this log?
+							{#if deleteChanges.length && !keepStatuses}{sentence(deleteChanges)}.{:else}Part
+								statuses stay as they are.{/if}
+						</p>
+						{#if deleteChanges.length}
+							<label class="chk"
+								><input type="checkbox" bind:checked={keepStatuses} /> Keep part statuses as they are</label
+							>
+						{/if}
+						<div class="confirm-acts">
+							<button class="btn" type="button" data-keep onclick={keepLog}>Keep it</button>
+							<button class="btn danger" type="button" disabled={busy} onclick={remove}
+								>Delete log</button
+							>
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<footer class="ds-modal__foot">
 				{#if editRun && !confirmDelete}
 					<button
 						bind:this={delBtn}
@@ -527,26 +529,15 @@
 </dialog>
 
 <style>
-	.sheet {
-		border: 1px solid var(--line);
-		border-radius: var(--r-xl);
-		background: var(--card);
-		color: var(--ink);
-		padding: 0;
-		width: min(480px, calc(100vw - 32px));
-		max-height: calc(100dvh - 32px);
-		overflow: auto;
-	}
-	.sheet::backdrop {
-		background: var(--scrim);
-	}
 	form {
-		display: grid;
-		gap: var(--sp-7);
-		padding: var(--sp-8);
 		min-width: 0;
 	}
-	header {
+	.lrs-body {
+		display: grid;
+		gap: var(--sp-7);
+		min-width: 0;
+	}
+	.lrs-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -606,41 +597,11 @@
 		gap: var(--sp-4);
 		align-items: center;
 	}
-	.segbtns {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		border: 1px solid var(--line);
-		border-radius: var(--r-lg);
-		overflow: hidden;
-	}
-	.segbtns button {
-		border: 0;
-		border-right: 1px solid var(--line);
-		background: var(--paper);
-		color: var(--ink);
-		padding: var(--sp-6) var(--sp-3);
-		font: inherit;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.segbtns button:last-child {
-		border-right: 0;
-	}
-	.segbtns button[aria-pressed='true'][data-v='Success'] {
-		background: var(--ok-soft);
-		color: var(--ok);
-	}
-	.segbtns button[aria-pressed='true'][data-v='Failed'] {
-		background: var(--bad-soft);
-		color: var(--bad);
-	}
-	.segbtns button[aria-pressed='true'][data-v='Partial'] {
-		background: var(--warn-soft);
-		color: var(--warn);
-	}
-	/* Colour is not the only cue for the chosen result: an underline in the text colour too. */
-	.segbtns button[aria-pressed='true'] {
-		box-shadow: inset 0 -3px 0 currentColor;
+	/* The chosen result is not shown by colour alone: the raised option also gets an underline. */
+	.lrs-seg button[aria-pressed='true'] {
+		box-shadow:
+			var(--shadow-1),
+			inset 0 -3px 0 currentColor;
 	}
 	small {
 		color: var(--muted);
@@ -657,11 +618,6 @@
 		background: var(--accent-soft);
 		color: var(--ink);
 		font-size: var(--fs-md);
-	}
-	footer {
-		display: flex;
-		justify-content: flex-end;
-		gap: var(--sp-4);
 	}
 	.del {
 		margin-right: auto;
@@ -693,13 +649,6 @@
 		width: auto;
 	}
 	@media (max-width: 760px) {
-		.sheet {
-			width: 100%;
-			max-width: 100%;
-			margin: auto 0 0;
-			border-radius: var(--r-xl) var(--r-xl) 0 0;
-			max-height: 92dvh;
-		}
 		footer .btn {
 			flex: 1;
 			padding: var(--sp-6) var(--sp-7);

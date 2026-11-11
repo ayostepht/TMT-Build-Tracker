@@ -63,7 +63,7 @@
 	<div class="card sum" aria-labelledby="readyTitle">
 		<div class="sum-top">
 			<h2 id="readyTitle">Ready to assemble</h2>
-			<span class="verdict" class:ok={ready.ready} class:warn={!ready.ready}>
+			<span class="ds-badge" class:ds-badge--ok={ready.ready} class:ds-badge--warn={!ready.ready}>
 				{ready.ready ? 'All parts printed' : `${ready.printed} of ${ready.total} parts printed`}
 			</span>
 		</div>
@@ -279,10 +279,6 @@
 		justify-content: space-between;
 		gap: 10px;
 		flex-wrap: wrap;
-	}
-	.verdict.warn {
-		background: var(--warn-soft);
-		color: var(--warn);
 	}
 	.missing {
 		margin: 6px 0 10px;

@@ -267,7 +267,7 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	await expect(page.getByTestId('ask-message')).toContainText('Mark as handed off anyway?');
 	await page.getByTestId('ask-confirm').click();
 	await expect(page.getByRole('heading', { name: 'Handed off' })).toBeVisible();
-	await expect(page.locator('.phase')).toHaveText('done');
+	await expect(page.getByTestId('build-phase')).toHaveText('done');
 	await page.goto(`/builds/${buildId}`);
 	await expect(page.locator('.activity')).toContainText(
 		'marked the chair as handed off to Riverside Clinic'

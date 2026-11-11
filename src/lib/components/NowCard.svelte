@@ -97,13 +97,14 @@
 </script>
 
 <article
-	class="now-card"
+	class="ds-card nc-card"
+	data-testid="now-card"
 	style="border-left-color:{ctx.filament(item.roles[0])?.hex ?? 'var(--accent)'}"
 >
 	<div class="now-head">
 		<div>
 			<div class="now-plate">
-				Plate {item.plate}{#if item.run}<span class="now-run"
+				Plate {item.plate}{#if item.run}<span class="ds-badge ds-badge--sm ds-badge--warn nc-run"
 						>Run {item.run.run} of {item.run.of}</span
 					>{/if}
 			</div>
@@ -230,6 +231,33 @@
 </article>
 
 <style>
+	/* ds-card plus what is specific to a running plate: the filament-coloured left edge and halo. */
+	.nc-card {
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-left: 6px solid var(--accent);
+		border-radius: var(--r-lg);
+		display: grid;
+		min-width: 0;
+		box-shadow: 0 0 0 3px var(--run-soft);
+		padding: var(--sp-7);
+		gap: var(--sp-5);
+		/* One shrinkable column: a grid's implicit auto column would grow to the min-content of
+		   the widest child (a long <select> option, an iOS datetime-local) and spill past the card. */
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.nc-card > :global(*) {
+		min-width: 0;
+		max-width: 100%;
+	}
+	.nc-run {
+		background: var(--warn-soft);
+		color: var(--warn);
+		padding: var(--sp-2) var(--sp-4);
+		border-radius: var(--r-pill);
+		letter-spacing: 0.02em;
+		text-transform: none;
+	}
 	.now-actions {
 		display: flex;
 		gap: var(--sp-4);

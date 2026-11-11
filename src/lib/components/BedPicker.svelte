@@ -14,7 +14,6 @@
 	} from '#lib/printers/printer.ts';
 	import PrinterPicker from './PrinterPicker.svelte';
 	import PrinterForm from './PrinterForm.svelte';
-	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 
 	/**
 	 * Pick the bed a build is planned for: a standard size in one tap, a custom size, or a
@@ -213,10 +212,20 @@
 		const ok = list.filter((t) => t.organizationId === orgId && catalogPrinter(t.catalogId));
 		if (preselectSingle && !touched && ok.length === 1 && !current?.catalogId) pickTeam(ok[0].id);
 	});
-	let npBox = $state<HTMLElement>();
-	function portal(node: HTMLElement) {
+	/**
+	 * Moves the dialog to <body> (the picker may sit inside a form, and PrinterForm is a form too)
+	 * and opens it as a modal: the browser gives focus trapping, an inert page, Escape and focus
+	 * restore.
+	 */
+	function modal(node: HTMLDialogElement) {
 		document.body.appendChild(node);
-		return { destroy: () => node.remove() };
+		node.showModal();
+		return {
+			destroy() {
+				if (node.open) node.close();
+				node.remove();
+			}
+		};
 	}
 </script>
 
@@ -423,29 +432,16 @@
 	{/if}
 </div>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && adding && isTopTrap(npBox)) adding = false;
-	}}
-/>
-
 {#if adding}
-	<!-- portal first, then the focus trap: moving the node in the DOM would drop focus set before -->
-	<div
-		use:portal
-		use:trapFocus
-		class="np-backdrop"
-		role="dialog"
-		aria-modal="true"
+	<dialog
+		use:modal
+		class="ds-modal np-dialog"
 		aria-label="New printer"
-		tabindex="-1"
 		data-testid="new-printer-dialog"
-		bind:this={npBox}
+		onclose={() => (adding = false)}
 	>
-		<div class="np-box">
-			<PrinterForm org={orgId} ondone={added} oncancel={() => (adding = false)} />
-		</div>
-	</div>
+		<PrinterForm org={orgId} ondone={added} oncancel={() => (adding = false)} />
+	</dialog>
 {/if}
 
 <style>
@@ -535,19 +531,14 @@
 	.num-field input {
 		max-width: 140px;
 	}
-	.np-backdrop {
-		position: fixed;
-		inset: 0 0 var(--bottom-bar-h, 0px) 0;
-		z-index: 100;
-		background: var(--scrim);
-		overflow-y: auto;
-		display: grid;
-		align-items: start;
-		justify-items: center;
-		padding: var(--sp-8);
+	.np-dialog {
+		width: min(640px, calc(100vw - 32px));
 	}
-	.np-box {
-		width: min(640px, 100%);
+	/* The form is a card: inside the dialog the dialog is the surface */
+	.np-dialog :global(.pf) {
+		border: 0;
+		border-radius: 0;
+		background: transparent;
 	}
 	.hint {
 		margin: 0;

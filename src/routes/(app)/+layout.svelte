@@ -236,7 +236,7 @@
 													{#if b.setupStep !== null}setup step {b.setupStep} of 5{:else}{b.progress}%
 														printed{/if}</span
 												>
-												<span class="mini" aria-hidden="true"
+												<span class="nav-mini" aria-hidden="true"
 													><span style="width:{b.setupStep !== null ? 0 : b.progress}%"
 													></span></span
 												>
@@ -339,7 +339,7 @@
 			</div>
 		</div>
 		{#if showCrumb}
-			<a class="crumb" href={overviewHref} data-testid="back-to-build"
+			<a class="nav-crumb" href={overviewHref} data-testid="back-to-build"
 				><span aria-hidden="true">←</span> {isDraft ? 'Studio' : current?.name}</a
 			>
 		{/if}
@@ -545,14 +545,15 @@
 		font-size: var(--fs-xs);
 		color: var(--muted);
 	}
-	.mini {
+	.nav-mini {
 		display: block;
+		width: 100%;
 		height: 4px;
 		border-radius: var(--r-sm);
 		background: var(--line);
 		overflow: hidden;
 	}
-	.mini span {
+	.nav-mini span {
 		display: block;
 		height: 100%;
 		background: var(--ok);
@@ -573,7 +574,7 @@
 		display: inline-flex;
 		align-items: center;
 	}
-	.crumb {
+	.nav-crumb {
 		flex-basis: 100%;
 		display: flex;
 		padding: 8px 12px;
@@ -721,7 +722,7 @@
 		.phone-only {
 			display: grid !important;
 		}
-		.crumb {
+		.nav-crumb {
 			order: 9;
 		}
 	}

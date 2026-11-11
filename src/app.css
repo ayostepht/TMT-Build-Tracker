@@ -250,12 +250,22 @@ button {
    All names are prefixed `ds-` so they cannot collide with component-local class names.
    DEPRECATED duplicates:
      segmented control: .seg (+ .seg button), .vtabs/.vtab, .tabs (as a segmented use), local variants
-     card: .card (kept as the base for the legacy tile), .tpl, .tile, .plate-card, .now-card, .placeholder
+     card: .tpl, .tile, .plate-card, .now-card, .placeholder
      badge/pill: .chip, .set, .phase, .verdict, .now-run, .pill-link/.gbtn (clickable), .banner/.error (notices stay)
      modal/sheet: .viewer/.vbox (GuideViewer), the share Dialog, AskDialog and LogRunSheet styles */
 
-/* Segmented control: a track with equal-width options; the active one is raised. Works as
-   role=group with aria-pressed buttons or as role=tablist with aria-selected tabs. */
+/* SEGMENTED CONTROL  .ds-seg
+   Markup: <div class="ds-seg" role="group" aria-label="Status">
+             <button type="button" aria-pressed="true">Printed</button> ... </div>
+           or role="tablist" with <button role="tab" aria-selected="true">. Children are direct
+           <button>/<a> elements; the selected one is marked with aria-pressed / aria-selected /
+           aria-current="true" (never with a class).
+   Modifiers: .ds-seg--fill (full width track, equal options)
+              .ds-seg--sm   (compact: --fs-sm text, tighter padding; still >= 40px tall on coarse
+                             pointers; four short options fit a 360px phone row)
+   Selected cue beyond colour: the option is raised onto the card surface with a shadow AND an inset
+   accent underline (the shadow is invisible in dark mode, the underline is not); in forced-colors
+   mode it becomes Highlight/HighlightText. */
 .ds-seg {
 	display: inline-grid;
 	grid-auto-flow: column;
@@ -292,13 +302,71 @@ button {
 	background: var(--card);
 	box-shadow: var(--shadow-1);
 	color: var(--accent);
+	box-shadow:
+		var(--shadow-1),
+		inset 0 -2px 0 var(--accent);
 }
 .ds-seg > button:disabled {
 	opacity: 0.55;
 	cursor: default;
 }
+.ds-seg--sm {
+	padding: var(--sp-1);
+	gap: var(--sp-1);
+}
+.ds-seg--sm > button,
+.ds-seg--sm > a {
+	font-size: var(--fs-sm);
+	padding: var(--sp-4) var(--sp-3);
+	min-height: 32px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+@media (pointer: coarse) {
+	.ds-seg--sm > button,
+	.ds-seg--sm > a {
+		min-height: 40px;
+	}
+}
+@media (forced-colors: active) {
+	.ds-seg {
+		border: 1px solid CanvasText;
+		forced-color-adjust: none;
+		background: Canvas;
+	}
+	.ds-seg > button,
+	.ds-seg > a {
+		color: ButtonText;
+		border: 1px solid transparent;
+	}
+	.ds-seg > [aria-selected='true'],
+	.ds-seg > [aria-pressed='true'],
+	.ds-seg > [aria-current='true'] {
+		background: Highlight;
+		color: HighlightText;
+		border-color: HighlightText;
+		box-shadow: none;
+	}
+	.ds-seg > button:disabled {
+		color: GrayText;
+	}
+	.ds-badge,
+	button.ds-badge[aria-pressed='true'] {
+		border: 1px solid CanvasText;
+	}
+	button.ds-badge[aria-pressed='true'] {
+		background: Highlight;
+		color: HighlightText;
+		forced-color-adjust: none;
+	}
+}
 
-/* Card: a bordered surface. Compose with .ds-card--compact, .ds-card--flush (no inner padding), .ds-card--dashed (empty state). */
+/* CARD  .card (supported name, used across the app) == .ds-card (alias): one definition.
+   Markup: <section class="card"> ... </section> (a grid with a gap; children stack).
+   Modifiers work on both names: --compact (tighter), --flush (no inner padding, for lists/media),
+   --dashed (empty state): .card.ds-card--compact or .ds-card.ds-card--compact are the same.
+   New markup uses .card; do not add card-like rules to component styles. */
+.card,
 .ds-card {
 	background: var(--card);
 	border: 1px solid var(--line);
@@ -308,19 +376,26 @@ button {
 	gap: var(--sp-6);
 	min-width: 0;
 }
-.ds-card--compact {
+.ds-card--compact,
+.card--compact {
 	padding: var(--sp-7);
 	gap: var(--sp-5);
 }
-.ds-card--flush {
+.ds-card--flush,
+.card--flush {
 	padding: 0;
 	gap: 0;
 }
-.ds-card--dashed {
+.ds-card--dashed,
+.card--dashed {
 	border-style: dashed;
 }
 
-/* Badge / pill: a short label. Static by default; a <button> or <a> becomes a toggle/link pill
+/* BADGE / PILL  .ds-badge
+   Markup: <span class="ds-badge ds-badge--ok">Done</span>; toggle: <button type="button"
+   class="ds-badge" aria-pressed="false">; link: <a class="ds-badge" href>. Size: --sm. Tones:
+   --accent --ok --warn --bad --run --solid (use one tone class at most).
+   Badge / pill: a short label. Static by default; a <button> or <a> becomes a toggle/link pill
    (aria-pressed="true" fills it). Tones carry meaning with text as well as colour: always put the
    state in the words, never rely on the tone alone. */
 .ds-badge {
@@ -385,9 +460,18 @@ button.ds-badge[aria-pressed='true'] {
 	border-color: var(--accent);
 }
 
-/* Modal / sheet: style for a native <dialog class="ds-modal"> opened with showModal() (focus
-   trap, Esc and inertness come from the platform). On phones add .ds-modal--sheet to anchor it to
-   the bottom edge. Inside: .ds-modal__head / __body / __foot. */
+/* MODAL / SHEET  .ds-modal
+   Markup: <dialog class="ds-modal" aria-labelledby="t1"> <header class="ds-modal__head"><h2 id="t1">
+           </h2></header> <div class="ds-modal__body">...</div> <footer class="ds-modal__foot">
+           buttons </footer> </dialog>, opened with dialog.showModal() (focus trap, inert page, Esc,
+           focus restore and the top layer come from the platform; no z-index needed, so it also
+           covers the phone bottom tab bar and sits above toasts' normal layer).
+   .ds-modal--sheet: on phones (<= 760px) anchors to the bottom edge, full width, rounded top; the
+           foot pads for the home-indicator safe area. No tab-bar offset is needed (top layer).
+   Long content: the dialog scrolls as a whole; __head sticks to the top and __foot to the bottom
+           so the actions stay reachable. A second dialog opened with showModal() while one is open
+           stacks above it (later in the top layer) with its own backdrop; close it first to return.
+   Nothing may set `display` on .ds-modal (it would defeat the closed state). */
 .ds-modal {
 	border: 1px solid var(--line);
 	border-radius: var(--r-xl);
@@ -398,6 +482,7 @@ button.ds-badge[aria-pressed='true'] {
 	width: min(520px, calc(100vw - 32px));
 	max-height: calc(100dvh - 32px);
 	overflow: auto;
+	overscroll-behavior: contain;
 }
 .ds-modal::backdrop {
 	background: var(--scrim);
@@ -407,20 +492,34 @@ button.ds-badge[aria-pressed='true'] {
 .ds-modal__foot {
 	padding: var(--sp-8);
 }
+.ds-modal__head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--card);
+}
 .ds-modal__foot {
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: var(--sp-4);
 	border-top: 1px solid var(--line);
+	position: sticky;
+	bottom: 0;
+	z-index: 1;
+	background: var(--card);
 }
 @media (max-width: 760px) {
 	.ds-modal--sheet {
 		margin: auto 0 0;
 		width: 100%;
 		max-width: 100%;
+		max-height: calc(100dvh - var(--sp-8));
 		border-radius: var(--r-xl) var(--r-xl) 0 0;
 		box-shadow: var(--shadow-sheet);
+	}
+	.ds-modal--sheet .ds-modal__foot {
+		padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom, 0px));
 	}
 }
 
@@ -460,14 +559,7 @@ button.ds-badge[aria-pressed='true'] {
 	color: var(--muted);
 	margin-bottom: var(--sp-3);
 }
-.card {
-	background: var(--card);
-	border: 1px solid var(--line);
-	border-radius: var(--r-lg);
-	padding: var(--sp-9);
-	display: grid;
-	gap: var(--sp-6);
-}
+/* .card is defined with .ds-card in the shared primitives above. */
 a {
 	color: var(--accent);
 	text-decoration-line: underline;

@@ -23,7 +23,7 @@ test('a viewer sees the build read-only and the API refuses their writes', async
 	const first = vp.locator('.row').first();
 	const slug = (await first.getAttribute('data-id')) as string;
 	const name = (await first.locator('.pbtn').innerText()).trim();
-	const buttons = first.locator('.seg button');
+	const buttons = first.getByRole('group', { name: /^Status for/ }).getByRole('button');
 	await expect(buttons).toHaveCount(4);
 	for (const b of await buttons.all()) await expect(b).toBeDisabled();
 

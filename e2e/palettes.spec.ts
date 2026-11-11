@@ -100,7 +100,7 @@ test('lock pink and purple, pick from auto-filled variations, preview, apply and
 	const gen = await openGenerator(page);
 
 	// Primary starts locked to the build's current primary; clear it, then quick swatches fill Primary, Accent.
-	const tile = (slot: string) => gen.locator(`.tile[data-slot="${slot}"]`);
+	const tile = (slot: string) => gen.locator(`.ptile[data-slot="${slot}"]`);
 	await expect(tile('primary')).toHaveClass(/locked/);
 	await expect(tile('accent')).not.toHaveClass(/locked/);
 	await gen.getByRole('button', { name: 'Clear Primary PETG (back to Auto)' }).click();
@@ -190,7 +190,7 @@ test('slot tiles: select a slot for the next color, use current, clear back to A
 	await page.goto(`/builds/${buildId}/design`);
 	await openPalettes(page);
 	const gen = await openGenerator(page);
-	const tile = (slot: string) => gen.locator(`.tile[data-slot="${slot}"]`);
+	const tile = (slot: string) => gen.locator(`.ptile[data-slot="${slot}"]`);
 	await expect(tile('primary')).toHaveClass(/locked/);
 
 	// Selecting Accent TPU sends the next quick color there instead of the first Auto slot.

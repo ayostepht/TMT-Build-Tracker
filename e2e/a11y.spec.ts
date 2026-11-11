@@ -1,10 +1,20 @@
 import { expect, test } from './fixtures';
-import { ownerWithBuild, openNav } from './helpers';
-import type { Page } from '@playwright/test';
+import { ownerWithBuild, openNav, keepPrintedVisible } from './helpers';
+import type { Locator, Page } from '@playwright/test';
 
 // Shell accessibility guard (no axe dependency): landmarks, headings, skip link, accessible
 // names, top-bar menu behaviour and dialog focus handling, at phone and desktop widths.
 const SHOTS = '.playwright-mcp/stage4-app-shell';
+
+/** Whether a click at the element's centre would reach it (an inert element behind a modal is skipped by hit testing). */
+async function reachable(loc: Locator): Promise<boolean> {
+	return loc.evaluate((el) => {
+		el.scrollIntoView({ block: 'center' });
+		const r = el.getBoundingClientRect();
+		const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+		return !!hit && el.contains(hit);
+	});
+}
 
 /** Roughly the accessible name: aria-label, labelledby, visible text, title, associated label. */
 async function unnamed(page: Page, scope: string): Promise<string[]> {
@@ -139,8 +149,9 @@ for (const [width, height] of [
 				expect(box!.height).toBeGreaterThanOrEqual(40);
 			}
 
-			// A modal (the shared Dialog): focus moves in, Tab is trapped, Escape closes and
-			// focus returns to the trigger.
+			// A modal (the shared Dialog, a native <dialog>): focus moves in, Tab never reaches the page
+			// behind (the browser may hand focus to its own chrome at the ends, so focus is inside the
+			// dialog or nowhere), Escape closes and focus returns to the trigger.
 			await page.goto('/account');
 			await page.waitForLoadState('networkidle');
 			const open = page.getByTestId('delete-account-open');
@@ -149,27 +160,29 @@ for (const [width, height] of [
 			const dlg = page.getByRole('dialog', { name: 'Delete my account' });
 			await expect(dlg).toBeVisible();
 			expect(await dlg.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+			const behind = () =>
+				page.evaluate(() => {
+					const a = document.activeElement;
+					return !!a && a !== document.body && !a.closest('dialog[open]');
+				});
 			for (let i = 0; i < 12; i++) {
 				await page.keyboard.press('Tab');
-				expect(await dlg.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+				expect(await behind()).toBe(false);
 			}
 			for (let i = 0; i < 12; i++) {
 				await page.keyboard.press('Shift+Tab');
-				expect(await dlg.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+				expect(await behind()).toBe(false);
 			}
-			// The page behind the modal is inert (top bar and the rest of the page), the dialog and
-			// the toasts are not; closing the dialog lifts it again.
-			await expect(page.locator('header.topbar')).toHaveJSProperty('inert', true);
-			// (the dialog sits inside <main>, so it is main's other content that is inert)
-			expect(await page.locator('main h1').evaluate((h) => !!h.closest('[inert]'))).toBe(true);
-			await expect(dlg).toHaveJSProperty('inert', false);
-			expect(await dlg.evaluate((d) => !!d.closest('[inert]'))).toBe(false);
-			expect(await page.locator('.toasts').evaluate((d) => !!d.closest('[inert]'))).toBe(false);
+			// The page behind the modal is inert (top bar and the rest of the page); the dialog is
+			// not; closing the dialog lifts it again. Toasts are inert too (see the Undo test below).
+			expect(await reachable(page.locator('header.topbar'))).toBe(false);
+			expect(await reachable(page.locator('main h1'))).toBe(false);
+			expect(await reachable(dlg.getByRole('button').first())).toBe(true);
 			await page.screenshot({ path: `${SHOTS}/dialog-${width}.png` });
 			await page.keyboard.press('Escape');
 			await expect(dlg).toHaveCount(0);
 			await expect(open).toBeFocused();
-			await expect(page.locator('[inert]')).toHaveCount(0);
+			expect(await reachable(page.locator('main h1'))).toBe(true);
 
 			// Inline confirm (build Settings, delete): Escape cancels and focus returns to the trigger.
 			await page.goto(`/builds/${buildId}/settings`);
@@ -185,3 +198,28 @@ for (const [width, height] of [
 		});
 	});
 }
+
+test('a toast raised before a modal opens is shown but not reachable while the modal is open', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'toastundo');
+	await keepPrintedVisible(page, buildId);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	const head = page.locator('.group-head').first();
+	const logBtn = head.getByRole('button', { name: /^Log a print on plate \d+$/ });
+	await logBtn.click();
+	const sheet = page.getByRole('dialog');
+	await sheet.getByRole('button', { name: 'Failed', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+	const undo = page.locator('.toasts').getByRole('button', { name: 'Undo' });
+	await expect(undo).toBeVisible();
+	// A second modal over the live toast: the toast stays painted above the backdrop (top layer)...
+	await head.getByRole('button', { name: /^Log a print on plate \d+$/ }).click();
+	await expect(page.getByRole('dialog')).toBeVisible();
+	await expect(undo).toBeVisible();
+	// ...but, as everything outside a modal dialog, it is inert: Undo cannot be clicked.
+	expect(await reachable(undo)).toBe(false);
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	expect(await reachable(undo)).toBe(true);
+});

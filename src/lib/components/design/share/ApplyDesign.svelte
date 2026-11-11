@@ -76,8 +76,11 @@
 			tabindex="-1"
 			use:focusIn={'button:not(.primary)'}
 			onkeydown={(e) => {
-				if (e.key === 'Escape' && !busy) {
+				if (e.key === 'Escape') {
+					// Always swallow Escape here: the native <dialog> around this would otherwise close.
+					e.preventDefault();
 					e.stopPropagation();
+					if (busy) return;
 					confirming = false;
 				}
 			}}
@@ -89,7 +92,7 @@
 				This replaces the color of every slot and which slot each part uses. Your print progress,
 				plates and logged runs are kept.
 			</p>
-			<div class="row">
+			<div class="apply-actions">
 				<button type="button" class="btn primary" disabled={busy} onclick={apply}
 					>{busy ? 'Applying…' : 'Replace colors'}</button
 				>
@@ -114,7 +117,7 @@
 		gap: var(--sp-2);
 		flex-wrap: wrap;
 	}
-	.row {
+	.apply-actions {
 		display: flex;
 		gap: var(--sp-4);
 		flex-wrap: wrap;

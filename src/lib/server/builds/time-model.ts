@@ -43,6 +43,12 @@ export function loadTimeModel(
 	return buildTimeModel(parts, plates, groups ?? [], learned);
 }
 
+function arrangedSlugs(a: ArrangedPlate | null): string[] | null {
+	const items: unknown = a?.items;
+	if (!Array.isArray(items) || !items.length) return null;
+	return items.flatMap((i: { slug: string } | null) => (i ? [i.slug] : []));
+}
+
 /** Estimates (per run) for arranged plates, by plate number. */
 export function estimateArrangedPlates(
 	model: TimeModel,
@@ -53,9 +59,8 @@ export function estimateArrangedPlates(
 		plates.map((p) => ({
 			number: p.number,
 			runs: p.runs,
-			items: p.arrangement?.items.length
-				? p.arrangement.items.flatMap((i) => (i ? [i.slug] : []))
-				: p.parts
+			// stored JSON may hold a non-array `items`: treat that as no items
+			items: arrangedSlugs(p.arrangement) ?? p.parts
 		}))
 	);
 }

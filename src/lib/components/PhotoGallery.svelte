@@ -1,6 +1,5 @@
 <script lang="ts">
 	import AskDialog from './AskDialog.svelte';
-	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { deletePhoto, photoUrl, uploadPhoto } from '#lib/client/api.ts';
 	import { downscalePhoto } from '#lib/client/images.ts';
@@ -20,7 +19,6 @@
 	let error = $state('');
 	let open = $state<number | null>(null);
 	let input = $state<HTMLInputElement>();
-	let lbox = $state<HTMLElement>();
 	const asking = createAsk();
 
 	async function pick(e: Event & { currentTarget: HTMLInputElement }) {
@@ -65,12 +63,28 @@
 	function close() {
 		open = null;
 	}
+	/** Opens the element as a modal <dialog>: native focus trap, inert page, Escape and focus restore. */
+	function modal(node: HTMLDialogElement) {
+		let gone = false;
+		node.showModal();
+		node.querySelector<HTMLElement>('[data-initial]')?.focus({ preventScroll: true });
+		// Native Escape closes the dialog and fires `close`; ignore the one our own teardown causes.
+		const onnative = () => {
+			if (!gone) close();
+		};
+		node.addEventListener('close', onnative);
+		return {
+			destroy() {
+				gone = true;
+				if (node.open) node.close();
+			}
+		};
+	}
 	function onkeydown(e: KeyboardEvent) {
 		if (open === null) return;
-		// A question on top (delete photo) takes Escape; the viewer stays.
-		if (asking.current || !isTopTrap(lbox)) return;
-		if (e.key === 'Escape') close();
-		else if (e.key === 'ArrowLeft' && open > 0) open--;
+		// A question on top (delete photo) takes the keys; the viewer stays. Escape is the dialog's own.
+		if (asking.current) return;
+		if (e.key === 'ArrowLeft' && open > 0) open--;
 		else if (e.key === 'ArrowRight' && open < photos.length - 1) open++;
 	}
 	const cur = $derived(open !== null ? photos[open] : undefined);
@@ -124,48 +138,39 @@
 </div>
 
 {#if cur && open !== null}
-	<div
-		class="lightbox"
+	<dialog
+		class="ds-modal pg-box"
+		aria-label="Photo viewer"
+		use:modal
 		onclick={(e) => e.target === e.currentTarget && close()}
-		role="presentation"
 	>
-		<div
-			class="lbox"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Photo viewer"
-			tabindex="-1"
-			bind:this={lbox}
-			use:trapFocus={{ initial: '[data-initial]' }}
-		>
-			<div class="lhead">
-				<span class="muted"
-					>{open + 1} of {photos.length} · {cur.createdByName ?? 'Someone'}, {ago(
-						cur.createdAt
-					)}</span
-				>
-				<button type="button" class="x" aria-label="Close photo" data-initial onclick={close}
-					>×</button
-				>
-			</div>
-			<div class="limg"><img src={photoUrl(ctx.id, cur.id)} alt={cur.caption || `${label}`} /></div>
-			<div class="lfoot">
-				<button type="button" class="btn sm" disabled={open === 0} onclick={() => open!--}
-					>‹ Prev</button
-				>
-				<span class="cap">{cur.caption}</span>
-				{#if ctx.canEdit}
-					<button type="button" class="btn sm danger" onclick={() => remove(cur.id)}>Delete</button>
-				{/if}
-				<button
-					type="button"
-					class="btn sm"
-					disabled={open >= photos.length - 1}
-					onclick={() => open!++}>Next ›</button
-				>
-			</div>
+		<div class="lhead">
+			<span class="muted"
+				>{open + 1} of {photos.length} · {cur.createdByName ?? 'Someone'}, {ago(
+					cur.createdAt
+				)}</span
+			>
+			<button type="button" class="x" aria-label="Close photo" data-initial onclick={close}
+				>×</button
+			>
 		</div>
-	</div>
+		<div class="limg"><img src={photoUrl(ctx.id, cur.id)} alt={cur.caption || `${label}`} /></div>
+		<div class="lfoot">
+			<button type="button" class="btn sm" disabled={open === 0} onclick={() => open!--}
+				>‹ Prev</button
+			>
+			<span class="cap">{cur.caption}</span>
+			{#if ctx.canEdit}
+				<button type="button" class="btn sm danger" onclick={() => remove(cur.id)}>Delete</button>
+			{/if}
+			<button
+				type="button"
+				class="btn sm"
+				disabled={open >= photos.length - 1}
+				onclick={() => open!++}>Next ›</button
+			>
+		</div>
+	</dialog>
 {/if}
 
 <style>
@@ -203,21 +208,9 @@
 		object-fit: cover;
 		display: block;
 	}
-	.lightbox {
-		position: fixed;
-		inset: 0;
-		z-index: 60;
-		background: var(--scrim-strong);
-		display: grid;
-		place-items: center;
-		padding: 12px;
-	}
-	.lbox {
-		background: var(--card);
-		color: var(--ink);
-		border-radius: var(--r-xl);
-		width: min(1100px, 100%);
-		max-height: 100%;
+	.pg-box {
+		width: min(1100px, calc(100vw - 24px));
+		max-height: calc(100dvh - 24px);
 		display: grid;
 		grid-template-rows: auto minmax(0, 1fr) auto;
 		overflow: hidden;
@@ -241,8 +234,8 @@
 		border: 1px solid var(--line);
 		background: var(--paper);
 		border-radius: var(--r-lg);
-		width: 36px;
-		height: 36px;
+		width: 40px;
+		height: 40px;
 		font-size: var(--fs-lg);
 	}
 	.limg {

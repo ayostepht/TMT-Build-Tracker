@@ -72,13 +72,15 @@ const esc = (v: string) =>
 	v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
- * Where "Go back" points on the plain-form refusal page: the Referer's path when it is on this
- * same host and a plain relative path, else the home page. A real link, not `javascript:`
- * (the page CSP blocks that and it needs no inline script).
+ * Where "Go back" points on the plain-form refusal page: the Referer's path when the Referer is
+ * on `host` (the request URL's host, from `hooks.server.ts`; never a request header, which a
+ * client can set when PUBLIC_URL is unset) and a plain relative path, else the home page. A real
+ * link rather than `javascript:` (it needs no inline script, and `javascript:` URLs are not an
+ * option on a page that only carries the fallback `frame-ancestors 'none'` policy). The result is
+ * always a same-origin path.
  */
-export function backPath(headers?: Headers): string {
+export function backPath(headers?: Headers, host?: string): string {
 	const ref = headers?.get('referer');
-	const host = headers?.get('x-forwarded-host') ?? headers?.get('host');
 	if (!ref || !host) return '/';
 	try {
 		const u = new URL(ref);
@@ -101,7 +103,8 @@ export function writeRateResponse(
 	pathname: string,
 	isAdmin: (u: NonNullable<typeof user>) => boolean = (u) => isSiteAdmin(getDb(), u),
 	now = Date.now(),
-	headers?: Headers
+	headers?: Headers,
+	host?: string
 ): Response | null {
 	if (!user || READ.has(method.toUpperCase())) return null;
 	if (pathname.startsWith('/api/auth/')) return null;
@@ -130,7 +133,7 @@ export function writeRateResponse(
 			headers: { 'content-type': 'application/json', 'retry-after': retry }
 		});
 	return new Response(
-		`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Too many changes</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Too many changes</h1><p>${error}</p><p><a href="${esc(backPath(headers))}">Go back</a></p></body>`,
+		`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Too many changes</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Too many changes</h1><p>${error}</p><p><a href="${esc(backPath(headers, host))}">Go back</a></p></body>`,
 		{ status: 429, headers: { 'content-type': 'text/html; charset=utf-8', 'retry-after': retry } }
 	);
 }

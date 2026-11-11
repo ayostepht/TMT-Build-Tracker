@@ -96,13 +96,19 @@ describe('write rate limit', () => {
 
 	it('points Go back at a same-host Referer path, else home', () => {
 		const h = (o: Record<string, string>) => new Headers(o);
-		expect(backPath(h({ host: 'a.test', referer: 'http://a.test/teams/x?y=1' }))).toBe(
-			'/teams/x?y=1'
-		);
-		expect(backPath(h({ host: 'a.test', referer: 'http://evil.test/x' }))).toBe('/');
-		expect(backPath(h({ host: 'a.test', referer: 'javascript:alert(1)' }))).toBe('/');
-		expect(backPath(h({ host: 'a.test', referer: 'http://a.test//evil.test' }))).toBe('/');
-		expect(backPath(h({ host: 'a.test' }))).toBe('/');
+		expect(backPath(h({ referer: 'http://a.test/teams/x?y=1' }), 'a.test')).toBe('/teams/x?y=1');
+		expect(backPath(h({ referer: 'http://evil.test/x' }), 'a.test')).toBe('/');
+		expect(backPath(h({ referer: 'javascript:alert(1)' }), 'a.test')).toBe('/');
+		expect(backPath(h({ referer: 'http://a.test//evil.test' }), 'a.test')).toBe('/');
+		expect(backPath(h({}), 'a.test')).toBe('/');
+		expect(backPath(h({ referer: 'http://a.test/x' }))).toBe('/');
+		// A client-set Host / X-Forwarded-Host header is not consulted.
+		expect(
+			backPath(
+				h({ host: 'evil.test', 'x-forwarded-host': 'evil.test', referer: 'http://evil.test/x' }),
+				'a.test'
+			)
+		).toBe('/');
 		expect(backPath(undefined)).toBe('/');
 	});
 });

@@ -40,6 +40,16 @@
 		disabled: 'Monitoring stopped',
 		connecting: 'Connecting…'
 	};
+	const TONE: Record<string, string> = {
+		printing: 'ds-badge--run',
+		paused: 'ds-badge--warn',
+		done: 'ds-badge--ok',
+		idle: 'ds-badge--ok',
+		failed: 'ds-badge--bad',
+		error: 'ds-badge--bad',
+		offline: 'ds-badge--bad',
+		disabled: 'ds-badge--warn'
+	};
 	const t = (v: number | undefined) => (v === undefined ? null : `${Math.round(v)}°`);
 </script>
 
@@ -54,7 +64,9 @@
 			<h3>{printer.name}</h3>
 			<span class="kind">{PRINTER_KIND_INFO[printer.kind].label}</span>
 		</div>
-		<span class="st st-{state}" data-testid="printer-state">{LABEL[state]}</span>
+		<span class="ds-badge ds-badge--sm {TONE[state] ?? ''}" data-testid="printer-state"
+			>{LABEL[state]}</span
+		>
 	</header>
 
 	{#if printer.blocked}
@@ -152,33 +164,6 @@
 	.kind {
 		font-size: var(--fs-xs);
 		color: var(--muted);
-	}
-	.st {
-		font-size: var(--fs-xs);
-		font-weight: 600;
-		padding: var(--sp-3) 9px;
-		border-radius: var(--r-pill);
-		background: var(--line);
-		color: var(--ink);
-		white-space: nowrap;
-	}
-	.st-printing {
-		background: var(--accent-soft);
-		color: var(--accent);
-	}
-	.st-paused {
-		background: var(--warn-soft);
-		color: var(--warn);
-	}
-	.st-done,
-	.st-idle {
-		background: var(--ok-soft);
-		color: var(--ok);
-	}
-	.st-failed,
-	.st-error {
-		background: var(--bad-soft);
-		color: var(--bad);
 	}
 	.prog {
 		display: flex;

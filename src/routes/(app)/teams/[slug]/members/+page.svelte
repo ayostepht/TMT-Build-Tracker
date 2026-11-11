@@ -37,7 +37,7 @@
 <h2>Members</h2>
 <ul class="tpl-list">
 	{#each data.members as m (m.id)}
-		<li class="tpl">
+		<li class="ds-card ds-card--compact" data-testid="member-row">
 			<b>{m.name}</b> <span class="muted">{m.email}</span>
 			{#if isOwner}
 				<form method="post" action="?/setRole" use:enhance>
@@ -60,7 +60,7 @@
 					onclick={() => (removing = { id: m.id, name: m.name })}>Remove</button
 				>
 			{:else}
-				<span class="set">{m.role}</span>
+				<span class="ds-badge ds-badge--sm">{m.role}</span>
 			{/if}
 		</li>
 	{/each}
@@ -104,7 +104,7 @@
 		<h3>Pending invitations</h3>
 		<ul class="tpl-list">
 			{#each data.invites as i (i.id)}
-				<li class="tpl">
+				<li class="ds-card ds-card--compact">
 					{i.email} ({i.role})
 					<div class="mem-link">
 						<input
