@@ -1,5 +1,15 @@
 /** OctoPrint over REST polling (`/api/job`, `/api/printer`) with an X-Api-Key. Read-only. */
 import type { PrinterStatus } from '#lib/printers/status.ts';
+import { cleanHost } from '#lib/printers/address.ts';
+import {
+	guardedFetch,
+	ipForUrl,
+	OutboundError,
+	isRedirect,
+	readJsonCapped,
+	REDIRECT_MESSAGE,
+	safeText
+} from '../outbound';
 import { num, safeError, StatusSubject, type AdapterHandle, type PrinterConfig } from '../types';
 
 type Obj = Record<string, unknown>;
@@ -44,35 +54,41 @@ export function normalizeOctoprint(job: Obj, printer: Obj | null): PrinterStatus
 		const left = num(prog.printTimeLeft);
 		if (state !== 'done' && left !== undefined) out.remainingSec = left;
 	}
-	if (state === 'error') out.message = stateText || 'OctoPrint error';
+	if (state === 'error') out.message = safeText(stateText, 80) || 'OctoPrint error';
 	return out;
 }
 
 export function connectOctoprint(cfg: PrinterConfig): AdapterHandle {
 	const subj = new StatusSubject();
 	let timer: ReturnType<typeof setTimeout> | undefined;
-	const base = `http://${cfg.host}:${cfg.port ?? 80}`;
+	const base = `http://${ipForUrl(cleanHost(cfg.host))}:${cfg.port ?? 80}`; // guardedFetch validates and pins
 	const headers = { 'X-Api-Key': cfg.secrets.apiKey ?? '' };
 
 	async function tick() {
 		let delay = 3000;
 		try {
-			const jr = await fetch(`${base}/api/job`, { headers, signal: AbortSignal.timeout(5000) });
-			if (jr.status === 401 || jr.status === 403) {
+			const jr = await guardedFetch(`${base}/api/job`, {
+				headers,
+				signal: AbortSignal.timeout(5000)
+			});
+			if (isRedirect(jr.status)) {
+				subj.emit({ state: 'error', progress: null, message: REDIRECT_MESSAGE });
+				delay = 15000;
+			} else if (jr.status === 401 || jr.status === 403) {
 				subj.emit({ state: 'error', progress: null, message: 'OctoPrint rejected the API key' });
 				delay = 15000;
 			} else if (!jr.ok) {
 				subj.emit({ state: 'offline', progress: null, message: `OctoPrint answered ${jr.status}` });
 				delay = 10000;
 			} else {
-				const job = (await jr.json()) as Obj;
+				const job = (await readJsonCapped(jr)) as Obj;
 				let printer: Obj | null = null;
 				try {
-					const pr = await fetch(`${base}/api/printer`, {
+					const pr = await guardedFetch(`${base}/api/printer`, {
 						headers,
 						signal: AbortSignal.timeout(5000)
 					});
-					if (pr.ok) printer = (await pr.json()) as Obj; // 409 when the printer is not connected
+					if (pr.ok) printer = (await readJsonCapped(pr)) as Obj; // 409 when the printer is not connected
 				} catch {
 					/* temperatures are optional */
 				}
@@ -81,8 +97,12 @@ export function connectOctoprint(cfg: PrinterConfig): AdapterHandle {
 				if (s.state === 'idle' || s.state === 'offline') delay = 8000;
 			}
 		} catch (e) {
-			subj.emit({ state: 'offline', progress: null, message: safeError(e) });
-			delay = 10000;
+			subj.emit({
+				state: e instanceof OutboundError ? 'error' : 'offline',
+				progress: null,
+				message: safeError(e)
+			});
+			delay = e instanceof OutboundError && e.kind === 'public' ? 600000 : 10000;
 		}
 		if (!subj.closed) timer = setTimeout(() => void tick(), delay);
 	}

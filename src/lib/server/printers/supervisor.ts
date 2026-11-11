@@ -5,11 +5,13 @@
  */
 import { eq } from 'drizzle-orm';
 import type { PrinterStatus } from '#lib/printers/status.ts';
+import { isPublicMode } from '../config';
 import type { Db } from '../db';
 import { printers } from '../db/schema';
 import { adapters as defaultAdapters } from './adapters';
 import { emitPrinterEvent } from './bus';
 import { processStatus } from './jobs';
+import { PUBLIC_MODE_MESSAGE } from './outbound';
 import { toConfig } from './store';
 import type { AdapterHandle, ConnectFn } from './types';
 import type { PrinterKind } from '#lib/printers/status.ts';
@@ -45,6 +47,7 @@ export class Supervisor {
 	}
 
 	private connect(printerId: string): void {
+		if (isPublicMode()) return; // hosted site: no printer connection is ever started
 		if (this.conns.has(printerId)) return;
 		const row = this.db.select().from(printers).where(eq(printers.id, printerId)).get();
 		if (!row) return;
@@ -152,6 +155,7 @@ export async function testConnection(
 	timeoutMs = 8000,
 	adapters: Record<PrinterKind, ConnectFn> = defaultAdapters
 ): Promise<{ ok: boolean; status: PrinterStatus | null; message?: string }> {
+	if (isPublicMode()) return { ok: false, status: null, message: PUBLIC_MODE_MESSAGE };
 	return new Promise((resolve) => {
 		let last: PrinterStatus | null = null;
 		let handle: AdapterHandle | null = null;

@@ -110,7 +110,7 @@ describe('SpoolmanClient', () => {
 			/Cannot reach Spoolman/
 		);
 		fail = true;
-		await expect(new SpoolmanClient(base).listSpools()).rejects.toThrow(/500: boom/);
+		await expect(new SpoolmanClient(base).listSpools()).rejects.toThrow(/^Spoolman returned 500$/); // the remote's own text ("boom") is not repeated
 	});
 });
 

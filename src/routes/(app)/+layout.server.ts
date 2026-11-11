@@ -3,6 +3,8 @@ import { eq } from 'drizzle-orm';
 import { buildAccess, isSiteAdmin } from '#lib/server/access.ts';
 import { recentBuilds } from '#lib/server/builds/list.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
+import { mayUseInvitations } from '#lib/server/auth-policy.ts';
+import { appMode, signupMode } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { printerCounts } from '#lib/server/printers/store.ts';
 import { builds } from '#lib/server/db/schema.ts';
@@ -64,7 +66,12 @@ export const load: LayoutServerLoad = async ({ locals, url, request }) => {
 		activeTeamId,
 		/** Install-wide admin (first user or ADMIN_EMAILS): shows the "Kit admin" link. */
 		siteAdmin: isSiteAdmin(db, locals.user),
-		invitationCount: pendingInvitationCount(db, locals.user.email),
+		invitationCount: mayUseInvitations(
+			{ publicMode: appMode() === 'public', signup: signupMode() },
+			locals.user
+		)
+			? pendingInvitationCount(db, locals.user.email)
+			: 0,
 		/** Builds touched most recently across all workspaces, for the Builds menu. */
 		recentBuilds: recentBuilds(
 			db,

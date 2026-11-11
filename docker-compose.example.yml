@@ -14,7 +14,8 @@ services:
       # to accept whichever address the request arrives on (http://<lan-ip>:3000 or
       # an https proxy that sends X-Forwarded-Proto). Set it when serving over https.
       # PUBLIC_URL: https://tmt.example.com
-      # Required. Generate with: openssl rand -hex 32 (changing it later signs everyone
+      # Required (the container exits at start without a real value; obvious placeholders such as
+      # changeme are refused). Generate with: openssl rand -hex 32 (changing it later signs everyone
       # out and makes saved printer access codes unreadable)
       BETTER_AUTH_SECRET: '' # required, 32+ characters: generate with  openssl rand -hex 32
       # Optional. Comma-separated emails that are site admins (template kits, 3D models)
@@ -26,13 +27,14 @@ services:
       # OIDC_CLIENT_SECRET: ""
       # OIDC_PROVIDER_NAME: Authentik
       # Planned, not active yet (read by config.ts, nothing uses them in this release):
-      # TMT_MODE: selfhost        # or public (SSO-only hosted instance, needs https PUBLIC_URL)
+      # TMT_MODE: selfhost        # or public (SSO-only; also needs https PUBLIC_URL, ADDRESS_HEADER, ADMIN_EMAILS)
       # SIGNUP: open              # open | invite | closed (self-hosted password sign-up)
       # GOOGLE_CLIENT_ID: ""      # Google/GitHub need both variables of a pair
       # GOOGLE_CLIENT_SECRET: ""
       # GITHUB_CLIENT_ID: ""
       # GITHUB_CLIENT_SECRET: ""
-      # Behind a reverse proxy you control that sets this header (adapter-node reads these):
+      # Only when ALL traffic comes through a reverse proxy you control that overwrites this header.
+      # Also the client address for sign-in rate limits; unset = a client-sent X-Forwarded-For is ignored:
       # ADDRESS_HEADER: X-Forwarded-For
       # XFF_DEPTH: 1
       # Optional. Largest slicer 3MF in MB (default 1024); the image allows bodies up to 1100 MB (BODY_SIZE_LIMIT).

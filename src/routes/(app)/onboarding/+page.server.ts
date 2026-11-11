@@ -1,6 +1,8 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { and, eq, gt } from 'drizzle-orm';
 import { getAuth } from '#lib/server/auth-instance.ts';
+import { mayUseInvitations } from '#lib/server/auth-policy.ts';
+import { appMode, signupMode } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { invitation, organization, user } from '#lib/server/db/schema.ts';
 import { slugify } from '#lib/server/teams.ts';
@@ -8,6 +10,11 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals }) => {
 	const email = locals.user!.email.toLowerCase();
+	// Public mode: only a provider-verified email may see or accept invitations.
+	if (
+		!mayUseInvitations({ publicMode: appMode() === 'public', signup: signupMode() }, locals.user!)
+	)
+		return { invitations: [] };
 	const invitations = getDb()
 		.select({
 			id: invitation.id,

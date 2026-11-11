@@ -7,7 +7,15 @@
  */
 import mqtt, { type MqttClient } from 'mqtt';
 import type { PrinterFilament, PrinterStatus } from '#lib/printers/status.ts';
-import { num, safeError, StatusSubject, type AdapterHandle, type PrinterConfig } from '../types';
+import { ipForUrl, OutboundError, resolveAllowed } from '../outbound';
+import {
+	backoff,
+	num,
+	safeError,
+	StatusSubject,
+	type AdapterHandle,
+	type PrinterConfig
+} from '../types';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -84,48 +92,84 @@ export function connectBambu(cfg: PrinterConfig): AdapterHandle {
 		});
 		return { status$: (cb) => subj.subscribe(cb), close: () => (subj.closed = true) };
 	}
-	const client = factory(`mqtts://${cfg.host}:${cfg.port ?? 8883}`, {
-		username: 'bblp',
-		password: cfg.secrets.accessCode,
-		clientId: `tmt-${Math.random().toString(16).slice(2, 10)}`,
-		rejectUnauthorized: false,
-		reconnectPeriod: 5000,
-		connectTimeout: 8000,
-		protocolVersion: 4
-	});
 	const report = `device/${serial}/report`;
-	client.on('connect', () => {
-		client.subscribe(report, (err) => {
-			if (err) return;
-			// Info request only: asks the printer to resend its full state.
-			client.publish(
-				`device/${serial}/request`,
-				JSON.stringify({ pushing: { sequence_id: '0', command: 'pushall' } })
-			);
-		});
-	});
-	client.on('message', (_topic, payload) => {
+	let client: MqttClient | null = null;
+	let retry: ReturnType<typeof setTimeout> | undefined;
+	let attempt = 0;
+
+	const later = (extra = 0) => {
+		clearTimeout(retry);
+		if (!subj.closed) retry = setTimeout(() => void start(), backoff(attempt++ + extra, 5000));
+	};
+
+	/** Resolve and validate on every (re)connect, then dial the validated IP (TLS name kept as SNI). */
+	async function start() {
+		if (subj.closed) return;
+		let t;
 		try {
-			const j = JSON.parse(payload.toString()) as Obj;
-			if (isObj(j.print)) {
-				Object.assign(acc, j.print);
-				subj.emit(normalizeBambu(acc));
-			}
-		} catch {
-			/* ignore */
+			t = await resolveAllowed(cfg.host);
+		} catch (e) {
+			if (subj.closed) return;
+			subj.emit({ state: 'error', progress: null, message: safeError(e) });
+			if (!(e instanceof OutboundError && e.kind === 'public')) later(2);
+			return;
 		}
-	});
-	client.on('error', (e) => {
-		subj.emit({ state: 'offline', progress: null, message: safeError(e) });
-	});
-	client.on('close', () => {
-		if (!subj.closed) subj.emit({ state: 'offline', progress: null, message: 'Disconnected' });
-	});
+		if (subj.closed) return;
+		const c = factory(`mqtts://${ipForUrl(t.ip)}:${cfg.port ?? 8883}`, {
+			username: 'bblp',
+			password: cfg.secrets.accessCode,
+			clientId: `tmt-${Math.random().toString(16).slice(2, 10)}`,
+			rejectUnauthorized: false,
+			...(t.literal ? {} : { servername: t.host }),
+			reconnectPeriod: 0, // reconnects go through start(): fresh resolve + validation
+			connectTimeout: 8000,
+			protocolVersion: 4
+		});
+		client = c;
+		c.on('connect', () => {
+			attempt = 0;
+			c.subscribe(report, (err) => {
+				if (err) return;
+				// Info request only: asks the printer to resend its full state.
+				c.publish(
+					`device/${serial}/request`,
+					JSON.stringify({ pushing: { sequence_id: '0', command: 'pushall' } })
+				);
+			});
+		});
+		c.on('message', (_topic, payload) => {
+			try {
+				const j = JSON.parse(payload.toString()) as Obj;
+				if (isObj(j.print)) {
+					Object.assign(acc, j.print);
+					subj.emit(normalizeBambu(acc));
+				}
+			} catch {
+				/* ignore */
+			}
+		});
+		c.on('error', (e) => {
+			subj.emit({ state: 'offline', progress: null, message: safeError(e) });
+		});
+		c.on('close', () => {
+			if (subj.closed || client !== c) return;
+			subj.emit({ state: 'offline', progress: null, message: 'Disconnected' });
+			try {
+				c.end(true);
+			} catch {
+				/* ignore */
+			}
+			client = null;
+			later();
+		});
+	}
+	void start();
 	return {
 		status$: (cb) => subj.subscribe(cb),
 		close: () => {
 			subj.closed = true;
-			client.end(true);
+			clearTimeout(retry);
+			client?.end(true);
 		}
 	};
 }

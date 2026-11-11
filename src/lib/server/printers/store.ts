@@ -10,8 +10,10 @@ import { catalogPrinter } from '#lib/printers/catalog.ts';
 import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
 import { ApiError } from '../access';
 import type { Db } from '../db';
+import { isPublicMode } from '../config';
 import { printers } from '../db/schema';
 import { decryptSecrets, encryptSecrets, type Secrets } from './secrets';
+import { hostBlockReason, PUBLIC_MODE_MESSAGE } from './outbound';
 import type { PrinterConfig } from './types';
 
 type Row = typeof printers.$inferSelect;
@@ -43,7 +45,8 @@ export function toPublic(r: Row, editor = false): PrinterPublic {
 		lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
 		status: (r.lastStatus as PrinterStatus | null) ?? null,
 		secretsSet: Object.keys(secrets).filter((k) => secrets[k]),
-		identifiers: Object.fromEntries(pub.filter((k) => secrets[k]).map((k) => [k, secrets[k]]))
+		identifiers: Object.fromEntries(pub.filter((k) => secrets[k]).map((k) => [k, secrets[k]])),
+		blocked: hostBlockReason(r.host)
 	};
 }
 
@@ -76,6 +79,9 @@ export function parseHost(v: unknown): string {
 	const h = v.trim();
 	if (!h || h.length > 253 || !/^[A-Za-z0-9.:_-]+$/.test(h))
 		return bad('Enter just the printer address, like 192.168.0.50');
+	// An IP literal on a public or reserved range can never be used: say so now, not at connect.
+	const why = hostBlockReason(h);
+	if (why && !isPublicMode()) return bad(why);
 	return h;
 }
 
@@ -169,7 +175,13 @@ function mergeSecrets(kind: PrinterKind, current: Secrets, supplied: Secrets | u
 	return next;
 }
 
+/** Hosted (public) mode never connects to printers, so there is nothing to save. */
+function refuseInPublicMode(): void {
+	if (isPublicMode()) throw new ApiError(403, PUBLIC_MODE_MESSAGE);
+}
+
 export function createPrinter(db: Db, orgId: string, userId: string, body: unknown): Row {
+	refuseInPublicMode();
 	const p = parsePrinterInput(body, false);
 	checkCamera(p.cameraUrl, p.host!, p.kind!);
 	const secrets = mergeSecrets(p.kind!, {}, p.secrets);
@@ -193,6 +205,14 @@ export function createPrinter(db: Db, orgId: string, userId: string, body: unkno
 }
 
 export function updatePrinter(db: Db, id: string, orgId: string, body: unknown): Row {
+	// Pausing and renaming stay possible so an old row can be tidied; nothing else is saved.
+	if (isPublicMode()) {
+		const o = (typeof body === 'object' && body !== null ? body : {}) as Obj;
+		const harmless = Object.entries(o).every(
+			([k, v]) => k === 'name' || (k === 'enabled' && v === false)
+		);
+		if (!harmless) refuseInPublicMode();
+	}
 	const cur = db
 		.select()
 		.from(printers)

@@ -1,12 +1,14 @@
 /**
  * Camera hub: one upstream connection per printer, fanned out to every browser. Opened on the
  * first viewer or snapshot request, keeps the latest JPEG frame, closed `lingerMs` after the last
- * one leaves. Read-only: only HTTP GETs to URLs that passed the same-host guard (also on
- * redirects). Nothing here logs URLs or response bodies.
+ * one leaves. Read-only: only HTTP GETs to URLs that passed the same-host guard, sent through
+ * `guardedFetch` (validated local address, pinned; redirects are failures). Nothing here logs
+ * URLs or response bodies.
  */
 import { checkCameraUrl } from '#lib/printers/camera-url.ts';
 import type { CameraSource } from './camera-source';
 import { boundaryOf, cleanJpeg, MAX_FRAME_BYTES, MjpegParser } from './mjpeg';
+import { guardedFetch, isRedirect, OutboundError, REDIRECT_MESSAGE } from './outbound';
 import { backoff } from './types';
 
 export interface Frame {
@@ -43,7 +45,7 @@ export const DEFAULT_HUB_OPTIONS: HubOptions = {
 	enableRetryMs: 1000,
 	enableWaitMs: 5000,
 	enableThrottleMs: 30000,
-	fetchFn: (...a) => fetch(...a)
+	fetchFn: (...a) => guardedFetch(...a)
 };
 
 export class CameraError extends Error {
@@ -77,46 +79,44 @@ const sleep = (ms: number, signal: AbortSignal) =>
 		}
 	});
 
-/** GET one camera URL with a connect timeout, following (guarded) redirects by hand. */
+/**
+ * GET one camera URL with a connect timeout. The URL must pass the same-host check, and the
+ * default `fetchFn` (`guardedFetch`) only connects to a validated local address. A redirect is
+ * never followed: it is a failure, whoever it points at.
+ */
 export async function openUpstream(
 	url: string,
 	host: string,
 	signal: AbortSignal,
 	o: Pick<HubOptions, 'connectTimeoutMs' | 'fetchFn'>
 ): Promise<Response> {
-	let target = url;
-	for (let hop = 0; hop < 4; hop++) {
-		const c = checkCameraUrl(target, host);
-		if (!c.ok) throw new CameraError('Camera redirected away from the printer');
-		const ctl = new AbortController(); // connect timeout only; the caller's signal governs the body
-		const timer = setTimeout(() => ctl.abort(), o.connectTimeoutMs);
-		let res: Response;
-		try {
-			res = await o.fetchFn(c.url, {
-				method: 'GET',
-				redirect: 'manual',
-				signal: AbortSignal.any([signal, ctl.signal]),
-				headers: { accept: 'multipart/x-mixed-replace, image/jpeg, */*' }
-			});
-		} catch {
-			throw new CameraError(signal.aborted ? 'Closed' : 'Could not reach the camera');
-		} finally {
-			clearTimeout(timer);
-		}
-		if (res.status >= 300 && res.status < 400) {
-			const loc = res.headers.get('location');
-			await res.body?.cancel().catch(() => {});
-			if (!loc) throw new CameraError('Camera redirect without a location');
-			target = new URL(loc, c.url).toString();
-			continue;
-		}
-		if (!res.ok) {
-			await res.body?.cancel().catch(() => {});
-			throw new CameraError(`Camera answered ${res.status}`, { status: res.status });
-		}
-		return res;
+	const c = checkCameraUrl(url, host);
+	if (!c.ok) throw new CameraError('Camera redirected away from the printer');
+	const ctl = new AbortController(); // connect timeout only; the caller's signal governs the body
+	const timer = setTimeout(() => ctl.abort(), o.connectTimeoutMs);
+	let res: Response;
+	try {
+		res = await o.fetchFn(c.url, {
+			method: 'GET',
+			redirect: 'manual',
+			signal: AbortSignal.any([signal, ctl.signal]),
+			headers: { accept: 'multipart/x-mixed-replace, image/jpeg, */*' }
+		});
+	} catch (e) {
+		if (e instanceof OutboundError) throw new CameraError(e.message);
+		throw new CameraError(signal.aborted ? 'Closed' : 'Could not reach the camera');
+	} finally {
+		clearTimeout(timer);
 	}
-	throw new CameraError('Camera redirected too many times');
+	if (isRedirect(res.status)) {
+		await res.body?.cancel().catch(() => {});
+		throw new CameraError(REDIRECT_MESSAGE);
+	}
+	if (!res.ok) {
+		await res.body?.cancel().catch(() => {});
+		throw new CameraError(`Camera answered ${res.status}`, { status: res.status });
+	}
+	return res;
 }
 
 /** Read a whole (small) body, at most `max` bytes. */

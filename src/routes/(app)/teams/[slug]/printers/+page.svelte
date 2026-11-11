@@ -50,11 +50,23 @@
 
 <section class="stack">
 	<h2>Printers</h2>
-	<p class="muted">
-		Connect the printers your chapter prints on to see live progress next to each plate, and to log
-		finished prints without typing. Status is read-only: this app never starts, stops or moves a
-		printer.
-	</p>
+	{#if data.printersAvailable}
+		<p class="muted">
+			Connect the printers your chapter prints on to see live progress next to each plate, and to
+			log finished prints without typing. Status is read-only: this app never starts, stops or moves
+			a printer.
+		</p>
+	{:else}
+		<div class="card pr-unavailable" data-testid="printers-unavailable">
+			<p>
+				<b>Printer status is not available on this hosted site yet.</b>
+			</p>
+			<p class="muted">
+				Logging prints by hand works everywhere: open a build and log a plate when it finishes.
+				Connecting printers will come later; until then this site never contacts a printer.
+			</p>
+		</div>
+	{/if}
 	{#if error}<div class="error" role="alert">{error}</div>{/if}
 	{#if store.error}<div class="error" role="alert">{store.error}</div>{/if}
 
@@ -71,10 +83,12 @@
 				<PrinterCard printer={p}>
 					{#snippet actions()}
 						{#if data.canEdit}
-							<button class="btn sm" type="button" onclick={() => (editing = p)}>Edit</button>
-							<button class="btn sm" type="button" onclick={() => toggle(p)}
-								>{p.enabled ? 'Pause' : 'Resume'}</button
-							>
+							{#if data.printersAvailable}
+								<button class="btn sm" type="button" onclick={() => (editing = p)}>Edit</button>
+								<button class="btn sm" type="button" onclick={() => toggle(p)}
+									>{p.enabled ? 'Pause' : 'Resume'}</button
+								>
+							{/if}
 							{#if confirmRemove === p.id}
 								<button class="btn sm danger solid" type="button" onclick={() => remove(p)}
 									>Remove for good</button
@@ -92,11 +106,13 @@
 				</PrinterCard>
 			{/if}
 		{:else}
-			{#if store.loaded}<p class="muted">No printers yet.</p>{/if}
+			{#if store.loaded && data.printersAvailable}<p class="muted">No printers yet.</p>{/if}
 		{/each}
 	</div>
 
-	{#if data.canEdit}
+	{#if !data.printersAvailable}
+		<!-- hosted site: no form that would always fail -->
+	{:else if data.canEdit}
 		{#if adding}
 			<PrinterForm org={data.team.id} ondone={done} oncancel={() => (adding = false)} />
 		{:else}
@@ -162,5 +178,11 @@
 	}
 	.error {
 		white-space: normal;
+	}
+	.pr-unavailable p {
+		margin: 0 0 6px;
+	}
+	.pr-unavailable p:last-child {
+		margin-bottom: 0;
 	}
 </style>

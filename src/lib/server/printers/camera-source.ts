@@ -1,7 +1,8 @@
 /**
  * Where a printer's camera is: the team's override, the printer type's default, or what the
  * printer itself reports (Moonraker webcam list, OctoPrint settings). Every URL that comes out
- * has passed the SSRF guard: http(s) only, same host as the printer.
+ * has passed the SSRF guard: http(s) only, same host as the printer (and the connection itself
+ * only ever goes to a validated local address, see `outbound.ts`).
  */
 import {
 	cameraSupported,
@@ -11,6 +12,7 @@ import {
 } from '#lib/printers/camera-url.ts';
 import type { PrinterKind } from '#lib/printers/status.ts';
 import type { printers } from '../db/schema';
+import { assertOutboundAllowed, guardedFetch, isRedirect, readJsonCapped } from './outbound';
 import { decryptSecrets } from './secrets';
 
 export type CameraOrigin = 'custom' | 'default' | 'moonraker' | 'octoprint';
@@ -61,8 +63,9 @@ async function getJson(
 		redirect: 'manual',
 		signal: AbortSignal.timeout(timeoutMs)
 	});
+	if (isRedirect(res.status)) throw new Error('redirect');
 	if (!res.ok) throw new Error(`status ${res.status}`);
-	return res.json();
+	return readJsonCapped(res);
 }
 
 export interface ResolveOptions {
@@ -76,12 +79,13 @@ export async function resolveCameraSource(
 	opts: ResolveOptions = {}
 ): Promise<CameraSource | null> {
 	if (!t.cameraEnabled || !cameraSupported(t.kind)) return null;
+	assertOutboundAllowed(); // public mode: refused before any lookup or request
 	const host = t.host;
 	if (t.cameraUrl) {
 		const c = checkCameraUrl(t.cameraUrl, host);
 		return c.ok ? { urls: [c.url.toString()], origin: 'custom', host } : null;
 	}
-	const fetchFn = opts.fetchFn ?? fetch;
+	const fetchFn = opts.fetchFn ?? guardedFetch;
 	const timeout = opts.apiTimeoutMs ?? 5000;
 	const h = hostPart(host);
 	if (t.kind === 'elegoo-sdcp') {

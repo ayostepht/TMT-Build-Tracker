@@ -1,4 +1,16 @@
-/** Server-side client for Spoolman's REST API (`/api/v1`). Short timeouts, readable errors. */
+/**
+ * Server-side client for Spoolman's REST API (`/api/v1`). Short timeouts, readable errors.
+ * Every request goes through the outbound guard (`printers/outbound.ts`): refused in public mode,
+ * only to local addresses otherwise, never follows a redirect, never repeats what Spoolman says.
+ */
+import {
+	assertOutboundAllowed,
+	guardedFetch,
+	isRedirect,
+	OutboundError,
+	readJsonCapped,
+	REDIRECT_MESSAGE
+} from '../printers/outbound';
 
 export class SpoolmanError extends Error {
 	constructor(
@@ -70,12 +82,18 @@ export class SpoolmanClient {
 	constructor(
 		url: string,
 		private timeoutMs = 6000,
-		private fetchImpl: typeof fetch = fetch
+		private fetchImpl: typeof fetch = guardedFetch
 	) {
 		this.base = normalizeSpoolmanUrl(url);
 	}
 
 	private async req(method: string, path: string, body?: unknown): Promise<unknown> {
+		try {
+			assertOutboundAllowed(); // public mode: nothing is sent, nothing is looked up
+		} catch (e) {
+			if (e instanceof OutboundError) throw new SpoolmanError(e.message, e.status);
+			throw e;
+		}
 		let res: Response;
 		try {
 			res = await this.fetchImpl(`${this.base}/api/v1${path}`, {
@@ -85,9 +103,11 @@ export class SpoolmanClient {
 						? { accept: 'application/json' }
 						: { 'content-type': 'application/json', accept: 'application/json' },
 				body: body === undefined ? undefined : JSON.stringify(body),
+				redirect: 'manual',
 				signal: AbortSignal.timeout(this.timeoutMs)
 			});
 		} catch (e) {
+			if (e instanceof OutboundError) throw new SpoolmanError(e.message, e.status);
 			const timeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
 			throw new SpoolmanError(
 				timeout
@@ -95,22 +115,22 @@ export class SpoolmanClient {
 					: 'Cannot reach Spoolman. Check the address and that it is running.'
 			);
 		}
+		if (isRedirect(res.status)) {
+			await res.body?.cancel().catch(() => {});
+			throw new SpoolmanError(REDIRECT_MESSAGE);
+		}
 		if (!res.ok) {
-			let detail = '';
-			try {
-				const j = (await res.json()) as Obj;
-				detail = typeof j.message === 'string' ? j.message : '';
-			} catch {
-				/* not json */
-			}
+			await res.body?.cancel().catch(() => {}); // what Spoolman says is never passed on
 			throw new SpoolmanError(
 				res.status === 404
 					? 'Spoolman answered 404. Is the address right (and is that a Spoolman server)?'
-					: `Spoolman returned ${res.status}${detail ? `: ${detail}` : ''}`
+					: res.status === 401 || res.status === 403
+						? 'Spoolman refused the request (it may need a different address or login).'
+						: `Spoolman returned ${res.status}`
 			);
 		}
 		try {
-			return await res.json();
+			return await readJsonCapped(res, 4 * 1024 * 1024);
 		} catch {
 			throw new SpoolmanError('Spoolman sent something unexpected. Is that a Spoolman address?');
 		}

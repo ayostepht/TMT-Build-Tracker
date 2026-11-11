@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { arrangeForCentauri, ownerWithBuild } from './helpers';
 import { makeProjectThreeMf } from '../src/lib/server/threemf/fixtures';
 

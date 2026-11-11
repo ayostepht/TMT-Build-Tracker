@@ -37,6 +37,11 @@ export default defineConfig({
 					DATABASE_URL: `${DB_DIR}/tmt.db`,
 					BETTER_AUTH_SECRET: 'e2e-secret-not-for-production-0123456789abcdef',
 					BODY_SIZE_LIMIT: '1100M',
+					// Behave like an install behind one trusted reverse proxy: the client address
+					// (and so the Better Auth rate-limit key) comes from X-Forwarded-For, which
+					// the fixtures set per context. A request without it gets 400 on /api/auth/*.
+					ADDRESS_HEADER: 'x-forwarded-for',
+					XFF_DEPTH: '1',
 					PUBLIC_URL: '',
 					BETTER_AUTH_URL: '',
 					ORIGIN: '',

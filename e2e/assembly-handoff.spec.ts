@@ -1,5 +1,5 @@
 import { deflateSync } from 'node:zlib';
-import { expect, test } from './fixtures';
+import { expect, newClientContext, test } from './fixtures';
 import {
 	invite,
 	joinViaInvite,
@@ -121,9 +121,7 @@ test('a site admin imports a guide PDF in the browser (Print settings) and maps 
 		);
 
 		// Another signed-in user can read the image but not write or list.
-		const other = await browser.newContext({
-			extraHTTPHeaders: { 'x-forwarded-for': '10.77.1.1' }
-		});
+		const other = await newClientContext(browser);
 		const op = await other.newPage();
 		await signUp(op, 'Olga Other', uniqueEmail('other'));
 		expect((await op.request.get(`/api/templates/${templateId}/guide/8.webp`)).status()).toBe(200);

@@ -1,6 +1,16 @@
 /** Klipper via Moonraker: WebSocket JSON-RPC with `printer.objects.subscribe`. Read-only. */
 import type { PrinterStatus } from '#lib/printers/status.ts';
 import {
+	guardedFetch,
+	ipForUrl,
+	isRedirect,
+	OutboundError,
+	readJsonCapped,
+	REDIRECT_MESSAGE,
+	resolveAllowed,
+	safeText
+} from '../outbound';
+import {
 	backoff,
 	num,
 	safeError,
@@ -61,8 +71,7 @@ export function normalizeMoonraker(st: Obj): PrinterStatus {
 			out.remainingSec = Math.max(0, Math.round(elapsed / frac - elapsed));
 	}
 	if (st0 === 'cancelled') out.cancelled = true;
-	if (state === 'error')
-		out.message = typeof ps.message === 'string' ? ps.message : 'Klipper error';
+	if (state === 'error') out.message = safeText(ps.message, 200) || 'Klipper error';
 	return out;
 }
 
@@ -74,7 +83,6 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 	let ping: ReturnType<typeof setInterval> | undefined;
 	let stale: ReturnType<typeof setTimeout> | undefined;
 	let acc: Obj = {};
-	const base = `${cfg.host}:${cfg.port ?? 7125}`;
 
 	const armStale = () => {
 		clearTimeout(stale);
@@ -94,15 +102,31 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 
 	async function open() {
 		if (subj.closed) return;
+		let base: string;
+		let named: string;
+		try {
+			// Resolved and validated on every (re)connect; both requests go to the validated IP.
+			const t = await resolveAllowed(cfg.host);
+			base = `${ipForUrl(t.ip)}:${cfg.port ?? 7125}`;
+			named = `${ipForUrl(t.host)}:${cfg.port ?? 7125}`; // keeps the Host header; guardedFetch pins the IP
+		} catch (e) {
+			if (subj.closed) return;
+			subj.emit({ state: 'error', progress: null, message: safeError(e) });
+			if (!(e instanceof OutboundError && e.kind === 'public'))
+				retry = setTimeout(() => void open(), backoff(attempt++ + 3));
+			return;
+		}
+		if (subj.closed) return;
 		let query = '';
 		if (cfg.secrets.apiKey) {
 			// Browsers/WebSocket cannot set headers: trade the API key for a one-shot token.
 			try {
-				const r = await fetch(`http://${base}/access/oneshot_token`, {
+				const r = await guardedFetch(`http://${named}/access/oneshot_token`, {
 					headers: { 'X-Api-Key': cfg.secrets.apiKey },
 					signal: AbortSignal.timeout(5000)
 				});
-				const j = (await r.json()) as { result?: string };
+				if (isRedirect(r.status)) throw new Error(REDIRECT_MESSAGE);
+				const j = (await readJsonCapped(r)) as { result?: string };
 				if (j.result) query = `?token=${encodeURIComponent(j.result)}`;
 			} catch (e) {
 				subj.emit({ state: 'offline', progress: null, message: safeError(e) });

@@ -17,14 +17,18 @@
 		compact = false,
 		actions
 	}: {
-		printer: Pick<PrinterPublic, 'name' | 'kind' | 'enabled' | 'lastSeenAt' | 'status'>;
+		printer: Pick<PrinterPublic, 'name' | 'kind' | 'enabled' | 'lastSeenAt' | 'status'> & {
+			blocked?: string | null;
+		};
 		status?: PrinterStatus | null;
 		compact?: boolean;
 		actions?: Snippet;
 	} = $props();
 
 	const s = $derived(status === undefined ? printer.status : status);
-	const state = $derived(!printer.enabled ? 'disabled' : (s?.state ?? 'connecting'));
+	const state = $derived(
+		!printer.enabled || printer.blocked ? 'disabled' : (s?.state ?? 'connecting')
+	);
 	const LABEL: Record<string, string> = {
 		idle: 'Idle',
 		printing: 'Printing',
@@ -53,7 +57,9 @@
 		<span class="st st-{state}" data-testid="printer-state">{LABEL[state]}</span>
 	</header>
 
-	{#if s && (s.state === 'printing' || s.state === 'paused' || s.state === 'done')}
+	{#if printer.blocked}
+		<p class="msg" data-testid="printer-blocked">{printer.blocked}</p>
+	{:else if s && (s.state === 'printing' || s.state === 'paused' || s.state === 'done')}
 		<div class="prog" data-testid="printer-progress">
 			<div
 				class="bar"
@@ -84,7 +90,7 @@
 		<p class="msg">Waiting for the first status…</p>
 	{/if}
 
-	{#if !compact && s && s.state !== 'offline'}
+	{#if !compact && !printer.blocked && s && s.state !== 'offline'}
 		<div class="temps">
 			{#if t(s.nozzleC)}<span title="Nozzle">Nozzle {t(s.nozzleC)}</span>{/if}
 			{#if t(s.bedC)}<span title="Bed">Bed {t(s.bedC)}</span>{/if}

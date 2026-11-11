@@ -2,6 +2,7 @@ import { ApiError, requireMember, requireOwner } from '#lib/server/access.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { getOrgSettings, setOrgSettings } from '#lib/server/org-settings.ts';
+import { assertOutboundAllowed, hostBlockReason } from '#lib/server/printers/outbound.ts';
 import { normalizeSpoolmanUrl, SpoolmanError } from '#lib/server/spoolman/client.ts';
 import type { RequestHandler } from './$types';
 
@@ -12,7 +13,17 @@ export const GET: RequestHandler = (event) =>
 		const org = event.url.searchParams.get('org');
 		if (!org) throw new ApiError(400, 'org is required');
 		const role = requireMember(db, org, requireUserId(event));
-		return { settings: getOrgSettings(db, org), canEdit: role === 'owner' };
+		const settings = getOrgSettings(db, org);
+		// A saved address that can no longer be used (hosted site, or not a local address) is shown as such.
+		let blocked: string | null = null;
+		if (settings.spoolmanUrl) {
+			try {
+				blocked = hostBlockReason(new URL(settings.spoolmanUrl).hostname);
+			} catch {
+				blocked = null;
+			}
+		}
+		return { settings, canEdit: role === 'owner', blocked };
 	});
 
 export const PUT: RequestHandler = (event) =>
@@ -29,9 +40,13 @@ export const PUT: RequestHandler = (event) =>
 			else if (typeof body.spoolmanUrl !== 'string')
 				throw new ApiError(400, 'spoolmanUrl must be text');
 			else {
+				assertOutboundAllowed(); // hosted site: no Spoolman address is saved (403)
 				try {
 					patch.spoolmanUrl = normalizeSpoolmanUrl(body.spoolmanUrl);
+					const why = hostBlockReason(new URL(patch.spoolmanUrl).hostname);
+					if (why) throw new ApiError(400, why);
 				} catch (e) {
+					if (e instanceof ApiError) throw e;
 					throw new ApiError(400, e instanceof SpoolmanError ? e.message : 'Invalid address');
 				}
 			}

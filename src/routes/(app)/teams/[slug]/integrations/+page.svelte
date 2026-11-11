@@ -7,4 +7,4 @@
 
 <svelte:head><title>Integrations · {data.team.name}</title></svelte:head>
 
-<TeamIntegrations orgId={data.team.id} />
+<TeamIntegrations orgId={data.team.id} available={data.printersAvailable} />

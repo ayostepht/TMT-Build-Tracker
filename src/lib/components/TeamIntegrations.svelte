@@ -7,7 +7,7 @@
 	} from '#lib/client/api.ts';
 
 	/** Integrations tab: "log finished prints automatically", Spoolman address and auto-deduct. */
-	let { orgId }: { orgId: string } = $props();
+	let { orgId, available = true }: { orgId: string; available?: boolean } = $props();
 
 	let s = $state<OrgSettingsDto | null>(null);
 	let canEdit = $state(false);
@@ -15,12 +15,15 @@
 	let msg = $state('');
 	let err = $state('');
 	let busy = $state(false);
+	let blocked = $state<string | null>(null);
 
 	$effect(() => {
+		if (!available) return;
 		void getOrgSettings(orgId)
 			.then((r) => {
 				s = r.settings;
 				canEdit = r.canEdit;
+				blocked = (r as { blocked?: string | null }).blocked ?? null;
 				url = r.settings.spoolmanUrl ?? '';
 			})
 			.catch((e) => (err = e instanceof Error ? e.message : 'Could not load settings'));
@@ -57,7 +60,15 @@
 
 <section class="card" data-testid="team-integrations">
 	<h2>Auto-log and Spoolman</h2>
-	{#if s}
+	{#if !available}
+		<p data-testid="integrations-unavailable">
+			Printer status, automatic print logging and Spoolman are not available on this hosted site
+			yet.
+		</p>
+		<p class="muted">
+			Logging prints by hand works everywhere: open a build and log a plate when it finishes.
+		</p>
+	{:else if s}
 		<label class="chk">
 			<input
 				type="checkbox"
@@ -108,6 +119,14 @@
 		{:else}
 			<p class="muted">Only chapter owners can change these settings.</p>
 		{/if}
+		{#if blocked}<div
+				class="error"
+				role="alert"
+				data-testid="spoolman-blocked"
+				style="white-space:normal"
+			>
+				This saved Spoolman address can no longer be used: {blocked}
+			</div>{/if}
 		<p class="muted">
 			Link each filament to a spool in a build's Settings. The server talks to Spoolman, so the
 			address must be reachable from this container.

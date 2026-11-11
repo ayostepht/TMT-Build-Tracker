@@ -1,9 +1,15 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { getAuth } from '#lib/server/auth-instance.ts';
+import { effectiveSignup, mayUseInvitations } from '#lib/server/auth-policy.ts';
+import { appMode, signupMode } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { invitation, organization, user } from '#lib/server/db/schema.ts';
 import type { Actions, PageServerLoad } from './$types';
+
+function policyAllows(u: { emailVerified?: boolean | null }) {
+	return mayUseInvitations({ publicMode: appMode() === 'public', signup: signupMode() }, u);
+}
 
 function find(id: string) {
 	return getDb()
@@ -42,6 +48,10 @@ export const load: PageServerLoad = ({ params, locals }) => {
 					: null
 		},
 		signedIn: !!locals.user,
+		// 'open' | 'invite' | 'closed' as for /signup; public mode has no sign-up page, only SSO sign-in.
+		signup: effectiveSignup(getDb(), { publicMode: appMode() === 'public', signup: signupMode() }),
+		publicMode: appMode() === 'public',
+		needsVerifiedEmail: !!locals.user && !policyAllows(locals.user),
 		wrongAccount: !!locals.user && locals.user.email.toLowerCase() !== inv.email.toLowerCase(),
 		userEmail: locals.user?.email ?? null
 	};
@@ -52,6 +62,8 @@ export const actions: Actions = {
 		if (!locals.user) redirect(303, `/login?redirect=/invite/${params.id}`);
 		const inv = find(params.id);
 		if (!inv) error(404, 'Invitation not found');
+		if (!policyAllows(locals.user))
+			return fail(403, { error: 'Verify your email address before accepting an invitation' });
 		try {
 			await getAuth().api.acceptInvitation({
 				body: { invitationId: params.id },

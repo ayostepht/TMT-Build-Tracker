@@ -5,6 +5,7 @@ import { json } from '@sveltejs/kit';
 import { CameraError, getCameraHub, type CameraSession } from './camera';
 import { resolveCameraSource, toCameraTarget, type CameraSource } from './camera-source';
 import { enableSdcpCamera } from './adapters/sdcp';
+import { assertOutboundAllowed } from './outbound';
 import { getSupervisor } from './supervisor';
 import { getPrinter, toConfig } from './store';
 import type { PrinterConfig } from './types';
@@ -20,6 +21,7 @@ export function cameraChanged(printerId: string) {
 
 /** Resolve (cached for a minute: Moonraker/OctoPrint are asked over HTTP) the printer's camera. */
 export async function sourceFor(db: Db, printerId: string): Promise<CameraSource | null> {
+	assertOutboundAllowed();
 	const hit = cache.get(printerId);
 	if (hit && Date.now() - hit.at < TTL_MS) return hit.src;
 	const row = getPrinter(db, printerId);
@@ -38,6 +40,7 @@ export function printerForMember(db: Db, printerId: string, userId: string) {
 }
 
 export function sessionFor(db: Db, printerId: string): CameraSession {
+	assertOutboundAllowed();
 	const row = getPrinter(db, printerId);
 	return getCameraHub().session(
 		printerId,

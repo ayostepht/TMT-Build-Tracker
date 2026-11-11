@@ -5,12 +5,14 @@ import { getDb } from '#lib/server/db/index.ts';
 import { CameraError, grabFrame } from '#lib/server/printers/camera.ts';
 import { testEnabler } from '#lib/server/printers/camera-access.ts';
 import { resolveCameraSource } from '#lib/server/printers/camera-source.ts';
+import { resolveAllowed } from '#lib/server/printers/outbound.ts';
 import { configFromInput } from '#lib/server/printers/store.ts';
 import type { RequestHandler } from './$types';
 
 /**
  * Settings "Test": fetch one frame with the typed (or stored) camera settings and send it back as
- * a data URL for the preview. Editors only; the same-host guard applies to what is typed.
+ * a data URL for the preview. Editors only; the same-host guard applies to what is typed and the
+ * outbound guard to where it connects.
  */
 export const POST: RequestHandler = (event) =>
 	respond(async () => {
@@ -21,6 +23,7 @@ export const POST: RequestHandler = (event) =>
 		if (!org) throw new ApiError(400, 'organizationId is required');
 		requireEditor(db, org, userId);
 		const cfg = configFromInput(db, org, body);
+		await resolveAllowed(cfg.host); // refused in public mode / for a non-local address, before any request
 		if (!cameraSupported(cfg.kind))
 			return { works: false, message: 'This printer type has no camera support.' };
 		const typed = typeof body.cameraUrl === 'string' ? body.cameraUrl.trim() : '';

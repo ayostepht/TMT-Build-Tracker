@@ -114,6 +114,8 @@ export interface PrinterPublic {
 	secretsSet: string[];
 	/** Non-secret identifiers (serial, mainboard id). */
 	identifiers: Record<string, string>;
+	/** Why this printer can never be reached (hosted site, or a non-local address); null when it can. */
+	blocked: string | null;
 }
 
 export interface PrinterJobView {

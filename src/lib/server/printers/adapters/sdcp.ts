@@ -15,6 +15,7 @@
 import { randomBytes } from 'node:crypto';
 import type { PrinterFilament, PrinterStatus } from '#lib/printers/status.ts';
 import { probeMainboardId } from '../discovery';
+import { ipForUrl, OutboundError, resolveAllowed } from '../outbound';
 import {
 	backoff,
 	num,
@@ -73,6 +74,12 @@ export async function enableSdcpCamera(
 ): Promise<boolean> {
 	const timeout = opts.timeoutMs ?? 5000;
 	const settle = opts.settleMs ?? 1500;
+	let target;
+	try {
+		target = await resolveAllowed(cfg.host); // public mode / non-local address: refused here
+	} catch {
+		return false;
+	}
 	const id = cfg.secrets.mainboardId || (await probeMainboardId(cfg.host)) || '';
 	if (!id) return false;
 	return new Promise<boolean>((resolve) => {
@@ -92,7 +99,7 @@ export async function enableSdcpCamera(
 		};
 		const t = setTimeout(() => done(sent), timeout);
 		try {
-			sock = new WebSocket(`ws://${cfg.host}:${cfg.port ?? 3030}/websocket`);
+			sock = new WebSocket(`ws://${ipForUrl(target.ip)}:${cfg.port ?? 3030}/websocket`);
 		} catch {
 			clearTimeout(t);
 			return resolve(false);
@@ -226,8 +233,6 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	let attributes: Obj | undefined;
 	let lastStatus: Obj | undefined;
 
-	const url = `ws://${cfg.host}:${cfg.port ?? 3030}/websocket`;
-
 	const send = (cmd: 0 | 1) => {
 		if (!ws || ws.readyState !== 1) return;
 		ws.send(sdcpEnvelope(cmd, {}, mainboardId));
@@ -250,6 +255,20 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	};
 
 	async function open() {
+		if (subj.closed) return;
+		let url: string;
+		try {
+			// Resolved and validated on every (re)connect; the socket goes to the validated IP.
+			const t = await resolveAllowed(cfg.host);
+			url = `ws://${ipForUrl(t.ip)}:${cfg.port ?? 3030}/websocket`;
+		} catch (e) {
+			if (subj.closed) return;
+			subj.emit({ state: 'error', progress: null, message: safeError(e) });
+			// A hosted site never retries; a refused address may be fixed by DNS or an edit.
+			if (!(e instanceof OutboundError && e.kind === 'public'))
+				retry = setTimeout(() => void open(), backoff(attempt++ + 3));
+			return;
+		}
 		if (subj.closed) return;
 		if (!mainboardId) {
 			mainboardId = (await probeMainboardId(cfg.host)) ?? '';
