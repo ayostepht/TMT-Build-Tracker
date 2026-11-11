@@ -4,7 +4,6 @@
 	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
 	import {
 		printing,
-		deleteRun,
 		updatePlate,
 		buildPlateLayouts,
 		plateThumbnailUrl,
@@ -170,6 +169,7 @@
 	// Plates that have both a slicer thumbnail and an arrangement: which one to show.
 	let diagramOn = $state<Record<number, boolean>>({});
 	let editing = $state<PrintRun | null>(null);
+	let deleteFirst = $state(false);
 	let editOpen = $state(false);
 	const startedOf = (pl: Plate) =>
 		pl.parts
@@ -543,8 +543,8 @@
 					colorOf={pl.perPartRuns
 						? (r) => (r.partSlug ? filLabel(ctx.filament(roleOf(r.partSlug))) : '')
 						: undefined}
-					ondelete={(r) => ctx.act(() => deleteRun(ctx.id, r.id))}
-					onedit={(r) => ((editing = r), (editOpen = true))}
+					ondelete={(r) => ((editing = r), (deleteFirst = true), (editOpen = true))}
+					onedit={(r) => ((editing = r), (deleteFirst = false), (editOpen = true))}
 				/>
 			</div>
 		{/if}
@@ -553,7 +553,7 @@
 	<p class="empty">This template has no plates yet.</p>
 {/each}
 {#if ctx.canEdit}
-	<LogRunSheet bind:open={editOpen} editRun={editing} />
+	<LogRunSheet bind:open={editOpen} editRun={editing} {deleteFirst} />
 {/if}
 
 <style>

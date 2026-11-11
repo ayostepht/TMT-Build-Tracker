@@ -132,7 +132,7 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	await expect(page.getByTestId('confirm-print-log')).toContainText('was stopped', {
 		timeout: 15_000
 	});
-	await page.getByRole('button', { name: 'Dismiss' }).click();
+	await page.getByRole('button', { name: /Don.t log/ }).click();
 	await expect(page.getByTestId('confirm-print-log')).toBeHidden();
 	mock.set({ printStatus: 0, machineStatus: [0], file: '' });
 
@@ -460,10 +460,87 @@ test('per-part plate: link a job to one rim color, Now printing shows it, Change
 	await expect(page.getByTestId('confirm-print-log')).toContainText('was stopped', {
 		timeout: 15_000
 	});
-	await page.getByRole('button', { name: 'Dismiss' }).click();
+	await page.getByRole('button', { name: /Don.t log/ }).click();
 	await expect(page.getByTestId('confirm-print-log')).toBeHidden();
 	await expect.poll(() => state('rims-1-4')).toBe('To print');
 	mock.set({ printStatus: 0, machineStatus: [0], file: '' });
+});
+
+test('a plate cancelled before it started logs nothing; one stopped at 40% offers a scaled Failed log', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'cancelled');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Cancel Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	expect(
+		(
+			await page.request.patch(`/api/builds/${buildId}/plates/1`, { data: { slicerGrams: 50 } })
+		).ok()
+	).toBe(true);
+	const view = async () => (await page.request.get(`/api/builds/${buildId}/view`)).json();
+	const status = async () => (await view()).state['handle-left'].status;
+	const idle = () => mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+
+	idle();
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+
+	// Cancelled at 0%: no run, no prompt, the part is back to To print, the activity says so.
+	mock.printing(FILE, 0);
+	await expect(page.getByTestId('printer-live')).toBeVisible({ timeout: 20_000 });
+	await expect.poll(status).toBe('Printing');
+	mock.set({ printStatus: 8, machineStatus: [0] });
+	await expect.poll(status, { timeout: 15_000 }).toBe('To print');
+	await expect(page.getByTestId('confirm-print-log')).toHaveCount(0);
+	expect((await view()).runs).toHaveLength(0);
+	await page.reload();
+	await expect(page.locator('body')).toContainText('before it started; nothing was logged');
+	idle();
+	await page.waitForTimeout(500);
+
+	// Stopped at 40%: prompt with Failed and grams scaled by progress (40% of 50 g), can be dismissed.
+	mock.printing(FILE, 40);
+	await expect(page.getByTestId('printer-live')).toBeVisible({ timeout: 20_000 });
+	mock.set({ printStatus: 8, machineStatus: [0] });
+	const prompt = page.getByTestId('confirm-print-log');
+	await expect(prompt).toBeVisible({ timeout: 15_000 });
+	await expect(prompt.getByTestId('confirm-result')).toHaveValue('Failed');
+	await expect(prompt.getByTestId('confirm-grams')).toHaveValue('20');
+	await prompt.getByTestId('confirm-dismiss').click();
+	await expect(prompt).toBeHidden();
+	await expect.poll(status).toBe('To print');
+	expect((await view()).runs).toHaveLength(0);
+	idle();
+	await page.waitForTimeout(500);
+
+	// The same again, but logged: a Failed run with the scaled grams, the part is flagged for reprint.
+	mock.printing(FILE, 40);
+	await expect(page.getByTestId('printer-live')).toBeVisible({ timeout: 20_000 });
+	mock.set({ printStatus: 8, machineStatus: [0] });
+	await expect(prompt).toBeVisible({ timeout: 15_000 });
+	await prompt.getByTestId('confirm-log').click();
+	await expect(prompt).toBeHidden();
+	const v = await view();
+	expect(v.runs).toHaveLength(1);
+	expect(v.runs[0]).toMatchObject({ result: 'Failed', grams: 20, plateNumber: 1 });
+	expect(v.state['handle-left'].status).toBe('Reprint');
+	idle();
 });
 
 test('Now printing shows the live printer box and camera tile at 390 and 1440, and recovers from a failed first load', async ({
@@ -491,11 +568,11 @@ test('Now printing shows the live printer box and camera tile at 390 and 1440, a
 	expect(created.ok()).toBe(true);
 	mock.printing(FILE, 81);
 
-	// The first printer-jobs request fails (a dropped connection on a phone): the card says so and Retry recovers.
-	let failed = false;
+	// The printer-jobs requests fail (a dropped connection on a phone) until Retry is pressed: the
+	// card says so and Retry recovers. (Every reload fails, so event-driven reloads cannot hide it.)
+	let failing = true;
 	await page.route('**/api/builds/*/printer-jobs', async (route) => {
-		if (!failed) {
-			failed = true;
+		if (failing) {
 			return route.fulfill({
 				status: 500,
 				contentType: 'application/json',
@@ -504,14 +581,21 @@ test('Now printing shows the live printer box and camera tile at 390 and 1440, a
 		}
 		return route.continue();
 	});
+	// The Now card (which shows the error) exists once the printer's job has linked and set the part Printing.
+	await expect
+		.poll(
+			async () =>
+				(await (await page.request.get(`/api/builds/${buildId}/view`)).json()).state['handle-left']
+					.status,
+			{ timeout: 20_000 }
+		)
+		.toBe('Printing');
 	await page.goto(`/builds/${buildId}`);
 	const live = page.getByTestId('printer-live');
 	const err = page.getByTestId('printer-status-error');
-	await expect(err.or(live)).toBeVisible({ timeout: 20_000 });
-	if (await err.isVisible()) {
-		await expect(err).toContainText('Printer status unavailable');
-		await err.getByRole('button', { name: 'Retry' }).click();
-	}
+	await expect(err).toContainText('Printer status unavailable', { timeout: 20_000 });
+	failing = false;
+	await err.getByRole('button', { name: 'Retry' }).click();
 	await expect(live).toBeVisible({ timeout: 20_000 });
 	await expect(err).toBeHidden();
 	await expect(page.getByTestId('camera-tile')).toBeVisible();
@@ -570,7 +654,12 @@ test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Tak
 	// 2. "Start on <printer>" first, then the printer starts a file with no plate in its name.
 	await page.goto(`/builds/${buildId}/print`);
 	await page.waitForLoadState('networkidle');
+	// Wait for the server to have recorded the suggestion: leaving the page would cancel the request.
+	const expectSent = page.waitForResponse(
+		(r) => /\/api\/printers\/[^/]+\/expect$/.test(r.url()) && r.request().method() === 'POST'
+	);
 	await page.getByTestId('start-on-printer').first().click();
+	expect((await expectSent).ok()).toBe(true);
 	await page.goto(`/builds/${buildId}`);
 	await page.waitForLoadState('networkidle');
 	mock.printing('ECC_0.4_tmt_4691_Overture PETG HF_0.2_11h1m.gcode', 5);

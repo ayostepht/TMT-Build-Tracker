@@ -61,3 +61,26 @@ export function recomputeParts(view: BuildView, runs: PrintRun[], slugs: string[
 	}
 	return out;
 }
+
+/**
+ * A plate was sent and the job ended before anything printed: parts still Printing go back to
+ * the status their run history gives them (`recomputeParts`): Reprint after a failure with no
+ * later success, Printed when every run is done, Printing between the runs of a multi-run part,
+ * else To print (Printed when it was marked printed by hand). Start time and run time are cleared.
+ */
+export function releaseUnstarted(view: BuildView, slugs: string[]): PartPatch[] {
+	const printing = slugs.filter((s) => view.state[s]?.status === 'Printing');
+	const byRuns = new Map(recomputeParts(view, view.runs, printing).map((p) => [p.slug, p]));
+	return printing.map((slug) => {
+		const p = byRuns.get(slug);
+		const patch: PartPatch = { slug, startedAt: null, runEstSeconds: null };
+		if (p?.status === 'To print' && view.state[slug].printedOn) {
+			patch.status = 'Printed';
+			return patch;
+		}
+		if (p?.status) patch.status = p.status;
+		if (p?.printedOn !== undefined) patch.printedOn = p.printedOn;
+		if (p?.comps) patch.comps = p.comps;
+		return patch;
+	});
+}

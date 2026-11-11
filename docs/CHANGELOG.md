@@ -6,6 +6,14 @@ state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, wh
 
 ## 2026-11
 
+- **r39** (9839be7, ee69a3a): security fix (a Moonraker status frame with `__proto__`
+  could pollute `Object.prototype`); cancelled/failed prints that never started log no run
+  or filament, part-way stops default to Failed with grams scaled by progress; collapsed
+  per-plate History on the Print tab. No schema change, no rehearsal.
+- **r38** (6be1868, hotfix): printer jobs auto-link only when the file name names the
+  plate (the "one plate still Printing" fallback kept re-attaching prints to multi-run
+  plates); "Start on <printer>" asks to confirm the plate; "Take off printer" unlinks the
+  live job. No schema change, no rehearsal.
 - **r37** (d1a815c): Palettes tab gets two collapsed disclosures; `/designs/[slug]` "Use
   this design" scrolls/focuses the Use card; design preview hides inactive variants (wheel
   z-fighting fixed).

@@ -7,7 +7,9 @@
  */
 import { and, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 import { fileMentionsBuild, matchPlate, plateRunGrams } from '#lib/domain/printer-match.ts';
-import { stopPrinting } from '#lib/domain/actions.ts';
+import { jobNeverStarted, stopPrinting } from '#lib/domain/actions.ts';
+import { releaseUnstarted } from '#lib/domain/recompute.ts';
+import { progressGrams } from '#lib/domain/logrun.ts';
 import { defaultRunParts } from '#lib/domain/run-choice.ts';
 import { today } from '#lib/domain/format.ts';
 import type { BuildView, PartPatch } from '#lib/domain/types.ts';
@@ -34,6 +36,13 @@ type JobRow = typeof printerJobs.$inferSelect;
 
 const RESTART_ELAPSED_SEC = 120;
 export const DISMISSED = 'dismissed';
+
+/** The highest progress seen: a final status that reads 0 (firmware resets it on cancel) never lowers it. */
+function maxProgress(a: number | null | undefined, b: number | null | undefined): number | null {
+	if (a == null) return b ?? null;
+	if (b == null) return a;
+	return Math.max(a, b);
+}
 
 export function activeJob(db: Db, printerId: string): JobRow | undefined {
 	return db
@@ -304,7 +313,7 @@ function finishJob(
 		.set({
 			status: result,
 			finishedAt: now,
-			progress: result === 'done' ? 100 : (s.progress ?? job.progress)
+			progress: result === 'done' ? 100 : maxProgress(s.progress, job.progress)
 		})
 		.where(eq(printerJobs.id, job.id))
 		.run();
@@ -316,6 +325,15 @@ function finishJob(
 	if (!actor) return;
 	const view = loadBuildView(db, job.buildId, actor);
 	if (!view) return;
+	// Cancelled or failed before anything printed: nothing to log, whatever the auto-log setting.
+	if (result !== 'done') {
+		const progress = maxProgress(s.progress, job.progress);
+		if (jobNeverStarted({ progress, layer: s.layer, elapsedSec: elapsed })) {
+			db.update(printerJobs).set({ runId: DISMISSED }).where(eq(printerJobs.id, job.id)).run();
+			releaseParts(db, printer, job, undefined, 'printer.job.unstarted', result);
+			return;
+		}
+	}
 	const grams = plateRunGrams(view, job.plateNumber, job.partSlugs ?? undefined);
 	const settings = getOrgSettings(db, printer.organizationId);
 	const auto = settings.autoLogPrints && result === 'done';
@@ -412,11 +430,12 @@ export function processStatus(
 			changed = true;
 		} else {
 			const status = s.state === 'paused' ? 'paused' : 'printing';
-			const moved =
-				s.progress != null && Math.abs((s.progress ?? 0) - (active.progress ?? -10)) >= 1;
+			// Stored progress only goes up while the job is live (a poll that dips to 0 changes nothing).
+			const best = maxProgress(s.progress, active.progress);
+			const moved = best != null && Math.abs(best - (active.progress ?? -10)) >= 1;
 			if (status !== active.status || moved) {
 				db.update(printerJobs)
-					.set({ status, progress: s.progress ?? active.progress })
+					.set({ status, progress: best })
 					.where(eq(printerJobs.id, active.id))
 					.run();
 				changed = true;
@@ -599,7 +618,14 @@ export function unlinkJob(db: Db, jobId: string, orgId: string): void {
  * A job ended and nothing was logged for it: its parts that are still Printing (and that no other
  * active job covers) go back to their status from before the print.
  */
-function releaseParts(db: Db, printer: PrinterRow, job: JobRow, userId?: string) {
+function releaseParts(
+	db: Db,
+	printer: PrinterRow,
+	job: JobRow,
+	userId?: string,
+	kind = 'printer.job.release',
+	result?: string
+) {
 	if (!job.buildId || !job.partSlugs?.length) return;
 	const buildId = job.buildId;
 	const others = db
@@ -616,15 +642,16 @@ function releaseParts(db: Db, printer: PrinterRow, job: JobRow, userId?: string)
 	const held = new Set(others.flatMap((o) => o.partSlugs ?? []));
 	const slugs = job.partSlugs.filter((s) => !held.has(s));
 	const body = (_tx: Db, view: BuildView) => ({
-		kind: 'printer.job.release',
+		kind,
 		payload: {
 			printer: printer.name,
 			printerId: printer.id,
 			jobId: job.id,
 			plateNumber: job.plateNumber,
-			fileName: job.fileName
+			fileName: job.fileName,
+			...(result ? { result } : {})
 		},
-		patches: stopPrinting(view, slugs)
+		patches: releaseUnstarted(view, slugs)
 	});
 	if (userId) mutateBuild(db, buildId, userId, body);
 	else {
@@ -648,7 +675,13 @@ export function confirmJob(
 		throw new ApiError(409, 'The print is not finished yet');
 	if (job.runId && job.runId !== DISMISSED) throw new ApiError(409, 'This print is already logged');
 	const o = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
-	const result = o.result === 'Failed' || o.result === 'Partial' ? o.result : 'Success';
+	const finished = job.status === 'done';
+	const result =
+		o.result === 'Failed' || o.result === 'Partial' || o.result === 'Success'
+			? o.result
+			: finished
+				? 'Success'
+				: 'Failed';
 	const view = loadBuildView(db, job.buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
 	const elapsed =
@@ -659,7 +692,12 @@ export function confirmJob(
 		view,
 		job,
 		result,
-		plateRunGrams(view, job.plateNumber, job.partSlugs ?? undefined),
+		finished
+			? plateRunGrams(view, job.plateNumber, job.partSlugs ?? undefined)
+			: progressGrams(
+					plateRunGrams(view, job.plateNumber, job.partSlugs ?? undefined),
+					job.progress
+				),
 		elapsed,
 		printer.name,
 		new Date(),

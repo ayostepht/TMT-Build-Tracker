@@ -92,11 +92,10 @@ export class PrinterStore {
 		if (typeof EventSource === 'undefined') return;
 		const es = new EventSource(`/api/printers/events?org=${encodeURIComponent(this.org)}`);
 		this.es = es;
-		let opened = false;
 		es.onopen = () => {
-			// A reconnect may have skipped events.
-			if (opened) this.resync();
-			opened = true;
+			// Events sent before the stream was open (the page's first load races it) and on a
+			// reconnect are missed: fetch again once it is open.
+			this.resync();
 		};
 		es.onmessage = (m) => {
 			try {

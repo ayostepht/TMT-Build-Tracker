@@ -170,6 +170,7 @@ describe('describeActivitySegments', () => {
 			['printer.job.done', { plateNumber: 5, auto: true, grams: 3 }],
 			['printer.job.link', { plateNumber: 6 }],
 			['printer.job.release', { plateNumber: 7 }],
+			['printer.job.unstarted', { printer: 'CC', plateNumber: 8, result: 'cancelled' }],
 			['design.update', { moves: [{ slug: part.slug, role: 'accent', roleName: 'Blue' }] }],
 			['something.new', {}]
 		];
@@ -194,7 +195,8 @@ describe('describeActivitySegments', () => {
 			['printer.job.start', { plateNumber: 13 }],
 			['printer.job.done', { plateNumber: 13 }],
 			['printer.job.link', { plateNumber: 13 }],
-			['printer.job.release', { plateNumber: 13 }]
+			['printer.job.release', { plateNumber: 13 }],
+			['printer.job.unstarted', { plateNumber: 13 }]
 		] as const) {
 			expect(plateOf(kind, payload)).toEqual([{ text: 'plate 13', plate: 13 }]);
 		}
@@ -218,5 +220,22 @@ describe('describeActivitySegments', () => {
 	it('never lets payload text forge a link', () => {
 		const s = segs('build.update', { name: '\u0001plate:9\u0002fake\u0003' });
 		expect(s.every((x) => x.plate === undefined && x.part === undefined)).toBe(true);
+	});
+});
+
+describe('printer.job.unstarted', () => {
+	it('says plainly that nothing was logged', () => {
+		const text = (r: string) =>
+			describeActivitySegments(
+				act('printer.job.unstarted', { printer: 'Shop CC', plateNumber: 3, result: r }),
+				view
+			)
+				.map((x) => x.text)
+				.join('');
+		expect(text('cancelled')).toBe(
+			'Shop CC cancelled plate 3 before it started; nothing was logged'
+		);
+		expect(text('cancelled')).toContain('before it started; nothing was logged');
+		expect(text('failed')).toContain('stopped');
 	});
 });

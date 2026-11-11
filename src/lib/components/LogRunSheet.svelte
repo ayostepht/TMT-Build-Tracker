@@ -31,6 +31,7 @@
 		startedAt = null,
 		title: titleIn = 'Log print',
 		editRun = null,
+		deleteFirst = false,
 		quick = false
 	}: {
 		open?: boolean;
@@ -43,6 +44,8 @@
 		title?: string;
 		/** Edit this past log instead of creating a new one. */
 		editRun?: PrintRun | null;
+		/** With `editRun`: open straight at the delete confirmation (from a Delete button in a log table). */
+		deleteFirst?: boolean;
 		/**
 		 * "Log a whole plate" shortcut: Success preselected, time prefilled from the plate's
 		 * slicer/learned time (or started to now), grams from the slicer/learned grams per run.
@@ -130,8 +133,13 @@
 		const runs = Math.max(1, plate?.runs ?? 1);
 		return slugs.reduce((a, s) => a + (partOf(s)?.bomGrams ?? 0), 0) / (plate ? runs : 1);
 	});
+	// A failed print did not use the plate's grams: leave it empty (counts as 0 g) unless typed.
 	const gramsShown = $derived(
-		gramsEdited ? grams : slicerDefault != null ? String(slicerDefault) : ''
+		gramsEdited
+			? grams
+			: slicerDefault != null && result !== 'Failed' && !editRun
+				? String(slicerDefault)
+				: ''
 	);
 
 	const durSeconds = $derived(dur.trim() === '' ? null : parseDur(dur));
@@ -221,7 +229,7 @@
 		grams = '';
 		gramsEdited = false;
 		durEdited = false;
-		confirmDelete = false;
+		confirmDelete = !!editRun && deleteFirst;
 		keepStatuses = false;
 		editDate = today();
 		picked = slugs[0] ?? '';
@@ -422,14 +430,22 @@
 					min="0"
 					step="1"
 					inputmode="decimal"
-					placeholder={bomEstimate > 0 ? `BOM ~${fmt(bomEstimate)}` : 'g'}
+					placeholder={result === 'Failed'
+						? 'optional'
+						: bomEstimate > 0
+							? `BOM ~${fmt(bomEstimate)}`
+							: 'g'}
 					value={gramsShown}
 					oninput={(e) => {
 						grams = e.currentTarget.value;
 						gramsEdited = true;
 					}}
 				/>
-				{#if slicerDefault != null && !gramsEdited}<small>{gramsSource}</small>{/if}
+				{#if result === 'Failed' && !gramsEdited}<small
+						>Optional: grams actually used. Left empty it counts as 0 g.</small
+					>
+				{:else if slicerDefault != null && !gramsEdited && !editRun}<small>{gramsSource}</small
+					>{/if}
 			</label>
 
 			<label class="f" for="{uid}-n"
@@ -459,7 +475,7 @@
 							><input type="checkbox" bind:checked={keepStatuses} /> Keep part statuses as they are</label
 						>
 					{/if}
-					<div class="row">
+					<div class="confirm-acts">
 						<button class="btn" type="button" onclick={() => (confirmDelete = false)}
 							>Keep it</button
 						>
@@ -631,7 +647,7 @@
 		margin: 0;
 		font-size: 14px;
 	}
-	.confirm .row {
+	.confirm .confirm-acts {
 		display: flex;
 		justify-content: flex-end;
 		gap: 8px;

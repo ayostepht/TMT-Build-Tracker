@@ -52,6 +52,27 @@ export function stopPrinting(view: BuildView, slugs: string[]): PartPatch[] {
 	return out;
 }
 
+/** A cancelled or failed job under this progress (%) never really started. */
+export const NO_PROGRESS_PCT = 1;
+/** With no progress reported, a job that ended within this many seconds of its start counts as not started. */
+export const NO_PROGRESS_MAX_ELAPSED_SEC = 600;
+
+/**
+ * Did a printer job that ended as cancelled/failed effectively never print? Conservative:
+ * a completed layer beyond the first, or progress of 1% or more, means it did. With no
+ * progress reported the print counts as not started only when it ended within
+ * `NO_PROGRESS_MAX_ELAPSED_SEC` of its start; with neither known the user is asked.
+ */
+export function jobNeverStarted(i: {
+	progress: number | null | undefined;
+	layer?: number | null;
+	elapsedSec?: number | null;
+}): boolean {
+	if (i.layer != null && i.layer > 1) return false;
+	if (i.progress != null) return i.progress < NO_PROGRESS_PCT;
+	return i.elapsedSec != null && i.elapsedSec < NO_PROGRESS_MAX_ELAPSED_SEC;
+}
+
 /** Set when the print started; a time in the future is clamped to `now`. */
 export function setPrintStart(
 	view: BuildView,
