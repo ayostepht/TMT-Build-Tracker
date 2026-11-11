@@ -9,6 +9,13 @@ import {
 import { catalogPrinter } from '#lib/printers/catalog.ts';
 import { cleanHost } from '#lib/printers/address.ts';
 import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
+import {
+	parseShareLink,
+	shareLinkOf,
+	SHARE_LINK_HOST_PLACEHOLDER,
+	SHARE_LINK_KEY,
+	isOctoEverywhereAddress
+} from '#lib/printers/share-link.ts';
 import { ApiError } from '../access';
 import type { Db } from '../db';
 import { isPublicMode } from '../config';
@@ -78,6 +85,8 @@ export function getPrinter(db: Db, id: string): Row | undefined {
 export function parseHost(v: unknown): string {
 	if (typeof v !== 'string') return bad('host is required');
 	const h = v.trim();
+	if (isOctoEverywhereAddress(h))
+		return bad('That is an OctoEverywhere link: put it in the "OctoEverywhere shared link" field');
 	if (!h || h.length > 253 || !/^[A-Za-z0-9.:_-]+$/.test(h))
 		return bad('Enter just the printer address, like 192.168.0.50');
 	// An IP literal on a public or reserved range can never be used: say so now, not at connect.
@@ -118,7 +127,14 @@ export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput 
 		if (!(PRINTER_KINDS as readonly unknown[]).includes(o.kind)) bad('Unknown printer type');
 		out.kind = o.kind as PrinterKind;
 	}
-	if (o.host !== undefined || !partial) out.host = parseHost(o.host);
+	const typedLink =
+		typeof (o.secrets as Obj | undefined)?.[SHARE_LINK_KEY] === 'string' &&
+		!!((o.secrets as Obj)[SHARE_LINK_KEY] as string).trim();
+	if (o.host !== undefined || !partial) {
+		// A printer reached through an OctoEverywhere link needs no address.
+		const blank = typeof o.host !== 'string' || !o.host.trim();
+		out.host = blank && typedLink ? SHARE_LINK_HOST_PLACEHOLDER : parseHost(o.host);
+	}
 	if (o.port !== undefined) {
 		if (o.port === null || o.port === '') out.port = null;
 		else if (
@@ -158,6 +174,12 @@ export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput 
 		for (const [k, v] of Object.entries(o.secrets as Obj)) {
 			if (typeof v !== 'string' || v.length > 300) bad(`${k} must be text`);
 			s[k] = (v as string).trim();
+			if (k === SHARE_LINK_KEY && s[k]) {
+				// Validated and normalised; the error never echoes the (secret) link.
+				const c = parseShareLink(s[k]);
+				if (!c.ok) bad(c.error);
+				else s[k] = c.origin;
+			}
 		}
 		out.secrets = s;
 	}
@@ -209,6 +231,40 @@ export function secretsForMovedAddress(
 	);
 }
 
+/**
+ * The one rule for stored secrets: they belong to the DESTINATION they were saved for, which is
+ * either an address (host + port) or an OctoEverywhere link (the link itself is the secret).
+ *  - same destination: stored secrets are kept;
+ *  - address to another address: `secretsForMovedAddress` (re-enter the key/access code);
+ *  - address to link, link to another link: nothing is carried over, the typed link is the
+ *    credential (a stale access code or mainboard id never rides along to the relay);
+ *  - link to address: the link is dropped and the address needs its own secrets.
+ * `supplied` is what the caller typed (links already normalised). Throws ApiError when a
+ * required secret was not re-entered.
+ */
+export function secretsForDestination(
+	kind: PrinterKind,
+	stored: { host: string; port: number | null; secrets: Secrets },
+	next: { host: string; port: number | null },
+	supplied: Secrets | undefined
+): Secrets {
+	const linkOf = (s: Secrets | undefined) => (kind === 'elegoo-sdcp' ? shareLinkOf(s) : null);
+	const curLink = linkOf(stored.secrets);
+	const typed = supplied?.[SHARE_LINK_KEY];
+	const nextLink =
+		typed === undefined ? curLink : typed ? linkOf({ [SHARE_LINK_KEY]: typed }) : null;
+	if (curLink || nextLink) {
+		if (curLink && nextLink && curLink.host === nextLink.host) return stored.secrets;
+		if (nextLink) return {}; // address to link, or another link
+		const { [SHARE_LINK_KEY]: _link, ...rest } = stored.secrets; // link to address
+		void _link;
+		return secretsForMovedAddress(kind, rest, supplied);
+	}
+	return addressMoved(stored, next.host, next.port)
+		? secretsForMovedAddress(kind, stored.secrets, supplied)
+		: stored.secrets;
+}
+
 /** Hosted (public) mode never connects to printers, so there is nothing to save. */
 function refuseInPublicMode(): void {
 	if (isPublicMode()) throw new ApiError(403, PUBLIC_MODE_MESSAGE);
@@ -217,8 +273,14 @@ function refuseInPublicMode(): void {
 export function createPrinter(db: Db, orgId: string, userId: string, body: unknown): Row {
 	refuseInPublicMode();
 	const p = parsePrinterInput(body, false);
-	checkCamera(p.cameraUrl, p.host!, p.kind!);
 	const secrets = mergeSecrets(p.kind!, {}, p.secrets);
+	if (!secrets[SHARE_LINK_KEY] && p.host === SHARE_LINK_HOST_PLACEHOLDER)
+		bad('Enter the printer address');
+	if (secrets[SHARE_LINK_KEY]) {
+		p.cameraUrl = null; // the link decides where the camera is
+		p.host = SHARE_LINK_HOST_PLACEHOLDER; // and where the printer is; a typed address is ignored
+	}
+	checkCamera(p.cameraUrl, p.host!, p.kind!);
 	return db
 		.insert(printers)
 		.values({
@@ -257,33 +319,41 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 	const kind = p.kind ?? (cur.kind as PrinterKind);
 	const kindChanged = kind !== cur.kind;
 	const host = p.host ?? cur.host;
-	const cameraUrl = !cameraSupported(kind)
-		? null
-		: p.cameraUrl !== undefined
-			? p.cameraUrl
-			: cur.cameraUrl;
-	checkCamera(cameraUrl, host, kind);
 	const port = p.port !== undefined ? p.port : cur.port;
-	const keep = kindChanged ? {} : decryptSecrets(cur.secretEnc);
 	const secrets = mergeSecrets(
 		kind,
-		kindChanged || !addressMoved(cur, host, port)
-			? keep
-			: secretsForMovedAddress(kind, keep, p.secrets),
+		kindChanged
+			? {}
+			: secretsForDestination(
+					kind,
+					{ host: cur.host, port: cur.port, secrets: decryptSecrets(cur.secretEnc) },
+					{ host, port },
+					p.secrets
+				),
 		p.secrets
 	);
+	const linked = !!secrets[SHARE_LINK_KEY];
+	if (!linked && host === SHARE_LINK_HOST_PLACEHOLDER) bad('Enter the printer address');
+	const cameraUrl =
+		!cameraSupported(kind) || linked
+			? null
+			: p.cameraUrl !== undefined
+				? p.cameraUrl
+				: cur.cameraUrl;
+	checkCamera(cameraUrl, host, kind);
 	const set: Partial<typeof printers.$inferInsert> = {
 		secretEnc: Object.keys(secrets).length ? encryptSecrets(secrets) : null
 	};
 	if (p.name !== undefined) set.name = p.name;
 	if (p.kind !== undefined) set.kind = p.kind;
 	if (p.host !== undefined) set.host = p.host;
+	if (linked) set.host = SHARE_LINK_HOST_PLACEHOLDER; // the link is the destination
 	if (p.port !== undefined) set.port = p.port;
 	if (p.catalogId !== undefined) set.catalogId = p.catalogId;
 	if (p.enabled !== undefined) set.enabled = p.enabled;
 	if (p.cameraUrl !== undefined) set.cameraUrl = p.cameraUrl;
 	if (p.cameraEnabled !== undefined) set.cameraEnabled = p.cameraEnabled;
-	if (kind === 'bambu-lan') set.cameraUrl = null;
+	if (kind === 'bambu-lan' || linked) set.cameraUrl = null;
 	return db.update(printers).set(set).where(eq(printers.id, id)).returning().get();
 }
 
@@ -310,17 +380,30 @@ export function configFromInput(db: Db, orgId: string, body: unknown): PrinterCo
 	}
 	const kind = ((o.kind as string) ?? stored?.kind) as PrinterKind;
 	if (!(PRINTER_KINDS as readonly unknown[]).includes(kind)) bad('Unknown printer type');
-	const p = parsePrinterInput({ ...o, name: 'test', kind, host: o.host ?? stored?.host }, true);
+	const typedHost = typeof o.host === 'string' && o.host.trim() ? o.host : undefined;
+	const p = parsePrinterInput(
+		{ ...o, name: 'test', kind, host: typedHost ?? stored?.host ?? o.host ?? '' },
+		true
+	);
 	const port = p.port !== undefined ? p.port : (stored?.port ?? null);
-	let keep: Secrets = stored && stored.kind === kind ? decryptSecrets(stored.secretEnc) : {};
-	if (stored && stored.kind === kind && addressMoved(stored, p.host!, port))
-		keep = secretsForMovedAddress(kind, keep, p.secrets);
+	const keep =
+		stored && stored.kind === kind
+			? secretsForDestination(
+					kind,
+					{ host: stored.host, port: stored.port, secrets: decryptSecrets(stored.secretEnc) },
+					{ host: p.host!, port },
+					p.secrets
+				)
+			: {};
+	const secrets = mergeSecrets(kind, keep, p.secrets);
+	const linked = !!secrets[SHARE_LINK_KEY];
+	if (!linked && p.host === SHARE_LINK_HOST_PLACEHOLDER) bad('Enter the printer address');
 	return {
 		id: stored?.id ?? 'test',
 		kind,
-		host: p.host!,
+		host: linked ? SHARE_LINK_HOST_PLACEHOLDER : p.host!,
 		port,
-		secrets: mergeSecrets(kind, keep, p.secrets)
+		secrets
 	};
 }
 

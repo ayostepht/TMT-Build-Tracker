@@ -55,17 +55,36 @@ export function slicerFor(view: BuildView, u: Unit): number | null {
 	return positive(pl.perPartRuns ? pl.slicerByPart[u.key] : pl.slicerGrams);
 }
 
+/** Positive entries of a plate's sliced-file grams, by role. */
+const fileGrams = (pl: Plate): [string, number][] =>
+	Object.entries(pl.filamentGrams ?? {}).filter(
+		(e): e is [string, number] => typeof e[1] === 'number' && e[1] > 0
+	);
+
 /**
- * Grams per run by role from a sliced 3MF (`Plate.filamentGrams`), for a whole-plate unit;
- * null when the plate has none (the unit is then all one role, `Unit.role`).
+ * Grams per run by role from a plate's sliced 3MF (`Plate.filamentGrams`), limited to the
+ * roles of the plate's parts. A sliced file's slot -> role map can disagree with the design
+ * (stray slots, a wrong slot order), so the parts' roles decide where the grams go; entries
+ * for roles no part on the plate has are dropped. Null when nothing is left (no file data, or
+ * no overlap): callers then fall back to the parts' own roles. Pure.
  */
+export function plateFileRoleGrams(
+	plate: Plate,
+	partRoles: Iterable<string>
+): Record<string, number> | null {
+	const roles = new Set(partRoles);
+	const kept = fileGrams(plate).filter(([r]) => roles.has(r));
+	return kept.length ? Object.fromEntries(kept) : null;
+}
+
+/** Grams per run by role for a whole-plate unit (see plateFileRoleGrams); null for perPartRuns / no usable file data. */
 function plateRoleGrams(view: BuildView, u: Unit): Record<string, number> | null {
 	const pl = plateByNumber(view, u.plate);
 	if (!pl || pl.perPartRuns) return null;
-	const fg = Object.fromEntries(
-		Object.entries(pl.filamentGrams ?? {}).filter(([, g]) => typeof g === 'number' && g > 0)
+	return plateFileRoleGrams(
+		pl,
+		u.parts.map((p) => p.role)
 	);
-	return Object.keys(fg).length ? fg : null;
 }
 
 /** How a unit's grams split over filament roles: {role: 1} normally, grams-proportional for multi-filament plates. */
@@ -79,8 +98,11 @@ export function roleShares(view: BuildView, u: Unit): Record<string, number> {
 export function estPerRun(view: BuildView, u: Unit): number {
 	const s = slicerFor(view, u);
 	if (s) return s;
-	const fg = plateRoleGrams(view, u);
-	if (fg) return Object.values(fg).reduce((a, b) => a + b, 0);
+	// The file's whole total stays the estimate: the plate still uses all of it, filtering
+	// only changes which roles it belongs to.
+	const pl = plateByNumber(view, u.plate);
+	const file = pl && !pl.perPartRuns ? fileGrams(pl) : [];
+	if (file.length) return file.reduce((a, [, g]) => a + g, 0);
 	return u.parts.reduce((a, p) => a + (p.bomGrams || 0), 0) / u.runs;
 }
 

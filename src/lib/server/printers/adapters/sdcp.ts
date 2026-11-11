@@ -14,18 +14,23 @@
  */
 import { randomBytes } from 'node:crypto';
 import type { PrinterFilament, PrinterStatus } from '#lib/printers/status.ts';
+import {
+	SHARE_LINK_HOST_PLACEHOLDER,
+	shareLinkOf,
+	shareLinkSocketUrl
+} from '#lib/printers/share-link.ts';
 import { probeMainboardId } from '../discovery';
 import {
 	ipForUrl,
 	MAX_REMOTE_MESSAGE_BYTES,
 	OutboundError,
 	resolveAllowed,
-	safeFileName,
-	safeText
+	safeFileName
 } from '../outbound';
 import {
 	backoff,
 	HostileGuard,
+	linkBackoff,
 	num,
 	OVERSIZED_MESSAGE,
 	safeError,
@@ -83,6 +88,10 @@ export async function enableSdcpCamera(
 ): Promise<boolean> {
 	const timeout = opts.timeoutMs ?? 5000;
 	const settle = opts.settleMs ?? 1500;
+	// Through an OctoEverywhere link the camera needs no Cmd 386 (OctoEverywhere keeps the stream
+	// up), so no second socket is opened on the printer's own connection slots.
+	if (shareLinkOf(cfg.secrets)) return false;
+	if (cfg.host === SHARE_LINK_HOST_PLACEHOLDER) return false; // link missing: never dial the placeholder
 	let target;
 	try {
 		target = await resolveAllowed(cfg.host); // public mode / non-local address: refused here
@@ -132,10 +141,6 @@ export async function enableSdcpCamera(
 		sock.onclose = () => done(sent);
 	});
 }
-
-/** Longest MainboardID kept: it is echoed back to the device in every request. */
-const MAX_MAINBOARD_ID = 64;
-const cleanId = (v: unknown) => safeText(v, MAX_MAINBOARD_ID);
 
 const POLL_MS = 4000;
 const STALE_MS = 20000;
@@ -208,6 +213,15 @@ export function normalizeSdcpStatus(s: Obj, attributes?: Obj): PrinterStatus {
 	return out;
 }
 
+const MAX_FILAMENTS = 16;
+const MAX_FILAMENT_STR = 32;
+const MAINBOARD_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** A MainboardID is echoed back to the device in every request we send, so it must look like an id. */
+function cleanMainboardId(v: unknown): string {
+	return typeof v === 'string' && MAINBOARD_ID_RE.test(v) ? v : '';
+}
+
 /**
  * CANVAS slot info. The Centauri Carbon's public SDCP docs do not define a canvas schema, so
  * this reads any `Canvas*` structure that looks like a list of trays (color + type) and
@@ -219,13 +233,17 @@ export function extractFilaments(...sources: (Obj | undefined)[]): PrinterFilame
 		if (depth > 4) return;
 		if (Array.isArray(v)) {
 			for (const x of v) {
+				if (out.length >= MAX_FILAMENTS) return;
 				if (isObj(x) && ('filament_color' in x || 'FilamentColor' in x || 'color' in x)) {
 					const color = (x.filament_color ?? x.FilamentColor ?? x.color) as unknown;
 					const type = (x.filament_type ?? x.FilamentType ?? x.type ?? x.filament_name) as unknown;
 					out.push({
 						slot: `A${out.length + 1}`,
-						color: typeof color === 'string' ? color.replace(/^0x/i, '#') : undefined,
-						type: typeof type === 'string' ? type : undefined
+						color:
+							typeof color === 'string'
+								? color.replace(/^0x/i, '#').slice(0, MAX_FILAMENT_STR)
+								: undefined,
+						type: typeof type === 'string' ? type.slice(0, MAX_FILAMENT_STR) : undefined
 					});
 				} else visit(x, depth + 1);
 			}
@@ -245,13 +263,18 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	let poll: ReturnType<typeof setInterval> | undefined;
 	let retry: ReturnType<typeof setTimeout> | undefined;
 	let stale: ReturnType<typeof setTimeout> | undefined;
-	let mainboardId = cleanId(cfg.secrets.mainboardId);
+	let mainboardId = cleanMainboardId(cfg.secrets.mainboardId);
 	const hostile = new HostileGuard();
 	let attributes: Obj | undefined;
 	let lastStatus: Obj | undefined;
 
+	// OctoEverywhere shared link: the printer keeps its one connection to OctoEverywhere and we
+	// ride on it (wss, no port, no UDP discovery, no polling). Otherwise the printer's own socket.
+	const link = shareLinkOf(cfg.secrets);
+	let askedAttributes = false;
+
 	const send = (cmd: 0 | 1) => {
-		if (!ws || ws.readyState !== 1) return;
+		if (!ws || ws.readyState !== 1 || (link && !mainboardId)) return;
 		ws.send(sdcpEnvelope(cmd, {}, mainboardId));
 	};
 
@@ -262,40 +285,54 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		}, STALE_MS);
 	};
 
+	// A relay that accepts the upgrade and hangs up must not be re-dialled every few seconds:
+	// `attempt` resets only once a valid Status/Attributes frame arrived (see `gotData`).
+	const delay = () => (link ? linkBackoff(attempt++) : backoff(attempt++));
+	const gotData = () => {
+		attempt = 0;
+	};
+
 	const scheduleReconnect = () => {
 		clearInterval(poll);
 		clearTimeout(stale);
 		if (subj.closed) return;
 		subj.emit({ state: 'offline', progress: null, message: 'Disconnected' });
 		clearTimeout(retry);
-		retry = setTimeout(() => void open(), backoff(attempt++));
+		retry = setTimeout(() => void open(), delay());
 	};
 
 	async function open() {
 		if (subj.closed) return;
 		let url: string;
 		try {
-			// Resolved and validated on every (re)connect; the socket goes to the validated IP.
-			const t = await resolveAllowed(cfg.host);
-			url = `ws://${ipForUrl(t.ip)}:${cfg.port ?? 3030}/websocket`;
+			// Resolved and validated on every (re)connect. LAN: the socket goes to the validated IP.
+			// Link: wss to the link host; the name is validated (all answers public) right before
+			// the dial, but the global WebSocket cannot pin the address (see architecture notes).
+			if (link) {
+				await resolveAllowed(link.host);
+				url = shareLinkSocketUrl(link.origin);
+			} else {
+				const t = await resolveAllowed(cfg.host);
+				url = `ws://${ipForUrl(t.ip)}:${cfg.port ?? 3030}/websocket`;
+			}
 		} catch (e) {
 			if (subj.closed) return;
 			subj.emit({ state: 'error', progress: null, message: safeError(e) });
 			// A hosted site never retries; a refused address may be fixed by DNS or an edit.
 			if (!(e instanceof OutboundError && e.kind === 'public'))
-				retry = setTimeout(() => void open(), backoff(attempt++ + 3));
+				retry = setTimeout(() => void open(), link ? delay() : backoff(attempt++ + 3));
 			return;
 		}
 		if (subj.closed) return;
-		if (!mainboardId) {
-			mainboardId = cleanId(await probeMainboardId(cfg.host));
+		if (!mainboardId && !link) {
+			mainboardId = cleanMainboardId(await probeMainboardId(cfg.host));
 			if (subj.closed) return;
 		}
 		try {
 			ws = new WebSocket(url);
 		} catch (e) {
 			subj.emit({ state: 'offline', progress: null, message: safeError(e) });
-			retry = setTimeout(() => void open(), backoff(attempt++));
+			retry = setTimeout(() => void open(), delay());
 			return;
 		}
 		const sock = ws;
@@ -315,8 +352,9 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			retry = setTimeout(() => void open(), hostile.trip());
 		};
 		sock.onopen = () => {
-			attempt = 0;
 			armStale();
+			askedAttributes = false;
+			if (link) return; // OctoEverywhere pushes status by itself; the MainboardID comes with it
 			send(1);
 			send(0);
 			clearInterval(poll);
@@ -339,17 +377,26 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			const id = (msg.MainboardID ??
 				(isObj(msg.Data) ? msg.Data.MainboardID : undefined)) as unknown;
 			if (!mainboardId) {
-				if (typeof id === 'string' && cleanId(id)) mainboardId = cleanId(id);
-				else if (topic.includes('/')) mainboardId = cleanId(topic.split('/').pop());
+				mainboardId = cleanMainboardId(id);
+				if (!mainboardId && topic.includes('/'))
+					mainboardId = cleanMainboardId(topic.split('/').pop());
+			}
+			// Through the link the id is known only once the first push arrives: ask for the
+			// attributes (Cmd 1, read-only) once, then rely on the pushed status.
+			if (link && mainboardId && !askedAttributes) {
+				askedAttributes = true;
+				send(1);
 			}
 			if (isObj(msg.Attributes)) {
 				attributes = msg.Attributes;
-				if (!mainboardId) mainboardId = cleanId(attributes.MainboardID);
+				if (!mainboardId) mainboardId = cleanMainboardId(attributes.MainboardID);
+				gotData();
 				if (lastStatus) subj.emit(normalizeSdcpStatus(lastStatus, attributes));
 				armStale();
 			}
 			if (isObj(msg.Status)) {
 				lastStatus = msg.Status;
+				gotData();
 				subj.emit(normalizeSdcpStatus(msg.Status, attributes));
 				armStale();
 			}
@@ -367,6 +414,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		status$: (cb) => subj.subscribe(cb),
 		/** Cmd 386 on our own open socket (the printer limits clients); a temporary one otherwise. */
 		enableCamera: async () => {
+			if (link) return false; // no Cmd 386 through OctoEverywhere
 			if (ws && ws.readyState === 1 && mainboardId) {
 				try {
 					ws.send(cameraOnEnvelope(mainboardId));

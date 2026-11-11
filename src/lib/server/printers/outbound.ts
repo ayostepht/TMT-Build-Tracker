@@ -9,13 +9,26 @@
  *  - HTTP never follows redirects: `guardedFetch` hands every 3xx back and callers treat it as
  *    a failure. API keys are therefore only ever sent to the validated host.
  *
+ *  - The ONE public destination: an OctoEverywhere shared-link host (`isShareLinkHost`). Its
+ *    name is resolved like any other, but EVERY answer must be a global unicast address (the
+ *    inverse of the private-range rule: a link name that points inward is refused), and it is
+ *    reached over https on the default port only.
+ *
  * Do not use `fetch`, `net`, `dgram` or a WebSocket on a user-supplied host anywhere else.
  */
 import { lookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { Readable } from 'node:stream';
-import { classifyAddress, cleanHost, isIpLiteral, refusedMessage } from '#lib/printers/address.ts';
+import {
+	classifyAddress,
+	cleanHost,
+	isIpLiteral,
+	parseIPv4,
+	parseIPv6,
+	refusedMessage
+} from '#lib/printers/address.ts';
+import { isShareLinkHost } from '#lib/printers/share-link.ts';
 import { ApiError } from '../access';
 import { isPublicMode } from '../config';
 
@@ -83,6 +96,38 @@ export interface ResolvedTarget {
 	family: 4 | 6;
 	/** True when `host` was already an IP literal (nothing to pin, no Host/SNI name). */
 	literal: boolean;
+	/** True for an OctoEverywhere shared-link host (a public address, https on 443 only). */
+	shareLink?: boolean;
+}
+
+/**
+ * True for an address on the public internet: global unicast only. Private, loopback,
+ * link-local (169.254/16 incl. metadata), CGNAT, ULA, multicast, documentation, benchmarking,
+ * 6to4/Teredo/NAT64 and IPv4-mapped private addresses are all false.
+ */
+export function isGlobalUnicast(raw: string): boolean {
+	const ip = cleanHost(raw);
+	const v = classifyAddress(ip);
+	if (v.ok || v.reason !== 'public') return false; // private, metadata or reserved
+	const v4 = parseIPv4(ip);
+	if (v4) {
+		const [a, b, c] = v4;
+		if (a === 192 && b === 0 && (c === 0 || c === 2)) return false; // 192.0.0/24, 192.0.2/24
+		if (a === 192 && b === 88 && c === 99) return false;
+		if (a === 198 && (b === 18 || b === 19)) return false; // benchmarking
+		if (a === 198 && b === 51 && c === 100) return false;
+		if (a === 203 && b === 0 && c === 113) return false;
+		return true;
+	}
+	const v6 = parseIPv6(ip);
+	if (!v6) return false;
+	const mapped = v6.slice(0, 10).every((x) => x === 0) && v6[10] === 0xff && v6[11] === 0xff;
+	if (mapped) return isGlobalUnicast(v6.slice(12).join('.'));
+	if ((v6[0] & 0xe0) !== 0x20) return false; // only 2000::/3 is global unicast
+	if (v6[0] === 0x20 && v6[1] === 0x02) return false; // 2002::/16 6to4
+	if (v6[0] === 0x20 && v6[1] === 0x01 && (v6[2] === 0 || (v6[2] === 0x0d && v6[3] === 0xb8)))
+		return false; // 2001::/32 Teredo, 2001:db8::/32 documentation
+	return true;
 }
 
 /** `[::1]` for IPv6, plain for IPv4: the form an address takes inside a URL. */
@@ -112,6 +157,23 @@ export async function resolveAllowed(
 	}
 	if (!answers.length)
 		throw new OutboundError(`Could not find ${host}. Check the address.`, 400, 'dns');
+	if (isShareLinkHost(host)) {
+		// The one public destination: every answer must be global unicast, then pin one.
+		if (!answers.every((a) => isGlobalUnicast(a)))
+			throw new OutboundError(
+				'The OctoEverywhere link does not point to a public address, so it was refused.',
+				400,
+				'address'
+			);
+		const pick = answers.find((a) => !a.includes(':')) ?? answers[0];
+		return {
+			host,
+			ip: cleanHost(pick),
+			family: pick.includes(':') ? 6 : 4,
+			literal: false,
+			shareLink: true
+		};
+	}
 	const verdicts = answers.map((a) => classifyAddress(a));
 	for (const v of verdicts) if (!v.ok) throw new OutboundError(refusedMessage(v, host));
 	const ok = verdicts.filter((v) => v.ok);
@@ -175,6 +237,12 @@ export async function guardedFetch(
 	assertOutboundAllowed();
 	if (url.protocol !== 'http:' && url.protocol !== 'https:')
 		throw new OutboundError('The address must start with http:// or https://', 400, 'protocol');
+	if (isShareLinkHost(cleanHost(url.hostname)) && (url.protocol !== 'https:' || url.port))
+		throw new OutboundError(
+			'The OctoEverywhere link is reached over https on the default port only.',
+			400,
+			'protocol'
+		);
 	const target = await resolveAllowed(url.hostname);
 	const headers = new Headers(init?.headers);
 	if (!headers.has('accept-encoding')) headers.set('accept-encoding', 'identity');

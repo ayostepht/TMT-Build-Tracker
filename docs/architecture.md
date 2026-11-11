@@ -81,6 +81,13 @@ Sections match the subagents in `.claude/agents/`:
 - **Run choice on per-part plates** (`domain/run-choice.ts`): perPartRuns plates (rims,
   plate 13) print one part per physical print. Default (`defaultRunParts`): the part
   already Printing, else the first part not Printed with runs left; never all.
+- **Filament by role** (`domain/accounting.ts`): a sliced file's grams per role
+  (`Plate.filamentGrams`) go through `plateFileRoleGrams(plate, partRoles)`, which keeps
+  only roles that a part on the plate has (a file's slot → role map can disagree with the
+  design: stray TPU slots on PETG plates). `roleShares`/`filamentStats` use the kept grams
+  renormalized; `estPerRun` stays slicer grams, else the file's full total, else BOM / runs;
+  no overlap → the parts' own roles. `splitGramsByRole` (`spool-split.ts`, Spoolman
+  deduction) uses the same helper for whole-plate runs.
 - **Part print logs:** `partRuns(view, slug)` in `logrun.ts` includes whole-plate runs
   that cover the part; `RunTable` tags them "Plate N · whole plate".
 - **Activity:** every activity kind needs a sentence in `describeActivity` /
@@ -163,6 +170,18 @@ Sections match the subagents in `.claude/agents/`:
   Retry".
 - "Your printers" lists printers of every workspace the user is in
   (`GET /api/printers/mine?first=<org>`).
+- **Elegoo via OctoEverywhere shared link** (`src/lib/printers/share-link.ts`): secret
+  `shareLink` in `secretEnc` (normalised `https://shared-<token>.octoeverywhere.com`, never
+  returned; only listed in `secretsSet`). With a link the adapter uses
+  `wss://<link>/websocket`: no port, no UDP probe, MainboardID learnt from the first push,
+  Cmd 1 once, no Cmd 0 polling, no Cmd 386 (`enableCamera`, `enableSdcpCamera`,
+  `testEnabler` skip it). Camera `<link>/video` (MJPEG; no snapshot endpoint), guard pinned
+  to the link host with https and the default port on every hop; a custom camera URL is
+  cleared on save. `host` holds the placeholder `octoeverywhere`; without a usable link
+  (e.g. secrets undecryptable) `guarded` in `adapters/index.ts` reports offline and nothing
+  is dialled. `parseHost` rejects `*.octoeverywhere.com` and pasted links in Address.
+  `safeError` masks share-link hosts. Live-probed read-only: the CC sends `PrintInfo.Status`
+  20 while printing (OctoEverywhere shows it as "Bed Leveling", 0%).
 
 ## Design studio (`design-studio-ui`)
 

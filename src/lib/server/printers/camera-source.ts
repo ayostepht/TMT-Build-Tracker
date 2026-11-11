@@ -2,7 +2,8 @@
  * Where a printer's camera is: the team's override, the printer type's default, or what the
  * printer itself reports (Moonraker webcam list, OctoPrint settings). Every URL that comes out
  * has passed the SSRF guard: http(s) only, same host as the printer (and the connection itself
- * only ever goes to a validated local address, see `outbound.ts`).
+ * only ever goes to a validated local address, or the shared link's validated public one, see
+ * `outbound.ts`).
  */
 import {
 	cameraSupported,
@@ -10,6 +11,11 @@ import {
 	defaultCameraUrl,
 	resolveCameraUrl
 } from '#lib/printers/camera-url.ts';
+import {
+	SHARE_LINK_HOST_PLACEHOLDER,
+	shareLinkCameraUrl,
+	shareLinkOf
+} from '#lib/printers/share-link.ts';
 import type { PrinterKind } from '#lib/printers/status.ts';
 import type { printers } from '../db/schema';
 import { assertOutboundAllowed, guardedFetch, isRedirect, readJsonCapped } from './outbound';
@@ -80,7 +86,17 @@ export async function resolveCameraSource(
 ): Promise<CameraSource | null> {
 	if (!t.cameraEnabled || !cameraSupported(t.kind)) return null;
 	assertOutboundAllowed(); // public mode: refused before any lookup or request
+	// Elegoo through an OctoEverywhere shared link: the stream is the link's /video, and every
+	// request and redirect is pinned to the link's host (a custom address is ignored).
+	if (t.kind === 'elegoo-sdcp') {
+		const link = shareLinkOf(t.secrets);
+		if (link) {
+			const c = checkCameraUrl(shareLinkCameraUrl(link.origin), link.host);
+			return c.ok ? { urls: [c.url.toString()], origin: 'default', host: link.host } : null;
+		}
+	}
 	const host = t.host;
+	if (host === SHARE_LINK_HOST_PLACEHOLDER) return null; // link missing: never dial the placeholder
 	if (t.cameraUrl) {
 		const c = checkCameraUrl(t.cameraUrl, host);
 		return c.ok ? { urls: [c.url.toString()], origin: 'custom', host } : null;

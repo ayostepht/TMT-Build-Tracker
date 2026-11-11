@@ -113,7 +113,7 @@ describe.each([
 });
 
 describe('elegoo-sdcp: remote MainboardID is bounded', () => {
-	it('a huge or control-laden id is cut before it is echoed back', async () => {
+	it('a huge or control-laden id is never learned, so never echoed back', async () => {
 		const ws = new MiniWsServer();
 		const requests: string[] = [];
 		ws.onMessage = (_s, t) => requests.push(t);
@@ -122,14 +122,13 @@ describe('elegoo-sdcp: remote MainboardID is bounded', () => {
 		collect(adapters['elegoo-sdcp'](cfg('elegoo-sdcp', ws.port)));
 		await until(() => ws.sockets.size > 0);
 		sendJson([...ws.sockets][0], { MainboardID: 'AB\u0007' + 'Z'.repeat(5000), Status: {} });
-		// The next 4 s poll echoes the id the adapter kept.
-		await until(() => requests.some((r) => r.includes('"Cmd":0') && r.includes('Z')), 9000);
-		const echoed = requests.filter((x) => x.includes('Z'));
-		expect(echoed.length).toBeGreaterThan(0);
-		for (const r of echoed) {
+		// The next 4 s poll must not carry the id (origin/main's strict id pattern, 1-64 safe characters).
+		await until(() => requests.filter((r) => r.includes('"Cmd":0')).length >= 2, 9000);
+		for (const r of requests) {
 			const j = JSON.parse(r);
 			expect(j.Data.MainboardID.length).toBeLessThanOrEqual(64);
 			expect(j.Data.MainboardID).not.toContain('\u0007');
+			expect(j.Data.MainboardID).not.toContain('Z');
 		}
 	}, 20000);
 });

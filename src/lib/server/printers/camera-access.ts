@@ -4,6 +4,7 @@ import type { Db } from '../db';
 import { json } from '@sveltejs/kit';
 import { CameraError, getCameraHub, type CameraSession } from './camera';
 import { resolveCameraSource, toCameraTarget, type CameraSource } from './camera-source';
+import { shareLinkOf } from '#lib/printers/share-link.ts';
 import { enableSdcpCamera } from './adapters/sdcp';
 import { assertOutboundAllowed } from './outbound';
 import { getSupervisor } from './supervisor';
@@ -50,7 +51,9 @@ export function sessionFor(db: Db, printerId: string): CameraSession {
 			if (!src) cache.delete(printerId);
 			return src;
 		},
-		row?.kind === 'elegoo-sdcp' ? () => enableElegooCamera(db, printerId) : undefined
+		row?.kind === 'elegoo-sdcp' && !shareLinkOf(toConfig(row).secrets)
+			? () => enableElegooCamera(db, printerId)
+			: undefined
 	);
 }
 
@@ -76,6 +79,7 @@ const logName = (n: string) =>
 export async function enableElegooCamera(db: Db, printerId: string): Promise<boolean> {
 	const row = getPrinter(db, printerId);
 	if (!row || row.kind !== 'elegoo-sdcp') return false;
+	if (shareLinkOf(toConfig(row).secrets)) return false; // OctoEverywhere: no Cmd 386
 	let ok = await getSupervisor()?.enableCamera(printerId);
 	if (ok === null || ok === undefined) ok = await enableSdcpCamera(toConfig(row));
 	if (ok) console.log(`[tmt] camera: enabled video on ${logName(row.name)}`);
@@ -84,7 +88,7 @@ export async function enableElegooCamera(db: Db, printerId: string): Promise<boo
 
 /** Settings "Test" for an unsaved/typed Elegoo config: temporary socket, throttled per host. */
 export function testEnabler(cfg: PrinterConfig) {
-	if (cfg.kind !== 'elegoo-sdcp') return undefined;
+	if (cfg.kind !== 'elegoo-sdcp' || shareLinkOf(cfg.secrets)) return undefined;
 	return getCameraHub().throttledEnabler(`test:${cfg.host}:${cfg.port ?? ''}`, async () => {
 		const ok = await enableSdcpCamera(cfg);
 		if (ok) console.log(`[tmt] camera: enabled video on ${logName(cfg.host)}`);

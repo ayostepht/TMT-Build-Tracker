@@ -9,6 +9,7 @@
 	} from '#lib/client/api.ts';
 	import { printerBrands } from '#lib/printers/catalog.ts';
 	import { cameraSupported, defaultCameraUrl } from '#lib/printers/camera-url.ts';
+	import { SHARE_LINK_HOST_PLACEHOLDER } from '#lib/printers/share-link.ts';
 	import {
 		PRINTER_KIND_INFO,
 		PRINTER_KINDS,
@@ -35,7 +36,7 @@
 	const init = () => ({
 		name: printer?.name ?? '',
 		kind: (printer?.kind ?? 'elegoo-sdcp') as PrinterKind,
-		host: printer?.host ?? '',
+		host: printer?.host === SHARE_LINK_HOST_PLACEHOLDER ? '' : (printer?.host ?? ''),
 		port: printer?.port ?? null,
 		catalogId: printer?.catalogId ?? '',
 		enabled: printer?.enabled ?? true,
@@ -50,14 +51,28 @@
 		secrets = {};
 	});
 	const info = $derived(PRINTER_KIND_INFO[f.kind]);
-	// Saved secrets only work at the address they were saved for: the server asks for them again.
+	/** "Remove link" pressed on a printer that has a saved OctoEverywhere link. */
+	let removeLink = $state(false);
+	const hasSavedLink = $derived(!!printer?.secretsSet.includes('shareLink'));
+	/** Reached through an OctoEverywhere link (typed or saved): no address, port or camera address. */
+	const viaLink = $derived(
+		f.kind === 'elegoo-sdcp' && (!!secrets.shareLink?.trim() || (hasSavedLink && !removeLink))
+	);
+	// Saved secrets only work at the destination they were saved for (an address, or the link
+	// itself): the server asks for them again when it changes. In link mode the link is the secret.
+	const savedHost = $derived(
+		printer?.host === SHARE_LINK_HOST_PLACEHOLDER ? '' : (printer?.host ?? '')
+	);
 	const moved = $derived(
 		!!printer &&
 			f.kind === printer.kind &&
-			(f.host.trim().toLowerCase() !== printer.host.toLowerCase() ||
+			!viaLink &&
+			(hasSavedLink ||
+				f.host.trim().toLowerCase() !== savedHost.toLowerCase() ||
 				(f.port ?? null) !== (printer.port ?? null))
 	);
-	const needRetype = (key: string) => moved && !!printer?.secretsSet.includes(key) && !secrets[key];
+	const needRetype = (key: string) =>
+		moved && key !== 'shareLink' && !!printer?.secretsSet.includes(key) && !secrets[key];
 
 	let busy = $state(false);
 	let error = $state('');
@@ -84,14 +99,15 @@
 			const typed = secrets[fld.key];
 			if (typed !== undefined && (typed !== '' || !fld.secret)) s[fld.key] = typed;
 		}
+		if (removeLink && !s.shareLink) s.shareLink = '';
 		return {
 			name: f.name,
 			kind: f.kind,
-			host: f.host,
+			host: f.host.trim() || (viaLink ? SHARE_LINK_HOST_PLACEHOLDER : ''),
 			port: f.port,
 			catalogId: f.catalogId || null,
 			enabled: f.enabled,
-			cameraUrl: cameraSupported(f.kind) ? f.cameraUrl.trim() || null : null,
+			cameraUrl: cameraSupported(f.kind) && !viaLink ? f.cameraUrl.trim() || null : null,
 			cameraEnabled: f.cameraEnabled,
 			secrets: s
 		};
@@ -173,27 +189,29 @@
 		<label class="field"
 			>Address <input
 				bind:value={f.host}
-				required
-				placeholder="192.168.0.50"
+				required={!viaLink}
+				placeholder={viaLink ? 'Not needed with a shared link' : '192.168.0.50'}
 				autocapitalize="none"
 				autocomplete="off"
 				data-testid="pf-host"
 			/></label
 		>
-		<label class="field"
-			>Port
-			<input
-				type="number"
-				min="1"
-				max="65535"
-				inputmode="numeric"
-				value={f.port ?? ''}
-				placeholder={String(info.defaultPort)}
-				data-testid="pf-port"
-				oninput={(e) => (f.port = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-			/></label
-		>
-		{#each info.secrets as fld (fld.key)}
+		{#if !viaLink}
+			<label class="field"
+				>Port
+				<input
+					type="number"
+					min="1"
+					max="65535"
+					inputmode="numeric"
+					value={f.port ?? ''}
+					placeholder={String(info.defaultPort)}
+					data-testid="pf-port"
+					oninput={(e) => (f.port = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+				/></label
+			>
+		{/if}
+		{#each info.secrets.filter((x) => !(viaLink && x.key === 'mainboardId')) as fld (fld.key)}
 			<label class="field"
 				>{fld.label}
 				<input
@@ -214,6 +232,15 @@
 						address.</small
 					>{/if}
 				{#if fld.hint}<small>{fld.hint}</small>{/if}
+				{#if fld.key === 'shareLink' && hasSavedLink && !secrets.shareLink?.trim()}
+					<button
+						class="btn sm linkrm"
+						type="button"
+						data-testid="pf-sharelink-remove"
+						onclick={() => (removeLink = !removeLink)}
+						>{removeLink ? 'Keep the saved link' : 'Remove the saved link'}</button
+					>
+				{/if}
 			</label>
 		{/each}
 		<label class="field"
@@ -230,7 +257,7 @@
 	</div>
 	<p class="muted hint">{info.hint}</p>
 
-	{#if f.kind === 'elegoo-sdcp'}
+	{#if f.kind === 'elegoo-sdcp' && !viaLink}
 		<div class="disc">
 			<button
 				class="btn sm"
@@ -268,27 +295,33 @@
 				><input type="checkbox" bind:checked={f.cameraEnabled} data-testid="pf-camera-on" /> Show the
 				camera while this printer is printing</label
 			>
-			<label class="field"
-				>Camera address (optional)
-				<input
-					bind:value={f.cameraUrl}
-					placeholder={camPlaceholder}
-					autocapitalize="none"
-					autocomplete="off"
-					maxlength="500"
-					data-testid="pf-camera-url"
-				/>
-				<small
-					>Leave empty to use the automatic address. A custom address must be on the same address as
-					the printer (any port).</small
-				>
-			</label>
+			{#if viaLink}
+				<p class="muted hint" data-testid="pf-camera-via-link">
+					The camera comes through the OctoEverywhere link too.
+				</p>
+			{:else}
+				<label class="field"
+					>Camera address (optional)
+					<input
+						bind:value={f.cameraUrl}
+						placeholder={camPlaceholder}
+						autocapitalize="none"
+						autocomplete="off"
+						maxlength="500"
+						data-testid="pf-camera-url"
+					/>
+					<small
+						>Leave empty to use the automatic address. A custom address must be on the same address
+						as the printer (any port).</small
+					>
+				</label>
+			{/if}
 			<div class="actions">
 				<button
 					class="btn sm"
 					type="button"
 					onclick={runCameraTest}
-					disabled={camTesting || !f.host}
+					disabled={camTesting || (!f.host && !viaLink)}
 					data-testid="pf-camera-test">{camTesting ? 'Testing…' : 'Test camera'}</button
 				>
 			</div>
@@ -341,7 +374,7 @@
 			class="btn"
 			type="button"
 			onclick={runTest}
-			disabled={testing || !f.host}
+			disabled={testing || (!f.host && !viaLink)}
 			data-testid="pf-test">{testing ? 'Testing…' : 'Test connection'}</button
 		>
 		<button class="btn" type="button" onclick={oncancel}>Cancel</button>
@@ -372,6 +405,9 @@
 		object-fit: contain;
 		background: #0c0e16;
 		border-radius: 6px;
+	}
+	.linkrm {
+		justify-self: start;
 	}
 	.hint {
 		margin: 0;

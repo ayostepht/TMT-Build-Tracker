@@ -1,8 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-11 (last deploy r39, ee69a3a: plate history, cancelled prints,
-Moonraker security fix. Audit Stage 1 is in progress on local `main`, not pushed and not
-deployed)._
+_Last updated: 2026-11-11 (audit Stage 1 complete on `main`: security re-review passed with no
+Critical or High. Test copy is on r41, 7e05586; `main` is ahead of it and not deployed)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -11,9 +10,10 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. Read `docs/audit-2026-11.md` (audit + staged proposal, approved 2026-11-10; untracked
-   until Stage 1 ships because it describes exploitable gaps).
-2. Start Stage 1 and Stage 2 from Next steps (they run in parallel).
+1. Deploy `main` to the test copy from the Unraid dev container (migration 0013 adds
+   `site_admin`; startup now sweeps `imports/`: do the migration rehearsal and the Docker
+   empty-`/data` run, neither could run on the Mac). Add the CHANGELOG entry.
+2. Continue Stage 2 from Next steps; then Stage 3.
 3. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
 
 ## Where we are
@@ -36,6 +36,7 @@ has not started.
 | Bundled MakeGood kit pack 1.0.1                                                | Done                                                                           |
 | Assembly checklist, photos, handoff, printable summary                         | Done                                                                           |
 | Read-only printer status + camera, job → plate linking                         | Done; SDCP and camera verified live, supervisor not tested during a full print |
+| Elegoo via OctoEverywhere shared link                                          | Done (r41); maintainer to enter the link and confirm live                      |
 | Spoolman (optional)                                                            | Done, mock-tested only                                                         |
 | Filament catalog + vendor supplement                                           | Done                                                                           |
 | Release (Unraid template, domain, public repo)                                 | Not started                                                                    |
@@ -68,18 +69,39 @@ Route each to the agent named in brackets.
   selected part's chip covers the lower third of the phone stage; phone toasts cover the
   stage top for ~8 s.
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Printers** [printers]: live supervisor test with the Centauri Carbon during a real
+- **Printers** [printers]: OctoEverywhere shared link for Elegoo (merged; r41 has it without
+  the reconnect/backoff fix 9c44a33): the maintainer enters the link in the printer form
+  and confirms status + camera live. `share-link.ts` `HOST_RE` only accepts
+  `shared-[a-z0-9]{8,64}`; revisit if a real link is rejected. Small follow-ups:
+  the Address box stretches tall next to the link field's helper text (desktop);
+  `printers.spec.ts:244` (plate layout picker) timed out once under host load, passed
+  alone (possible flake); open question whether a linked printer should keep a direct
+  LAN fallback (orchestrator suggests no). CC firmware reports `PrintInfo.Status` 20
+  mid-print: consider a proper label instead of treating it as a prep state.
+  Live supervisor test with the Centauri Carbon during a real
   print (auto-link needs plate numbers in file names; Elegoo Slicer's names lack them);
   OctoEverywhere notification webhooks (needs a public URL, shared-secret check);
   `BuildPrinter` has no `teamPrinterId` link back to the team printer.
 - **Plates** [plates-3mf]: print-template "printer" and "manual" profile sources not
-  wired; 3D chair from 3MF only (no STEP) for user-uploaded templates.
+  wired; 3D chair from 3MF only (no STEP) for user-uploaded templates. Upload still
+  stores raw slot → role grams (`builds/plates.ts`, `part-profile.ts` learning): check
+  whether learned part profiles inherit stray slots (accounting filters them since
+  fix/filament-role-mismatch).
 - **Kit** [kit-and-startup]: template copies: switching back to the built-in kit leaves
   the unused copy; designs from the base kit don't apply to a copy.
-- **Security**: 1 critical and 5 high findings for a public instance (any signed-up user
-  can point the server at any host/port; unverified email claims invites and site admin;
-  open sign-up; 1.1 GB global body limit; no quotas; `X-Forwarded-For` rate-limit bypass).
-  Details and owners: audit §1 and Stage 1. Not safe to expose publicly until Stage 1 ships.
+- **Security** (Stage 1 done; `docs/audit-2026-11.md` has the findings and their status).
+  Open Lows, none blocking: storage totals are re-measured from disk on every upload
+  (`quota.ts` `workspaceUploadBytes`; a cache needs an invalidation call from photo, plate
+  and kit writes); the converted GLB after a STEP conversion is only counted at the next
+  upload; migration 0007 created `templates.owner_org_id` without the ON DELETE CASCADE the
+  schema declares (worked around in `account.ts` `deleteOwnedTemplates`; fix with the
+  migration squash); chapter delete runs our cleanup just before Better Auth's own delete,
+  not in one transaction; activity is pruned to the newest 5000 rows per build; no privacy
+  or terms page yet (Stage 5); write-rate and slot state is per process (single process
+  only); an OctoEverywhere link's status socket (wss) has its address checked as public right
+  before each dial but is not pinned (the camera path is pinned).
+  Accepted on self-hosted installs: unverified emails, so an `ADMIN_EMAILS` address is
+  admin for whoever registers it first.
 - **Screenshots never taken**: multi-run log-plate flow; palette locks
   (`data/shots-palette-locks/` spec, on the cloud machine).
 
@@ -127,41 +149,52 @@ Route each to the agent named in brackets.
   connections, limited to private address ranges (2026-11-10).
 - **Remove** the prototype import and the 3D re-orientation code (2026-11-10, Stage 4).
 - Don't re-run the full ~6 min e2e suite before every deploy when agents ran their specs.
+- **Site admins** (2026-11-11): `ADMIN_EMAILS` (authoritative), plus admins granted in the
+  app (`site_admin` table), plus on self-hosted installs the first account while neither
+  exists. The last site admin cannot delete their account or be revoked; they hand over
+  first on `/account`. The only account on a server cannot be deleted.
+- **Public-instance limits** (2026-11-11): defaults in `config.ts` `quotas()` (README env
+  table); self-hosted installs are unlimited unless set. Print-geometry import is
+  site-admin only on a public instance. `MAX_3MF_MB` defaults to 256 there.
+- Account deletion removes the personal workspace and the user's drafts in chapters;
+  chapter builds they created pass to another owner (2026-11-11).
+- Git history is kept as is when the repo goes public (private-range LAN addresses in old
+  commits are accepted; no rewrite). Branch protection (no force push, no deletion,
+  required `test` + `e2e`) is set the moment the repo is public: GitHub refuses it on a
+  free private repo (2026-11-11).
 
 ## Next steps (in order)
 
 Stages from `docs/audit-2026-11.md` Part 2 (items, owners and exit checks are there).
-Stage 0 (placeholders for private addresses, `MAX_3MF_MB` docs, compose secret) is done.
-Done so far in Stage 1: the config contract in `config.ts` (`appMode`, `signupMode`,
-`socialProviders`, `trustedProxy`, `validatePublicMode`; nothing consumes it yet) and a
-production check that rejects secrets under 32 characters or known placeholders (still
-lazy: it fires on first auth use, not at boot). Done so far in Stage 2: the Now card's log
-sheet preselects Success; the build view re-fetches on reconnect, tab visible, online and
-focus. Mac e2e: keep Node 22 first on PATH (Homebrew's Node 25 breaks the build) and call
-`/opt/homebrew/bin/flock` by absolute path. The local `docker build` needs kit-pack
-download credentials.
+Stage 0 and **Stage 1 (safe to expose) are done**: modes, SSO-only public sign-in, sign-up
+switch, outbound guard, trusted-proxy rate limits, boot validation, security headers and
+CSP, body caps, quotas and write limits, streaming-only uploads with zip caps, account
+deletion/export, site admin hand-over, CLI password reset (`docs/password-reset.md`).
+Done so far in Stage 2: the Now card's log sheet preselects Success; the build view
+re-fetches on reconnect, tab visible, online and focus; plate print history and
+delete-a-run on the Print tab. Mac: keep Node 22 first on PATH (Homebrew's Node 25 breaks
+the build), call `/opt/homebrew/bin/flock` by absolute path, give each parallel e2e run
+its own `E2E_PORT`; the local `docker build` needs kit-pack download credentials. CI's e2e
+job failed twice on 2026-11-11 installing the browser (runner could not reach Ubuntu's
+package server): re-run before reading it as a code failure.
 
-1. **Stage 1, safe to expose** (hard gate for public hosting): `TMT_MODE`, outbound guard
-   for printers/camera/Spoolman, SSO-only public mode, sign-up switch, trusted-proxy rate
-   limits, body limits, quotas, secret check, security headers, account deletion. Ends
-   with a `security-reviewer` re-audit: no Critical or High.
-2. **Stage 2, daily loop and phone shell** (parallel with Stage 1): Now printing / Next up
+1. **Stage 2, daily loop and phone shell**: Now printing / Next up
    on the landing page, one start/log component, re-fetch on resume, optimistic status,
    compact phone header and bottom bar, error page. Also the iPhone checks and whatever the
-   Elegoo Slicer export re-test turns up. Open: one name for chapter/workspace/team.
-3. **Stage 3, PWA**: manifest (icons incl. maskable and apple-touch-icon, light/dark theme
+   Elegoo Slicer export re-test turns up. Naming: "chapter" + "My builds".
+2. **Stage 3, PWA**: manifest (icons incl. maskable and apple-touch-icon, light/dark theme
    colors, `display: standalone`, `start_url /`), iOS meta and safe-area insets, a service
    worker caching the app shell and immutable assets/GLBs but never API data, offline
    fallback, update prompt, re-checking r35/r36 resume behaviour in standalone mode, and a
    real logo/favicon. Needs https; plain-http LAN installs must keep working without it.
-4. **Stage 4, cleanup and design system**: remove prototype import and re-orientation
+3. **Stage 4, cleanup and design system**: remove prototype import and re-orientation
    code, slim the image, style scales, class-name leaks, contrast, design studio a11y pass
    and Options placement. Open: squash migrations (needs a journal reset on the test copy).
-5. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
+4. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
    CONTRIBUTING/SECURITY, `v1.0.0`, e2e gating the image, Unraid template (+ Community
    Apps), repo public.
-6. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
+5. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
    plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),
    Prusa Link and Duet adapters; printer supervisor live test.
-7. **Stage 7, public launch**: `TMT_MODE=public`, backups of database and uploads, uptime
+6. **Stage 7, public launch**: `TMT_MODE=public`, backups of database and uploads, uptime
    check, soft launch.

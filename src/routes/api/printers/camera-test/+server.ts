@@ -1,4 +1,5 @@
 import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
+import { shareLinkOf } from '#lib/printers/share-link.ts';
 import { ApiError, requireEditor } from '#lib/server/access.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
@@ -23,10 +24,14 @@ export const POST: RequestHandler = (event) =>
 		if (!org) throw new ApiError(400, 'organizationId is required');
 		requireEditor(db, org, userId);
 		const cfg = configFromInput(db, org, body);
-		await resolveAllowed(cfg.host); // refused in public mode / for a non-local address, before any request
+		// Refused in public mode / for a non-local address, before any request. Through an
+		// OctoEverywhere link the destination is the link's host (a validated public address).
+		const link = cfg.kind === 'elegoo-sdcp' ? shareLinkOf(cfg.secrets) : null;
+		await resolveAllowed(link ? link.host : cfg.host);
 		if (!cameraSupported(cfg.kind))
 			return { works: false, message: 'This printer type has no camera support.' };
-		const typed = typeof body.cameraUrl === 'string' ? body.cameraUrl.trim() : '';
+		// With an OctoEverywhere link the camera address comes from the link; a typed one is ignored.
+		const typed = typeof body.cameraUrl === 'string' && !link ? body.cameraUrl.trim() : '';
 		if (typed) {
 			const c = checkCameraUrl(typed, cfg.host);
 			if (!c.ok) throw new ApiError(400, c.error);
