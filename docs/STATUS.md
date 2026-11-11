@@ -1,9 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-11 (audit Stages 1-3 and Stage 4 bar one item are on `main`. Test copy
-is on r43 = eba0e72 (Stage 4 wave 2). Stage 4 wave 3 (the whole app on the shared `ds-*`
-styles, native dialogs), the removal of the old global styles from `app.css` and the last
-deletions are on `main` and NOT deployed yet; the maintainer has approved deploying them as r44)._
+_Last updated: 2026-11-11 (audit Stages 1-4 done and deployed: test copy on r44 = 6ce39e3,
+which also carries the first Stage 5 slice. Stage 5 in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -12,22 +10,21 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **On Unraid, alone** (maintainer approved both 2026-11-11): move `three`/`pdfjs-dist` to
-   devDependencies (a dependency change: no other agent running; prove first that the
-   production image loads neither at runtime; image build + empty-`/data` run), then
-   **deploy r44** from the resulting `main` (rehearse, the dependency set changed).
-2. After r44, look on the test copy at what could not be seen locally: the plate view
-   toggle and the "rotated N°" badge (need print geometry), the Now card while printing,
-   printer badges other than "Printing", toasts over dialogs on a phone; the old tab URLs
-   are 404s and `/print#plates` still moves on to `/files#plates`.
-3. **Stage 5 is in progress** (see Next steps 2 for what is done and left). Next slices:
-   README screenshots (need a seeded instance: Unraid, after r44), `engines` in
-   `package.json` and version in `/api/health` (after the dependency move lands), user-facing
-   changelog, Unraid Community Apps template.
+1. **Stage 5** (see Next steps 1 for done and left). Next slices: README screenshots (the
+   test copy on r44 has real data; the plate arranger shot needs an arranged layout, see
+   Files tab below), `engines` in `package.json` and version in `/api/health` (unblocked:
+   the dependency move landed), user-facing changelog, Unraid Community Apps template.
+2. Fix the Files tab heading race (open items, Files tab) [plates-3mf].
+3. CI: the `image` job of the `docker` workflow failed twice on 6ce39e3 within 3 s, before
+   any step ran (no log: BlobNotFound); `test` and `e2e` passed, and the same Dockerfile built
+   locally. It passed on f0eba3c and 578eb84. Look at the run in the GitHub UI (annotations
+   aren't readable with this machine's token): GHCR has no image for 6ce39e3 yet.
 4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
    (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
    test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
-   public (then turn on branch protection at once; Dependabot is otherwise tidy).
+   public (then turn on branch protection at once; Dependabot is otherwise tidy); whether
+   to switch the test build to "Arrange for my bed" (needed to see the plate view toggle and
+   "rotated N°" badge live; converts its 13 print logs to part logs).
 5. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
@@ -50,7 +47,7 @@ has not started.
 | Bundled MakeGood kit pack 1.0.1                                                | Done                                                                           |
 | Assembly checklist, photos, handoff, printable summary                         | Done                                                                           |
 | Read-only printer status + camera, job → plate linking                         | Done; SDCP and camera verified live, supervisor not tested during a full print |
-| Elegoo via OctoEverywhere shared link                                          | Done; status + camera confirmed live through the link (r42)                    |
+| Elegoo via OctoEverywhere shared link                                          | Done; status + camera confirmed live through the link (r44)                    |
 | Spoolman (optional)                                                            | Done, mock-tested only                                                         |
 | Filament catalog + vendor supplement                                           | Done                                                                           |
 | Release (Unraid template, domain, public repo)                                 | Not started                                                                    |
@@ -112,13 +109,21 @@ Route each to the agent named in brackets.
   by role) [build-state]; a local `npm run dev`/built server without release credentials
   logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Files tab** [plates-3mf, app-shell]: on one r43 load the plate-layout heading read
-  "MakeGood profile" while the select showed "Your uploaded 3MF" (greyed); an earlier load
-  headed "Your uploaded 3MF". Heading and select can disagree; reproduce before fixing.
+- **Files tab** [plates-3mf]: reproduced on r44. After in-app navigation to Files (from
+  Print or Overview) the plate-layout heading reads "MakeGood profile" for about 3 s while
+  the select shows "Your uploaded 3MF", then corrects itself; a fresh load or reload is
+  right. Likely cause: `layoutName` in `components/build/PlatesPanel.svelte` derives from
+  `current`, which is null at first, and the first `plates/layouts` result isn't applied
+  until the later refetch.
+- **r44 live checks, small things**: the plate view toggle and the "rotated N°" badge only
+  render with an arranged layout (`/arrangement` returns no plates for an uploaded 3MF), so
+  they are still unseen live (see Pick up here 4); on the phone Now card "Details" and
+  "Log a print…" sit indented, out of line with the buttons in their row [app-shell];
+  nothing shows a toast without changing data, so toast-over-dialog was checked with a
+  synthetic toast (fine on phone and desktop).
 - **Printers** [printers]: OctoEverywhere shared link for Elegoo works live (status, camera,
-  with the reconnect backoff fix; re-checked on r43). On r43 the landing Camera expander's
-  first `camera/snapshot` got a 502 twice in one browser session, then 200s on direct
-  retries: watch for a first-open race in the reworked `CameraTile`. `share-link.ts` `HOST_RE` only accepts
+  with the reconnect backoff fix; re-checked on r44: 6 fresh loads, first `camera/snapshot`
+  200 every time, so the r43 502s were not reproduced). `share-link.ts` `HOST_RE` only accepts
   `shared-[a-z0-9]{8,64}`; revisit if a real link is rejected. Small follow-ups:
   the Address box stretches tall next to the link field's helper text (desktop);
   `printers.spec.ts:244` (plate layout picker) timed out once under host load, passed
@@ -233,23 +238,15 @@ its own `E2E_PORT`; the local `docker build` needs kit-pack download credentials
 job failed twice on 2026-11-11 installing the browser (runner could not reach Ubuntu's
 package server): re-run before reading it as a code failure.
 
-1. **Stage 4, cleanup and design system** (nearly done). Done: prototype import and 3D
-   re-orientation code removed, kit pack 1.0.0 dropped from the image, unused components
-   removed, scales and primitives in `app.css`, component styles on the tokens, leaked class
-   names renamed with a guard test (`domain/style-leaks.test.ts`), contrast guard, native
-   dialogs everywhere (browser focus trap, inert background), keyboard paths, one printer
-   stream per chapter, every screen on `ds-seg`/`ds-badge`/`ds-modal`/`ds-card`, a damaged
-   stored arrangement is treated as stale (no more 500 on export), the false reverse-proxy
-   startup hint fixed, the deprecated globals deleted from `app.css` (373 lines; kept on
-   purpose: `.tiles`, `.sw`, `.mini` via `Swatch`, `.spools`, `.clock`, `.tpl-list`, the
-   other `.now-*`). One shared `isObj` (`domain/guards.ts`). `client/focus-trap.ts` (its two live helpers
-   moved to `client/focus.ts`), the four legacy tab redirects and `src/lib/index.ts` are
-   deleted. Left: `three`/`pdfjs-dist` to devDependencies (runs alone, needs an image
-   build: do it on Unraid). The two `slugify` copies stay on
-   purpose (`teams.ts`: 40 chars, fallback `chapter`; `templates/fork.ts`: 30, `kit`). Open: squash migrations (needs a journal reset on the test copy; would also fix
-   `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision);
-   TypeScript 7 (Dependabot PR #11 fails check: a deliberate upgrade).
-2. **Stage 5, docs and 1.0** (started). Done: Docker-first README (95 lines) with ten
+**Stage 4 (cleanup and design system) is done** and deployed (r44): removals, every screen
+on `ds-seg`/`ds-badge`/`ds-modal`/`ds-card` with native dialogs, the old globals deleted,
+`three`/`pdfjs-dist` as devDependencies (image 531 → 408 MB). Kept on purpose: the two
+`slugify` copies (`teams.ts`: 40 chars, fallback `chapter`; `templates/fork.ts`: 30, `kit`).
+Waiting on the maintainer: squash migrations (needs a journal reset on the test copy; would
+also fix `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle; TypeScript 7
+(Dependabot PR #11 fails check: a deliberate upgrade).
+
+1. **Stage 5, docs and 1.0** (started). Done: Docker-first README (95 lines) with ten
    guides in `docs/guides/`, `CONTRIBUTING.md`, `SECURITY.md`, `.nvmrc`; in-app `/help` and
    `/about` (version from `package.json`, Help link in the account menu), fact-checked
    against the tracking code, with `e2e/help-about.spec.ts`. Not verified: the Caddy and
@@ -259,8 +256,8 @@ package server): re-run before reading it as a code failure.
    version in `package.json` and `/api/health`, user-facing changelog, moving agent notes
    out of the public docs path (maintainer's call), `v1.0.0`, e2e gating the image, an e2e
    run with a kit pack installed, Unraid template (+ Community Apps), repo public.
-3. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
+2. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
    plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),
    Prusa Link and Duet adapters; printer supervisor live test.
-4. **Stage 7, public launch**: `TMT_MODE=public`, backups of database and uploads, uptime
+3. **Stage 7, public launch**: `TMT_MODE=public`, backups of database and uploads, uptime
    check, soft launch.

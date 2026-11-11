@@ -6,6 +6,12 @@ state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, wh
 
 ## 2026-11
 
+- **r44** (6ce39e3): Stage 4 finished: wave 3 (every screen on `ds-seg`/`ds-badge`/
+  `ds-modal`/`ds-card`, native dialogs), old global styles deleted from `app.css`,
+  `focus-trap.ts`, the legacy tab redirects and `src/lib/index.ts` deleted, one shared
+  `isObj`; `three`/`pdfjs-dist` to devDependencies (image 531 → 408 MB); first Stage 5 slice
+  (README and guides, `/help`, `/about`). No migration; rehearsal clean (row counts
+  identical in 37 tables). Old tab URLs now 404.
 - **r43** (eba0e72, CI green): Stage 4 wave 2: component styles on the design tokens,
   focus trapping with an inert background, one printer stream per chapter; agent
   definitions drop removed code. No migration or startup change; landing, Print/Files tabs
