@@ -423,6 +423,10 @@ Answered on 2026-11-04 (keep for context):
 
 - The main session orchestrates: plans, splits work into Sonnet subagents with explicit
   file ownership, reviews, verifies and is the only one that commits/deploys.
+- Specialist subagents live in `.claude/agents/` (Sonnet): `plates-3mf`, `build-state`, `printers`,
+  `design-studio-ui`, `kit-and-startup`, `e2e-playwright`, `release-pwa`, `filaments-catalog`, and the
+  read-only `security-reviewer`. Each owns its directories, carries the area's hard rules and verification, and
+  ends with "STATUS notes" for this file. Keep their prompts in sync when rules here or in `CLAUDE.md` change.
 - Every change set: `npm run check`, `npm run lint`, `npx vitest run`, `npm run build`,
   the relevant e2e specs (subagents run their own; the maintainer asked not to re-run the full
   ~6 min suite before every deploy when agents validated), migration rehearsal on a copy of the
