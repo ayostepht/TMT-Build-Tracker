@@ -43,6 +43,17 @@ describe('classifyAddress: refused ranges', () => {
 		expect(why('169.254.0.1')).toBe('metadata');
 		expect(why('169.254.255.255')).toBe('metadata');
 	});
+	it('metadata addresses inside the allowed private ranges (Alibaba, AWS IPv6)', () => {
+		expect(why('100.100.100.200')).toBe('metadata');
+		expect(why('::ffff:100.100.100.200')).toBe('metadata');
+		expect(why('fd00:ec2::254')).toBe('metadata');
+		expect(why('FD00:0EC2:0:0:0:0:0:254')).toBe('metadata');
+		// neighbours stay allowed
+		expect(ok('100.100.100.201')).toBe(true);
+		expect(ok('100.100.101.200')).toBe(true);
+		expect(ok('fd00:ec2::253')).toBe(true);
+		expect(ok('fd00:ec3::254')).toBe(true);
+	});
 	it('this-network, multicast, reserved and broadcast', () => {
 		expect(why('0.0.0.0')).toBe('reserved');
 		expect(why('0.1.2.3')).toBe('reserved');

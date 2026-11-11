@@ -72,6 +72,9 @@ function judgeV4(b: number[], shown: string): AddressVerdict {
 	const [a, c] = b;
 	const ok = { ok: true as const, ip: shown, family: 4 as const };
 	if (a === 169 && c === 254) return { ok: false, ip: shown, reason: 'metadata' };
+	// Alibaba Cloud's metadata service sits inside the shared 100.64/10 range allowed below.
+	if (a === 100 && c === 100 && b[2] === 100 && b[3] === 200)
+		return { ok: false, ip: shown, reason: 'metadata' };
 	if (a === 0) return { ok: false, ip: shown, reason: 'reserved' };
 	if (a >= 224) return { ok: false, ip: shown, reason: 'reserved' }; // multicast, 240/4, broadcast
 	if (a === 10) return ok;
@@ -82,7 +85,12 @@ function judgeV4(b: number[], shown: string): AddressVerdict {
 	return { ok: false, ip: shown, reason: 'public' };
 }
 
-/** Judge one IP literal. Anything that is not a valid literal is refused. */
+/**
+ * Judge one IP literal. Loopback (127/8, ::1) is deliberately ALLOWED, along with the other
+ * private ranges: this is a self-hosted tool whose owner decides what it may reach, and the
+ * e2e mocks plus same-host Spoolman/OctoPrint setups rely on loopback. The trade-off is that
+ * anyone who may add a printer can make the server probe services on its own host; the
+ * metadata addresses inside the allowed ranges are refused explicitly. Anything that is not a valid literal is refused. */
 export function classifyAddress(raw: string): AddressVerdict {
 	const ip = cleanHost(raw);
 	const v4 = parseIPv4(ip);
@@ -99,6 +107,17 @@ export function classifyAddress(raw: string): AddressVerdict {
 	if (allZeroButLast && v6[15] === 1) return { ok: true, ip, family: 6 }; // ::1
 	if (allZeroButLast && v6[15] === 0) return { ok: false, ip, reason: 'reserved' }; // ::
 	if (v6[0] === 0xff) return { ok: false, ip, reason: 'reserved' }; // multicast
+	// AWS IPv6 metadata (fd00:ec2::254) lives inside the unique-local range allowed below.
+	if (
+		v6[0] === 0xfd &&
+		v6[1] === 0 &&
+		v6[2] === 0x0e &&
+		v6[3] === 0xc2 &&
+		v6[14] === 0x02 &&
+		v6[15] === 0x54 &&
+		v6.slice(4, 14).every((x) => x === 0)
+	)
+		return { ok: false, ip, reason: 'metadata' };
 	if ((v6[0] & 0xfe) === 0xfc) return { ok: true, ip, family: 6 }; // fc00::/7
 	if (v6[0] === 0xfe && (v6[1] & 0xc0) === 0x80) return { ok: true, ip, family: 6 }; // fe80::/10
 	return { ok: false, ip, reason: 'public' };
@@ -108,7 +127,7 @@ export function classifyAddress(raw: string): AddressVerdict {
 export function refusedMessage(v: Extract<AddressVerdict, { ok: false }>, host?: string): string {
 	const who = host && cleanHost(host) !== v.ip ? `${host} (${v.ip})` : v.ip;
 	if (v.reason === 'metadata')
-		return `${who} is a link-local address (169.254.x.x), which is never allowed.`;
+		return `${who} is a cloud metadata or link-local address, which is never allowed.`;
 	if (v.reason === 'reserved') return `${who} is not a usable printer address.`;
 	return `${who} is not on your local network. Printers, cameras and Spoolman must be reachable on a private address (like 192.168.x.x or 10.x.x.x).`;
 }

@@ -10,7 +10,14 @@ import {
 } from './auth-policy';
 import { isSiteAdmin } from './access';
 import { openDb, runMigrations, type Db } from './db';
-import { account, invitation, member, organization, user } from './db/schema';
+import {
+	account,
+	invitation,
+	member,
+	organization,
+	session as sessionTable,
+	user
+} from './db/schema';
 
 const ENV_KEYS = [
 	'BETTER_AUTH_SECRET',
@@ -469,5 +476,41 @@ describe('public mode auth', () => {
 		expect(db.select().from(invitation).where(eq(invitation.id, 'inv-1')).get()?.status).toBe(
 			'accepted'
 		);
+	});
+});
+
+describe('session hook and bootstrap guard', () => {
+	it('public: a session for an unverified user is refused even with an active workspace', async () => {
+		setEnv(PUBLIC_ENV);
+		const auth = createAuth(db);
+		const ctx = await auth.$context;
+		const now = new Date();
+		db.insert(user)
+			.values({
+				id: 'u1',
+				name: 'Pat',
+				email: 'pat@example.com',
+				emailVerified: false,
+				createdAt: now,
+				updatedAt: now
+			})
+			.run();
+		await expect(
+			ctx.internalAdapter.createSession('u1', false, { activeOrganizationId: 'org-x' })
+		).rejects.toMatchObject({ body: { code: 'email_not_verified' } });
+		expect(db.select().from(sessionTable).all()).toHaveLength(0);
+	});
+
+	it('SIGNUP=closed: two simultaneous first sign-ups create one account', async () => {
+		setEnv({ SIGNUP: 'closed' });
+		const auth = createAuth(db);
+		const ctx = await auth.$context;
+		const make = (n: string) =>
+			ctx.internalAdapter.createUser({ name: n, email: `${n}@example.com`, emailVerified: false }, {
+				source: 'test'
+			} as never);
+		const results = await Promise.allSettled([make('a'), make('b')]);
+		expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+		expect(db.select().from(user).all()).toHaveLength(1);
 	});
 });

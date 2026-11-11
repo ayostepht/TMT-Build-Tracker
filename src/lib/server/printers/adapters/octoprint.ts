@@ -8,6 +8,7 @@ import {
 	isRedirect,
 	readJsonCapped,
 	REDIRECT_MESSAGE,
+	safeFileName,
 	safeText
 } from '../outbound';
 import { num, safeError, StatusSubject, type AdapterHandle, type PrinterConfig } from '../types';
@@ -23,7 +24,7 @@ export function normalizeOctoprint(job: Obj, printer: Obj | null): PrinterStatus
 			: {};
 	const prog = isObj(job.progress) ? job.progress : {};
 	const file = isObj(job.job) && isObj((job.job as Obj).file) ? ((job.job as Obj).file as Obj) : {};
-	const name = typeof file.name === 'string' && file.name ? file.name : undefined;
+	const name = safeFileName(file.name);
 	const completion = num(prog.completion);
 	const t = isObj(printer?.temperature) ? (printer!.temperature as Obj) : {};
 	const actual = (k: string) => (isObj(t[k]) ? num((t[k] as Obj).actual) : undefined);

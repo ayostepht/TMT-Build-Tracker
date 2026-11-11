@@ -4,10 +4,12 @@ import {
 	guardedFetch,
 	ipForUrl,
 	isRedirect,
+	MAX_REMOTE_MESSAGE_BYTES,
 	OutboundError,
 	readJsonCapped,
 	REDIRECT_MESSAGE,
 	resolveAllowed,
+	safeFileName,
 	safeText
 } from '../outbound';
 import {
@@ -26,6 +28,8 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 /** Merge a (partial) status update into the accumulated object tree. */
 export function mergeStatus(into: Obj, patch: Obj): Obj {
 	for (const [k, v] of Object.entries(patch)) {
+		// A JSON `__proto__` key would otherwise merge into Object.prototype.
+		if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
 		if (isObj(v) && isObj(into[k])) mergeStatus(into[k] as Obj, v);
 		else into[k] = isObj(v) ? mergeStatus({}, v) : v;
 	}
@@ -58,8 +62,7 @@ export function normalizeMoonraker(st: Obj): PrinterStatus {
 	const out: PrinterStatus = {
 		state,
 		progress: state === 'idle' ? null : frac === undefined ? null : Math.round(frac * 1000) / 10,
-		fileName:
-			state !== 'idle' && typeof ps.filename === 'string' && ps.filename ? ps.filename : undefined,
+		fileName: state !== 'idle' ? safeFileName(ps.filename) : undefined,
 		nozzleC: temp(ex.temperature),
 		bedC: temp(hb.temperature)
 	};
@@ -171,12 +174,16 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			}, 15000);
 		};
 		sock.onmessage = (ev) => {
-			let m: unknown;
+			// Event-handler throws are uncaught exceptions (deep JSON can overflow the stack).
 			try {
-				m = JSON.parse(String(ev.data));
+				handle(ev.data);
 			} catch {
-				return;
+				/* hostile or malformed frame: ignore it */
 			}
+		};
+		const handle = (data: unknown) => {
+			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return;
+			const m: unknown = JSON.parse(data);
 			if (!isObj(m)) return;
 			armStale();
 			if (m.id === 1 && isObj(m.result) && isObj(m.result.status)) {

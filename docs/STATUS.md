@@ -1,6 +1,8 @@
 # Project status
 
-_Last updated: 2026-11-10 (audit + staged proposal approved; last deploy r37, d1a815c)._
+_Last updated: 2026-11-11 (audit Stage 1 in progress on local `main`, not pushed; the
+printer-linking hotfix 6be1868 is deployed on the test copy: take its tag from the Unraid
+`docs/CHANGELOG.md` entry, which was not yet pushed on 2026-11-11)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in

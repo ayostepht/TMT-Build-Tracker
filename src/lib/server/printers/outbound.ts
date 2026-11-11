@@ -42,15 +42,31 @@ export type Resolver = (host: string) => Promise<string[]>;
 
 const RESOLVE_TIMEOUT_MS = 5000;
 
+/** Lookups still running in libuv's small thread pool, by host name. Our timeout cannot cancel one. */
+const inFlight = new Map<string, Promise<string[]>>();
+/** At most this many different names resolve at once, so slow DNS cannot starve the pool. */
+export const MAX_INFLIGHT_LOOKUPS = 8;
+
 const systemResolver: Resolver = async (host) => {
 	// getaddrinfo also understands decimal/hex/octal spellings; we judge what it returns.
-	const all = await Promise.race([
-		lookup(host, { all: true, verbatim: true }),
+	let p = inFlight.get(host);
+	if (!p) {
+		if (inFlight.size >= MAX_INFLIGHT_LOOKUPS) throw new Error('too many lookups');
+		// Concurrent callers for one name share this lookup; it stays registered until it really ends.
+		p = lookup(host, { all: true, verbatim: true }).then((all) => all.map((a) => a.address));
+		const mine = p;
+		const forget = () => {
+			if (inFlight.get(host) === mine) inFlight.delete(host);
+		};
+		mine.then(forget, forget);
+		inFlight.set(host, p);
+	}
+	return Promise.race([
+		p,
 		new Promise<never>((_, rej) =>
 			setTimeout(() => rej(new Error('dns timeout')), RESOLVE_TIMEOUT_MS).unref()
 		)
 	]);
-	return all.map((a) => a.address);
 };
 
 let resolver: Resolver = systemResolver;
@@ -126,6 +142,22 @@ export function safeText(v: unknown, max = 120): string {
 	return out.replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+/** Longest printer-reported file name kept (real slicer names are well under this). */
+export const MAX_FILE_NAME = 200;
+
+/** A printer-reported file name, made safe to store and broadcast; undefined when empty. */
+export function safeFileName(v: unknown): string | undefined {
+	return safeText(v, MAX_FILE_NAME) || undefined;
+}
+
+/**
+ * Largest WebSocket / MQTT message we parse. Real printers send a few KB (Bambu full reports
+ * up to ~100 KB); anything larger is dropped unparsed.
+ */
+export const MAX_REMOTE_MESSAGE_BYTES = 1024 * 1024;
+
+const BAD_STATUS_MESSAGE = 'The device sent an invalid answer.';
+
 const NULL_BODY = new Set([101, 204, 205, 304]);
 
 type FetchInit = Parameters<typeof fetch>[1];
@@ -171,19 +203,30 @@ export async function guardedFetch(
 				...(isHttps && !target.literal ? { servername: hostname } : {})
 			},
 			(res) => {
-				const h = new Headers();
-				for (const [k, v] of Object.entries(res.headers)) {
-					if (Array.isArray(v)) for (const x of v) h.append(k, x);
-					else if (v !== undefined) h.set(k, v);
+				// Runs outside the promise chain: anything thrown here would be an uncaught exception.
+				res.on('error', () => {});
+				try {
+					const status = res.statusCode ?? 0;
+					if (!Number.isInteger(status) || status < 200 || status > 599) {
+						res.destroy();
+						throw new OutboundError(BAD_STATUS_MESSAGE, 502, 'protocol');
+					}
+					const h = new Headers();
+					for (const [k, v] of Object.entries(res.headers)) {
+						if (Array.isArray(v)) for (const x of v) h.append(k, x);
+						else if (v !== undefined) h.set(k, v);
+					}
+					if (NULL_BODY.has(status)) {
+						res.resume();
+						return resolve(new Response(null, { status, headers: h }));
+					}
+					resolve(
+						new Response(Readable.toWeb(res) as ReadableStream<Uint8Array>, { status, headers: h })
+					);
+				} catch (e) {
+					req.destroy();
+					reject(e);
 				}
-				const status = res.statusCode ?? 502;
-				if (NULL_BODY.has(status)) {
-					res.resume();
-					return resolve(new Response(null, { status, headers: h }));
-				}
-				resolve(
-					new Response(Readable.toWeb(res) as ReadableStream<Uint8Array>, { status, headers: h })
-				);
 			}
 		);
 		req.on('error', reject);

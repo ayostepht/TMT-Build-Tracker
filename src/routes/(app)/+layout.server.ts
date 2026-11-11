@@ -4,7 +4,7 @@ import { buildAccess, isSiteAdmin } from '#lib/server/access.ts';
 import { recentBuilds } from '#lib/server/builds/list.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { mayUseInvitations } from '#lib/server/auth-policy.ts';
-import { appMode, signupMode } from '#lib/server/config.ts';
+import { appMode, isPublicMode, signupMode } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { printerCounts } from '#lib/server/printers/store.ts';
 import { builds } from '#lib/server/db/schema.ts';
@@ -66,6 +66,8 @@ export const load: LayoutServerLoad = async ({ locals, url, request }) => {
 		activeTeamId,
 		/** Install-wide admin (first user or ADMIN_EMAILS): shows the "Kit admin" link. */
 		siteAdmin: isSiteAdmin(db, locals.user),
+		/** Hosted site: no printers or Spoolman, so the nav hides those links. */
+		publicMode: isPublicMode(),
 		invitationCount: mayUseInvitations(
 			{ publicMode: appMode() === 'public', signup: signupMode() },
 			locals.user

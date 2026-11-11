@@ -678,7 +678,7 @@ export const jobAction = (
 	);
 
 export const getOrgSettings = (org: string) =>
-	call<{ settings: OrgSettingsDto; canEdit: boolean }>(
+	call<{ settings: OrgSettingsDto; canEdit: boolean; blocked?: string | null }>(
 		'GET',
 		`/api/spoolman?org=${encodeURIComponent(org)}`
 	);

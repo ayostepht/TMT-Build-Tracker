@@ -15,7 +15,13 @@
 import { randomBytes } from 'node:crypto';
 import type { PrinterFilament, PrinterStatus } from '#lib/printers/status.ts';
 import { probeMainboardId } from '../discovery';
-import { ipForUrl, OutboundError, resolveAllowed } from '../outbound';
+import {
+	ipForUrl,
+	MAX_REMOTE_MESSAGE_BYTES,
+	OutboundError,
+	resolveAllowed,
+	safeFileName
+} from '../outbound';
 import {
 	backoff,
 	num,
@@ -167,7 +173,7 @@ export function normalizeSdcpStatus(s: Obj, attributes?: Obj): PrinterStatus {
 		if (cT !== undefined) cT /= 1000;
 	}
 	const active = state === 'printing' || state === 'paused';
-	const fileName = typeof info.Filename === 'string' && info.Filename ? info.Filename : undefined;
+	const fileName = safeFileName(info.Filename);
 
 	const out: PrinterStatus = {
 		state,
@@ -291,12 +297,16 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			poll = setInterval(() => send(0), POLL_MS);
 		};
 		sock.onmessage = (ev) => {
-			let msg: unknown;
+			// Event-handler throws are uncaught exceptions: nothing remote-driven may escape.
 			try {
-				msg = JSON.parse(String(ev.data));
+				handle(ev.data);
 			} catch {
-				return;
+				/* hostile or malformed frame: ignore it */
 			}
+		};
+		const handle = (data: unknown) => {
+			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return;
+			const msg: unknown = JSON.parse(data);
 			if (!isObj(msg)) return;
 			const topic = typeof msg.Topic === 'string' ? msg.Topic : '';
 			const id = (msg.MainboardID ??

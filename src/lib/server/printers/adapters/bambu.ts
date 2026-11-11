@@ -7,7 +7,13 @@
  */
 import mqtt, { type MqttClient } from 'mqtt';
 import type { PrinterFilament, PrinterStatus } from '#lib/printers/status.ts';
-import { ipForUrl, OutboundError, resolveAllowed } from '../outbound';
+import {
+	ipForUrl,
+	MAX_REMOTE_MESSAGE_BYTES,
+	OutboundError,
+	resolveAllowed,
+	safeFileName
+} from '../outbound';
 import {
 	backoff,
 	num,
@@ -32,10 +38,7 @@ export function normalizeBambu(p: Obj): PrinterStatus {
 					: g === 'FAILED'
 						? 'failed'
 						: 'idle';
-	const file =
-		(typeof p.subtask_name === 'string' && p.subtask_name) ||
-		(typeof p.gcode_file === 'string' && p.gcode_file) ||
-		undefined;
+	const file = safeFileName(p.subtask_name) ?? safeFileName(p.gcode_file);
 	const pct = num(p.mc_percent);
 	const remainMin = num(p.mc_remaining_time);
 	const filaments: PrinterFilament[] = [];
@@ -139,9 +142,10 @@ export function connectBambu(cfg: PrinterConfig): AdapterHandle {
 		});
 		c.on('message', (_topic, payload) => {
 			try {
+				if (payload.length > MAX_REMOTE_MESSAGE_BYTES) return;
 				const j = JSON.parse(payload.toString()) as Obj;
 				if (isObj(j.print)) {
-					Object.assign(acc, j.print);
+					for (const [k, v] of Object.entries(j.print)) if (k !== '__proto__') acc[k] = v;
 					subj.emit(normalizeBambu(acc));
 				}
 			} catch {

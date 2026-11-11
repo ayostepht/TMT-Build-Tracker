@@ -1,6 +1,6 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { ApiError } from '../access.ts';
+import { ApiError, type SiteAdminCandidate } from '../access.ts';
 import { requireUserId } from '../api.ts';
 import { getDb, type Db } from '../db/index.ts';
 import { templates } from '../db/schema.ts';
@@ -11,11 +11,7 @@ import { canManageTemplate } from '../templates/fork.ts';
  * site admins for the global kits, owners and editors of the owning workspace for a workspace's
  * own copy (made from "Upload your own files" in the setup wizard).
  */
-export function assertTemplateAdmin(
-	db: Db,
-	user: { id: string; email?: string | null },
-	templateId: string
-): void {
+export function assertTemplateAdmin(db: Db, user: SiteAdminCandidate, templateId: string): void {
 	const t = db
 		.select({ id: templates.id })
 		.from(templates)

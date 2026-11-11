@@ -89,8 +89,13 @@ function parseFrame(b: Buffer): { opcode: number; payload: Buffer; len: number }
 }
 
 export function sendJson(socket: Socket, obj: unknown) {
+	sendText(socket, JSON.stringify(obj));
+}
+
+/** One text frame with the given payload, verbatim (tests use it to send hostile frames). */
+export function sendText(socket: Socket, text: string) {
 	if (socket.destroyed) return;
-	const data = Buffer.from(JSON.stringify(obj));
+	const data = Buffer.from(text);
 	let head: Buffer;
 	if (data.length < 126) head = Buffer.from([0x81, data.length]);
 	else if (data.length < 65536) {

@@ -7,6 +7,7 @@ import {
 	type PrinterStatus
 } from '#lib/printers/status.ts';
 import { catalogPrinter } from '#lib/printers/catalog.ts';
+import { cleanHost } from '#lib/printers/address.ts';
 import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
 import { ApiError } from '../access';
 import type { Db } from '../db';
@@ -175,6 +176,39 @@ function mergeSecrets(kind: PrinterKind, current: Secrets, supplied: Secrets | u
 	return next;
 }
 
+/** True when the address a caller asks for is not the one stored (host, or port as stored). */
+function addressMoved(
+	stored: { host: string; port: number | null },
+	host: string,
+	port: number | null
+) {
+	return cleanHost(host) !== cleanHost(stored.host) || (port ?? null) !== (stored.port ?? null);
+}
+
+/**
+ * Stored secrets belong to the stored address only. When the address changes, the sensitive
+ * ones (API key, access code) are not carried over: the caller must type them again, so
+ * nobody with edit rights can point a saved printer at another host and have the server send
+ * it the stored key. Non-secret identifiers (serial, mainboard id) are kept.
+ */
+export function secretsForMovedAddress(
+	kind: PrinterKind,
+	current: Secrets,
+	supplied: Secrets | undefined
+): Secrets {
+	const sensitive = PRINTER_KIND_INFO[kind].secrets.filter((f) => f.secret);
+	for (const f of sensitive) {
+		if (current[f.key] && supplied?.[f.key] === undefined)
+			throw new ApiError(
+				400,
+				`Re-enter the ${f.label.replace(/\s*\(optional\)/i, '').toLowerCase()} to use a different address. Saved secrets are only used at the address they were saved for.`
+			);
+	}
+	return Object.fromEntries(
+		Object.entries(current).filter(([k]) => !sensitive.some((f) => f.key === k))
+	);
+}
+
 /** Hosted (public) mode never connects to printers, so there is nothing to save. */
 function refuseInPublicMode(): void {
 	if (isPublicMode()) throw new ApiError(403, PUBLIC_MODE_MESSAGE);
@@ -229,7 +263,15 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 			? p.cameraUrl
 			: cur.cameraUrl;
 	checkCamera(cameraUrl, host, kind);
-	const secrets = mergeSecrets(kind, kindChanged ? {} : decryptSecrets(cur.secretEnc), p.secrets);
+	const port = p.port !== undefined ? p.port : cur.port;
+	const keep = kindChanged ? {} : decryptSecrets(cur.secretEnc);
+	const secrets = mergeSecrets(
+		kind,
+		kindChanged || !addressMoved(cur, host, port)
+			? keep
+			: secretsForMovedAddress(kind, keep, p.secrets),
+		p.secrets
+	);
 	const set: Partial<typeof printers.$inferInsert> = {
 		secretEnc: Object.keys(secrets).length ? encryptSecrets(secrets) : null
 	};
@@ -269,16 +311,16 @@ export function configFromInput(db: Db, orgId: string, body: unknown): PrinterCo
 	const kind = ((o.kind as string) ?? stored?.kind) as PrinterKind;
 	if (!(PRINTER_KINDS as readonly unknown[]).includes(kind)) bad('Unknown printer type');
 	const p = parsePrinterInput({ ...o, name: 'test', kind, host: o.host ?? stored?.host }, true);
+	const port = p.port !== undefined ? p.port : (stored?.port ?? null);
+	let keep: Secrets = stored && stored.kind === kind ? decryptSecrets(stored.secretEnc) : {};
+	if (stored && stored.kind === kind && addressMoved(stored, p.host!, port))
+		keep = secretsForMovedAddress(kind, keep, p.secrets);
 	return {
 		id: stored?.id ?? 'test',
 		kind,
 		host: p.host!,
-		port: p.port !== undefined ? p.port : (stored?.port ?? null),
-		secrets: mergeSecrets(
-			kind,
-			stored && stored.kind === kind ? decryptSecrets(stored.secretEnc) : {},
-			p.secrets
-		)
+		port,
+		secrets: mergeSecrets(kind, keep, p.secrets)
 	};
 }
 

@@ -4,8 +4,12 @@ import type { RequestEvent } from '@sveltejs/kit';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { startup } from '#lib/server/startup.ts';
 import { compressResponse } from '#lib/server/compress.ts';
-import { authRequestHeaders } from '#lib/server/client-ip.ts';
-import { bootProblems } from '#lib/server/config.ts';
+import {
+	authRequestHeaders,
+	shouldWarnUndeclaredProxy,
+	UNDECLARED_PROXY_WARNING
+} from '#lib/server/client-ip.ts';
+import { bootProblems, trustedProxy } from '#lib/server/config.ts';
 
 export const init: ServerInit = () => {
 	if (building) return;
@@ -21,6 +25,7 @@ export const init: ServerInit = () => {
 };
 
 let lastClientIpWarning = 0;
+let proxyHintLogged = false;
 
 /**
  * Better Auth rate-limits per client IP from X-Forwarded-For; see `authRequestHeaders`.
@@ -36,6 +41,10 @@ function withClientIp(event: RequestEvent): Request | null {
 export const handle: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 	const auth = getAuth();
+	if (shouldWarnUndeclaredProxy(event.request.headers, trustedProxy() !== null, proxyHintLogged)) {
+		proxyHintLogged = true;
+		console.warn(UNDECLARED_PROXY_WARNING);
+	}
 	if (event.url.pathname.startsWith('/api/auth/')) {
 		const request = withClientIp(event);
 		if (!request) {

@@ -1,5 +1,12 @@
 import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
-import { ApiError, canEditRole, getMemberRole, isSiteAdmin, requireEditor } from '../access';
+import {
+	ApiError,
+	canEditRole,
+	getMemberRole,
+	isSiteAdmin,
+	requireEditor,
+	type SiteAdminCandidate
+} from '../access';
 import type { Db } from '../db';
 import {
 	builds,
@@ -45,11 +52,7 @@ export function defaultTemplate(db: Db) {
  * May this user add or replace kit files of the template? Global templates: site admins only
  * (imports are install-wide). A workspace's own template: owners and editors of that workspace.
  */
-export function canManageTemplate(
-	db: Db,
-	user: { id: string; email?: string | null },
-	templateId: string
-): boolean {
+export function canManageTemplate(db: Db, user: SiteAdminCandidate, templateId: string): boolean {
 	const t = db
 		.select({ ownerOrgId: templates.ownerOrgId })
 		.from(templates)

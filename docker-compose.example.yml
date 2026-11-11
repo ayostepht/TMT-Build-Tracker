@@ -26,15 +26,17 @@ services:
       # OIDC_CLIENT_ID: ""
       # OIDC_CLIENT_SECRET: ""
       # OIDC_PROVIDER_NAME: Authentik
-      # Planned, not active yet (read by config.ts, nothing uses them in this release):
-      # TMT_MODE: selfhost        # or public (SSO-only; also needs https PUBLIC_URL, ADDRESS_HEADER, ADMIN_EMAILS)
-      # SIGNUP: open              # open | invite | closed (self-hosted password sign-up)
-      # GOOGLE_CLIENT_ID: ""      # Google/GitHub need both variables of a pair
+      # TMT_MODE: selfhost        # or public (SSO-only Google/GitHub, no printers; needs https PUBLIC_URL, ADDRESS_HEADER, ADMIN_EMAILS)
+      # SIGNUP: open              # open | invite | closed. Use invite or closed if reachable from the internet or with OIDC
+      # GOOGLE_CLIENT_ID: ""      # Public mode; each provider needs both variables of its pair
+      # (redirect URIs: <PUBLIC_URL>/api/auth/callback/google and /github)
       # GOOGLE_CLIENT_SECRET: ""
       # GITHUB_CLIENT_ID: ""
       # GITHUB_CLIENT_SECRET: ""
       # Only when ALL traffic comes through a reverse proxy you control that overwrites this header.
-      # Also the client address for sign-in rate limits; unset = a client-sent X-Forwarded-For is ignored:
+      # Also the client address for sign-in rate limits; unset = a client-sent X-Forwarded-For is ignored,
+      # so behind a proxy everyone shares one sign-in limit (the log warns once). Set it, with XFF_DEPTH
+      # if there is more than one proxy, only if every request comes through the proxy:
       # ADDRESS_HEADER: X-Forwarded-For
       # XFF_DEPTH: 1
       # Optional. Largest slicer 3MF in MB (default 1024); the image allows bodies up to 1100 MB (BODY_SIZE_LIMIT).

@@ -183,7 +183,7 @@
 						: undefined}>Studio</a
 				>
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
-				{#if printersHref}
+				{#if printersHref && !data.publicMode}
 					<a
 						class="navlink"
 						href={printersHref}
@@ -211,7 +211,7 @@
 			{:else}
 				<a class="btn sm" href={resolve('/(app)/onboarding')}>Create a chapter</a>
 			{/if}
-			{#if workspace}
+			{#if workspace && (membersHref || !data.publicMode)}
 				<div class="menu-wrap ws-settings">
 					<button
 						type="button"
@@ -228,9 +228,11 @@
 							{#if membersHref}
 								<a role="menuitem" href={membersHref} data-testid="ws-members">Members</a>
 							{/if}
-							<a role="menuitem" href={integrationsHref} data-testid="ws-integrations"
-								>Integrations</a
-							>
+							{#if !data.publicMode}
+								<a role="menuitem" href={integrationsHref} data-testid="ws-integrations"
+									>Integrations</a
+								>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -256,7 +258,9 @@
 						{#if workspace}
 							{#if membersHref}<a role="menuitem" class="phone-only" href={membersHref}>Members</a
 								>{/if}
-							<a role="menuitem" class="phone-only" href={integrationsHref}>Integrations</a>
+							{#if !data.publicMode}
+								<a role="menuitem" class="phone-only" href={integrationsHref}>Integrations</a>
+							{/if}
 						{/if}
 						<button type="button" role="menuitem" onclick={signOut}>Sign out</button>
 					</div>

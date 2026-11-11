@@ -211,7 +211,8 @@ function publicUrlProblems(): string[] {
 	if ((url.pathname !== '/' && url.pathname !== '') || url.search || url.hash) {
 		problems.push(`${name} must be just the origin (https://host), without a path or query.`);
 	}
-	const host = url.hostname.toLowerCase();
+	// A trailing dot (`localhost.`) is the same host.
+	const host = url.hostname.toLowerCase().replace(/\.+$/, '');
 	if (host === 'localhost' || host.endsWith('.localhost')) {
 		problems.push(`${name} must be a public host name, not localhost.`);
 	} else if (isIP(host) || host.startsWith('[')) {

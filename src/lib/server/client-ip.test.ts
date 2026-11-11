@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { authRequestHeaders } from './client-ip.ts';
+import {
+	authRequestHeaders,
+	normaliseClientAddress,
+	shouldWarnUndeclaredProxy
+} from './client-ip.ts';
 
 describe('authRequestHeaders', () => {
 	it('replaces a forged x-forwarded-for with the socket address (no proxy configured)', () => {
@@ -38,5 +42,40 @@ describe('authRequestHeaders', () => {
 		expect(authRequestHeaders(new Headers(), () => 'not-an-ip')).toBeNull();
 		expect(authRequestHeaders(new Headers(), () => '1.2.3.4, 5.6.7.8')).toBeNull();
 		expect(authRequestHeaders(new Headers(), () => '')).toBeNull();
+	});
+});
+
+describe('zone ids and mapped addresses', () => {
+	it('fails closed on a zone id', () => {
+		expect(authRequestHeaders(new Headers(), () => '::1%x')).toBeNull();
+		expect(authRequestHeaders(new Headers(), () => 'fe80::1%eth0')).toBeNull();
+		expect(normaliseClientAddress('::1%x')).toBeNull();
+	});
+	it('turns an IPv4-mapped IPv6 socket address into plain IPv4', () => {
+		const h = authRequestHeaders(new Headers(), () => '::ffff:203.0.113.5');
+		expect(h?.get('x-forwarded-for')).toBe('203.0.113.5');
+		expect(normaliseClientAddress('::FFFF:203.0.113.5')).toBe('203.0.113.5');
+	});
+	it('leaves other IPv6 addresses alone', () => {
+		expect(normaliseClientAddress('::1')).toBe('::1');
+		expect(normaliseClientAddress('2001:db8::ffff:1')).toBe('2001:db8::ffff:1');
+	});
+});
+
+describe('shouldWarnUndeclaredProxy', () => {
+	const xff = new Headers({ 'x-forwarded-for': '198.51.100.7' });
+	it('warns for forwarding headers without a trusted proxy', () => {
+		expect(shouldWarnUndeclaredProxy(xff, false, false)).toBe(true);
+		expect(
+			shouldWarnUndeclaredProxy(new Headers({ 'x-forwarded-proto': 'https' }), false, false)
+		).toBe(true);
+		expect(shouldWarnUndeclaredProxy(new Headers({ 'x-forwarded-host': 'a' }), false, false)).toBe(
+			true
+		);
+	});
+	it('stays quiet without such headers, with a trusted proxy, or once warned', () => {
+		expect(shouldWarnUndeclaredProxy(new Headers(), false, false)).toBe(false);
+		expect(shouldWarnUndeclaredProxy(xff, true, false)).toBe(false);
+		expect(shouldWarnUndeclaredProxy(xff, false, true)).toBe(false);
 	});
 });

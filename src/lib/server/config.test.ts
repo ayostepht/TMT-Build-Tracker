@@ -169,6 +169,8 @@ describe('validatePublicMode', () => {
 			['https://user:pw@tmt.example.com', /user name or password/],
 			['https://tmt.example.com/app', /without a path/],
 			['https://localhost', /localhost/],
+			['https://localhost.', /localhost/],
+			['https://app.localhost.', /localhost/],
 			['https://app.localhost', /localhost/],
 			['https://192.0.2.1', /IP address/],
 			['https://[2001:db8::1]', /IP address/]

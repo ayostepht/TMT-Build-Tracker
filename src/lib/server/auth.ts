@@ -10,7 +10,7 @@ import {
 	signupMode,
 	socialProviders
 } from './config';
-import { decideNewUser, mayUseInvitations, type PolicyConfig } from './auth-policy';
+import { decideNewUser, mayUseInvitations, userCount, type PolicyConfig } from './auth-policy';
 import * as schema from './db/schema';
 import { user as userTable } from './db/schema';
 import { eq } from 'drizzle-orm';
@@ -55,6 +55,9 @@ export const PASSWORD_PATHS = [
 export function createAuth(db: Db) {
 	const publicMode = isPublicMode();
 	const policy: PolicyConfig = { publicMode, signup: signupMode() };
+	/** In-flight bootstrap sign-up (see user.create.before); expires so a failed attempt cannot lock it. */
+	const BOOTSTRAP_CLAIM_MS = 30_000;
+	let bootstrapClaimedAt = 0;
 	const social = publicMode ? socialProviders() : {};
 	const oidc = publicMode ? null : oidcConfig();
 	const url = publicUrl();
@@ -97,9 +100,22 @@ export function createAuth(db: Db) {
 					before: async (u) => {
 						const d = decideNewUser(db, u, policy);
 						if (!d.ok) throw new APIError('FORBIDDEN', { code: d.code, message: d.message });
+						// Bootstrap race: with SIGNUP=closed|invite the "empty database" exception lets
+						// one account through, but the user-count check and the insert are separated by
+						// awaits, so two simultaneous first sign-ups could both pass. The check and this
+						// claim run in one synchronous stretch (one Node process), so only one wins.
+						if (!policy.publicMode && policy.signup !== 'open' && userCount(db) === 0) {
+							if (bootstrapClaimedAt && Date.now() - bootstrapClaimedAt < BOOTSTRAP_CLAIM_MS)
+								throw new APIError('FORBIDDEN', {
+									code: 'signup_closed',
+									message: 'Sign-up is closed on this server.'
+								});
+							bootstrapClaimedAt = Date.now();
+						}
 					},
 					// Every account (email, OIDC, invited) gets a personal workspace.
 					after: async (u) => {
+						bootstrapClaimedAt = 0;
 						ensurePersonalWorkspace(db, { id: u.id, name: u.name });
 					}
 				}
@@ -107,6 +123,19 @@ export function createAuth(db: Db) {
 			session: {
 				create: {
 					before: async (session) => {
+						// Public mode: no session for an unverified email, checked before any early return.
+						if (publicMode) {
+							const v = db
+								.select({ emailVerified: userTable.emailVerified })
+								.from(userTable)
+								.where(eq(userTable.id, session.userId))
+								.get();
+							if (!v?.emailVerified)
+								throw new APIError('FORBIDDEN', {
+									code: 'email_not_verified',
+									message: 'Your email address is not verified.'
+								});
+						}
 						if ((session as { activeOrganizationId?: string | null }).activeOrganizationId) return;
 						// The user's after-create hook may not have run yet; ensure is idempotent.
 						const u = db
@@ -115,12 +144,6 @@ export function createAuth(db: Db) {
 							.where(eq(userTable.id, session.userId))
 							.get();
 						if (!u) return;
-						// Public mode: no session for an account whose email is not provider-verified.
-						if (publicMode && !u.emailVerified)
-							throw new APIError('FORBIDDEN', {
-								code: 'email_not_verified',
-								message: 'Your email address is not verified.'
-							});
 						const { id } = ensurePersonalWorkspace(db, { id: session.userId, name: u.name });
 						// Users who already belong to chapters keep their own default (see the app layout).
 						if (listTeams(db, session.userId).some((t) => !t.personal)) return;

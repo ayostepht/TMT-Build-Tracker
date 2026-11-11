@@ -50,6 +50,14 @@
 		secrets = {};
 	});
 	const info = $derived(PRINTER_KIND_INFO[f.kind]);
+	// Saved secrets only work at the address they were saved for: the server asks for them again.
+	const moved = $derived(
+		!!printer &&
+			f.kind === printer.kind &&
+			(f.host.trim().toLowerCase() !== printer.host.toLowerCase() ||
+				(f.port ?? null) !== (printer.port ?? null))
+	);
+	const needRetype = (key: string) => moved && !!printer?.secretsSet.includes(key) && !secrets[key];
 
 	let busy = $state(false);
 	let error = $state('');
@@ -194,11 +202,17 @@
 					autocapitalize="none"
 					value={secrets[fld.key] ?? (fld.secret ? '' : (printer?.identifiers[fld.key] ?? ''))}
 					placeholder={fld.secret && printer?.secretsSet.includes(fld.key)
-						? 'Saved (leave blank to keep)'
+						? moved
+							? 'Re-enter for the new address'
+							: 'Saved (leave blank to keep)'
 						: ''}
 					data-testid="pf-{fld.key}"
 					oninput={(e) => (secrets[fld.key] = e.currentTarget.value)}
 				/>
+				{#if fld.secret && needRetype(fld.key)}<small data-testid="pf-retype-{fld.key}"
+						>The saved value is only used at the address it was saved for. Re-enter it to use this
+						address.</small
+					>{/if}
 				{#if fld.hint}<small>{fld.hint}</small>{/if}
 			</label>
 		{/each}
