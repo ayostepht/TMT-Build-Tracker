@@ -16,6 +16,8 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 /** Merge a (partial) status update into the accumulated object tree. */
 export function mergeStatus(into: Obj, patch: Obj): Obj {
 	for (const [k, v] of Object.entries(patch)) {
+		// JSON.parse makes `__proto__` an own key: never merge into prototypes.
+		if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
 		if (isObj(v) && isObj(into[k])) mergeStatus(into[k] as Obj, v);
 		else into[k] = isObj(v) ? mergeStatus({}, v) : v;
 	}
@@ -147,26 +149,30 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			}, 15000);
 		};
 		sock.onmessage = (ev) => {
-			let m: unknown;
 			try {
-				m = JSON.parse(String(ev.data));
+				let m: unknown;
+				try {
+					m = JSON.parse(String(ev.data));
+				} catch {
+					return;
+				}
+				if (!isObj(m)) return;
+				armStale();
+				if (m.id === 1 && isObj(m.result) && isObj(m.result.status)) {
+					acc = mergeStatus({}, m.result.status);
+					subj.emit(normalizeMoonraker(acc));
+				} else if (
+					m.method === 'notify_status_update' &&
+					Array.isArray(m.params) &&
+					isObj(m.params[0])
+				) {
+					mergeStatus(acc, m.params[0]);
+					subj.emit(normalizeMoonraker(acc));
+				} else if (m.id === 2 && subj.current?.state === 'offline') {
+					subj.emit(normalizeMoonraker(acc));
+				}
 			} catch {
-				return;
-			}
-			if (!isObj(m)) return;
-			armStale();
-			if (m.id === 1 && isObj(m.result) && isObj(m.result.status)) {
-				acc = mergeStatus({}, m.result.status);
-				subj.emit(normalizeMoonraker(acc));
-			} else if (
-				m.method === 'notify_status_update' &&
-				Array.isArray(m.params) &&
-				isObj(m.params[0])
-			) {
-				mergeStatus(acc, m.params[0]);
-				subj.emit(normalizeMoonraker(acc));
-			} else if (m.id === 2 && subj.current?.state === 'offline') {
-				subj.emit(normalizeMoonraker(acc));
+				/* a malformed or hostile frame is ignored (nothing from it is logged) */
 			}
 		};
 		sock.onerror = () => {};
