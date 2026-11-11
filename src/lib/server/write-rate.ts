@@ -1,11 +1,14 @@
 /**
  * Per-user write rate limit for the app API: a token bucket in memory, keyed by user id.
  *
- * - Applies to non-GET/HEAD/OPTIONS requests under `/api/`, except `/api/auth/*` (Better Auth
- *   rate-limits those itself). Site admins are exempt (looked up only when a request is refused).
+ * - Applies to every non-GET/HEAD/OPTIONS request of a signed-in user, whatever the path (API
+ *   routes and page form actions), except `/api/auth/*` (Better Auth rate-limits those itself). Site admins are exempt (looked up only when a request is refused).
  * - Public mode: `WRITE_RATE_PER_MIN` (default 120) refill, `WRITE_RATE_BURST` (default 60) bucket.
  *   Self-hosted: off unless `WRITE_RATE_PER_MIN` is set. `off` (or 0) disables it.
- * - Refusal: 429 `{ error, code: 'rate' }` with `Retry-After` (seconds).
+ * - Refusal: 429 with `Retry-After` (seconds). `/api/` or JSON callers get `{ error, code: 'rate' }`;
+ *   a `use:enhance` form action (header `x-sveltekit-action`) gets a SvelteKit action failure
+ *   (`form.error` / `form.code`, the same shape as `fail(409, { error })`); a plain form post gets
+ *   a small HTML page with the message and a back link.
  * - State is per process; a restart resets it, which is fine for a burst limiter.
  */
 import { isSiteAdmin } from './access';
@@ -74,22 +77,37 @@ export function writeRateResponse(
 	method: string,
 	pathname: string,
 	isAdmin: (u: NonNullable<typeof user>) => boolean = (u) => isSiteAdmin(getDb(), u),
-	now = Date.now()
+	now = Date.now(),
+	headers?: Headers
 ): Response | null {
 	if (!user || READ.has(method.toUpperCase())) return null;
-	if (!pathname.startsWith('/api/') || pathname.startsWith('/api/auth/')) return null;
+	if (pathname.startsWith('/api/auth/')) return null;
 	const cfg = writeRateConfig();
 	if (!cfg) return null;
 	const wait = takeWriteToken(user.id, cfg, now);
 	if (wait === 0 || isAdmin(user)) return null;
-	return new Response(
-		JSON.stringify({
-			error: 'Too many changes too quickly. Wait a moment and try again.',
-			code: 'rate'
-		}),
-		{
+	const error = 'Too many changes too quickly. Wait a moment and try again.';
+	const retry = String(wait);
+	if (headers?.get('x-sveltekit-action') === 'true') {
+		// SvelteKit's `deserialize` expects `{ type, status, data }` with `data` devalue-encoded.
+		return new Response(
+			JSON.stringify({
+				type: 'failure',
+				status: 429,
+				data: JSON.stringify([{ error: 1, code: 2 }, error, 'rate'])
+			}),
+			{ status: 200, headers: { 'content-type': 'application/json', 'retry-after': retry } }
+		);
+	}
+	const wantsJson =
+		pathname.startsWith('/api/') || !(headers?.get('accept') ?? '').includes('text/html');
+	if (wantsJson)
+		return new Response(JSON.stringify({ error, code: 'rate' }), {
 			status: 429,
-			headers: { 'content-type': 'application/json', 'retry-after': String(wait) }
-		}
+			headers: { 'content-type': 'application/json', 'retry-after': retry }
+		});
+	return new Response(
+		`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Too many changes</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Too many changes</h1><p>${error}</p><p><a href="javascript:history.back()">Go back</a></p></body>`,
+		{ status: 429, headers: { 'content-type': 'text/html; charset=utf-8', 'retry-after': retry } }
 	);
 }

@@ -38,7 +38,7 @@ import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { Silhouette } from '#lib/domain/silhouette.ts';
 import { ApiError, buildAccess } from '../access';
 import { diskHasRoom, uploadsDir } from '../config';
-import { assertUploadRoom, parsedUploadBytes } from '../quota';
+import { assertRunTotal, assertUploadRoom, parsedUploadBytes } from '../quota';
 import type { Db } from '../db';
 import { buildPlates, builds, buildUploads, printRuns, templatePlateLayouts } from '../db/schema';
 import { mutateBuild } from './actions';
@@ -122,6 +122,9 @@ export function buildLayouts(db: Db, buildId: string, userId: string) {
  */
 function convertPlateRuns(tx: Db, buildId: string, view: BuildView): number {
 	const attached = view.runs.filter((r) => r.plateNumber != null);
+	// one run per active part for each attached run: refuse before touching anything when over the cap
+	const created = attached.reduce((n, r) => n + runTargets(view, r).length, 0);
+	assertRunTotal(view.runs.length - attached.length + created);
 	for (const r of attached) {
 		const targets = runTargets(view, r);
 		tx.delete(printRuns).where(eq(printRuns.id, r.id)).run();

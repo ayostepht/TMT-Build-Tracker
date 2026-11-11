@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { extractNestedThreeMfs, type NestedLimits } from './nested-zip';
 
@@ -107,4 +107,14 @@ describe('extractNestedThreeMfs', () => {
 			extractNestedThreeMfs(writeZip(files), join(scratch(), 'x'), LIMITS)
 		).rejects.toThrow(/too many 3MF/);
 	});
+
+	it('stops with 507 before unpacking when the disk floor is crossed', async () => {
+		vi.stubEnv('MIN_FREE_DISK_MB', '999999999');
+		const zip = writeZip({ 'a.3mf': strToU8('aaaa') });
+		const out = join(scratch(), 'x');
+		await expect(extractNestedThreeMfs(zip, out, LIMITS)).rejects.toMatchObject({ status: 507 });
+		expect(existsSync(out)).toBe(false);
+	});
 });
+
+afterEach(() => vi.unstubAllEnvs());

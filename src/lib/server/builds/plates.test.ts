@@ -34,6 +34,7 @@ import {
 	setPlateLayout,
 	uploadThumbnailFile
 } from './plates';
+import { MAX_RUNS_PER_BUILD } from '../quota';
 import { onBuildEvents } from './test-helpers';
 import { loadBuildView } from './view';
 
@@ -155,6 +156,32 @@ describe('replacing plates when print logs exist', () => {
 		const after = view(id);
 		expect(after.plates).toEqual(before.plates);
 		expect(after.runs).toHaveLength(4);
+	});
+
+	it('refuses a conversion that would push the build over the print-log cap', () => {
+		const id = mk();
+		run(id, { plateNumber: 10, grams: 100 }); // two parts: becomes two logs
+		const now = view(id);
+		const filler = Array.from({ length: MAX_RUNS_PER_BUILD - 1 }, (_, i) => ({
+			buildId: id,
+			plateNumber: null,
+			partSlug: 'wing-left',
+			partSlugs: null,
+			date: '2026-03-01',
+			result: 'Success' as const,
+			grams: null,
+			hours: null,
+			printer: null,
+			userId: 'owner',
+			note: `f${i}`
+		}));
+		db.insert(printRuns).values(filler).run();
+		expect(view(id).runs).toHaveLength(MAX_RUNS_PER_BUILD);
+		expect(() => setPlateLayout(db, id, 'owner', { key: 'h2d', convertRuns: true })).toThrow(
+			/at most/
+		);
+		expect(view(id).plates).toEqual(now.plates);
+		expect(view(id).runs.filter((r) => r.plateNumber != null)).toHaveLength(1);
 	});
 
 	it('converts plate logs to part logs and leaves every status exactly as it was', () => {

@@ -12,10 +12,9 @@
  * Other sources (HTTP bodies, buffers) are streamed with fflate's `Unzip`, which buffers
  * unwanted entries that use data descriptors, so keep big inputs on disk.
  */
-import { createReadStream } from 'node:fs';
 import { Unzip, UnzipInflate, UnzipPassThrough, strFromU8 } from 'fflate';
 import { XMLParser } from 'fast-xml-parser';
-import { entryChunks, readZipDirectory } from './zipfile';
+import { BAD_ZIP_MESSAGE, MAX_UNWANTED_BUFFER, entryChunks, readZipDirectory } from './zipfile';
 import {
 	decodeEntities,
 	runsHintFromName,
@@ -192,8 +191,10 @@ async function readRaw(source: Source, limits: ParseLimits): Promise<Raw> {
 		failure ??= e;
 	};
 
+	let sinceEntry = 0; // bytes pushed since an entry last produced data or began
 	const uz = new Unzip((file) => {
 		if (failure) return;
+		sinceEntry = 0;
 		if (++entries > limits.maxEntries) {
 			fail(new ThreeMfError('The 3MF has too many entries'));
 			return;
@@ -201,6 +202,7 @@ async function readRaw(source: Source, limits: ParseLimits): Promise<Raw> {
 		const sink = entrySink(file.name, raw, limits, fail);
 		if (!sink) return; // never started, so never inflated
 		file.ondata = (err, chunk, final) => {
+			sinceEntry = 0;
 			if (sink(err, chunk, final) === 'stop') file.terminate();
 		};
 		file.start();
@@ -211,6 +213,9 @@ async function readRaw(source: Source, limits: ParseLimits): Promise<Raw> {
 	try {
 		for await (const chunk of source as AsyncIterable<Uint8Array>) {
 			uz.push(chunk);
+			sinceEntry += chunk.length;
+			if (sinceEntry > MAX_UNWANTED_BUFFER)
+				fail(new ThreeMfError('This 3MF holds too much data the reader cannot skip'));
 			if (failure) break;
 		}
 		if (!failure) uz.push(new Uint8Array(0), true);
@@ -226,14 +231,15 @@ async function readRaw(source: Source, limits: ParseLimits): Promise<Raw> {
 /**
  * Same result from a file on disk through its central directory: only the wanted entries are
  * read, so G-code, meshes and the size of the file cost nothing (see `zipfile.ts`).
- * Returns null when the directory cannot be read (the caller falls back to streaming).
+ * Throws a ThreeMfError when the directory cannot be read.
  */
-async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw | null> {
+async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw> {
 	let dir;
 	try {
 		dir = await readZipDirectory(path);
 	} catch {
-		return null;
+		// never fall back to the push parser for a file on disk: it buffers what it does not want
+		throw new ThreeMfError(BAD_ZIP_MESSAGE);
 	}
 	if (dir.length > limits.maxEntries) throw new ThreeMfError('The 3MF has too many entries');
 	const raw = newRaw();
@@ -513,7 +519,5 @@ export function parseThreeMfBytes(bytes: Uint8Array, limits?: Partial<ParseLimit
 
 export async function parseThreeMfFile(path: string, limits?: Partial<ParseLimits>) {
 	const all = { ...DEFAULT_LIMITS, ...limits };
-	const raw = await readRawFromFile(path, all);
-	if (raw) return parseThreeMf([], all, raw);
-	return parseThreeMf(createReadStream(path, { highWaterMark: 1 << 20 }), limits);
+	return parseThreeMf([], all, await readRawFromFile(path, all));
 }

@@ -18,7 +18,7 @@
  */
 import { rm, unlink } from 'node:fs/promises';
 import { basename, join, resolve, sep } from 'node:path';
-import { and, asc, eq, inArray, like, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, like, notInArray, or, sql } from 'drizzle-orm';
 import { ApiError, isSiteAdmin, normalizeRole } from './access';
 import { uploadsDir } from './config';
 import type { Db } from './db';
@@ -128,13 +128,44 @@ export function planFiles(db: Db, opts: { orgIds?: string[]; buildIds?: string[]
 /**
  * Delete the kit copies owned by these workspaces (their child rows cascade). Needed because
  * migration 0007 added `templates.owner_org_id` without ON DELETE CASCADE, so deleting the
- * workspace row alone fails on the foreign key. Call after `repointBuildsOffTemplates`; it also deletes the owning workspace's own builds that use the copies.
+ * workspace row alone fails on the foreign key. Call after `repointBuildsOffTemplates`.
+ *
+ * Only builds of the doomed workspaces (`doomedOrgIds`) are deleted; they go with their workspace
+ * and must go first because builds.template_id has no ON DELETE. A build of a SURVIVING workspace
+ * that still uses a copy (the repoint skips copies with no resolvable base: legacy data) is moved to
+ * the default built-in kit; if there is none, nothing is deleted and the call throws 409.
  */
-export function deleteOwnedTemplates(tx: Db, templateIds: string[]): void {
+export function deleteOwnedTemplates(tx: Db, templateIds: string[], doomedOrgIds: string[]): void {
 	if (!templateIds.length) return;
-	// Builds still using a copy are the owning workspace's own (the repoint moved the others); they
-	// go with that workspace anyway, and must go first because builds.template_id has no ON DELETE.
-	tx.delete(builds).where(inArray(builds.templateId, templateIds)).run();
+	if (doomedOrgIds.length)
+		tx.delete(builds)
+			.where(
+				and(inArray(builds.templateId, templateIds), inArray(builds.organizationId, doomedOrgIds))
+			)
+			.run();
+	const survivors = tx
+		.select({ id: builds.id })
+		.from(builds)
+		.where(inArray(builds.templateId, templateIds))
+		.all();
+	if (survivors.length) {
+		const fallback = tx
+			.select({ id: templates.id })
+			.from(templates)
+			.where(and(isNull(templates.ownerOrgId), notInArray(templates.id, templateIds)))
+			.orderBy(asc(templates.createdAt), asc(templates.name))
+			.limit(1)
+			.get();
+		if (!fallback)
+			throw new ApiError(
+				409,
+				'Other chapters still use this kit copy and there is no built-in kit to move them to, so nothing was deleted.'
+			);
+		tx.update(builds)
+			.set({ templateId: fallback.id })
+			.where(inArray(builds.templateId, templateIds))
+			.run();
+	}
 	tx.delete(templates).where(inArray(templates.id, templateIds)).run();
 }
 
@@ -321,7 +352,11 @@ export async function deleteAccount(db: Db, userId: string): Promise<DeletionRes
 			.map((d) => d.id);
 
 		repointBuildsOffTemplates(tx as unknown as Db, plan.templateIds);
-		deleteOwnedTemplates(tx as unknown as Db, plan.templateIds);
+		deleteOwnedTemplates(
+			tx as unknown as Db,
+			plan.templateIds,
+			doomed.map((f) => f.orgId)
+		);
 		const doomedBuilds = [...myDrafts, ...orphanIds];
 		if (doomedBuilds.length) tx.delete(builds).where(inArray(builds.id, doomedBuilds)).run();
 		if (doomed.length)

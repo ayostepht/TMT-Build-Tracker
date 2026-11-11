@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
 import type { TeamRole } from '#lib/domain/types.ts';
 import { normalizeRole } from './access';
 import type { Db } from './db';
@@ -207,6 +207,34 @@ export function countPendingInvites(db: Db, orgId: string): number {
 			)
 			.get()?.n ?? 0
 	);
+}
+
+/** How many used-up (cancelled, rejected, expired) invitations a chapter keeps. */
+export const KEEP_OLD_INVITATIONS = 50;
+
+/**
+ * Durable bound for the invite/cancel loop: delete the chapter's old invitations that can no longer
+ * be used (cancelled, rejected, or pending but expired) beyond the newest `keep`. Open invitations and
+ * accepted ones are never touched (only pending ones are ever read by the app). Call when creating one.
+ */
+export function pruneOldInvitations(db: Db, orgId: string, keep = KEEP_OLD_INVITATIONS): number {
+	const stale = db
+		.select({ id: invitation.id })
+		.from(invitation)
+		.where(
+			and(
+				eq(invitation.organizationId, orgId),
+				sql`${invitation.status} != 'accepted'`,
+				sql`(${invitation.status} != 'pending' or ${invitation.expiresAt} <= ${Date.now()})`
+			)
+		)
+		.orderBy(desc(invitation.createdAt), sql`rowid desc`)
+		.limit(100000)
+		.offset(keep)
+		.all();
+	let n = 0;
+	for (const r of stale) n += db.delete(invitation).where(eq(invitation.id, r.id)).run().changes;
+	return n;
 }
 
 type ChapterQuotaKey =

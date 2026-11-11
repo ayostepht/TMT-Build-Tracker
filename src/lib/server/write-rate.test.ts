@@ -40,14 +40,43 @@ describe('write rate limit', () => {
 		expect(takeWriteToken('a', cfg, 600)).toBe(0); // 2/s refill
 	});
 
-	it('ignores reads, auth routes, non-api paths and anonymous requests', () => {
+	it('ignores reads, auth routes and anonymous requests', () => {
 		vi.stubEnv('WRITE_RATE_BURST', '1');
 		for (let i = 0; i < 5; i++) {
 			expect(writeRateResponse(u, 'GET', '/api/builds', () => false, 0)).toBeNull();
 			expect(writeRateResponse(u, 'POST', '/api/auth/sign-in', () => false, 0)).toBeNull();
-			expect(writeRateResponse(u, 'POST', '/login', () => false, 0)).toBeNull();
 			expect(writeRateResponse(null, 'POST', '/api/builds', () => false, 0)).toBeNull();
 		}
+	});
+
+	it('limits form actions outside /api/ and shapes the refusal per caller', async () => {
+		vi.stubEnv('WRITE_RATE_BURST', '1');
+		const path = '/teams/x/members';
+		expect(writeRateResponse(u, 'POST', path, () => false, 0)).toBeNull();
+		const plain = writeRateResponse(
+			u,
+			'POST',
+			path,
+			() => false,
+			0,
+			new Headers({ accept: 'text/html' })
+		);
+		expect(plain?.status).toBe(429);
+		expect(plain!.headers.get('content-type')).toContain('text/html');
+		expect(await plain!.text()).toContain('Too many changes');
+		const enh = writeRateResponse(
+			u,
+			'POST',
+			path,
+			() => false,
+			0,
+			new Headers({ 'x-sveltekit-action': 'true' })
+		);
+		const body = await enh!.json();
+		expect(body).toMatchObject({ type: 'failure', status: 429 });
+		expect(JSON.parse(body.data)).toEqual([{ error: 1, code: 2 }, expect.any(String), 'rate']);
+		const json = writeRateResponse(u, 'POST', path, () => false, 0, new Headers());
+		expect(await json!.json()).toMatchObject({ code: 'rate' });
 	});
 
 	it('exempts site admins', () => {

@@ -60,7 +60,8 @@
 			<p class="muted">
 				Site admins manage the kit and who else is an admin. Admins set by the server configuration
 				cannot be changed here. If ADMIN_EMAILS names someone who has no account yet, the first
-				account stays admin until they sign up.
+				account stays admin until they sign up. On a self-hosted server, an address in ADMIN_EMAILS
+				becomes an admin as soon as someone registers it, so register it first.
 			</p>
 			<ul class="acct-list admins">
 				{#each data.siteAdmins as a (a.id)}

@@ -11,6 +11,8 @@ import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { diskHasRoom } from '../config';
+import { ApiError } from '../access';
 import { entryChunks, readZipDirectory } from '../threemf/zipfile';
 
 export interface NestedLimits {
@@ -42,6 +44,8 @@ export async function extractNestedThreeMfs(
 		declared += e.usize;
 		if (declared > limits.maxTotalBytes) throw new Error('That zip is too large to unpack');
 	}
+	// the route checked the disk floor before the upload; the unpacked copies are written after it
+	if (!diskHasRoom()) throw new ApiError(507, 'The server is almost out of disk space');
 	await mkdir(outDir, { recursive: true });
 	const out: NestedFile[] = [];
 	let total = 0;

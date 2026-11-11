@@ -25,7 +25,8 @@ import {
 	ensurePersonalWorkspace,
 	listTeams,
 	isPersonalMetadata,
-	isPersonalOrg
+	isPersonalOrg,
+	pruneOldInvitations
 } from './teams';
 import {
 	emptyPlan,
@@ -34,6 +35,7 @@ import {
 	deleteOwnedTemplates,
 	type FilePlan
 } from './account';
+import { ApiError } from './access';
 import { repointBuildsOffTemplates } from './builds/repoint';
 import { QuotaError, quotaLimit } from './quota';
 
@@ -256,6 +258,8 @@ export function createAuth(db: Db) {
 								message: 'Create a chapter to invite people; My builds is just for you'
 							});
 						quotaGuard(() => assertCanInvite(db, inviter.id, org.id));
+						// Keep the invitation table bounded under invite/cancel loops.
+						pruneOldInvitations(db, org.id);
 					},
 					beforeDeleteOrganization: async ({ organization: org }) => {
 						if (
@@ -268,8 +272,18 @@ export function createAuth(db: Db) {
 						// The rows cascade away with the chapter; list their files first, remove them after.
 						const plan = planFiles(db, { orgIds: [org.id] });
 						// Builds in other workspaces that use this chapter's kit copies go back to the base kit.
-						repointBuildsOffTemplates(db, plan.templateIds);
-						deleteOwnedTemplates(db, plan.templateIds);
+						// One transaction: a refusal (409) leaves the chapter untouched. The plugin has already
+						// checked session, membership and the delete permission before this hook, and its own
+						// delete is a single statement that our part has cleared of FK blockers.
+						try {
+							db.transaction((tx) => {
+								repointBuildsOffTemplates(tx as unknown as typeof db, plan.templateIds);
+								deleteOwnedTemplates(tx as unknown as typeof db, plan.templateIds, [org.id]);
+							});
+						} catch (e) {
+							if (e instanceof ApiError) throw new APIError('CONFLICT', { message: e.message });
+							throw e;
+						}
 						const now = Date.now();
 						for (const [k, v] of pendingFiles)
 							if (now - v.at > PENDING_FILES_MS) pendingFiles.delete(k);

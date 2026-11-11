@@ -13,7 +13,12 @@
 import { Unzip, UnzipInflate, UnzipPassThrough, strFromU8 } from 'fflate';
 import { XMLParser } from 'fast-xml-parser';
 import { decodeEntities } from '#lib/domain/threemf.ts';
-import { entryChunks, readZipDirectory } from '../threemf/zipfile';
+import {
+	BAD_ZIP_MESSAGE,
+	MAX_UNWANTED_BUFFER,
+	entryChunks,
+	readZipDirectory
+} from '../threemf/zipfile';
 import type { PaintEntry } from './mesh-format';
 import {
 	bounds,
@@ -233,8 +238,10 @@ export async function streamEntries(
 	maxEntryBytes = MAX_MODEL_ENTRY
 ): Promise<void> {
 	let failure: Error | null = null;
+	let sinceEntry = 0; // bytes pushed since an entry last produced data or began
 	const uz = new Unzip((file) => {
 		if (failure) return;
+		sinceEntry = 0;
 		const sink = want(file.name);
 		if (!sink) return;
 		let size = 0;
@@ -242,6 +249,7 @@ export async function streamEntries(
 		const cap =
 			sink instanceof ModelScanner ? maxEntryBytes : Math.min(maxEntryBytes, MAX_BUFFERED_ENTRY);
 		file.ondata = (err, chunk, final) => {
+			sinceEntry = 0;
 			if (dead) return;
 			if (err) {
 				failure ??= new Error(`Cannot read ${file.name}: ${err.message}`);
@@ -278,6 +286,9 @@ export async function streamEntries(
 	try {
 		for await (const chunk of source as AsyncIterable<Uint8Array>) {
 			uz.push(chunk);
+			sinceEntry += chunk.length;
+			if (sinceEntry > MAX_UNWANTED_BUFFER)
+				failure ??= new Error('This zip holds too much data the reader cannot skip');
 			if (failure) break;
 		}
 		if (!failure) uz.push(new Uint8Array(0), true);
@@ -301,7 +312,11 @@ export async function readEntries(
 	maxEntryBytes = MAX_MODEL_ENTRY
 ): Promise<void> {
 	let dir: Awaited<ReturnType<typeof readZipDirectory>> | null = null;
-	if (open.path) dir = await readZipDirectory(open.path).catch(() => null);
+	// a file on disk is never push-parsed: that buffers what it does not want
+	if (open.path)
+		dir = await readZipDirectory(open.path).catch(() => {
+			throw new Error(BAD_ZIP_MESSAGE);
+		});
 	if (!dir) return streamEntries(open(), want, onDone, maxEntryBytes);
 	for (const e of dir) {
 		const sink = want(e.name);

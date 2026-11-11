@@ -418,6 +418,110 @@ describe('kit copies used from another workspace', () => {
 	});
 });
 
+describe('deleteOwnedTemplates scope', () => {
+	function copy(orgId: string, base: string | null) {
+		const id = `c-${orgId}`;
+		db.insert(templates)
+			.values({
+				id,
+				slug: id,
+				name: 'Copy',
+				version: '1',
+				ownerOrgId: orgId,
+				baseTemplateId: base
+			} as never)
+			.run();
+		return id;
+	}
+
+	it("deletes the doomed workspace's own build on its copy with the workspace", async () => {
+		await signUp('Admin', 'admin@example.test');
+		const pat = await signUp('Pat', 'pat@example.test');
+		const personal = findPersonalWorkspace(db, pat.id)!;
+		const c = copy(personal.id, templateId);
+		const b = addBuild(personal.id, pat.id);
+		db.update(builds).set({ templateId: c }).where(eq(builds.id, b)).run();
+		await expect(deleteAccount(db, pat.id)).resolves.toBeTruthy();
+		expect(db.select().from(builds).where(eq(builds.id, b)).get()).toBeUndefined();
+		expect(db.select().from(templates).where(eq(templates.id, c)).get()).toBeUndefined();
+	});
+
+	it('keeps a surviving chapter build on a copy with a null base, on the built-in kit', async () => {
+		await signUp('Admin', 'admin@example.test');
+		const pat = await signUp('Pat', 'pat@example.test');
+		const lee = await signUp('Lee', 'lee@example.test');
+		const personal = findPersonalWorkspace(db, pat.id)!;
+		addChapter('c1', [
+			[pat.id, 'owner'],
+			[lee.id, 'owner']
+		]);
+		const c = copy(personal.id, null);
+		const b = addBuild('c1', lee.id);
+		db.update(builds).set({ templateId: c }).where(eq(builds.id, b)).run();
+		await expect(deleteAccount(db, pat.id)).resolves.toBeTruthy();
+		expect(db.select().from(builds).where(eq(builds.id, b)).get()!.templateId).toBe(templateId);
+		expect(db.select().from(templates).where(eq(templates.id, c)).get()).toBeUndefined();
+	});
+
+	it('refuses with 409 and deletes nothing when no built-in kit can take the build', async () => {
+		await signUp('Admin', 'admin@example.test');
+		const pat = await signUp('Pat', 'pat@example.test');
+		const lee = await signUp('Lee', 'lee@example.test');
+		const personal = findPersonalWorkspace(db, pat.id)!;
+		addChapter('c1', [
+			[pat.id, 'owner'],
+			[lee.id, 'owner']
+		]);
+		const c = copy(personal.id, null);
+		const b = addBuild('c1', lee.id);
+		db.update(builds).set({ templateId: c }).where(eq(builds.id, b)).run();
+		// Make every other template a copy so none is global.
+		db.update(templates).set({ ownerOrgId: 'c1' }).where(eq(templates.id, templateId)).run();
+		await expect(deleteAccount(db, pat.id)).rejects.toMatchObject({ status: 409 });
+		expect(db.select().from(builds).where(eq(builds.id, b)).get()!.templateId).toBe(c);
+		expect(db.select().from(user).where(eq(user.id, pat.id)).get()).toBeTruthy();
+	});
+});
+
+describe('pruneOldInvitations', () => {
+	it('keeps the newest 50 used-up invitations, and never open or accepted ones', async () => {
+		await signUp('Admin', 'admin@example.test');
+		const owner = await signUp('Owner', 'owner@example.test');
+		await post('/organization/create', owner.cookie, { name: 'C1', slug: 'c1' });
+		const org = db.select().from(organization).where(eq(organization.slug, 'c1')).get()!;
+		const far = new Date(Date.now() + 86_400_000);
+		const mk = (i: number, status: string) =>
+			db
+				.insert(invitation)
+				.values({
+					id: `inv-${status}-${i}`,
+					organizationId: org.id,
+					email: `x${i}@example.test`,
+					role: 'viewer',
+					status,
+					expiresAt: far,
+					createdAt: new Date(1000 + i),
+					inviterId: owner.id
+				})
+				.run();
+		for (let i = 0; i < 60; i++) mk(i, 'canceled');
+		mk(100, 'accepted');
+		mk(101, 'pending');
+		const r = await post('/organization/invite-member', owner.cookie, {
+			email: 'new@example.test',
+			role: 'viewer',
+			organizationId: org.id
+		});
+		expect(r.status).toBe(200);
+		const rows = db.select().from(invitation).where(eq(invitation.organizationId, org.id)).all();
+		expect(rows.filter((x) => x.status === 'canceled')).toHaveLength(50);
+		expect(rows.some((x) => x.id === 'inv-canceled-0')).toBe(false);
+		expect(rows.some((x) => x.id === 'inv-canceled-59')).toBe(true);
+		expect(rows.some((x) => x.status === 'accepted')).toBe(true);
+		expect(rows.filter((x) => x.status === 'pending')).toHaveLength(2);
+	});
+});
+
 describe('chapter deletion removes files (plugin endpoint)', () => {
 	it('removes photos after the transaction', async () => {
 		await signUp('Admin', 'admin@example.test');

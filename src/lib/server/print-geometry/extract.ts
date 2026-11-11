@@ -7,7 +7,7 @@ import { MATCH_THRESHOLD, matchPlates, type MatchPart } from '#lib/domain/plates
 import { deriveUnits } from '#lib/domain/print-footprint.ts';
 import type { Pt } from '#lib/domain/geom2d.ts';
 import type { ThreeMfObject, ThreeMfPlate } from '#lib/domain/threemf.ts';
-import { parseThreeMf } from '../threemf/index';
+import { parseThreeMf, parseThreeMfFile } from '../threemf/index';
 import {
 	extractGeometry,
 	readStructure,
@@ -78,7 +78,7 @@ export async function extractPartGeometry(
 	label?: string
 ): Promise<{ parts: ExtractedPart[]; report: ExtractReport }> {
 	const t0 = Date.now();
-	const summary = await parseThreeMf(open());
+	const summary = await (open.path ? parseThreeMfFile(open.path) : parseThreeMf(open()));
 	if (label && summary.kind === 'plain')
 		for (const pl of summary.plates)
 			for (const o of pl.objects) if (/^Object \d+$/.test(o.name)) o.name = label;
