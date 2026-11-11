@@ -1,46 +1,49 @@
 # CLAUDE.local.md (template)
 
-Copy to `CLAUDE.local.md` (gitignored) and fill in for this machine. Never commit the
-filled copy. The maintainer keeps the canonical private values outside the repo; ask for
-them instead of guessing. See `docs/dev-environments.md`.
+Copy to `CLAUDE.local.md` (gitignored) and fill in for this machine. Only private values
+and machine facts go here; rules and workflow live in `CLAUDE.md` and
+`docs/dev-environments.md`. The maintainer keeps the canonical copy outside git: ask for
+it instead of guessing.
 
 ## This machine
 
 - Machine: <Mac | Unraid dev container | ...>
-- Repo path: <...>
-- E2E lock: `flock node_modules/.e2e.lock` (installed: yes/no)
-- Docker available: yes/no. Can deploy from here: yes/no.
+- Repo path: <...> (Unraid: also the host path, `<HOST_REPO>`)
+- Commit identity: <GITHUB_USER> <<COMMIT_EMAIL>>
+- E2E lock available: yes/no. Docker: yes/no. Deploys from here: yes/no.
 
-## Test copy
+## Network
 
-- URL: <TEST_COPY_URL>
-- Container name / template: <...>
-- Data (appdata) path: <...>
-- Backup location: <...>
+- Unraid LAN IP: <LAN_IP> · Tailscale IP: <TAILSCALE_IP>
 
-## Deploy routine (exact commands)
+## Test copy (Unraid)
 
-1. <build>
-2. <backup>
-3. <swap container>
-4. <health check>
-5. <rollback if needed>
+- URLs: http://<LAN_IP>:8420, http://<TAILSCALE_IP>:8420
+- Container `tmt-build-tracker`, image `tmt-build-tracker:test`; latest deploy: <rNN = commit>
+- Data dir: <host path> (`secret.env` holds `BETTER_AUTH_SECRET`, root-only; never print it)
+- MakeGood files: <host path> (mounted read-only at `/makegood`)
+- Pre-reset archive: <path>
 
-## Migration rehearsal
+## Exact deploy commands (Unraid)
 
-- Copy of test data: <path>; command: <...>
+<backup one-liner, docker run flags, health check URL>
 
 ## Real-file tests
 
-- `KITPACK_DIR=<path>`
-- `TMT_SLICED_3MF=<path to the maintainer's sliced project>`
-- `TMT_REAL_ELEGOO=<printer host>` (opt-in, read-only probe)
+- `<HOST_REPO>`, `<MAKEGOOD_FILES>`, `TMT_SLICED_3MF=<file>`, `TMT_XPA_3MF=<file>`
+- `TMT_REAL_ELEGOO=<PRINTER_IP>`
 
-## Printer (never commit these)
+## Printer (never commit)
 
-- Elegoo Centauri Carbon: host <PRINTER_IP>, camera `http://<PRINTER_IP>:3031/video`
+- Elegoo Centauri Carbon: <PRINTER_IP>, SDCP port 3030, camera `http://<PRINTER_IP>:3031/video`;
+  keep-out: filament cutter x 246..256, y 0..20
+
+## Secrets (locations only, never values)
+
+- GitHub token: <where>; Anthropic key: <where>; Claude login: <where>
 
 ## Other
 
-- GitHub/GHCR access: <gh auth status, token scopes>
-- Notes:
+- Original prototype artifact: <PROTOTYPE_ARTIFACT_ID>; prototype DB snapshot: <path>
+  (personal data, never commit)
+- Scratch awaiting the maintainer's OK to delete: <paths>

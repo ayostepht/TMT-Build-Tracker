@@ -48,7 +48,11 @@ Exceptions only when the maintainer says so in this session.
 | Security review (auth, access, API, uploads, printers) | `security-reviewer` |
 
 Work that spans areas: split it so each agent owns distinct files, or run them in
-sequence. Never let two parallel agents edit the same file.
+sequence. Never let two parallel agents edit the same file. Shared contracts first: if
+parallel work needs a schema change or new shared types (`domain/types.ts`), dispatch that
+alone (`kit-and-startup` / `build-state`) and start the parallel agents after it lands.
+Urgent fixes (e.g. a print in progress) ship on their own, built from a clean worktree,
+ahead of unfinished work.
 
 **Brief every dispatch with:**
 1. Goal and the user-visible result, in the maintainer's words where possible.
@@ -61,7 +65,10 @@ sequence. Never let two parallel agents edit the same file.
 output. Missing output, skipped checks without a reason, or failing checks → send it back
 to the same agent (SendMessage), don't fix or re-run it yourself. Before committing a change
 set, dispatch `verifier` once for the whole set; dispatch `security-reviewer` when the diff
-touches auth, access, API routes, uploads or printers.
+touches auth, access, API routes, uploads or printers. Don't re-run the full e2e suite
+before a deploy when the agents ran their relevant specs (maintainer, 2026-11-08). For UI
+changes, look at one desktop and one phone screenshot from the report before telling the
+maintainer it's done.
 
 **End of session (and before a context reset):** fold the agents' STATUS notes into
 `docs/STATUS.md` (rewrite in place, delete what's done), add a `docs/CHANGELOG.md` entry
@@ -80,9 +87,15 @@ _Every specialist in `.claude/agents/` follows this; agent files only add area r
   tests next to the code before changing it.
 - **Stay in scope:** edit only the files the brief gives you. If the task needs a file
   outside it, or would break a Ground rule or a STATUS decision, stop and report back.
-- **Never:** commit, push, tag, deploy, `rm` files, copy or touch the live database,
+- **Never:** commit, push, tag, deploy, `rm` files (write new files instead; deletions
+  are the maintainer's call), copy or touch the live database or the test copy container,
   contact real printers (unless the brief says so), or put private values (IPs, domains,
   emails, access codes) in code, tests, fixtures or reports.
+- **Blocked or denied command** (permission prompt, hook): stop and report it. Never retry
+  it with a different spelling or another tool.
+- **Clean up:** dev servers and throwaway containers per `docs/dev-environments.md`
+  (ports 5173-5199, containers named `tmt-*`, `--rm`); leave no background processes or
+  containers running. Send exactly one final report.
 - **E2E:** use `--reporter=line` (the html reporter hangs on failure) and the lock
   described in `docs/dev-environments.md` for this machine. Run your specs alone and with
   specs that share data; the full suite only when asked.
@@ -148,8 +161,9 @@ Gotchas:
 
 - Visual language: tokens in `src/app.css` (Barlow Condensed / IBM Plex Sans / IBM Plex
   Mono, light + dark via `prefers-color-scheme` and `data-theme`). Mobile-first: makers
-  update status from their phone at the printer. UI is checked at 390 px and 1440/1920 px,
-  light and dark.
+  update status from their phone at the printer. UI is checked with screenshots at 390 px
+  (phone) and 1440, 1920 and 2560 px (desktop, also at 125/150% device scale), light and
+  dark; checks up to 1280 px once missed a badly scaled desktop layout.
 - Actions are buttons (`.btn`, `.btn.primary`, `.btn.go` + `.btn-arrow`, `.btn.back`,
   `.btn.ghost`) or clickable badges (`.pill-link`); text links only inside sentences.
 - Global class names in `src/app.css` (`.bar`, `.head`, `.chip`, `.group`, `.dot`, `.more`,
