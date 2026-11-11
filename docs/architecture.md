@@ -81,6 +81,13 @@ Sections match the subagents in `.claude/agents/`:
 - **Run choice on per-part plates** (`domain/run-choice.ts`): perPartRuns plates (rims,
   plate 13) print one part per physical print. Default (`defaultRunParts`): the part
   already Printing, else the first part not Printed with runs left; never all.
+- **Filament by role** (`domain/accounting.ts`): a sliced file's grams per role
+  (`Plate.filamentGrams`) go through `plateFileRoleGrams(plate, partRoles)`, which keeps
+  only roles that a part on the plate has (a file's slot → role map can disagree with the
+  design: stray TPU slots on PETG plates). `roleShares`/`filamentStats` use the kept grams
+  renormalized; `estPerRun` stays slicer grams, else the file's full total, else BOM / runs;
+  no overlap → the parts' own roles. `splitGramsByRole` (`spool-split.ts`, Spoolman
+  deduction) uses the same helper for whole-plate runs.
 - **Part print logs:** `partRuns(view, slug)` in `logrun.ts` includes whole-plate runs
   that cover the part; `RunTable` tags them "Plate N · whole plate".
 - **Activity:** every activity kind needs a sentence in `describeActivity` /

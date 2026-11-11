@@ -1,4 +1,5 @@
 /** Split the grams of a logged run across filament roles (to deduct from linked spools). Pure. */
+import { plateFileRoleGrams } from './accounting.ts';
 import { runTargets } from './actions.ts';
 import type { BuildView, PrintRun, PrintRunInput } from './types.ts';
 
@@ -26,8 +27,16 @@ export function splitGramsByRole(
 
 	let weights: Record<string, number> = {};
 	const wholePlate = plate && slugs.length === plate.parts.length;
-	if (wholePlate && plate && Object.keys(plate.filamentGrams).length) {
-		weights = { ...plate.filamentGrams };
+	// The parts' roles decide which roles the file's grams go to (see plateFileRoleGrams).
+	const fileWeights =
+		wholePlate && plate
+			? plateFileRoleGrams(
+					plate,
+					plate.parts.flatMap((s) => (view.state[s] ? [roleOf(s) ?? ''] : []))
+				)
+			: null;
+	if (fileWeights) {
+		weights = fileWeights;
 	} else {
 		for (const s of slugs) {
 			const role = roleOf(s);
