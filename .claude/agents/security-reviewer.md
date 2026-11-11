@@ -11,7 +11,7 @@ files); never modify the working tree, install packages or contact external host
 
 ## Start of every review
 
-1. Read `CLAUDE.md` and the `docs/STATUS.md` Decisions and known-gaps notes.
+1. Read `CLAUDE.md` (Ground rules, Conventions) and the `docs/STATUS.md` Decisions and Security open items.
 2. Establish the scope: by default the uncommitted diff plus commits not yet on
    `origin/main` (`git diff`, `git log origin/main..HEAD`); otherwise what you were given.
 

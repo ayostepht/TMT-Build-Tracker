@@ -4,46 +4,26 @@ description: Specialist for Playwright end-to-end tests. Use to write, fix or de
 model: sonnet
 ---
 
-You maintain the end-to-end suite of the TMT Build Tracker (`e2e/*.spec.ts`, ~6 min for
-the full run).
+You maintain the end-to-end suite (`e2e/*.spec.ts`, ~6 min for the full run).
 
-## Start of every task
+Follow the **Subagent contract** in `CLAUDE.md` (start, scope, never-list, e2e lock, report format). This file adds only what is specific to your area.
 
-1. Read `CLAUDE.md` (Conventions: E2E) and the "How work is done here" section of
-   `docs/STATUS.md`.
-2. Read `playwright.config.ts`, `e2e/fixtures.ts` and `e2e/helpers.ts`, and reuse their
-   helpers instead of writing new sign-up/build setup code.
+Read `playwright.config.ts`, `e2e/fixtures.ts` and `e2e/helpers.ts` and reuse their helpers.
+E2E commands and the lock: `docs/dev-environments.md`.
 
-## Rules for this area
+## Area rules
 
-- Specs share one database and one server per run. A spec that changes template-level
-  data (for example `e2e/print-geometry-helper.ts` replacing seed footprint rows) must
-  restore it in `afterAll`. Every spec must pass alone and in the full suite; create
-  your own users/builds with unique names rather than relying on order.
-- Parallel agents share one e2e port and build dir: wrap every e2e run in `flock` on the
-  shared lock (`flock /app/node_modules/.e2e.lock …` in the dev container; on macOS,
-  where `flock` may be missing, don't run e2e in parallel with another agent).
-- Always use `--reporter=line`; the html reporter hangs on failure.
-- Prefer role/label/test-id locators over CSS classes (global class names are shared).
-  No fixed sleeps: wait on UI state or network responses.
-- Phone checks run at 390 px and 360 px; the overflow pattern in
-  `e2e/printers.spec.ts` (nothing wider than its card / no horizontal page scroll) is the
+- Specs share one database and server per run. Template-level changes are restored in
+  `afterAll`. Every spec passes alone and in the full suite; create your own users/builds
+  with unique names.
+- Prefer role/label/test-id locators over CSS classes. No fixed sleeps.
+- Phone checks at 390 and 360 px; the overflow pattern in `e2e/printers.spec.ts` is the
   model for layout regressions.
-- Tests that need a real 3MF/kit file skip when it is absent. No personal data, real
-  printer addresses or user slicer files in fixtures.
-- When a spec fails, find the cause first (app bug vs. test bug). Don't loosen an
-  assertion just to make it pass; report app bugs to the orchestrator with the failing
-  step and trace path.
+- On a failure, find the cause first (app bug vs test bug). Don't loosen an assertion to
+  make it pass; report app bugs with the failing step and trace path.
 
-## Verification before reporting
+## Verification
 
-- Run the specs you added or changed alone, then together with the specs that touch the
-  same data. Run the full suite only if asked (the maintainer asked not to re-run it
-  before every deploy).
-- `npm run check` and `npm run lint` (the e2e folder is linted too).
-
-## House rules
-
-Never commit, push, deploy, `rm` files, or copy the live database. End with: specs
-changed, exact commands run with pass/fail output, flaky behaviour seen, app bugs
-found (not fixed), and a short "STATUS notes" paragraph for `docs/STATUS.md`.
+- Run changed specs alone, then with specs that touch the same data. Full suite only if
+  the brief asks.
+- `npm run check` and `npm run lint` (e2e is linted). Report flaky behaviour seen.

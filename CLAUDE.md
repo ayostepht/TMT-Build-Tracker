@@ -1,219 +1,189 @@
 # TMT Build Tracker
 
-> Start here: read `docs/STATUS.md` (current state and next steps), then this file.
-> Maintainer-machine specifics live in the untracked `CLAUDE.local.md`.
+Self-hostable, open-source web app for makers 3D-printing **MakeGood 3D TMT** (toddler
+mobility trainer) chairs: teams ("chapters") plan, print, assemble and hand off builds.
 
-Self-hostable, open-source web app for makers 3D-printing **MakeGood 3D TMT**
-(toddler mobility trainer) chairs: teams ("chapters") plan, print, assemble
-and hand off builds together.
+## Docs map
+
+| File | What it holds | Who reads it |
+| --- | --- | --- |
+| `CLAUDE.md` (this) | Rules, stack gotchas, conventions, how work is done | Everyone |
+| `docs/STATUS.md` | Current state, open items, decisions, next steps | Orchestrator, every session |
+| `docs/architecture.md` | Where code lives and how each area works | Subagents, for their section |
+| `docs/dev-environments.md` | Machines, setup, e2e locking, deploy outline | Orchestrator on a new machine |
+| `CLAUDE.local.md` (untracked) | This machine's private values: test copy, printer, deploy specifics | Orchestrator |
+| `docs/CHANGELOG.md` | Deploy history | Append only |
+| `.claude/agents/*.md` | Specialist subagents | Claude Code |
+
+## Main session: you are the orchestrator
+
+_Subagents: skip this section; follow "Subagent contract" below._
+
+**Start of session:** read `docs/STATUS.md`, then `CLAUDE.local.md`. If `CLAUDE.local.md`
+is missing, follow "New machine" in `docs/dev-environments.md` before anything else.
+
+**You do:** talk to the maintainer, plan, split work, brief subagents, read their reports,
+decide, update `docs/STATUS.md` / `docs/CHANGELOG.md` / `docs/architecture.md`, commit,
+push and deploy (with the maintainer's OK).
+
+**You don't:** edit anything under `src/`, `e2e/`, `scripts/`, `drizzle/`, `static/` or
+config files, and you don't run tests, builds or the dev server. If a fix is one line,
+it still goes to the owning agent. Reading code to write a good brief is fine.
+Exceptions only when the maintainer says so in this session.
+
+**Routing:**
+
+| Area | Agent |
+| --- | --- |
+| Part status, runs, undo, accounting, activity, SSE, drafts (server), import | `build-state` |
+| Arranger, 3MF parse/export, plate matching, plate times, print template | `plates-3mf` |
+| Printer adapters, supervisor, jobs, camera, Spoolman, printer store | `printers` |
+| Design tab, 3D viewer, palettes, picker, designs gallery, Studio UI, `app.css` | `design-studio-ui` |
+| Filament catalog data and scripts | `filaments-catalog` |
+| Schema, migrations, seed, startup, kit pack, STEP → GLB | `kit-and-startup` |
+| Auth, teams, invites, workspaces, onboarding, wizard, Overview/Finish, kit admin UI, layout/nav | `app-shell` |
+| Dockerfile, CI, Unraid, README install docs, origin/proxy, PWA | `release-pwa` |
+| Writing or fixing Playwright specs | `e2e-playwright` |
+| Final gate before commit (check, lint, unit, build, chosen e2e) | `verifier` |
+| Security review (auth, access, API, uploads, printers) | `security-reviewer` |
+
+Work that spans areas: split it so each agent owns distinct files, or run them in
+sequence. Never let two parallel agents edit the same file.
+
+**Brief every dispatch with:**
+1. Goal and the user-visible result, in the maintainer's words where possible.
+2. Files/dirs the agent owns for this task, and files it must not touch.
+3. Decisions already made (link STATUS Decisions) and what is out of scope.
+4. Checks to run (its own Verification list; name the e2e specs).
+5. Report: per the Subagent contract.
+
+**Accepting work:** a report counts only if it shows the commands run and their pass/fail
+output. Missing output, skipped checks without a reason, or failing checks → send it back
+to the same agent (SendMessage), don't fix or re-run it yourself. Before committing a change
+set, dispatch `verifier` once for the whole set; dispatch `security-reviewer` when the diff
+touches auth, access, API routes, uploads or printers.
+
+**End of session (and before a context reset):** fold the agents' STATUS notes into
+`docs/STATUS.md` (rewrite in place, delete what's done), add a `docs/CHANGELOG.md` entry
+per deploy, update the touched `docs/architecture.md` sections, commit them with the work.
+
+**Ask the maintainer** before: deploying, deleting anything, schema changes on the test
+copy, revisiting a STATUS decision, anything outward-facing (push to a public place, PRs
+upstream, making the repo public).
+
+## Subagent contract
+
+_Every specialist in `.claude/agents/` follows this; agent files only add area rules._
+
+- **Start:** read this file's Ground rules and Conventions, your section of
+  `docs/architecture.md`, and the open items for your area in `docs/STATUS.md`. Read the
+  tests next to the code before changing it.
+- **Stay in scope:** edit only the files the brief gives you. If the task needs a file
+  outside it, or would break a Ground rule or a STATUS decision, stop and report back.
+- **Never:** commit, push, tag, deploy, `rm` files, copy or touch the live database,
+  contact real printers (unless the brief says so), or put private values (IPs, domains,
+  emails, access codes) in code, tests, fixtures or reports.
+- **E2E:** use `--reporter=line` (the html reporter hangs on failure) and the lock
+  described in `docs/dev-environments.md` for this machine. Run your specs alone and with
+  specs that share data; the full suite only when asked.
+- **Report (final message), in this order:**
+  1. Files changed (and migrations generated).
+  2. Commands run, each with pass/fail and the relevant output lines.
+  3. Skipped checks and why (e.g. real-file tests without `KITPACK_DIR`, no Docker).
+  4. Screenshot paths (UI work), app bugs found but not fixed.
+  5. Questions or decisions for the maintainer.
+  6. **STATUS notes:** 2-5 lines for `docs/STATUS.md`, and **Architecture notes:** what
+     changed in your `docs/architecture.md` section (or "none").
 
 ## Ground rules
 
-- **HARD RULE: never re-orient parts in 3D.** Parts keep the face-down
-  orientation from their source file (the slicer profile). The arranger and
-  the 3MF export may only rotate parts flat about Z (0/90° or a free in-plane
-  angle). Never change which face is down, stand a part on an edge, or tilt it
-  off the bed (`ALLOW_3D_REORIENT = false` in `src/lib/domain/arrange.ts`).
-  A part that doesn't fit flat is reported as oversize, with advice (other
-  profile, two-piece variant, bigger bed).
-
-- **MakeGood files: CC0, shipped as a kit pack, never in git.** MakeGood's 3D
-  TMT files are Creative Commons Public Domain (confirmed 2026-11-04). The
-  converted 3D model and print geometry ship as a versioned kit pack (GitHub
-  release asset, baked into the Docker image, `kitpacks/index.json` holds the
-  sha256) and are installed on first start. Always credit MakeGood. Raw
-  MakeGood files and derived binaries stay out of git (size): `.gitignore`
-  blocks `*.3mf`, `*.glb`, `*.step`, `*.kitpack`, `uploads/`; keep it that way.
-  The maker guide PDF is **not** bundled: reference MakeGood's page numbers
-  and link to their guide. Seed files carry data only.
-- **Template vs design vs build.** A _template_ is a printable kit (parts,
-  plates, guide, hardware) with generic filament roles (`primary`, `accent`,
-  `soft`, `tire`). A _color design_ maps roles to real filaments and parts to
-  roles. A _build_ belongs to a team, snapshots a design, and holds all
+- **HARD RULE: never re-orient parts in 3D.** Parts keep the face-down orientation from
+  their source file. The arranger and the 3MF export may only rotate parts flat about Z
+  (0/90° or a free in-plane angle). Never change which face is down, stand a part on an
+  edge, or tilt it (`ALLOW_3D_REORIENT = false` in `src/lib/domain/arrange.ts`). A part
+  that doesn't fit flat is reported as oversize, with advice.
+- **Printers are read-only.** The only command ever sent is Elegoo SDCP Cmd 386
+  `{"Enable":1}` (camera on), through `sdcpEnvelope`. Never move, heat, pause, stop or start.
+- **MakeGood files: CC0, shipped as a kit pack, never in git.** The converted model and
+  print geometry ship as a versioned kit pack (GitHub release asset, baked into the Docker
+  image, sha256 in `kitpacks/index.json`), installed on first start. Always credit
+  MakeGood. `.gitignore` blocks `*.3mf`, `*.glb`, `*.step`, `*.kitpack`, `uploads/`; keep
+  it that way. The maker guide PDF is not bundled: reference page numbers and link it.
+- **Template vs design vs build.** A _template_ is a printable kit with generic filament
+  roles (`primary`, `accent`, `soft`, `tire`). A _color design_ maps roles to filaments
+  and parts to roles. A _build_ belongs to a team, snapshots a design, and holds all
   progress. Never put one user's colors or progress into a template.
-- **No personal data in fixtures or seeds.** Real build progress, recipient or
-  hospital names, and slicer files from users stay out of git. Tests that need
-  a real 3MF skip when the file is absent.
-- Everything a single `docker run` with an empty `/data` must work: migrations
-  and seeding run on startup and are idempotent.
+- **No personal data in fixtures or seeds** (build progress, recipient or hospital names,
+  user slicer files). Tests that need a real 3MF skip when the file is absent.
+- A single `docker run` with an empty `/data` must work: migrations and seeding run on
+  startup and are idempotent.
 
 ## Stack
 
-SvelteKit 3 (Svelte 5, TypeScript, `adapter-node`), SQLite via
-`better-sqlite3` and Drizzle (migrations in `drizzle/`, generated with
-drizzle-kit; never `push`), Better Auth 1.7 (email/password, organization
-plugin for teams/roles, optional OIDC via `OIDC_*` env), three.js for the 3D
-prototyper, fflate + fast-xml-parser for 3MF, Server-Sent Events for live
-updates, Vitest + Playwright.
+SvelteKit 3 (Svelte 5, TypeScript, `adapter-node`), SQLite via `better-sqlite3` and
+Drizzle (migrations in `drizzle/`, generated with drizzle-kit; never `push`), Better Auth
+1.7 (email/password, organization plugin for teams/roles, optional OIDC via `OIDC_*`),
+three.js, fflate + fast-xml-parser for 3MF, Server-Sent Events, Vitest + Playwright.
 
-SvelteKit 3 specifics that trip people up:
+Gotchas:
 
-- No `$lib` alias. Import app modules through package.json subpath imports
-  with explicit extensions: `#lib/server/db/index.ts`. Hook types come from
-  `@sveltejs/kit/hooks`, `building` from `$app/env`. Server config is read
-  from `process.env` in `src/lib/server/config.ts`.
-- `.npmrc` sets `legacy-peer-deps=true`; plain `npm install` fails on a peer
-  conflict without it.
-- `/api/auth/*` is routed to `auth.handler` directly in `src/hooks.server.ts`
-  (`svelteKitHandler` returned 404). OIDC sign-in uses
-  `signIn.social({ provider: 'oidc' })`; redirect URI
-  `<BETTER_AUTH_URL>/api/auth/callback/oidc`.
+- No `$lib` alias: import via package.json subpath imports with explicit extensions
+  (`#lib/server/db/index.ts`). Hook types from `@sveltejs/kit/hooks`, `building` from
+  `$app/env`. Server config is read from `process.env` in `src/lib/server/config.ts`.
+- `.npmrc` sets `legacy-peer-deps=true`; plain `npm install` fails without it.
+- `/api/auth/*` is routed to `auth.handler` directly in `src/hooks.server.ts`. OIDC uses
+  `signIn.social({ provider: 'oidc' })`; redirect URI `<BETTER_AUTH_URL>/api/auth/callback/oidc`.
 - Migrations load from `./drizzle`, so the server must start from the app root.
-- Origins: adapter-node v6 ignores `ORIGIN` and assumes https without a
-  protocol header. `scripts/proxy-origin.mjs` is preloaded (`node --import`,
-  used by `npm start`, the Dockerfile and Playwright) and normalises
-  `X-Forwarded-Proto/Host`. `PUBLIC_URL` set → that origin is forced and
-  Better Auth uses it as `baseURL` (needed for OIDC); unset → request's own
-  origin, http by default, cookies never Secure. Config: `publicUrl()` in
-  `src/lib/server/config.ts`.
-- `src/hooks.server.ts` adds `x-forwarded-for` from `getClientAddress()` so
-  Better Auth rate limits per client. Known gap: without a proxy a client can
-  send its own `X-Forwarded-For` and dodge the limit (fix: trust it only from
-  configured proxies).
-
-## Layout
-
-- `src/lib/server/db/`: `app.schema.ts` (app tables), `auth.schema.ts`
-  (generated by the Better Auth CLI; regenerate, don't hand-edit),
-  `schema.ts` re-exports both
-- `src/lib/server/auth.ts`, `src/lib/permissions.ts`: auth setup and team
-  roles (owner / editor / viewer via organization access control)
-- `src/lib/server/startup.ts`: migrate + seed on server start (`init` hook)
-- `src/lib/server/seed/`: template seed data (`types.ts` is the contract,
-  `tmt.ts` the MakeGood kit, `index.ts` the list); see its README
-- `src/lib/domain/`: pure, framework-free logic. `types.ts` is the shared
-  contract (`BuildView`, `PartState`, `PrintRun`, `PartPatch`; change it
-  deliberately, it binds server, domain and UI). `accounting.ts` (units,
-  filament and time stats), `actions.ts` (status/run/printing rules that
-  return `PartPatch[]`), `now.ts`, `grouping.ts`, `format.ts`; `fixtures.ts`
-  builds a test `BuildView` from the seed. Keep it free of DB, Svelte and Node imports
-- `src/lib/server/access.ts`: `ApiError`, `requireMember/Editor/Owner`,
-  `buildAccess` (non-member → 404, viewer write → 403)
-- `src/lib/server/builds/`: `view.ts` (`loadBuildView`), `create.ts`
-  (`createBuild` snapshots the design), `actions.ts` (every mutation goes
-  through `mutateBuild`: access check → domain function → patches + activity
-  row in one transaction → SSE emit)
-- `src/lib/server/events.ts`: in-process pub/sub per build (single container;
-  SSE at `/api/builds/[id]/events`), `src/lib/server/teams.ts`: chapter
-  helpers (writes go through Better Auth `auth.api`)
-- `src/lib/client/`: browser `api.ts` (typed fetch helpers that throw the
-  server's message) and `live.ts` (`subscribeBuild` EventSource with reconnect)
-- `src/lib/components/`: UI components; `build-context.svelte.ts` holds the
-  live view and `act()` (mutate, then re-fetch the view)
-- Workspaces: every user has a personal workspace (Better Auth organization
-  with metadata `{ personal: true, userId }`, shown as "My builds", created on
-  sign-up and lazily for legacy users in `src/lib/server/teams.ts`). Chapters
-  are ordinary organizations and optional; personal workspaces can't take
-  invitations; builds move personal → chapter via `POST /api/builds/[id]/move`
-- Run history is the source of truth for run-driven statuses:
-  `src/lib/domain/recompute.ts` (`recomputeParts`) replays a part's runs
-  through `applyRun`; `deleteRun`/`updateRun` recompute targeted parts
-  (`?recompute=0` to skip). Undo right after logging uses
-  `POST /api/builds/[id]/runs/[runId]/undo` with a client snapshot
-- Prototype import: pure converter `src/lib/domain/import-prototype.ts`,
-  server `src/lib/server/builds/import.ts` (`POST /api/builds/[id]/import`,
-  `?dryRun=1`), CLI bundled by `vite.cli.config.ts` into `build/cli/` and run
-  via `scripts/import-prototype.mjs` (see README); `scripts/bundle-prototype-export.mjs`
-- Variants: `templates.variant_groups`, `builds.variant_choices`;
-  `src/lib/domain/variants.ts`. `BuildView.parts`/`state`/`plates` hold
-  active parts only; `allParts` has everything. Seed reconcile
-  (`seed/run.ts`) upserts new template data into existing installs on
-  startup and never touches builds; `backfillBuildParts` adds rows
-- 3D model: STEP zip → `src/lib/server/models/` (forked worker bundled by
-  `vite.worker.config.ts`, ~80 s / ~620 MB peak for the TMT) → GLB with one
-  node per slug in each STEP's own frame; placements (`template_part_placements`,
-  column-major 4x4 + instances) are applied at runtime by
-  `ChairViewer.svelte` (`src/lib/client/three/`), so nudging never
-  reconverts. Hardware GLB is built offline (`scripts/step-to-glb.mjs`).
-  Kit admin (`/admin/templates/[id]`, site admins: first user or
-  `ADMIN_EMAILS`) has the upload and the nudge editor
-- Designs: `src/lib/domain/design.ts`, `src/lib/server/designs/`
-  (visibility: public, author, or shares a workspace with the author),
-  Design tab components in `src/lib/components/design/`, gallery at `/designs`
-- Plates: built-in layouts in `template_plate_layouts` (`xpa` default, `h2d`),
-  `builds.plate_layout`; 3MF parser `src/lib/server/threemf/` (Bambu, Orca
-  family, plain; Metadata only, never `3D/Objects/*`), matcher
-  `src/lib/domain/plates-match.ts`, apply in `src/lib/server/builds/plates.ts`
-  (plate-attached runs must be converted to per-part runs: `convertRuns`)
-- Uploads stream the raw body to disk; `BODY_SIZE_LIMIT=1100M` is set in the
-  Dockerfile (adapter-node rejects bigger bodies before any handler); 3MF uploads
-  are limited by `MAX_3MF_MB` (default 1024, `maxThreeMfBytes()` in `config.ts`),
-  STEP zips by 200 MB. A sliced project (`Metadata/plate_N.gcode`) is read from disk
-  through its central directory (`threemf/zipfile.ts`); never use fflate `Unzip` on a
-  file path (it buffers unwanted data-descriptor entries). The kit drop zone sends
-  sliced projects to the build's plate upload (`BuildCtx.slicedFile`), not to kit geometry
-- `src/lib/server/filaments/`: bundled SpoolmanDB catalog (`catalog.json`,
-  MIT, attribution in `THIRD_PARTY.md`; refresh with `npm run
-  filaments:update`, which merges the vendor `supplement.json` regenerated by
-  `scripts/fetch-vendor-filaments.mjs`), served by `/api/filaments*` with
-  `no-cache` + an ETag of the catalog version; browser-safe helpers in
-  `src/lib/filament-catalog.ts`; UI `FilamentPicker.svelte`
-- Design tab: `src/lib/components/build/DesignWorkspace.svelte` (also used by the
-  setup wizard and drafts; tabs Colors | Palettes | Parts) with pieces in
-  `src/lib/components/design/` (`SwatchPicker`, `PalettePanel`, `PartSheet`,
-  `PartList`, `share/`); role labels via `roleLabel`/`sortRoles` in
-  `src/lib/domain/labels.ts`; picker logic in `src/lib/domain/swatch-picker.ts`
-- `src/lib/server/compress.ts`: gzip for html/json responses (wired in
-  `hooks.server.ts`) and cached gzip for GLB downloads
-- `src/lib/client/printer-store.svelte.ts`: printers/jobs per team, kept fresh
-  over SSE plus refetch on reconnect/visibility/online and a 30 s poll
-- `src/routes/(app)/`: signed-in area (layout guard → `/login`; `/` →
-  active workspace); `builds/[id]/` tabs as nested routes (overview, print, files,
-  design, finish, settings; old /parts, /plates, /assembly, /handoff redirect); `teams/[slug]`,
-  `onboarding`; `src/routes/invite/[id]` sits outside the group
-- `src/routes/api/`: JSON endpoints; `/api/health` for the Docker healthcheck
-- `drizzle/`: committed SQL migrations
-- `.github/workflows/`: CI (check + lint + test, e2e in parallel) and multi-arch image to GHCR
+- Origins: adapter-node v6 ignores `ORIGIN`. `scripts/proxy-origin.mjs` is preloaded
+  (`node --import`, used by `npm start`, the Dockerfile and Playwright) and normalises
+  `X-Forwarded-Proto/Host`. `PUBLIC_URL` set → that origin is forced and Better Auth uses
+  it as `baseURL`; unset → the request's own origin, http, cookies never Secure.
+- `hooks.server.ts` adds `x-forwarded-for` from `getClientAddress()` for Better Auth rate
+  limits (known gap: spoofable without a proxy).
+- Uploads stream to disk; `BODY_SIZE_LIMIT=1100M` in the Dockerfile; 3MF limit
+  `maxThreeMfBytes()` (`MAX_3MF_MB`, default 1024), STEP zips 200 MB. Read files on disk
+  through the zip central directory (`threemf/zipfile.ts`), never fflate `Unzip` on a path.
 
 ## Conventions
 
-- Match the prototype's visual language: tokens in `src/app.css` (Barlow
-  Condensed / IBM Plex Sans / IBM Plex Mono, light + dark via
-  `prefers-color-scheme` and `data-theme`). Mobile-first; makers update
-  status from their phone at the printer.
-- Actions and next steps are buttons (`.btn`, `.btn.primary`, `.btn.go` with a
-  trailing `.btn-arrow`, `.btn.back`, `.btn.ghost`) or clickable badges
-  (`.pill-link`), not underlined text links; text links only inside sentences.
-  Global class names in `src/app.css` leak into components, so give component
-  classes distinct names. Phone fields are 16 px (iOS zooms on focus otherwise).
-- Permissions are checked on the server for every mutation (team role:
-  owner / editor / viewer). UI hiding is not access control.
-- Every build mutation writes an `activity` row and emits an SSE event; add
-  new mutations to `src/lib/server/builds/actions.ts` via `mutateBuild` and
-  give new activity kinds a sentence in the activity formatter.
-- State rules live in `src/lib/domain/actions.ts` only; the server persists
-  the returned patches and never re-implements them.
+- Visual language: tokens in `src/app.css` (Barlow Condensed / IBM Plex Sans / IBM Plex
+  Mono, light + dark via `prefers-color-scheme` and `data-theme`). Mobile-first: makers
+  update status from their phone at the printer. UI is checked at 390 px and 1440/1920 px,
+  light and dark.
+- Actions are buttons (`.btn`, `.btn.primary`, `.btn.go` + `.btn-arrow`, `.btn.back`,
+  `.btn.ghost`) or clickable badges (`.pill-link`); text links only inside sentences.
+- Global class names in `src/app.css` (`.bar`, `.head`, `.chip`, `.group`, `.dot`, `.more`,
+  `.brand`, `.tabs`, `.seg button`) leak into components: use distinct component class names.
+- Form fields are 16 px on coarse pointers (iOS zooms on focus otherwise).
+- Permissions are checked on the server for every mutation (owner / editor / viewer;
+  `src/lib/server/access.ts`). UI hiding is not access control.
+- Every build mutation goes through `mutateBuild` in `src/lib/server/builds/actions.ts`,
+  writes an `activity` row and emits an SSE event; new activity kinds need a sentence in
+  the activity formatter.
+- State rules live in `src/lib/domain/actions.ts` only; `src/lib/domain/` has no DB,
+  Svelte or Node imports.
+- Client fetches go through `src/lib/client/api.ts`.
 - Route ids include the `(app)` group: `resolve('/(app)/builds/[id]')`.
-- E2E specs share one database and server per run. A spec that changes
-  template-level data (e.g. `e2e/print-geometry-helper.ts` replacing seed
-  footprint rows) must restore it in `afterAll`; specs must pass both alone
-  and in the full suite.
+- E2E specs share one database and server per run; a spec that changes template-level data
+  restores it in `afterAll`; specs pass alone and in the full suite.
 - No email sending yet: invitations produce a copyable `/invite/[id]` link.
-- Schema change → edit `schema.ts`, `npm run db:generate`, commit the new
-  migration with the code that uses it.
-- Keep secrets (printer access codes, OIDC secrets) out of logs and API
-  responses; store printer credentials encrypted.
+- Schema change → edit `schema.ts`, `npm run db:generate`, commit the migration with the
+  code that uses it.
+- Secrets (printer access codes, OIDC secrets) stay out of logs and API responses; printer
+  credentials are stored encrypted.
 
-## Commands
+## Commands and definition of done
 
 ```bash
 npm run dev          # dev server
 npm run check        # svelte-check / types
 npm run lint
-npm test             # vitest
-npm run test:e2e     # playwright (see README for running it in the playwright image)
+npm test             # vitest (agents: npx vitest run <files>)
+npm run test:e2e     # playwright, see docs/dev-environments.md
 npm run build
 docker build -t tmt-build-tracker:dev .
 ```
 
-Definition of done for a change: `check`, `lint`, `test` and `build` pass,
-and anything touching startup is verified with `docker build` + a run against
-an empty data directory.
-
-## Status, roadmap and handoff
-
-**`docs/STATUS.md` is the source of truth** for where development stands:
-milestone state, decisions not to revisit, open questions for the maintainer,
-backlog and next steps. Read it at the start of every session. Update it at the
-end of every work session and before any context reset, in the same commit as
-the work it describes.
+Done = `check`, `lint`, `test` and `build` pass (run by the agents and the `verifier`),
+the relevant e2e specs pass, and anything touching startup is verified with `docker build`
++ a run against an empty data directory.
