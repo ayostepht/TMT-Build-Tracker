@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-	cameraSupported,
-	checkCameraUrl,
-	defaultCameraUrl,
-	normalizeHost,
-	resolveCameraUrl
-} from './camera-url';
+import { cameraSupported, checkCameraUrl, defaultCameraUrl, resolveCameraUrl } from './camera-url';
+import { cleanHost } from './address';
 
 describe('camera URL defaults', () => {
 	it('Elegoo SDCP defaults to the MJPEG port on the printer host', () => {
@@ -43,8 +38,13 @@ describe('same-host guard', () => {
 		expect(ok('//192.168.1.50/x', '192.168.1.50')).toBe(false);
 	});
 	it('normalizes hosts', () => {
-		expect(normalizeHost(' [::1] ')).toBe('::1');
-		expect(normalizeHost('Host.')).toBe('host');
+		expect(cleanHost(' [::1] ')).toBe('::1');
+		expect(cleanHost('Host.')).toBe('host');
+		expect(cleanHost('Host...')).toBe('host');
+	});
+	it('uses the same normaliser as the guard: a multi-dot host still matches, a different one does not', () => {
+		expect(ok('http://printer.lan./x', 'Printer.LAN..')).toBe(true);
+		expect(ok('http://printer.lan./x', 'other.lan')).toBe(false);
 	});
 	it('resolves relative URLs from a printer API against its host and still guards them', () => {
 		expect(

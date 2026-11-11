@@ -220,6 +220,12 @@ export async function guardedFetch(
 						res.resume();
 						return resolve(new Response(null, { status, headers: h }));
 					}
+					if (status >= 300 && status < 400) {
+						// Never followed and never read: drop the connection now instead of leaving the
+						// body (and its socket) for a caller that only looks at the status.
+						res.destroy();
+						return resolve(new Response(null, { status, headers: h }));
+					}
 					resolve(
 						new Response(Readable.toWeb(res) as ReadableStream<Uint8Array>, { status, headers: h })
 					);

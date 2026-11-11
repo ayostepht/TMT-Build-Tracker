@@ -278,6 +278,7 @@ export function bootProblems(): string[] {
 	guard(() => signupMode());
 	guard(() => trustedProxy());
 	guard(() => publicUrl());
+	guard(() => quotas());
 	if (mode === 'public') problems.push(...validatePublicMode());
 	return [...new Set(problems)];
 }
@@ -359,4 +360,114 @@ export function kitpackDownloadEnabled(): boolean {
 export function maxThreeMfBytes(): number {
 	const mb = Number(process.env.MAX_3MF_MB);
 	return (Number.isFinite(mb) && mb > 0 ? mb : 1024) * 1024 * 1024;
+}
+
+/** Largest request body adapter-node's `BODY_SIZE_LIMIT` allows, in bytes; `Infinity` when set to it, null when unset or unparsable. */
+export function bodySizeLimitBytes(): number | null {
+	const raw = (env.BODY_SIZE_LIMIT ?? '').trim();
+	if (!raw) return null;
+	if (raw === 'Infinity') return Infinity;
+	// Same grammar as adapter-node: a number with an optional K, M or G suffix.
+	const m = /^(\d+)([KMG]?)$/.exec(raw);
+	if (!m) return null;
+	const unit = { '': 1, K: 1024, M: 1024 ** 2, G: 1024 ** 3 }[m[2] as '' | 'K' | 'M' | 'G'];
+	return Number(m[1]) * unit;
+}
+
+/**
+ * A warning (not a boot problem: the server still runs) when `BODY_SIZE_LIMIT`, the outer bound on
+ * every request body, is below what `MAX_3MF_MB` allows: 3MF uploads would fail with 413 from
+ * adapter-node before the app's own per-route cap (`body-limits.ts`) is reached. Null when fine.
+ */
+export function bodyLimitWarning(): string | null {
+	if (!isProd) return null;
+	const need = maxThreeMfBytes() + 1024 * 1024;
+	const have = bodySizeLimitBytes();
+	if (have === Infinity) return null;
+	const needMb = Math.ceil(need / 1048576);
+	if (have === null) {
+		return `BODY_SIZE_LIMIT is not set (adapter-node then refuses bodies over 512 kB): set it to at least ${needMb}M so 3MF uploads work.`;
+	}
+	if (have < need) {
+		return `BODY_SIZE_LIMIT is smaller than MAX_3MF_MB allows: 3MF uploads over ${Math.floor(have / 1048576)} MB fail with 413. Set BODY_SIZE_LIMIT to at least ${needMb}M.`;
+	}
+	return null;
+}
+
+/**
+ * Limits per workspace, user, chapter or build. A field is a count (or bytes), or `null` for no limit.
+ * Defaults depend on `TMT_MODE`: `selfhost` has no limits, `public` has finite ones sized for volunteer
+ * makers who each build one or two chairs. Every field has a `QUOTA_*` variable (digits, or `off`).
+ * This is only the configuration contract: whichever feature creates the thing reads its field here
+ * and refuses with a clear message; a field nothing reads yet limits nothing.
+ */
+export interface Quotas {
+	/** Builds (all statuses, drafts excluded) in one workspace (chapter or personal). `QUOTA_BUILDS_PER_WORKSPACE` */
+	buildsPerWorkspace: number | null;
+	/** Draft builds (the Studio and unfinished wizards) one user owns. `QUOTA_DRAFTS_PER_USER` */
+	draftsPerUser: number | null;
+	/** Chapters (teams) one user may create. `QUOTA_CHAPTERS_PER_USER` */
+	chaptersPerUser: number | null;
+	/** Members in one chapter. `QUOTA_MEMBERS_PER_CHAPTER` */
+	membersPerChapter: number | null;
+	/** Open (pending) invitations in one chapter. `QUOTA_PENDING_INVITES_PER_CHAPTER` */
+	pendingInvitesPerChapter: number | null;
+	/** Photos on one build. `QUOTA_PHOTOS_PER_BUILD` */
+	photosPerBuild: number | null;
+	/** Kit copies (forks of a template) in one workspace. `QUOTA_KIT_COPIES_PER_WORKSPACE` */
+	kitCopiesPerWorkspace: number | null;
+	/** Custom filaments in one workspace. `QUOTA_CUSTOM_FILAMENTS_PER_WORKSPACE` */
+	customFilamentsPerWorkspace: number | null;
+	/** Saved color designs one user owns. `QUOTA_SAVED_DESIGNS_PER_USER` */
+	savedDesignsPerUser: number | null;
+	/** Bytes of uploaded files (photos, kept 3MFs, snapshots, guide images) in one workspace; the variable is in MB. `QUOTA_UPLOAD_MB_PER_WORKSPACE` */
+	uploadBytesPerWorkspace: number | null;
+	/** STEP to GLB conversions one user may have queued or running. `QUOTA_STEP_CONVERSIONS_PER_USER` */
+	stepConversionsPerUser: number | null;
+	/** Open live-update (SSE) connections one user may hold. `QUOTA_SSE_CONNECTIONS_PER_USER` */
+	sseConnectionsPerUser: number | null;
+}
+
+type CountKey = Exclude<keyof Quotas, 'uploadBytesPerWorkspace'>;
+
+/** Variable name, selfhost default, public default. */
+const QUOTA_COUNTS: Record<CountKey, [string, number | null, number]> = {
+	buildsPerWorkspace: ['QUOTA_BUILDS_PER_WORKSPACE', null, 10],
+	draftsPerUser: ['QUOTA_DRAFTS_PER_USER', null, 20],
+	chaptersPerUser: ['QUOTA_CHAPTERS_PER_USER', null, 3],
+	membersPerChapter: ['QUOTA_MEMBERS_PER_CHAPTER', null, 25],
+	pendingInvitesPerChapter: ['QUOTA_PENDING_INVITES_PER_CHAPTER', null, 25],
+	photosPerBuild: ['QUOTA_PHOTOS_PER_BUILD', null, 100],
+	kitCopiesPerWorkspace: ['QUOTA_KIT_COPIES_PER_WORKSPACE', null, 2],
+	customFilamentsPerWorkspace: ['QUOTA_CUSTOM_FILAMENTS_PER_WORKSPACE', null, 50],
+	savedDesignsPerUser: ['QUOTA_SAVED_DESIGNS_PER_USER', null, 50],
+	stepConversionsPerUser: ['QUOTA_STEP_CONVERSIONS_PER_USER', null, 1],
+	sseConnectionsPerUser: ['QUOTA_SSE_CONNECTIONS_PER_USER', null, 6]
+};
+const QUOTA_UPLOAD_VAR = 'QUOTA_UPLOAD_MB_PER_WORKSPACE';
+const QUOTA_UPLOAD_PUBLIC_MB = 2048;
+
+/** `off` (also `unlimited`, `none`) is null; digits are that number (0 forbids the thing); empty is `fallback`; anything else throws. */
+function quotaValue(name: string, fallback: number | null): number | null {
+	const raw = (env[name] ?? '').trim().toLowerCase();
+	if (!raw) return fallback;
+	if (raw === 'off' || raw === 'unlimited' || raw === 'none') return null;
+	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+		throw new Error(`${name} must be a whole number (0 or more) or "off", got "${env[name]}".`);
+	}
+	return Number(raw);
+}
+
+export function quotas(): Quotas {
+	const pub = isPublicMode();
+	const out = {} as Quotas;
+	for (const [key, [name, selfhost, hosted]] of Object.entries(QUOTA_COUNTS) as [
+		CountKey,
+		[string, number | null, number]
+	][]) {
+		out[key] = quotaValue(name, pub ? hosted : selfhost);
+	}
+	const mb = quotaValue(QUOTA_UPLOAD_VAR, pub ? QUOTA_UPLOAD_PUBLIC_MB : null);
+	out.uploadBytesPerWorkspace = mb === null ? null : mb * 1024 * 1024;
+	return out;
 }

@@ -47,6 +47,10 @@ describe('classifyAddress: refused ranges', () => {
 		expect(why('100.100.100.200')).toBe('metadata');
 		expect(why('::ffff:100.100.100.200')).toBe('metadata');
 		expect(why('fd00:ec2::254')).toBe('metadata');
+		expect(why('fd00:ec2::23')).toBe('metadata'); // AWS IPv6 resolver
+		expect(why('FD00:0EC2:0:0:0:0:0:23')).toBe('metadata');
+		expect(ok('fd00:ec2::24')).toBe(true);
+		expect(ok('100.100.0.1')).toBe(true); // Tailscale range stays allowed
 		expect(why('FD00:0EC2:0:0:0:0:0:254')).toBe('metadata');
 		// neighbours stay allowed
 		expect(ok('100.100.100.201')).toBe(true);

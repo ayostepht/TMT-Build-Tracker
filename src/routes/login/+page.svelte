@@ -83,6 +83,9 @@
 				>
 				<button class="btn primary" disabled={busy}>Sign in</button>
 			</form>
+			<p class="muted" data-testid="forgot-password">
+				Forgot your password? Ask whoever runs this server for a reset link.
+			</p>
 			{#if data.sso}
 				<button class="btn" onclick={sso}>Sign in with {data.sso.providerName}</button>
 			{/if}

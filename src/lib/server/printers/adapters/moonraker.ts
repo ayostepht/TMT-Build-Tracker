@@ -14,7 +14,9 @@ import {
 } from '../outbound';
 import {
 	backoff,
+	HostileGuard,
 	num,
+	OVERSIZED_MESSAGE,
 	safeError,
 	StatusSubject,
 	temp,
@@ -86,6 +88,7 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 	let ping: ReturnType<typeof setInterval> | undefined;
 	let stale: ReturnType<typeof setTimeout> | undefined;
 	let acc: Obj = {};
+	const hostile = new HostileGuard();
 
 	const armStale = () => {
 		clearTimeout(stale);
@@ -147,6 +150,21 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			return;
 		}
 		ws = sock;
+		/** Oversized or non-text frame: drop the socket and come back on a long backoff. */
+		const tooBig = () => {
+			ws = null; // the close handler below then ignores this socket
+			sock.onmessage = null;
+			clearInterval(ping);
+			clearTimeout(stale);
+			try {
+				sock.close();
+			} catch {
+				/* ignore */
+			}
+			subj.emit({ state: 'error', progress: null, message: OVERSIZED_MESSAGE });
+			clearTimeout(retry);
+			retry = setTimeout(() => void open(), hostile.trip());
+		};
 		sock.onopen = () => {
 			attempt = 0;
 			acc = {};
@@ -182,9 +200,10 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			}
 		};
 		const handle = (data: unknown) => {
-			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return;
+			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
 			const m: unknown = JSON.parse(data);
 			if (!isObj(m)) return;
+			hostile.good();
 			armStale();
 			if (m.id === 1 && isObj(m.result) && isObj(m.result.status)) {
 				acc = mergeStatus({}, m.result.status);

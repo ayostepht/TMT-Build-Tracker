@@ -16,7 +16,9 @@ import {
 } from '../outbound';
 import {
 	backoff,
+	HostileGuard,
 	num,
+	OVERSIZED_MESSAGE,
 	safeError,
 	StatusSubject,
 	type AdapterHandle,
@@ -83,6 +85,14 @@ export function setMqttFactory(f: MqttFactory | null) {
 	factory = f ?? ((url, opts) => mqtt.connect(url, opts));
 }
 
+/**
+ * mqtt.js 5.16 has no incoming packet cap (mqtt-packet waits for the whole remaining length, up to
+ * 256 MB). Bytes read from the socket since the last complete packet are counted instead: the
+ * socket is `client.stream` (public in client.d.ts) and `packetreceive` is emitted for every
+ * parsed packet (mqtt/build/lib/handlers/index.js). Past this, the connection is force-ended.
+ */
+export const MAX_BAMBU_PARTIAL_BYTES = 4 * 1024 * 1024;
+
 export function connectBambu(cfg: PrinterConfig): AdapterHandle {
 	const subj = new StatusSubject();
 	const serial = cfg.secrets.serial ?? '';
@@ -99,6 +109,7 @@ export function connectBambu(cfg: PrinterConfig): AdapterHandle {
 	let client: MqttClient | null = null;
 	let retry: ReturnType<typeof setTimeout> | undefined;
 	let attempt = 0;
+	const hostile = new HostileGuard();
 
 	const later = (extra = 0) => {
 		clearTimeout(retry);
@@ -129,6 +140,28 @@ export function connectBambu(cfg: PrinterConfig): AdapterHandle {
 			protocolVersion: 4
 		});
 		client = c;
+		/** Oversized message: end the client now and come back on a long backoff. */
+		const tooBig = () => {
+			if (client !== c) return;
+			client = null; // the close handler then ignores this client
+			try {
+				c.end(true);
+			} catch {
+				/* ignore */
+			}
+			subj.emit({ state: 'error', progress: null, message: OVERSIZED_MESSAGE });
+			clearTimeout(retry);
+			if (!subj.closed) retry = setTimeout(() => void start(), hostile.trip());
+		};
+		let partial = 0;
+		c.on('packetreceive', () => {
+			partial = 0;
+		});
+		// Absent on test fakes; a real client has had its stream since construction.
+		c.stream?.on('data', (chunk: Buffer) => {
+			partial += chunk.length;
+			if (partial > MAX_BAMBU_PARTIAL_BYTES) tooBig();
+		});
 		c.on('connect', () => {
 			attempt = 0;
 			c.subscribe(report, (err) => {
@@ -142,7 +175,8 @@ export function connectBambu(cfg: PrinterConfig): AdapterHandle {
 		});
 		c.on('message', (_topic, payload) => {
 			try {
-				if (payload.length > MAX_REMOTE_MESSAGE_BYTES) return;
+				if (payload.length > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
+				hostile.good();
 				const j = JSON.parse(payload.toString()) as Obj;
 				if (isObj(j.print)) {
 					for (const [k, v] of Object.entries(j.print)) if (k !== '__proto__') acc[k] = v;
@@ -153,6 +187,7 @@ export function connectBambu(cfg: PrinterConfig): AdapterHandle {
 			}
 		});
 		c.on('error', (e) => {
+			if (client !== c) return; // already ended on purpose
 			subj.emit({ state: 'offline', progress: null, message: safeError(e) });
 		});
 		c.on('close', () => {

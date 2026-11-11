@@ -23,7 +23,7 @@
 			.then((r) => {
 				s = r.settings;
 				canEdit = r.canEdit;
-				blocked = (r as { blocked?: string | null }).blocked ?? null;
+				blocked = r.blocked ?? null;
 				url = r.settings.spoolmanUrl ?? '';
 			})
 			.catch((e) => (err = e instanceof Error ? e.message : 'Could not load settings'));

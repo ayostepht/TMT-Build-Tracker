@@ -72,7 +72,13 @@ export function createAuth(db: Db) {
 		secret: authSecret(),
 		database: drizzleAdapter(db, { provider: 'sqlite', schema }),
 		// Public mode is SSO-only (Google, GitHub): no passwords, no generic OIDC.
-		emailAndPassword: { enabled: !publicMode, minPasswordLength: 8 },
+		// Reset links are minted only by the operator CLI (scripts/reset-password-link.mjs); finishing
+		// one also signs the user out everywhere.
+		emailAndPassword: {
+			enabled: !publicMode,
+			minPasswordLength: 8,
+			revokeSessionsOnPasswordReset: true
+		},
 		...(publicMode ? { socialProviders: social, disabledPaths: PASSWORD_PATHS } : {}),
 		// Failures of the OAuth round trip land on the login page, which turns the code into
 		// a fixed message. Linking stays on Better Auth's safe default (provider email verified

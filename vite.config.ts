@@ -10,7 +10,30 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter()
+			adapter: adapter(),
+			// Page CSP; SvelteKit adds a nonce to its inline bootstrap script (mode 'auto'). Nothing is
+			// loaded from another origin: fonts, scripts, workers and the models are all same-origin.
+			// 'wasm-unsafe-eval' is for three.js's meshopt decoder (WebAssembly), not for eval().
+			// Styles keep 'unsafe-inline' because Svelte writes inline style="" attributes and
+			// transitions; scripts never do. Not set here: upgrade-insecure-requests (plain-http LAN installs).
+			csp: {
+				mode: 'auto',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self', 'wasm-unsafe-eval'],
+					'style-src': ['self', 'unsafe-inline'],
+					'img-src': ['self', 'data:', 'blob:'],
+					'font-src': ['self'],
+					'connect-src': ['self'],
+					'worker-src': ['self'],
+					'manifest-src': ['self'],
+					'frame-src': ['none'],
+					'object-src': ['none'],
+					'base-uri': ['self'],
+					'form-action': ['self'],
+					'frame-ancestors': ['none']
+				}
+			}
 		})
 	],
 	test: {

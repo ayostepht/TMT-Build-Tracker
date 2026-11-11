@@ -1,5 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const QUOTA_VARS = [
+	'QUOTA_BUILDS_PER_WORKSPACE',
+	'QUOTA_DRAFTS_PER_USER',
+	'QUOTA_CHAPTERS_PER_USER',
+	'QUOTA_MEMBERS_PER_CHAPTER',
+	'QUOTA_PENDING_INVITES_PER_CHAPTER',
+	'QUOTA_PHOTOS_PER_BUILD',
+	'QUOTA_KIT_COPIES_PER_WORKSPACE',
+	'QUOTA_CUSTOM_FILAMENTS_PER_WORKSPACE',
+	'QUOTA_SAVED_DESIGNS_PER_USER',
+	'QUOTA_UPLOAD_MB_PER_WORKSPACE',
+	'QUOTA_STEP_CONVERSIONS_PER_USER',
+	'QUOTA_SSE_CONNECTIONS_PER_USER'
+];
+
 // config.ts captures NODE_ENV at import, so each test re-imports it after setting env.
 async function load(vars: Record<string, string | undefined> = {}) {
 	vi.resetModules();
@@ -21,7 +36,10 @@ async function load(vars: Record<string, string | undefined> = {}) {
 		'XFF_DEPTH',
 		'PUBLIC_URL',
 		'BETTER_AUTH_URL',
-		'ORIGIN'
+		'ORIGIN',
+		'BODY_SIZE_LIMIT',
+		'MAX_3MF_MB',
+		...QUOTA_VARS
 	];
 	for (const k of keys) delete process.env[k];
 	for (const [k, v] of Object.entries(vars)) if (v !== undefined) process.env[k] = v;
@@ -315,5 +333,104 @@ describe('bootProblems', () => {
 		).bootProblems();
 		expect(p.join('\n')).toMatch(/SIGNUP/);
 		expect(p.join('\n')).toMatch(/XFF_DEPTH/);
+	});
+});
+
+describe('quotas', () => {
+	it('has no limits in selfhost mode', async () => {
+		const q = (await load()).quotas();
+		expect(Object.values(q).every((v) => v === null)).toBe(true);
+	});
+
+	it('has finite defaults in public mode', async () => {
+		const q = (await load({ TMT_MODE: 'public' })).quotas();
+		expect(q).toEqual({
+			buildsPerWorkspace: 10,
+			draftsPerUser: 20,
+			chaptersPerUser: 3,
+			membersPerChapter: 25,
+			pendingInvitesPerChapter: 25,
+			photosPerBuild: 100,
+			kitCopiesPerWorkspace: 2,
+			customFilamentsPerWorkspace: 50,
+			savedDesignsPerUser: 50,
+			uploadBytesPerWorkspace: 2048 * 1024 * 1024,
+			stepConversionsPerUser: 1,
+			sseConnectionsPerUser: 6
+		});
+	});
+
+	it('overrides a field with digits, 0 or off, in either mode', async () => {
+		const hosted = (
+			await load({
+				TMT_MODE: 'public',
+				QUOTA_BUILDS_PER_WORKSPACE: '40',
+				QUOTA_PHOTOS_PER_BUILD: 'off',
+				QUOTA_CHAPTERS_PER_USER: '0'
+			})
+		).quotas();
+		expect(hosted.buildsPerWorkspace).toBe(40);
+		expect(hosted.photosPerBuild).toBeNull();
+		expect(hosted.chaptersPerUser).toBe(0);
+		const self = (
+			await load({ QUOTA_DRAFTS_PER_USER: '5', QUOTA_UPLOAD_MB_PER_WORKSPACE: '500' })
+		).quotas();
+		expect(self.draftsPerUser).toBe(5);
+		expect(self.uploadBytesPerWorkspace).toBe(500 * 1024 * 1024);
+		expect(self.buildsPerWorkspace).toBeNull();
+	});
+
+	it('treats an empty variable as unset', async () => {
+		expect(
+			(await load({ TMT_MODE: 'public', QUOTA_BUILDS_PER_WORKSPACE: ' ' })).quotas()
+				.buildsPerWorkspace
+		).toBe(10);
+	});
+
+	it('rejects bad values, naming the variable', async () => {
+		for (const bad of ['-1', '1.5', 'many', '10abc', '1e3']) {
+			const c = await load({ QUOTA_PHOTOS_PER_BUILD: bad });
+			expect(() => c.quotas()).toThrow(/QUOTA_PHOTOS_PER_BUILD must be a whole number/);
+		}
+	});
+
+	it('reports a bad quota as a boot problem', async () => {
+		const c = await load({ NODE_ENV: 'development', QUOTA_SSE_CONNECTIONS_PER_USER: 'lots' });
+		expect(c.bootProblems().join(' ')).toMatch(/QUOTA_SSE_CONNECTIONS_PER_USER/);
+	});
+});
+
+describe('bodyLimitWarning', () => {
+	it('stays quiet outside production', async () => {
+		expect((await load({ NODE_ENV: 'development' })).bodyLimitWarning()).toBeNull();
+	});
+
+	it('accepts the image default (1100M) and Infinity', async () => {
+		expect(
+			(await load({ NODE_ENV: 'production', BODY_SIZE_LIMIT: '1100M' })).bodyLimitWarning()
+		).toBeNull();
+		expect(
+			(await load({ NODE_ENV: 'production', BODY_SIZE_LIMIT: 'Infinity' })).bodyLimitWarning()
+		).toBeNull();
+	});
+
+	it('warns when BODY_SIZE_LIMIT is unset or below MAX_3MF_MB', async () => {
+		expect((await load({ NODE_ENV: 'production' })).bodyLimitWarning()).toMatch(/not set.*1025M/);
+		expect(
+			(await load({ NODE_ENV: 'production', BODY_SIZE_LIMIT: '512K' })).bodyLimitWarning()
+		).toMatch(/at least 1025M/);
+		expect(
+			(
+				await load({ NODE_ENV: 'production', BODY_SIZE_LIMIT: '1100M', MAX_3MF_MB: '2048' })
+			).bodyLimitWarning()
+		).toMatch(/at least 2049M/);
+	});
+
+	it('needs no warning for a lowered MAX_3MF_MB', async () => {
+		expect(
+			(
+				await load({ NODE_ENV: 'production', BODY_SIZE_LIMIT: '400M', MAX_3MF_MB: '300' })
+			).bodyLimitWarning()
+		).toBeNull();
 	});
 });

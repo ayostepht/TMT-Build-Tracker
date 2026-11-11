@@ -60,7 +60,10 @@ export function isIpLiteral(s: string): boolean {
 	return parseIPv4(s) !== null || parseIPv6(s) !== null;
 }
 
-/** Lower-case, no brackets, no trailing dot: the form hosts are compared and resolved in. */
+/**
+ * The ONE host normaliser (guard, resolver, camera-URL host pin, store): trimmed, lower-case, no
+ * brackets, every trailing dot removed.
+ */
 export function cleanHost(h: string): string {
 	let v = h.trim().toLowerCase();
 	if (v.startsWith('[') && v.endsWith(']')) v = v.slice(1, -1);
@@ -107,14 +110,15 @@ export function classifyAddress(raw: string): AddressVerdict {
 	if (allZeroButLast && v6[15] === 1) return { ok: true, ip, family: 6 }; // ::1
 	if (allZeroButLast && v6[15] === 0) return { ok: false, ip, reason: 'reserved' }; // ::
 	if (v6[0] === 0xff) return { ok: false, ip, reason: 'reserved' }; // multicast
-	// AWS IPv6 metadata (fd00:ec2::254) lives inside the unique-local range allowed below.
+	// AWS IPv6 metadata (fd00:ec2::254) and resolver (fd00:ec2::23) live inside the unique-local
+	// range allowed below. Exact matches only.
 	if (
 		v6[0] === 0xfd &&
 		v6[1] === 0 &&
 		v6[2] === 0x0e &&
 		v6[3] === 0xc2 &&
-		v6[14] === 0x02 &&
-		v6[15] === 0x54 &&
+		(v6[15] === 0x54 || v6[15] === 0x23) &&
+		v6[14] === (v6[15] === 0x54 ? 0x02 : 0x00) &&
 		v6.slice(4, 14).every((x) => x === 0)
 	)
 		return { ok: false, ip, reason: 'metadata' };

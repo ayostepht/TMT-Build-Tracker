@@ -20,11 +20,14 @@ import {
 	MAX_REMOTE_MESSAGE_BYTES,
 	OutboundError,
 	resolveAllowed,
-	safeFileName
+	safeFileName,
+	safeText
 } from '../outbound';
 import {
 	backoff,
+	HostileGuard,
 	num,
+	OVERSIZED_MESSAGE,
 	safeError,
 	StatusSubject,
 	temp,
@@ -119,13 +122,20 @@ export async function enableSdcpCamera(
 				done(false);
 			}
 		};
-		sock.onmessage = () => {
+		sock.onmessage = (ev) => {
+			// An oversized or non-text answer ends this short-lived socket at once.
+			if (typeof ev.data !== 'string' || ev.data.length > MAX_REMOTE_MESSAGE_BYTES)
+				return done(sent);
 			if (sent) done(true);
 		};
 		sock.onerror = () => done(sent);
 		sock.onclose = () => done(sent);
 	});
 }
+
+/** Longest MainboardID kept: it is echoed back to the device in every request. */
+const MAX_MAINBOARD_ID = 64;
+const cleanId = (v: unknown) => safeText(v, MAX_MAINBOARD_ID);
 
 const POLL_MS = 4000;
 const STALE_MS = 20000;
@@ -235,7 +245,8 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	let poll: ReturnType<typeof setInterval> | undefined;
 	let retry: ReturnType<typeof setTimeout> | undefined;
 	let stale: ReturnType<typeof setTimeout> | undefined;
-	let mainboardId = cfg.secrets.mainboardId || '';
+	let mainboardId = cleanId(cfg.secrets.mainboardId);
+	const hostile = new HostileGuard();
 	let attributes: Obj | undefined;
 	let lastStatus: Obj | undefined;
 
@@ -277,7 +288,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		}
 		if (subj.closed) return;
 		if (!mainboardId) {
-			mainboardId = (await probeMainboardId(cfg.host)) ?? '';
+			mainboardId = cleanId(await probeMainboardId(cfg.host));
 			if (subj.closed) return;
 		}
 		try {
@@ -288,6 +299,21 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			return;
 		}
 		const sock = ws;
+		/** Oversized or non-text frame: drop the socket and come back on a long backoff. */
+		const tooBig = () => {
+			ws = null; // the close handler below then ignores this socket
+			sock.onmessage = null;
+			clearInterval(poll);
+			clearTimeout(stale);
+			try {
+				sock.close();
+			} catch {
+				/* ignore */
+			}
+			subj.emit({ state: 'error', progress: null, message: OVERSIZED_MESSAGE });
+			clearTimeout(retry);
+			retry = setTimeout(() => void open(), hostile.trip());
+		};
 		sock.onopen = () => {
 			attempt = 0;
 			armStale();
@@ -305,20 +331,20 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			}
 		};
 		const handle = (data: unknown) => {
-			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return;
+			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
 			const msg: unknown = JSON.parse(data);
 			if (!isObj(msg)) return;
+			hostile.good();
 			const topic = typeof msg.Topic === 'string' ? msg.Topic : '';
 			const id = (msg.MainboardID ??
 				(isObj(msg.Data) ? msg.Data.MainboardID : undefined)) as unknown;
 			if (!mainboardId) {
-				if (typeof id === 'string' && id) mainboardId = id;
-				else if (topic.includes('/')) mainboardId = topic.split('/').pop() ?? '';
+				if (typeof id === 'string' && cleanId(id)) mainboardId = cleanId(id);
+				else if (topic.includes('/')) mainboardId = cleanId(topic.split('/').pop());
 			}
 			if (isObj(msg.Attributes)) {
 				attributes = msg.Attributes;
-				if (!mainboardId && typeof attributes.MainboardID === 'string')
-					mainboardId = attributes.MainboardID;
+				if (!mainboardId) mainboardId = cleanId(attributes.MainboardID);
 				if (lastStatus) subj.emit(normalizeSdcpStatus(lastStatus, attributes));
 				armStale();
 			}

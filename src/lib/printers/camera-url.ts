@@ -1,17 +1,10 @@
 /** Printer camera URL rules shared by server and browser. No Node imports. */
+import { cleanHost } from './address.ts';
 import type { PrinterKind } from './status.ts';
 
 /** Bambu's LAN camera is a proprietary stream (RTSPS / port 6000 JPEG protocol): not supported. */
 export function cameraSupported(kind: PrinterKind): boolean {
 	return kind !== 'bambu-lan';
-}
-
-/** Host as compared by the SSRF guard: lower case, no brackets, no trailing dot. */
-export function normalizeHost(h: string): string {
-	let v = h.trim().toLowerCase();
-	if (v.startsWith('[') && v.endsWith(']')) v = v.slice(1, -1);
-	if (v.endsWith('.')) v = v.slice(0, -1);
-	return v;
 }
 
 /**
@@ -41,7 +34,7 @@ export function checkCameraUrl(raw: string, printerHost: string): CameraUrlCheck
 		return { ok: false, error: 'The camera address must start with http:// or https://' };
 	if (u.username || u.password)
 		return { ok: false, error: 'Leave user name and password out of the camera address' };
-	if (normalizeHost(u.hostname) !== normalizeHost(printerHost))
+	if (cleanHost(u.hostname) !== cleanHost(printerHost))
 		return { ok: false, error: 'The camera must be on the same address as the printer' };
 	return { ok: true, url: u };
 }

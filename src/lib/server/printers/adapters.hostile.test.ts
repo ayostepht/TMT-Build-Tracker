@@ -4,7 +4,7 @@ import { adapters } from './adapters';
 import { normalizeBambu } from './adapters/bambu';
 import { normalizeOctoprint } from './adapters/octoprint';
 import { MiniWsServer, sendJson, sendText } from './mini-ws';
-import { MAX_FILE_NAME, MAX_REMOTE_MESSAGE_BYTES } from './outbound';
+import { MAX_FILE_NAME } from './outbound';
 import type { AdapterHandle, PrinterConfig } from './types';
 
 const cleanup: (() => unknown)[] = [];
@@ -36,7 +36,7 @@ const cfg = (kind: PrinterConfig['kind'], port: number): PrinterConfig => ({
 });
 
 describe('a hostile WebSocket peer cannot crash or poison the Moonraker adapter', () => {
-	it('survives deep nesting, oversized frames and __proto__ keys, then keeps working', async () => {
+	it('survives deep nesting and __proto__ keys, then keeps working', async () => {
 		const uncaught: unknown[] = [];
 		const onUncaught = (e: unknown) => uncaught.push(e);
 		process.on('uncaughtException', onUncaught);
@@ -49,12 +49,12 @@ describe('a hostile WebSocket peer cannot crash or poison the Moonraker adapter'
 		await until(() => ws.sockets.size > 0);
 		const sock = [...ws.sockets][0];
 
-		const depth = 200_000; // deeper than the JS stack allows for a recursive merge
+		const depth = 100_000; // deeper than the JS stack allows for a recursive merge
 		sendText(
 			sock,
 			'{"id":1,"result":{"status":' + '{"a":'.repeat(depth) + '1' + '}'.repeat(depth) + '}}'
 		);
-		sendText(sock, '{"x":"' + 'A'.repeat(MAX_REMOTE_MESSAGE_BYTES + 10) + '"}');
+		// (An oversized frame now drops the connection; see adapters.oversize.test.ts.)
 		sendText(
 			sock,
 			'{"jsonrpc":"2.0","method":"notify_status_update","params":[{"__proto__":{"polluted":"yes"}}]}'
