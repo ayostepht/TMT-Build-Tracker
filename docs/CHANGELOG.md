@@ -6,6 +6,12 @@ state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, wh
 
 ## 2026-11
 
+- **r42** (1907861): the audit so far: Stage 1 security hardening, Stage 2 phone shell and
+  landing (Now printing / Next up), Stage 3 installable PWA, Stage 4 removals (prototype
+  import, 3D re-orientation code), kit pack 1.0.0 out of the image, better-auth 1.7.18,
+  vite 8.3.6, vitest 5, OctoEverywhere reconnect backoff (no 2 s redial loop). Migration
+  0013 (`site_admin`); empty-`/data` run and rehearsal clean (14 migrations, row counts
+  unchanged, kit current). Arrange for the Centauri Carbon still 21 plates, guard clean.
 - **r41** (7e05586, PR #2): Elegoo printers can connect through an OctoEverywhere shared
   link (encrypted secret) instead of the LAN address, so TMT doesn't use one of the
   Centauri Carbon's limited direct connections; status and camera go via OctoEverywhere,

@@ -1,7 +1,8 @@
 # Project status
 
 _Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`. Test copy is
-still on r41, 7e05586: nothing from the audit is deployed yet)._
+on r42, 1907861: Stages 1-3 and the Stage 4 removals; 39023ab, Stage 4 wave 2, is not
+deployed yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -10,15 +11,11 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. Deploy `main` to the test copy from the Unraid dev container (migration 0013 adds
-   `site_admin`; startup now sweeps `imports/`: do the migration rehearsal and the Docker
-   empty-`/data` run, neither could run on the Mac). Add the CHANGELOG entry.
-2. Ask the maintainer: push Stage 2; merge PR #13 (CI: e2e without apt, image gated on
-   e2e, Dependabot grouping; its run is green); delete the unused `PlateStart.svelte`,
-   `LogPlateButton.svelte`, `FilamentPicker.svelte`; tidy Dependabot PRs #3-#12.
-3. Continue Stage 4 from Next steps (second design-system wave; dependency moves; the
+1. Ask the maintainer: deploy 39023ab (Stage 4 wave 2) as r43; tidy the remaining Dependabot PRs; keep or delete the kit pack
+   1.0.0 release asset.
+2. Continue Stage 4 from Next steps (second design-system wave; dependency moves; the
    migration squash is parked); leftovers are under Open items.
-4. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
+3. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
 
 ## Where we are
 
@@ -40,7 +37,7 @@ has not started.
 | Bundled MakeGood kit pack 1.0.1                                                | Done                                                                           |
 | Assembly checklist, photos, handoff, printable summary                         | Done                                                                           |
 | Read-only printer status + camera, job → plate linking                         | Done; SDCP and camera verified live, supervisor not tested during a full print |
-| Elegoo via OctoEverywhere shared link                                          | Done (r41); maintainer to enter the link and confirm live                      |
+| Elegoo via OctoEverywhere shared link                                          | Done; status + camera confirmed live through the link (r42)                    |
 | Spoolman (optional)                                                            | Done, mock-tested only                                                         |
 | Filament catalog + vendor supplement                                           | Done                                                                           |
 | Release (Unraid template, domain, public repo)                                 | Not started                                                                    |
@@ -51,9 +48,8 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
-- (2026-11-11) Re-check on Unraid with the real kit pack after the re-orientation removal:
-  Elegoo Centauri Carbon → 21 plates, no warnings, export guard clean. Keep or delete the
-  GitHub release asset for kit pack 1.0.0 (no longer baked into the image)?
+- (2026-11-11) Keep or delete the GitHub release asset for kit pack 1.0.0 (no longer baked
+  into the image)? (The 21-plate re-check after the re-orientation removal passed on r42.)
 
 - (2026-11-11) After the next deploy behind https, on a real iPhone and Android phone:
   install from the browser, icon and name ("TMT Builds"), splash, status bar and safe areas
@@ -90,9 +86,12 @@ Route each to the agent named in brackets.
   the bursts) [printers, app-shell]; `KitFilesImport` and `GuideMapper` were restyled
   without screenshots (need installed kit files) [app-shell].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Printers** [printers]: OctoEverywhere shared link for Elegoo (merged; r41 has it without
-  the reconnect/backoff fix 9c44a33): the maintainer enters the link in the printer form
-  and confirms status + camera live. `share-link.ts` `HOST_RE` only accepts
+- **Startup log** [release-pwa]: the "a reverse proxy appears to be in front" hint fires on
+  every direct install: `scripts/proxy-origin.mjs` always sets `x-forwarded-proto`, which
+  `client-ip.ts` `shouldWarnUndeclaredProxy` then sees. Base the hint on headers the client
+  actually sent.
+- **Printers** [printers]: OctoEverywhere shared link for Elegoo works live on r42 (status,
+  camera, with the reconnect backoff fix). `share-link.ts` `HOST_RE` only accepts
   `shared-[a-z0-9]{8,64}`; revisit if a real link is rejected. Small follow-ups:
   the Address box stretches tall next to the link field's helper text (desktop);
   `printers.spec.ts:244` (plate layout picker) timed out once under host load, passed
