@@ -1632,3 +1632,22 @@ label.field input[type='file'] {
 	font-size: 12px;
 	color: var(--muted);
 }
+
+/* ---- phone shell (app-shell) ----
+   Variables: --bottom-bar-h (height the build's fixed bottom tab bar occupies, safe area included;
+   0 on desktop, on phones without a build bar and while the build tab bar is absent). Anything that
+   is fixed or sticky to the bottom on a phone should sit at `bottom: var(--bottom-bar-h)`.
+   The bar is `nav.tabs[data-bottom]` (TabBar.svelte), fixed at z-index 20: dialogs and overlays
+   (z-index 50+) cover it. */
+:root {
+	--bottom-bar-h: 0px;
+}
+@media (max-width: 760px) {
+	:root:has(nav.tabs[data-bottom]) {
+		--bottom-bar-h: calc(56px + env(safe-area-inset-bottom, 0px));
+	}
+	/* The tab bar no longer pins under the header on phones, so the sticky Print toolbar sits at the top. */
+	:root:has(nav.tabs[data-bottom]) .toolbar {
+		top: 0;
+	}
+}

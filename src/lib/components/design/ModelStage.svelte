@@ -133,13 +133,14 @@
 		position: absolute;
 		left: 10px;
 		bottom: 8px;
-		max-width: calc(100% - 120px);
+		max-width: calc(100% - 20px);
+		white-space: nowrap;
 		pointer-events: none;
 	}
 	.reset {
 		position: absolute;
 		right: 10px;
-		bottom: 10px;
+		bottom: 30px; /* above the credit line, so the credit never wraps over the chair at 360 px */
 		opacity: 0.9;
 	}
 	.reset.raised {

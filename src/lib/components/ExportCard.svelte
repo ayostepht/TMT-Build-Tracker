@@ -1,22 +1,16 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import {
-		exportDownloadUrl,
-		exportPreview,
-		type ExportFlavor,
-		type ExportPreviewDto
-	} from '#lib/client/api.ts';
+	import { exportDownloadUrl, exportPreview, type ExportPreviewDto } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
+	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
 
 	const ctx = getBuildCtx();
 
-	const FLAVORS: { key: ExportFlavor; label: string }[] = [
-		{ key: 'orca', label: 'Elegoo Slicer / OrcaSlicer' },
-		{ key: 'bambu', label: 'Bambu Studio' },
-		{ key: 'plain', label: 'Other slicer (plain 3MF per plate)' }
-	];
-	let flavor = $state<ExportFlavor>('orca');
+	const FLAVORS = FLAVOR_OPTIONS;
+	// The slicer is remembered per device (shared with the per-plate export buttons).
+	$effect(() => exportPref.load());
+	const flavor = $derived(exportPref.flavor);
 	let scope = $state<'all' | 'some'>('all');
 	let picked = $state<number[]>([]);
 	let pv = $state<ExportPreviewDto | null>(null);
@@ -108,7 +102,7 @@
 		<div class="controls">
 			<label class="field">
 				Slicer
-				<select bind:value={flavor} data-testid="export-flavor">
+				<select bind:value={exportPref.flavor} data-testid="export-flavor">
 					{#each FLAVORS as f (f.key)}<option value={f.key}>{f.label}</option>{/each}
 				</select>
 			</label>

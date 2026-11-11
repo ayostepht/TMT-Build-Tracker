@@ -607,6 +607,9 @@ export const listPrinters = (org: string) =>
 		jobs: PrinterJobView[];
 		canEdit: boolean;
 		autoLogPrints: boolean;
+		/** Editors: builds a running job can be linked to, and pending "Confirm X is printing" suggestions. */
+		builds: { id: string; name: string }[];
+		expected: PrinterExpectedView[];
 	}>('GET', `/api/printers?org=${encodeURIComponent(org)}`);
 export interface PrinterWorkspace {
 	id: string;

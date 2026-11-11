@@ -2,13 +2,12 @@
 	import { onMount, tick } from 'svelte';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { filamentLabel, groupParts } from '#lib/domain/index.ts';
+	import { groupParts } from '#lib/domain/index.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import PartRow from '#lib/components/PartRow.svelte';
-	import Swatch from '#lib/components/Swatch.svelte';
-	import PlateStart from '#lib/components/PlateStart.svelte';
 	import PlateTime from '#lib/components/PlateTime.svelte';
-	import LogPlateButton from '#lib/components/LogPlateButton.svelte';
+	import PlateControl from '#lib/components/PlateControl.svelte';
+	import PrintToolbar from '#lib/components/PrintToolbar.svelte';
 	import PlateHistory from '#lib/components/PlateHistory.svelte';
 
 	const ctx = getBuildCtx();
@@ -25,14 +24,20 @@
 	const KEY = `tmt-ui:${ctx.id}`;
 
 	let role = $state('all');
-	let hidePrinted = $state(false);
+	// null = the reader never chose: Printed parts are hidden once the build is under way (some part
+	// Printed), shown while nothing is printed yet. A choice is remembered per build on this device.
+	let hideChoice = $state<boolean | null>(null);
 	let by = $state<By>('plate');
+	const underWay = $derived(
+		ctx.view.parts.some((p) => ctx.view.state[p.slug]?.status === 'Printed')
+	);
+	const hidePrinted = $derived(hideChoice ?? underWay);
 
 	// Remember the toolbar per build (localStorage can be blocked; render fine without it).
 	try {
 		const u = JSON.parse(localStorage.getItem(KEY) ?? '{}');
 		if (typeof u.role === 'string') role = u.role;
-		if (typeof u.hidePrinted === 'boolean') hidePrinted = u.hidePrinted;
+		if (typeof u.hide === 'boolean') hideChoice = u.hide;
 		if (['role', 'section', 'plate'].includes(u.group)) by = u.group;
 	} catch {
 		/* ignore */
@@ -88,7 +93,7 @@
 	});
 
 	$effect(() => {
-		const v = JSON.stringify({ role, hidePrinted, group: by });
+		const v = JSON.stringify({ role, hide: hideChoice ?? undefined, group: by });
 		try {
 			localStorage.setItem(KEY, v);
 		} catch {
@@ -112,7 +117,7 @@
 
 {#snippet startFor(key: string)}
 	{@const pl = ctx.view.plates.find((p) => String(p.number) === key)}
-	{#if pl}<PlateTime plate={pl} /><PlateStart plate={pl} /><LogPlateButton plate={pl} />{/if}
+	{#if pl}<PlateTime plate={pl} /><PlateControl plate={pl} />{/if}
 	{#if histCount(key)}
 		<button
 			class="btn sm ghost"
@@ -127,56 +132,20 @@
 
 <svelte:head><title>Print · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
-<div class="toolbar" role="toolbar" aria-label="Filter parts">
-	<div class="chips">
-		<button
-			class="chip"
-			type="button"
-			aria-pressed={activeRole === 'all'}
-			onclick={() => pickRole('all')}>All filament</button
-		>
-		{#each ctx.view.filaments as f (f.key)}
-			<button
-				class="chip"
-				type="button"
-				aria-pressed={activeRole === f.key}
-				onclick={() => pickRole(f.key)}
-			>
-				<Swatch hex={f.hex} tpu={f.tpu} size="mini" />
-				{filamentLabel(f)}
-			</button>
-		{/each}
-	</div>
-	<label class="tog"
-		><input
-			type="checkbox"
-			bind:checked={
-				() => curHide,
-				(v) => {
-					hidePrinted = v;
-					ovHide = null;
-				}
-			}
-		/> Hide printed</label
-	>
-	<label class="tog"
-		>Group by
-		<select
-			bind:value={
-				() => curBy,
-				(v) => {
-					by = v;
-					ovBy = null;
-				}
-			}
-		>
-			<option value="role">Filament</option>
-			<option value="section">Section</option>
-			<option value="plate">Plate</option>
-		</select>
-	</label>
-	<button class="btn sm" type="button" onclick={() => ctx.openGuide(null)}>Open build guide</button>
-</div>
+<PrintToolbar
+	role={activeRole}
+	hide={curHide}
+	by={curBy}
+	onrole={pickRole}
+	onhide={(v) => {
+		hideChoice = v;
+		ovHide = null;
+	}}
+	onby={(v) => {
+		by = v;
+		ovBy = null;
+	}}
+/>
 
 <main>
 	{#each groups as g (g.key)}

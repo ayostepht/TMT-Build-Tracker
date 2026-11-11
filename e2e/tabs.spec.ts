@@ -19,7 +19,8 @@ test('build tab bar: order, active tab in view, screenshots', async ({ page }) =
 				['files', '/files', 'Files']
 			]) {
 				await page.goto(buildUrl.replace(/\/$/, '') + path);
-				await expect(nav).toBeVisible();
+				// On phones the nav is display: contents (the bar inside it is fixed to the bottom).
+				await expect(nav.getByRole('link').first()).toBeVisible();
 				const active = nav.locator('[aria-current="page"]');
 				await expect(active).toHaveCount(1);
 				await expect(active).toHaveText(label);
@@ -27,20 +28,14 @@ test('build tab bar: order, active tab in view, screenshots', async ({ page }) =
 					.poll(async () =>
 						active.evaluate((el) => {
 							const a = el.getBoundingClientRect();
-							const n = el.parentElement!.getBoundingClientRect();
+							const p = el.parentElement!.getBoundingClientRect();
+							// Desktop: the strip is the nav (its row wrapper is display: contents).
+							const n = p.width ? p : el.closest('nav')!.getBoundingClientRect();
 							return a.left >= n.left - 1 && a.right <= n.right + 1;
 						})
 					)
 					.toBe(true);
-				await page.screenshot({
-					path: `${SHOTS}/tabs-${tab}-${width}-${scheme}.png`,
-					clip: {
-						x: 0,
-						y: 0,
-						width,
-						height: Math.ceil((await nav.boundingBox())!.y + (await nav.boundingBox())!.height) + 8
-					}
-				});
+				await page.screenshot({ path: `${SHOTS}/tabs-${tab}-${width}-${scheme}.png` });
 			}
 		}
 	}

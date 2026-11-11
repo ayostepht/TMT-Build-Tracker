@@ -14,7 +14,7 @@ test('a viewer sees the build read-only and the API refuses their writes', async
 	const vp = viewer.page;
 	// Invited users also get a personal workspace of their own.
 	await expect(
-		vp.getByRole('combobox', { name: 'Workspace' }).locator('option', { hasText: 'My builds' })
+		vp.getByRole('combobox', { name: 'Chapter' }).locator('option', { hasText: 'My builds' })
 	).toHaveCount(1);
 	await vp.goto(`/builds/${buildId}/print`);
 	await expect(vp.getByRole('note')).toContainText('view-only access');

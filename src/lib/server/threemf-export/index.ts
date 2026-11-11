@@ -216,8 +216,8 @@ export function chunksOf(
 
 export function exportFilename(plan: ExportPlan): string {
 	const zip = plan.flavor === 'plain' && plan.plates.length > 1;
-	const only =
-		plan.flavor === 'plain' && plan.plates.length === 1 ? `-plate${plan.plates[0].number}` : '';
+	// One plate: always name it ("-plateN"), the printer job linker matches on that file name.
+	const only = plan.plates.length === 1 ? `-plate${plan.plates[0].number}` : '';
 	return `TMT-${slug(plan.buildName)}-${slug(plan.printer.name)}-${plan.flavor}${only}.${zip ? 'zip' : '3mf'}`;
 }
 

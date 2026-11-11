@@ -1,17 +1,31 @@
 <script lang="ts">
-	import { jobAction } from '#lib/client/api.ts';
+	import { untrack } from 'svelte';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
+	import { jobAction } from '#lib/client/api.ts';
 	import type { PrinterExpectedView } from '#lib/printers/status.ts';
-	import { getBuildCtx } from './build-context.svelte.ts';
+	import { getBuildCtx, type BuildCtx } from './build-context.svelte.ts';
 	import { runChoices, runOptionLabel } from './run-label.ts';
 
 	/**
 	 * "Confirm Plate 13 · Wheel rims is printing on <printer>?": the user sent this plate to the
 	 * printer ("Start on <printer>") and the printer now runs a job nobody has linked. One tap links it.
 	 */
-	let { exp, onother }: { exp: PrinterExpectedView; onother: () => void } = $props();
-	const ctx = getBuildCtx();
-	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
+	let {
+		exp,
+		onother,
+		ctx: ctxProp,
+		onlinked
+	}: {
+		exp: PrinterExpectedView;
+		onother: () => void;
+		/** Outside a build page (the Printers page) the build's context is passed in. */
+		ctx?: BuildCtx;
+		onlinked?: () => void | Promise<void>;
+	} = $props();
+	const ctx = untrack(() => ctxProp ?? getBuildCtx());
+	const store = untrack(() =>
+		onlinked ? null : printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id)
+	);
 
 	const plate = $derived(ctx.view.plates.find((p) => p.number === exp.plateNumber));
 	const label = $derived.by(() => {
@@ -35,7 +49,8 @@
 				partSlugs: exp.partSlugs ?? undefined
 			});
 			await ctx.refresh();
-			await store.load();
+			if (onlinked) await onlinked();
+			else await store?.load();
 		} catch (e) {
 			err = e instanceof Error ? e.message : 'That did not work.';
 		}

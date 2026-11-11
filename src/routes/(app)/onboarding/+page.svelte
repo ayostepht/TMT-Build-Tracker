@@ -10,7 +10,7 @@
 	<div class="kicker">Chapters</div>
 	<h1>Build with others</h1>
 	<p class="muted">
-		A chapter is a team of makers who share builds, progress and filament. Your own builds stay in
+		A chapter is a group of makers who share builds, progress and filament. Your own builds stay in
 		My builds until you move them to a chapter.
 	</p>
 

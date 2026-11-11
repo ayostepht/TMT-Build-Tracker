@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
-import { createBuild, ownerWithBuild, signUp, startBuild, uniqueEmail } from './helpers';
+import { createBuild, openNav, ownerWithBuild, signUp, startBuild, uniqueEmail } from './helpers';
 
 const SHOTS = 'data/shots-m7';
 const FILE = 'Plate 1 - Handle Left.gcode';
@@ -303,11 +303,12 @@ test('top nav Printers reaches the printers page from a build; a personal worksp
 	await expect(wsMenu.getByTestId('ws-members')).toHaveCount(0);
 	await page.screenshot({ path: `data/shots-nav/menu-settings-1440-light.png` });
 	await page.keyboard.press('Escape');
-	// Phone: the same items live in the account menu and the header never overflows.
+	// Phone: the same items sit in the menu panel and the header never overflows.
 	for (const w of [360, 390]) {
 		await page.setViewportSize({ width: w, height: 844 });
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
-		await page.getByTestId('account-menu').click();
+		await openNav(page);
+		await page.getByTestId('workspace-settings-menu').click();
 		await expect(page.getByRole('menuitem', { name: 'Integrations' })).toBeVisible();
 		await expect(page.getByRole('menuitem', { name: 'Members' })).toHaveCount(0);
 		await page.screenshot({ path: `data/shots-nav/menu-account-${w}-light.png` });
@@ -320,6 +321,7 @@ test('top nav Printers reaches the printers page from a build; a personal worksp
 	await page.goto(`/builds/${buildId}`);
 	await page.waitForLoadState('networkidle');
 	await page.screenshot({ path: `data/shots-nav/nav-390-light.png` });
+	await openNav(page);
 	await page.getByTestId('builds-menu').click();
 	await page.screenshot({ path: `data/shots-nav/menu-builds-390-light.png` });
 	await page.keyboard.press('Escape');
@@ -683,4 +685,71 @@ test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Tak
 	await expect(page.getByTestId('printer-live')).toHaveCount(0);
 	await expect(page.getByTestId('expected-confirm')).toHaveCount(0);
 	idle();
+});
+
+test('Printers page: a running unlinked job can be linked there; Stop monitoring says what it does', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	const SHOTS_PP = process.env.STAGE2_SHOTS ?? 'data/shots-stage2';
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'pagelink');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Page Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	await page.goto(`${chapterUrl}/printers`);
+	await page.waitForLoadState('networkidle');
+
+	// A file with no plate number in its name: listed unlinked, with the link control right here.
+	mock.printing('benchy.gcode', 8);
+	const row = page.getByTestId('job-list').getByTestId('job-link');
+	await expect(row).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByTestId('job-list')).toContainText('Not linked to a plate');
+	const choose = row.getByTestId('link-plate');
+	await expect(choose).toBeVisible({ timeout: 15_000 });
+	await page.screenshot({ path: `${SHOTS_PP}/printers-unlinked-390-light.png`, fullPage: true });
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.screenshot({ path: `${SHOTS_PP}/printers-unlinked-390-dark.png`, fullPage: true });
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.screenshot({ path: `${SHOTS_PP}/printers-unlinked-1440-light.png`, fullPage: true });
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.screenshot({ path: `${SHOTS_PP}/printers-unlinked-1440-dark.png`, fullPage: true });
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await choose.selectOption({ index: 1 });
+	await expect(page.getByTestId('job-list').getByRole('link', { name: /^Plate \d+/ })).toBeVisible({
+		timeout: 15_000
+	});
+	const view = await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json();
+	expect(view.jobs.some((j: { buildId: string }) => j.buildId === buildId)).toBe(true);
+
+	// Monitoring wording: the print is not paused, only the app stops watching.
+	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	await page.getByRole('button', { name: 'Stop monitoring' }).click();
+	await expect(page.getByTestId('printer-state')).toHaveText('Monitoring stopped');
+	await page.screenshot({ path: `${SHOTS_PP}/printer-monitoring-stopped-390-light.png` });
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.screenshot({ path: `${SHOTS_PP}/printer-monitoring-stopped-390-dark.png` });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.screenshot({ path: `${SHOTS_PP}/printer-monitoring-stopped-1440-dark.png` });
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.screenshot({ path: `${SHOTS_PP}/printer-monitoring-stopped-1440-light.png` });
+	await expect(page.getByRole('button', { name: 'Resume monitoring' })).toBeVisible();
+	await page.getByRole('button', { name: 'Resume monitoring' }).click();
+	await expect(page.getByRole('button', { name: 'Stop monitoring' })).toBeVisible();
 });

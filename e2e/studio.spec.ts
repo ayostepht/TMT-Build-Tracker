@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { signUp, uniqueEmail, TUNED_LAYOUT } from './helpers';
+import { openNav, signUp, uniqueEmail, TUNED_LAYOUT } from './helpers';
 
 const SHOTS = 'data/shots-studio';
 
@@ -115,6 +115,7 @@ test('studio: screenshots (phone, desktop, wide; light and dark)', async ({ page
 			await page.goto(`/builds/${id}/settings`);
 			await page.waitForLoadState('networkidle');
 			await page.screenshot({ path: `${SHOTS}/draft-settings-${tag}.png` });
+			await openNav(page);
 			await page.getByTestId('builds-menu').click();
 			await page.screenshot({ path: `${SHOTS}/builds-menu-empty-${tag}.png` });
 			await page.keyboard.press('Escape');

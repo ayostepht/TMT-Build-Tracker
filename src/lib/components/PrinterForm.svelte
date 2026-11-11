@@ -342,7 +342,8 @@
 	</fieldset>
 
 	<label class="chk"
-		><input type="checkbox" bind:checked={f.enabled} /> Connected (uncheck to pause)</label
+		><input type="checkbox" bind:checked={f.enabled} /> Monitor this printer (uncheck to stop monitoring;
+		the print is not affected)</label
 	>
 
 	{#if error}<div class="error" role="alert">{error}</div>{/if}
@@ -382,6 +383,9 @@
 </form>
 
 <style>
+	.pf :global(.form-grid) {
+		align-items: start;
+	}
 	.pf small {
 		color: var(--muted);
 		font-size: 12px;

@@ -11,8 +11,8 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	await expect(page.getByRole('heading', { name: 'Members' })).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Invite', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Want to build with others?' })).toBeVisible();
-	// A single workspace and no invitations: no switcher, just a small link.
-	await expect(page.getByRole('combobox', { name: 'Workspace' })).toHaveCount(0);
+	// A single chapter-less workspace and no invitations: no switcher, just a small link.
+	await expect(page.getByRole('combobox', { name: 'Chapter' })).toHaveCount(0);
 	await expect(
 		page.getByRole('banner').getByRole('link', { name: 'Create a chapter' })
 	).toBeVisible();
@@ -29,7 +29,7 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	await page.getByRole('banner').getByRole('link', { name: 'Create a chapter' }).click();
 	const chapterName = `Pia chapter ${Date.now().toString(36)}`;
 	await createChapter(page, chapterName);
-	await expect(page.getByRole('combobox', { name: 'Workspace' })).toBeVisible();
+	await expect(page.getByRole('combobox', { name: 'Chapter' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Members', exact: true })).toBeVisible();
 
 	// Move the build.
@@ -47,7 +47,7 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 
 	// It is gone from My builds, and the activity log notes the move.
 	await page.waitForLoadState('networkidle');
-	await page.getByRole('combobox', { name: 'Workspace' }).selectOption({ label: 'My builds' });
+	await page.getByRole('combobox', { name: 'Chapter' }).selectOption({ label: 'My builds' });
 	await expect(page.getByRole('heading', { level: 1, name: 'My builds' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Solo chair' })).toHaveCount(0);
 	await page.goto(`/builds/${buildId}`);

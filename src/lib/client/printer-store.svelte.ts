@@ -19,6 +19,8 @@ export class PrinterStore {
 	error = $state<string | null>(null);
 	canEdit = $state(false);
 	autoLogPrints = $state(false);
+	/** Team page, editors: builds a job can be linked to. */
+	builds = $state<{ id: string; name: string }[]>([]);
 	private es: EventSource | null = null;
 	private refs = 0;
 	private reloadTimer: ReturnType<typeof setTimeout> | undefined;
@@ -48,6 +50,8 @@ export class PrinterStore {
 				this.printers = r.printers;
 				this.jobs = r.jobs;
 				this.canEdit = r.canEdit;
+				this.builds = r.builds ?? [];
+				this.expected = r.expected ?? [];
 				this.autoLogPrints = r.autoLogPrints;
 			}
 			this.error = null;

@@ -32,7 +32,7 @@
 					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 					<a href={resolve('/(app)/admin/templates/[id]', { id: t.id }) + from}>{t.name}</a>
 				</h3>
-				<div class="muted">{t.version}{t.owned ? ' · workspace copy' : ''}</div>
+				<div class="muted">{t.version}{t.owned ? ' · chapter copy' : ''}</div>
 				<div class="counts">
 					<span class="set">{t.parts} parts</span>
 					<span class="set">{t.plates} plates</span>

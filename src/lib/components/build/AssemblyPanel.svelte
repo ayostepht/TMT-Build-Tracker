@@ -8,6 +8,7 @@
 		readyToAssemble,
 		stepProgress
 	} from '#lib/domain/index.ts';
+	import { untrack } from 'svelte';
 	import type { AssemblyStep } from '#lib/domain/types.ts';
 	import { ago, getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import PhotoGallery from '#lib/components/PhotoGallery.svelte';
@@ -36,6 +37,22 @@
 		});
 		return out;
 	});
+
+	// Completed steps fold away (Finish is long); a toggle brings them back. Only steps that were
+	// already done when this page opened fold: one ticked off during the visit (by you or by someone
+	// else, live) stays open until the next visit, so the tap visibly worked.
+	let showDone = $state(false);
+	const foldedAtOpen = new Set(
+		untrack(() =>
+			view.assembly.steps.filter((st) => stepProgress(view, st).done).map((st) => st.key)
+		)
+	);
+	const foldedCount = $derived(
+		view.assembly.steps.filter((st) => foldedAtOpen.has(st.key) && stepProgress(view, st).done)
+			.length
+	);
+	const isShown = (st: AssemblyStep) =>
+		showDone || !foldedAtOpen.has(st.key) || !stepProgress(view, st).done;
 
 	const set = (key: string, patch: { done?: boolean; note?: string }) =>
 		ctx.act(() => setAssemblyItem(ctx.id, key, patch));
@@ -90,135 +107,152 @@
 		</div>
 	</div>
 
+	{#if foldedCount > 0}
+		<button
+			type="button"
+			class="btn sm done-toggle"
+			aria-expanded={showDone}
+			data-testid="toggle-done-steps"
+			onclick={() => (showDone = !showDone)}
+			>{showDone
+				? 'Hide completed steps'
+				: `Show ${foldedCount} completed ${foldedCount === 1 ? 'step' : 'steps'}`}</button
+		>
+	{/if}
+
 	{#each sections as sec (sec.name)}
-		<div class="sec">
-			<h2 class="sect-h">{sec.name}</h2>
-			{#each sec.steps as { step, n } (step.key)}
-				{@const sp = stepProgress(view, step)}
-				{@const si = item(step.key)}
-				{@const img = guideImage(step.guidePage)}
-				<article class="astep" class:done={sp.done} data-step={step.key} data-done={sp.done}>
-					<header>
-						<span class="no" aria-hidden="true">{sp.done ? '✓' : n}</span>
-						<h3>{step.title}</h3>
-						{#if step.guidePage !== null}
-							<button
-								type="button"
-								class="pill-link guide"
-								class:withimg={!!img}
-								aria-label="Open guide page {step.guidePage}"
-								onclick={() => ctx.openGuidePage(step.guidePage!)}
-							>
-								{#if img}<img src={img} alt="" loading="lazy" />{/if}
-								<span>Guide p. {step.guidePage}</span>
-							</button>
-						{/if}
-					</header>
-					<p class="desc">{step.description}</p>
-
-					{#if step.parts.length}
-						<div class="blk">
-							<div class="lab">Parts</div>
-							<ul class="parts">
-								{#each step.parts as slug (slug)}
-									{@const st = statusOf(slug)}
-									<li class:warn={st !== 'Printed'}>
-										<span>{partName(slug)}</span>
-										{#if st === 'Printed'}
-											<span class="pst ok">Printed</span>
-										{:else}
-											<span class="pst warnchip">{st}</span>
-											<span class="warntext">{partName(slug)} isn't printed yet</span>
-										{/if}
-									</li>
-								{/each}
-							</ul>
-						</div>
-					{/if}
-
-					{#if step.hardware.length}
-						<div class="blk">
-							<div class="lab">Hardware</div>
-							<ul class="ticks">
-								{#each step.hardware as h (h.name)}
-									<li>
-										<label>
-											<input
-												type="checkbox"
-												checked={item(hwItemKey(step.key, h.name))?.done ?? false}
-												disabled={!ctx.canEdit}
-												onchange={(e) =>
-													set(hwItemKey(step.key, h.name), { done: e.currentTarget.checked })}
-											/>
-											<span>{h.name}{h.qty ? ` × ${h.qty}` : ''}</span>
-										</label>
-									</li>
-								{/each}
-							</ul>
-						</div>
-					{/if}
-
-					{#if step.checks.length}
-						<div class="blk">
-							<div class="lab">Checks</div>
-							<ul class="ticks">
-								{#each step.checks as c (c.key)}
-									{@const ci = item(checkItemKey(step.key, c.key))}
-									<li>
-										<label>
-											<input
-												type="checkbox"
-												checked={ci?.done ?? false}
-												disabled={!ctx.canEdit}
-												onchange={(e) =>
-													set(checkItemKey(step.key, c.key), { done: e.currentTarget.checked })}
-											/>
-											<span>{c.text}</span>
-										</label>
-										{#if ci?.done && ci.doneByName}
-											<span class="who">{ci.doneByName}</span>
-										{/if}
-									</li>
-								{/each}
-							</ul>
-						</div>
-					{/if}
-
-					<label class="note">
-						<span class="lab">Notes</span>
-						<textarea
-							rows="2"
-							placeholder={ctx.canEdit ? 'Anything to remember about this step' : ''}
-							value={si?.note ?? ''}
-							readonly={!ctx.canEdit}
-							onchange={(e) => set(step.key, { note: e.currentTarget.value })}></textarea>
-					</label>
-
-					<footer>
-						{#if sp.done}
-							<span class="doneby"
-								>Done{si?.doneByName ? ` by ${si.doneByName}` : ''}{si?.doneAt
-									? ` · ${ago(si.doneAt, ctx.now)}`
-									: ''}</span
-							>
-						{/if}
-						{#if ctx.canEdit}
-							{#if sp.done}
-								<button type="button" class="btn sm" onclick={() => set(step.key, { done: false })}
-									>Reopen step</button
-								>
-							{:else}
+		{#if sec.steps.some((x) => isShown(x.step))}
+			<div class="sec">
+				<h2 class="sect-h">{sec.name}</h2>
+				{#each sec.steps.filter((x) => isShown(x.step)) as { step, n } (step.key)}
+					{@const sp = stepProgress(view, step)}
+					{@const si = item(step.key)}
+					{@const img = guideImage(step.guidePage)}
+					<article class="astep" class:done={sp.done} data-step={step.key} data-done={sp.done}>
+						<header>
+							<span class="no" aria-hidden="true">{sp.done ? '✓' : n}</span>
+							<h3>{step.title}</h3>
+							{#if step.guidePage !== null}
 								<button
 									type="button"
-									class="btn primary"
-									onclick={() => set(step.key, { done: true })}>Mark step done</button
+									class="pill-link guide"
+									class:withimg={!!img}
+									aria-label="Open guide page {step.guidePage}"
+									onclick={() => ctx.openGuidePage(step.guidePage!)}
+								>
+									{#if img}<img src={img} alt="" loading="lazy" />{/if}
+									<span>Guide p. {step.guidePage}</span>
+								</button>
+							{/if}
+						</header>
+						<p class="desc">{step.description}</p>
+
+						{#if step.parts.length}
+							<div class="blk">
+								<div class="lab">Parts</div>
+								<ul class="parts">
+									{#each step.parts as slug (slug)}
+										{@const st = statusOf(slug)}
+										<li class:warn={st !== 'Printed'}>
+											<span>{partName(slug)}</span>
+											{#if st === 'Printed'}
+												<span class="pst ok">Printed</span>
+											{:else}
+												<span class="pst warnchip">{st}</span>
+												<span class="warntext">{partName(slug)} isn't printed yet</span>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+
+						{#if step.hardware.length}
+							<div class="blk">
+								<div class="lab">Hardware</div>
+								<ul class="ticks">
+									{#each step.hardware as h (h.name)}
+										<li>
+											<label>
+												<input
+													type="checkbox"
+													checked={item(hwItemKey(step.key, h.name))?.done ?? false}
+													disabled={!ctx.canEdit}
+													onchange={(e) =>
+														set(hwItemKey(step.key, h.name), { done: e.currentTarget.checked })}
+												/>
+												<span>{h.name}{h.qty ? ` × ${h.qty}` : ''}</span>
+											</label>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+
+						{#if step.checks.length}
+							<div class="blk">
+								<div class="lab">Checks</div>
+								<ul class="ticks">
+									{#each step.checks as c (c.key)}
+										{@const ci = item(checkItemKey(step.key, c.key))}
+										<li>
+											<label>
+												<input
+													type="checkbox"
+													checked={ci?.done ?? false}
+													disabled={!ctx.canEdit}
+													onchange={(e) =>
+														set(checkItemKey(step.key, c.key), { done: e.currentTarget.checked })}
+												/>
+												<span>{c.text}</span>
+											</label>
+											{#if ci?.done && ci.doneByName}
+												<span class="who">{ci.doneByName}</span>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+
+						<label class="note">
+							<span class="lab">Notes</span>
+							<textarea
+								rows="2"
+								placeholder={ctx.canEdit ? 'Anything to remember about this step' : ''}
+								value={si?.note ?? ''}
+								readonly={!ctx.canEdit}
+								onchange={(e) => set(step.key, { note: e.currentTarget.value })}></textarea>
+						</label>
+
+						<footer>
+							{#if sp.done}
+								<span class="doneby"
+									>Done{si?.doneByName ? ` by ${si.doneByName}` : ''}{si?.doneAt
+										? ` · ${ago(si.doneAt, ctx.now)}`
+										: ''}</span
 								>
 							{/if}
-						{/if}
-					</footer>
-				</article>
-			{/each}
-		</div>
+							{#if ctx.canEdit}
+								{#if sp.done}
+									<button
+										type="button"
+										class="btn sm"
+										onclick={() => set(step.key, { done: false })}>Reopen step</button
+									>
+								{:else}
+									<button
+										type="button"
+										class="btn primary"
+										onclick={() => set(step.key, { done: true })}>Mark step done</button
+									>
+								{/if}
+							{/if}
+						</footer>
+					</article>
+				{/each}
+			</div>
+		{/if}
 	{:else}
 		<p class="muted">This kit has no assembly checklist yet.</p>
 	{/each}
@@ -260,6 +294,9 @@
 		display: grid;
 		gap: 6px;
 		margin-top: 8px;
+	}
+	.done-toggle {
+		justify-self: start;
 	}
 	.sec {
 		display: grid;

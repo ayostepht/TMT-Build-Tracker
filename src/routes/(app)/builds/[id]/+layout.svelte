@@ -7,7 +7,6 @@
 	import DraftHeader from '#lib/components/DraftHeader.svelte';
 	import TabBar from '#lib/components/TabBar.svelte';
 	import GuideViewer from '#lib/components/GuideViewer.svelte';
-	import Toast from '#lib/components/Toast.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -75,7 +74,6 @@
 {/if}
 {@render children()}
 <GuideViewer />
-<Toast />
 
 <style>
 	/* The Design tab is a work area: wider container, tighter bottom padding, no page scroll on desktop. */

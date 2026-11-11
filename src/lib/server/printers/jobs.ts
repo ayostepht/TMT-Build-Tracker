@@ -257,19 +257,19 @@ export function expectOnPrinterJob(
 	emitPrinterEvent(printer.organizationId, { type: 'job', printerId });
 }
 
-/** Suggestions for a build: its plate was sent to a printer that now runs an unlinked job. */
-export function pendingExpected(db: Db, orgId: string, buildId: string): PrinterExpectedView[] {
+/** Suggestions for a build (or, without `buildId`, for every build of the team): its plate was sent to a printer that now runs an unlinked job. */
+export function pendingExpected(db: Db, orgId: string, buildId?: string): PrinterExpectedView[] {
 	const out: PrinterExpectedView[] = [];
 	for (const p of db.select().from(printers).where(eq(printers.organizationId, orgId)).all()) {
 		const exp = getExpected(db, orgId, p.id);
-		if (!exp || exp.buildId !== buildId || !exp.jobId) continue;
+		if (!exp || (buildId && exp.buildId !== buildId) || !exp.jobId) continue;
 		if (Date.now() - exp.at >= EXPECTED_MAX_AGE_MS) continue;
 		const j = activeJob(db, p.id);
 		if (!j || j.id !== exp.jobId || j.buildId) continue;
 		out.push({
 			printerId: p.id,
 			printerName: p.name,
-			buildId,
+			buildId: exp.buildId,
 			plateNumber: exp.plate,
 			partSlugs: exp.partSlugs ?? null,
 			jobId: j.id,

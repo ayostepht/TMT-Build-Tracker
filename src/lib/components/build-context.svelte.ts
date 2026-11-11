@@ -1,7 +1,14 @@
 import { getContext, setContext } from 'svelte';
-import type { BuildView, FilamentRole } from '#lib/domain/types.ts';
-import { getView } from '#lib/client/api.ts';
+import { SvelteDate } from 'svelte/reactivity';
+import type { BuildView, FilamentRole, PartPatch, PartStatus } from '#lib/domain/types.ts';
+import { getView, printing, setPartStatus as apiSetPartStatus } from '#lib/client/api.ts';
+import { applyPatches, setStatus, startPrinting, stopPrinting } from '#lib/domain/actions.ts';
+import { snapshotParts, type PartSnapshot } from '#lib/domain/logrun.ts';
 import { filamentLabel } from '#lib/domain/labels.ts';
+import { toasts } from './toast.svelte.ts';
+
+/** How long the Undo toast for a build action stays (ms). Long enough to notice a slip. */
+export const UNDO_MS = 15000;
 
 export type SyncState = 'connecting' | 'on' | 'off';
 
@@ -47,18 +54,116 @@ export class BuildCtx {
 		}
 	}
 
-	/** Run a mutation, surface its error, then refresh. Returns true on success. */
-	async act(fn: () => Promise<unknown>): Promise<boolean> {
+	/**
+	 * Run a mutation, surface its error, then refresh. Returns true on success.
+	 *
+	 * `opts.patches` makes it optimistic: the part state is updated at once with patches the pure
+	 * domain rules predicted (`#lib/domain/actions.ts`), the server call follows, and a failure puts
+	 * the touched parts back before showing the server's sentence. The server stays the authority:
+	 * the re-fetched view always replaces the optimistic one.
+	 */
+	async act(fn: () => Promise<unknown>, opts: { patches?: PartPatch[] } = {}): Promise<boolean> {
 		this.error = null;
+		const rollback = opts.patches?.length ? this.#applyOptimistic(opts.patches) : null;
 		try {
 			await fn();
 			await this.refresh();
 			return true;
 		} catch (e) {
+			rollback?.();
 			this.error = e instanceof Error ? e.message : 'That did not save.';
 			await this.refresh();
 			return false;
 		}
+	}
+
+	#applyOptimistic(patches: PartPatch[]): () => void {
+		const before = Object.fromEntries(
+			patches.filter((p) => this.view.state[p.slug]).map((p) => [p.slug, this.view.state[p.slug]])
+		);
+		this.view = applyPatches(this.view, patches);
+		return () => {
+			this.view = { ...this.view, state: { ...this.view.state, ...before } };
+		};
+	}
+
+	#nameOf(slugs: string[]): string {
+		const n = slugs.map((s) => this.view.parts.find((p) => p.slug === s)?.name ?? s);
+		return n.length > 2 ? `${n.length} parts` : n.join(' + ');
+	}
+
+	/** Offer Undo for a status change: puts the parts back as `before` (status, start time, estimate). */
+	#offerUndo(text: string, before: PartSnapshot[]) {
+		toasts.push(
+			text,
+			{
+				label: 'Undo',
+				run: async () => {
+					if (await this.restoreParts(before)) toasts.push('Undone', undefined, 4000);
+				}
+			},
+			UNDO_MS
+		);
+	}
+
+	/** Put parts back to a snapshot taken before a status change. Optimistic, like the change itself. */
+	restoreParts(before: PartSnapshot[]): Promise<boolean> {
+		const patches: PartPatch[] = before.map((s) => ({
+			slug: s.slug,
+			status: s.status,
+			startedAt: s.startedAt,
+			printedOn: s.printedOn,
+			runEstSeconds: s.runEstSeconds
+		}));
+		return this.act(
+			async () => {
+				for (const s of before) {
+					await apiSetPartStatus(this.id, s.slug, s.status);
+					if (s.status === 'Printing') {
+						if (s.startedAt)
+							await printing(this.id, { action: 'setStart', slugs: [s.slug], when: s.startedAt });
+						if (s.runEstSeconds)
+							await printing(this.id, {
+								action: 'setEstimate',
+								slugs: [s.slug],
+								seconds: s.runEstSeconds
+							});
+					}
+				}
+			},
+			{ patches }
+		);
+	}
+
+	/** Set one part's status (the per-part control): optimistic, with an Undo toast. */
+	async setPartStatus(slug: string, status: PartStatus): Promise<boolean> {
+		const patches = setStatus(this.view, slug, status, new SvelteDate());
+		if (!patches.length) return true;
+		const before = snapshotParts(this.view, [slug]);
+		const name = this.#nameOf([slug]);
+		const ok = await this.act(() => apiSetPartStatus(this.id, slug, status), { patches });
+		if (ok) this.#offerUndo(`${name} · ${status}`, before);
+		return ok;
+	}
+
+	/** "Start printing": mark these parts Printing (optimistic, Undo toast). */
+	async startParts(slugs: string[], label = this.#nameOf(slugs)): Promise<boolean> {
+		const patches = startPrinting(this.view, slugs, new SvelteDate());
+		if (!patches.length) return true;
+		const before = snapshotParts(this.view, slugs);
+		const ok = await this.act(() => printing(this.id, { action: 'start', slugs }), { patches });
+		if (ok) this.#offerUndo(`Started ${label}`, before);
+		return ok;
+	}
+
+	/** "Take off printer": the parts stop printing without a log (optimistic, Undo toast). */
+	async takeOffParts(slugs: string[], label = this.#nameOf(slugs)): Promise<boolean> {
+		const patches = stopPrinting(this.view, slugs);
+		if (!patches.length) return true;
+		const before = snapshotParts(this.view, slugs);
+		const ok = await this.act(() => printing(this.id, { action: 'stop', slugs }), { patches });
+		if (ok) this.#offerUndo(`Took ${label} off the printer`, before);
+		return ok;
 	}
 
 	/** Open the whole guide at one of our guide page numbers. */

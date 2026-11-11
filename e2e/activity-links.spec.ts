@@ -8,7 +8,7 @@ async function logFirstPlate(page: Page): Promise<string> {
 	await page.getByLabel('Group by').selectOption('plate');
 	const btn = page
 		.locator('.group-head')
-		.getByRole('button', { name: /^Log plate \d+ printed$/ })
+		.getByRole('button', { name: /^Log a print on plate \d+$/ })
 		.first();
 	await expect(btn).toBeVisible();
 	const plate = /\d+/.exec((await btn.getAttribute('aria-label')) as string)![0];

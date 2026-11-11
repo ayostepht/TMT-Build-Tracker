@@ -13,7 +13,7 @@
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import type { Plate } from '#lib/domain/types.ts';
 	import RoleChip from './RoleChip.svelte';
-	import LogRunSheet from './LogRunSheet.svelte';
+	import PlateControl from './PlateControl.svelte';
 	import PlateTime from './PlateTime.svelte';
 	import PrinterLive from './PrinterLive.svelte';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
@@ -33,7 +33,6 @@
 		};
 	}
 	const fid = $derived(`now-${item.plate}`);
-	let sheetOpen = $state(false);
 	const pstore = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	$effect(() => pstore.acquire());
 	const liveJobs = $derived(
@@ -207,33 +206,10 @@
 			>A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure flags them
 			for reprint.</span
 		>
-		{#if ctx.canEdit}
-			<div class="now-actions">
-				<button class="btn primary" type="button" onclick={() => (sheetOpen = true)}
-					>Finish &amp; log print…</button
-				>
-				<button
-					class="btn"
-					type="button"
-					onclick={async () => {
-						await ctx.act(() => printing(ctx.id, { action: 'stop', slugs }));
-						// the printer's running job is unlinked now: show it in "Link to plate…" at once
-						void pstore.load();
-					}}>Take off printer</button
-				>
-			</div>
+		{#if plate}
+			<div class="now-actions"><PlateControl {plate} size="md" /></div>
 		{/if}
 	</div>
-	{#if ctx.canEdit}
-		<LogRunSheet
-			bind:open={sheetOpen}
-			quick
-			plateNumber={item.plate}
-			{slugs}
-			startedAt={item.startedAt}
-			title="Finish & log print"
-		/>
-	{/if}
 </article>
 
 <style>

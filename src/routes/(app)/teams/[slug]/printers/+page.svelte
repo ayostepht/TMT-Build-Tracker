@@ -4,6 +4,7 @@
 	import { jobAction, removePrinter, updatePrinter } from '#lib/client/api.ts';
 	import { PrinterStore } from '#lib/client/printer-store.svelte.ts';
 	import PrinterCard from '#lib/components/PrinterCard.svelte';
+	import PrinterJobLink from '#lib/components/PrinterJobLink.svelte';
 	import PrinterForm from '#lib/components/PrinterForm.svelte';
 	import type { PrinterPublic } from '#lib/printers/status.ts';
 	import type { PageProps } from './$types';
@@ -86,7 +87,7 @@
 							{#if data.printersAvailable}
 								<button class="btn sm" type="button" onclick={() => (editing = p)}>Edit</button>
 								<button class="btn sm" type="button" onclick={() => toggle(p)}
-									>{p.enabled ? 'Pause' : 'Resume'}</button
+									>{p.enabled ? 'Stop monitoring' : 'Resume monitoring'}</button
 								>
 							{/if}
 							{#if confirmRemove === p.id}
@@ -158,6 +159,14 @@
 								{/if}
 							{:else}
 								<span class="muted">Not linked to a plate</span>
+								{#if data.canEdit && (j.status === 'printing' || j.status === 'paused')}
+									<PrinterJobLink
+										job={j}
+										builds={store.builds}
+										exp={store.expected.find((e) => e.jobId === j.id)}
+										onlinked={() => store.load()}
+									/>
+								{/if}
 							{/if}
 						</div>
 					</div>

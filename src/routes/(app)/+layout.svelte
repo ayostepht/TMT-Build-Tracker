@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import { untrack } from 'svelte';
 	import { PrinterStore } from '#lib/client/printer-store.svelte.ts';
+	import Toast from '#lib/components/Toast.svelte';
 	import { authClient } from '#lib/auth-client.ts';
 	import type { LayoutProps } from './$types';
 
@@ -48,6 +49,16 @@
 	);
 	const onOverview = $derived(!isDraft && !!overviewHref && page.url.pathname === overviewHref);
 	const onSetup = $derived(page.route.id === '/(app)/builds/[id]/setup');
+	// Inside a build the Builds menu is the "you are here" item. The build tabs lead back to the
+	// Overview, so the crumb is only for drafts (their tab bar has no Overview).
+	const routeId = $derived(page.route.id ?? '');
+	const buildsActive = $derived(
+		!!current ||
+			routeId.startsWith('/(app)/builds') ||
+			routeId === '/(app)/teams/[slug]' ||
+			routeId === '/(app)/builds'
+	);
+	const showCrumb = $derived(!!current && isDraft && !onOverview && !onSetup);
 	// Pages that are not part of a build carry `?from=<id>` so they can lead back to it.
 	const fromQuery = $derived(current ? `?from=${current.id}` : '');
 
@@ -99,31 +110,86 @@
 	);
 
 	let open = $state<'builds' | 'account' | 'settings' | null>(null);
-	afterNavigate(() => (open = null));
+	/** Phones: the nav links and menus sit in a panel behind one button. */
+	let navOpen = $state(false);
+	afterNavigate(() => {
+		open = null;
+		navOpen = false;
+	});
+
+	// Thin progress bar while a navigation is in flight (shown after a short delay, so quick ones stay calm).
+	let progress = $state(false);
+	$effect(() => {
+		if (!navigating.to) return;
+		const t = setTimeout(() => (progress = true), 120);
+		return () => {
+			clearTimeout(t);
+			progress = false;
+		};
+	});
 	function toggle(which: 'builds' | 'account' | 'settings') {
 		open = open === which ? null : which;
 	}
 	function onWindowClick(e: MouseEvent) {
-		if (!(e.target as Element | null)?.closest('.menu-wrap')) open = null;
+		const el = e.target as Element | null;
+		if (!el?.closest('.menu-wrap')) open = null;
+		if (!el?.closest('.navpanel, .navtoggle')) navOpen = false;
 	}
 </script>
 
 <svelte:window
 	onclick={onWindowClick}
 	onkeydown={(e) => {
-		if (e.key === 'Escape') open = null;
+		if (e.key === 'Escape') {
+			open = null;
+			navOpen = false;
+		}
 	}}
 />
 
-<div class="wrap">
+<div class="navprogress" class:on={progress} aria-hidden="true"></div>
+
+<div class="wrap shell" class:has-tabs={!!current && !onSetup}>
 	<header class="topbar">
-		<div class="left">
-			<a class="brand" href={resolve('/(app)')}>TMT Build Tracker</a>
+		<a class="brand" href={resolve('/(app)')}>TMT Build Tracker</a>
+		<div class="chapter-slot">
+			{#if showSwitcher}
+				<label class="chapter">
+					<span class="sr-only">Chapter</span>
+					<select value={data.activeTeamId ?? ''} onchange={switchTeam} aria-label="Chapter">
+						{#each data.teams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+						<option value="__create">Create a chapter…</option>
+						{#if data.invitationCount > 0}
+							<option value="__invites">Invitations ({data.invitationCount})</option>
+						{/if}
+					</select>
+				</label>
+			{:else}
+				<a class="btn sm create-chapter" href={resolve('/(app)/onboarding')}>Create a chapter</a>
+			{/if}
+		</div>
+		<button
+			type="button"
+			class="navtoggle"
+			aria-expanded={navOpen}
+			aria-controls="nav-panel"
+			aria-label="Menu"
+			data-testid="nav-toggle"
+			onclick={() => (navOpen = !navOpen)}
+		>
+			<svg viewBox="0 0 24 24" aria-hidden="true"
+				><path d={navOpen ? 'M6 6l12 12M18 6L6 18' : 'M4 7h16M4 12h16M4 17h16'} /></svg
+			>
+			{#if data.invitationCount > 0 && !navOpen}<span class="badge-dot" aria-hidden="true"
+				></span>{/if}
+		</button>
+		<div class="navpanel" id="nav-panel" class:open={navOpen}>
 			<nav class="main" aria-label="Main">
 				<div class="menu-wrap">
 					<button
 						type="button"
 						class="navlink"
+						class:on={buildsActive}
 						aria-haspopup="true"
 						aria-expanded={open === 'builds'}
 						data-testid="builds-menu"
@@ -161,7 +227,9 @@
 								<div class="menu-h">No builds yet</div>
 							{/if}
 							<div class="menu-foot">
-								<a role="menuitem" href={resolve('/(app)')} data-testid="all-builds">All builds</a>
+								<a role="menuitem" href={resolve('/(app)/builds')} data-testid="all-builds"
+									>All builds</a
+								>
 								<a
 									role="menuitem"
 									class="btn primary sm"
@@ -177,10 +245,13 @@
 					class="navlink"
 					href={resolve('/(app)/studio') + fromQuery}
 					data-testid="nav-studio"
-					aria-current={page.url.pathname.startsWith('/studio') ||
-					page.url.pathname.startsWith('/designs')
-						? 'page'
-						: undefined}>Studio</a
+					aria-current={page.url.pathname.startsWith('/studio') ? 'page' : undefined}>Studio</a
+				>
+				<a
+					class="navlink"
+					href={resolve('/(app)/designs') + fromQuery}
+					data-testid="nav-designs"
+					aria-current={page.url.pathname.startsWith('/designs') ? 'page' : undefined}>Designs</a
 				>
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 				{#if printersHref && !data.publicMode}
@@ -195,22 +266,6 @@
 					>
 				{/if}
 			</nav>
-		</div>
-		<div class="who">
-			{#if showSwitcher}
-				<label class="chapter">
-					<span class="sr-only">Workspace</span>
-					<select value={data.activeTeamId ?? ''} onchange={switchTeam} aria-label="Workspace">
-						{#each data.teams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
-						<option value="__create">Create a chapter…</option>
-						{#if data.invitationCount > 0}
-							<option value="__invites">Invitations ({data.invitationCount})</option>
-						{/if}
-					</select>
-				</label>
-			{:else}
-				<a class="btn sm" href={resolve('/(app)/onboarding')}>Create a chapter</a>
-			{/if}
 			{#if workspace && (membersHref || !data.publicMode)}
 				<div class="menu-wrap ws-settings">
 					<button
@@ -220,7 +275,8 @@
 						aria-expanded={open === 'settings'}
 						data-testid="workspace-settings-menu"
 						onclick={() => toggle('settings')}
-						>Workspace settings <span aria-hidden="true">▾</span></button
+						>{workspace.personal ? 'My builds' : 'Chapter'} settings
+						<span aria-hidden="true">▾</span></button
 					>
 					{#if open === 'settings'}
 						<div class="menu account" role="menu" data-testid="workspace-settings-panel">
@@ -237,7 +293,7 @@
 					{/if}
 				</div>
 			{/if}
-			<div class="menu-wrap">
+			<div class="menu-wrap acct-wrap">
 				<button
 					type="button"
 					class="navlink acct"
@@ -251,16 +307,14 @@
 				{#if open === 'account'}
 					<div class="menu account" role="menu">
 						{#if data.user}<div class="menu-h">{data.user.email}</div>{/if}
+						{#if !showSwitcher}
+							<a role="menuitem" class="phone-only" href={resolve('/(app)/onboarding')}
+								>Create a chapter</a
+							>
+						{/if}
 						{#if data.siteAdmin}
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 							<a role="menuitem" href={resolve('/(app)/admin/templates') + fromQuery}>Kit admin</a>
-						{/if}
-						{#if workspace}
-							{#if membersHref}<a role="menuitem" class="phone-only" href={membersHref}>Members</a
-								>{/if}
-							{#if !data.publicMode}
-								<a role="menuitem" class="phone-only" href={integrationsHref}>Integrations</a>
-							{/if}
 						{/if}
 						<a role="menuitem" href={resolve('/(app)/account')} data-testid="account-link"
 							>Account</a
@@ -270,37 +324,91 @@
 				{/if}
 			</div>
 		</div>
-		{#if current && !onOverview && !onSetup}
+		{#if showCrumb}
 			<a class="crumb" href={overviewHref} data-testid="back-to-build"
-				><span aria-hidden="true">←</span> {isDraft ? 'Studio' : current.name}</a
+				><span aria-hidden="true">←</span> {isDraft ? 'Studio' : current?.name}</a
 			>
 		{/if}
 	</header>
 	{@render children()}
 </div>
 
+<Toast />
+
 <style>
+	.navprogress {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		z-index: 3000;
+		overflow: hidden;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	.navprogress.on {
+		opacity: 1;
+	}
+	.navprogress::before {
+		content: '';
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: 40%;
+		background: var(--accent);
+		animation: navslide 1s ease-in-out infinite;
+	}
+	@keyframes navslide {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(250%);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.navprogress::before {
+			width: 100%;
+			animation: none;
+		}
+	}
 	.topbar {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 8px 12px;
+		gap: 6px 12px;
 		flex-wrap: wrap;
 	}
-	.left,
-	.who,
+	/* Desktop: the panel dissolves so brand, nav, chapter and menus sit in one row. */
+	.navpanel {
+		display: contents;
+	}
+	.brand {
+		order: 0;
+		margin-right: 6px;
+	}
+	.main {
+		order: 1;
+	}
+	.chapter-slot {
+		order: 2;
+		margin-left: auto;
+		min-width: 0;
+	}
+	.ws-settings {
+		order: 3;
+	}
+	.acct-wrap {
+		order: 4;
+	}
+	.navtoggle {
+		display: none;
+	}
 	.main {
 		display: flex;
 		align-items: center;
 		gap: 6px 12px;
 		min-width: 0;
-	}
-	.left {
-		gap: 6px 18px;
-		flex-wrap: wrap;
-	}
-	.who {
-		font-size: 14px;
 	}
 	.navlink {
 		background: none;
@@ -318,6 +426,12 @@
 	}
 	.navlink:hover {
 		background: var(--accent-soft);
+	}
+	.navlink.on,
+	.navlink[aria-current='page'] {
+		color: var(--accent);
+		box-shadow: inset 0 -2px 0 var(--accent);
+		border-radius: 6px 6px 0 0;
 	}
 	.live {
 		display: inline-flex;
@@ -363,13 +477,9 @@
 	}
 	.menu-h {
 		font: 600 12px/1 var(--f-body);
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
 		color: var(--muted);
 		padding: 8px 8px 6px;
 		overflow-wrap: anywhere;
-		text-transform: none;
-		letter-spacing: 0;
 	}
 	.menu ul {
 		list-style: none;
@@ -440,7 +550,7 @@
 	}
 	.crumb {
 		flex-basis: 100%;
-		display: none;
+		display: flex;
 		padding: 8px 12px;
 		border-radius: 8px;
 		background: var(--accent-soft);
@@ -453,37 +563,142 @@
 		white-space: nowrap;
 		min-height: 40px;
 		align-items: center;
+		order: 9;
 	}
 	.phone-only {
 		display: none !important;
 	}
-	.who select {
-		max-width: 150px;
+	.chapter select {
+		max-width: 170px;
 	}
+
+	/* Phones: ONE row (brand, chapter, menu button); everything else sits in the menu panel. */
 	@media (max-width: 760px) {
-		.ws-settings {
+		.shell {
+			padding-top: 8px;
+			gap: 10px;
+		}
+		.shell.has-tabs {
+			padding-bottom: calc(var(--bottom-bar-h) + 20px);
+		}
+		.topbar {
+			position: relative;
+			flex-wrap: wrap;
+			gap: 0 8px;
+			min-height: 48px;
+		}
+		.brand {
+			font-size: 20px;
+			margin-right: 0;
+			flex: none;
+		}
+		.chapter-slot {
+			flex: 1 1 0;
+			min-width: 0;
+			margin-left: 0;
+			order: 1;
+		}
+		.chapter,
+		.chapter select {
+			display: block;
+			width: 100%;
+			max-width: none;
+		}
+		.create-chapter {
 			display: none;
+		}
+		.navtoggle {
+			order: 2;
+			display: inline-grid;
+			place-items: center;
+			position: relative;
+			flex: none;
+			width: 44px;
+			height: 44px;
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			background: var(--card);
+			color: var(--ink);
+			padding: 0;
+		}
+		.navtoggle svg {
+			width: 22px;
+			height: 22px;
+			fill: none;
+			stroke: currentColor;
+			stroke-width: 2;
+			stroke-linecap: round;
+		}
+		.badge-dot {
+			position: absolute;
+			top: 6px;
+			right: 6px;
+			width: 9px;
+			height: 9px;
+			border-radius: 50%;
+			background: var(--accent);
+		}
+		.navpanel {
+			display: none;
+			position: absolute;
+			top: calc(100% + 4px);
+			left: 0;
+			right: 0;
+			z-index: 40;
+			max-height: calc(100dvh - 72px - var(--bottom-bar-h));
+			overflow-y: auto;
+			background: var(--card);
+			border: 1px solid var(--line);
+			border-radius: 12px;
+			box-shadow: 0 10px 28px rgb(0 0 0 / 0.22);
+			padding: 6px;
+			gap: 2px;
+		}
+		.navpanel.open {
+			display: grid;
+		}
+		.main {
+			display: grid;
+			gap: 2px;
+		}
+		.navpanel .navlink {
+			width: 100%;
+			min-height: 44px;
+			padding: 8px 10px;
+			justify-content: space-between;
+		}
+		.navlink.on,
+		.navlink[aria-current='page'] {
+			box-shadow: none;
+			background: var(--accent-soft);
+			border-radius: 6px;
+		}
+		.menu-wrap {
+			position: static;
+		}
+		.acct-wrap,
+		.ws-settings {
+			border-top: 1px solid var(--line);
+			padding-top: 2px;
+		}
+		.menu,
+		.menu.account {
+			position: static;
+			max-width: none;
+			min-width: 0;
+			box-shadow: none;
+			border: 0;
+			border-radius: 0;
+			background: var(--paper);
+			padding: 4px;
+			margin: 2px 0 4px;
+			border-radius: 8px;
 		}
 		.phone-only {
 			display: grid !important;
 		}
 		.crumb {
-			display: flex;
-		}
-		.brand {
-			font-size: 20px;
-		}
-		.topbar {
-			position: relative;
-		}
-		.menu-wrap {
-			position: static;
-		}
-		.menu,
-		.menu.account {
-			left: 0;
-			right: 0;
-			max-width: none;
+			order: 9;
 		}
 	}
 </style>

@@ -6,6 +6,26 @@ import { today } from './format.ts';
 import { plateByNumber } from './accounting.ts';
 import type { BuildView, PartPatch, PartStatus, PrintRunInput } from './types.ts';
 
+/**
+ * A copy of `view` with `patches` applied to the part state, for optimistic updates in the
+ * browser. Only fields a patch sets change; the server stays the authority and its re-fetched
+ * view replaces this one.
+ */
+export function applyPatches(view: BuildView, patches: PartPatch[]): BuildView {
+	if (!patches.length) return view;
+	const state = { ...view.state };
+	for (const { slug, ...fields } of patches) {
+		const cur = state[slug];
+		if (!cur) continue;
+		const next = { ...cur };
+		for (const [k, v] of Object.entries(fields)) {
+			if (v !== undefined) (next as Record<string, unknown>)[k] = v;
+		}
+		state[slug] = next;
+	}
+	return { ...view, state };
+}
+
 export function setStatus(
 	view: BuildView,
 	slug: string,

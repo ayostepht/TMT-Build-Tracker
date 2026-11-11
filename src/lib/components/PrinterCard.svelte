@@ -37,7 +37,7 @@
 		failed: 'Failed',
 		offline: 'Offline',
 		error: 'Error',
-		disabled: 'Paused (disabled)',
+		disabled: 'Monitoring stopped',
 		connecting: 'Connecting…'
 	};
 	const t = (v: number | undefined) => (v === undefined ? null : `${Math.round(v)}°`);

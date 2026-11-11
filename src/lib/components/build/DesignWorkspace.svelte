@@ -4,7 +4,7 @@
 	import { filamentStats, roleLabel } from '#lib/domain/index.ts';
 	import { applyPartRole, designColors, hiddenSlugs } from '#lib/domain/design.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
-	import { setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
+	import { getArrangement, setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import ModelStage from '#lib/components/design/ModelStage.svelte';
@@ -109,6 +109,30 @@
 		const shown = ready.rendered;
 		return ctx.view.parts.filter((p) => !shown.includes(p.slug)).map((p) => p.slug);
 	});
+
+	// "Plates and export are out of date": the same server rule Files uses (`arrangement.stale`),
+	// shown here for real builds with a printer, where the colour or part change was made.
+	let platesStale = $state(false);
+	let dismissedKey = $state<string | null>(null);
+	const staleKey = $derived(
+		JSON.stringify([
+			ctx.view.parts.map((p) => [p.slug, p.role]),
+			ctx.view.filaments.map((f) => [f.key, f.hex, f.material]),
+			ctx.view.plates.map((p) => [p.number, p.parts, p.source]),
+			ctx.view.printer
+		])
+	);
+	$effect(() => {
+		void staleKey;
+		if (embedded || !ctx.canEdit || ctx.view.build.kind !== 'build' || !ctx.view.printer) {
+			platesStale = false;
+			return;
+		}
+		getArrangement(ctx.id)
+			.then((r) => (platesStale = r.stale))
+			.catch(() => {});
+	});
+	const showStale = $derived(platesStale && dismissedKey !== staleKey);
 
 	function openPicker(p: NonNullable<typeof picker>) {
 		picker = p;
@@ -283,6 +307,25 @@
 					onpick={(v) => addSlot(v)}
 					onclose={() => (picker = null)}
 				/>
+			</div>
+		{/if}
+		{#if showStale}
+			<div class="stalenote" role="status" data-testid="design-stale">
+				<span>Plates and export are out of date for these colors.</span>
+				<span class="stale-actions">
+					<a
+						class="btn sm go"
+						href={resolve('/(app)/builds/[id]/files', { id: ctx.id })}
+						data-testid="design-stale-review"
+						>Review plates in Files <span class="btn-arrow" aria-hidden="true">→</span></a
+					>
+					<button
+						type="button"
+						class="btn sm ghost"
+						data-testid="design-stale-dismiss"
+						onclick={() => (dismissedKey = staleKey)}>Dismiss</button
+					>
+				</span>
 			</div>
 		{/if}
 		<DesignActions
@@ -461,6 +504,25 @@
 	}
 	.hint {
 		margin: 0;
+	}
+	.stalenote {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+		align-items: center;
+		justify-content: space-between;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: var(--warn-soft);
+		color: var(--warn);
+		font-size: 14px;
+		font-weight: 600;
+		min-width: 0;
+	}
+	.stale-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
 	}
 	h2 {
 		margin: 0;

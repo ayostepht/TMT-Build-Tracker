@@ -21,6 +21,8 @@
 			.filter(Boolean)
 			.join(' · ')
 	);
+	/** Phones: the header is one line; the kicker and the progress numbers sit behind a tap. */
+	let details = $state(false);
 	const syncText = $derived(
 		!ctx.canEdit && ctx.sync === 'on'
 			? 'Live · read only'
@@ -32,11 +34,11 @@
 	);
 </script>
 
-<header class="head" class:compact>
-	<div>
-		<div class="kicker">{kicker}</div>
+<header class="head bh" class:compact class:bh-open={details}>
+	<div class="bh-title">
+		<div class="kicker bh-kicker">{kicker}</div>
 		<h1>
-			{b.name}<span class="phase">{b.phase}</span>
+			<span class="bh-name">{b.name}</span><span class="phase">{b.phase}</span>
 		</h1>
 	</div>
 	<div
@@ -46,10 +48,22 @@
 		role="status"
 		aria-live="polite"
 	>
-		<span class="dot"></span><span>{syncText}</span>
+		<span class="dot"></span><span class="sync-t">{syncText}</span>
 	</div>
 	{#if !compact}
-		<div class="overall">
+		<button
+			type="button"
+			class="bh-more"
+			aria-expanded={details}
+			aria-controls="build-details"
+			data-testid="header-details"
+			onclick={() => (details = !details)}
+			><span class="num">{prog.printed}/{prog.total}</span>
+			<span class="bh-caret" aria-hidden="true">▾</span><span class="sr-only"
+				>{details ? 'Hide' : 'Show'} build details</span
+			></button
+		>
+		<div class="overall" id="build-details">
 			<div class="overall-top">
 				<span><b class="num">{prog.printed} of {prog.total}</b> parts printed</span>
 				<span><b class="num">{prog.printing}</b> printing</span>
@@ -81,6 +95,12 @@
 </header>
 
 <style>
+	.bh-more {
+		display: none;
+	}
+	.bh-name {
+		min-width: 0;
+	}
 	.head.compact {
 		gap: 0 20px;
 		align-items: center;
@@ -107,6 +127,83 @@
 		}
 		.head.compact .sync {
 			justify-self: end;
+		}
+	}
+	/* Phones: name + status on one line; the rest behind the details button. */
+	@media (max-width: 760px) {
+		.bh {
+			grid-template-columns: minmax(0, 1fr) auto auto;
+			gap: 0 10px;
+			align-items: center;
+		}
+		.bh-title {
+			min-width: 0;
+		}
+		.bh h1 {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			font-size: 20px;
+			line-height: 1.2;
+		}
+		.bh .bh-name {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.bh .phase {
+			flex: none;
+			margin-left: 0;
+		}
+		.bh .sync {
+			justify-self: end;
+			grid-column: auto;
+		}
+		.bh .sync-t {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+		}
+		.bh-kicker {
+			display: none;
+		}
+		.bh-open .bh-kicker {
+			display: block;
+			margin-bottom: 4px;
+		}
+		.bh-more {
+			display: inline-flex;
+			align-items: center;
+			gap: 4px;
+			min-height: 40px;
+			min-width: 40px;
+			padding: 0 6px;
+			border: 0;
+			border-radius: 8px;
+			background: transparent;
+			color: var(--muted);
+			font: 600 13px/1 var(--f-body);
+		}
+		.bh-more:hover {
+			background: var(--accent-soft);
+		}
+		.bh-caret {
+			transition: transform 0.15s;
+		}
+		.bh-open .bh-caret {
+			transform: rotate(180deg);
+		}
+		.bh .overall {
+			display: none;
+			margin-top: 6px;
+		}
+		.bh-open .overall {
+			display: grid;
+		}
+		.bh-open .bh-title {
+			grid-column: 1;
 		}
 	}
 </style>

@@ -140,7 +140,7 @@
 		<section class="card danger-zone">
 			<h2>Delete build</h2>
 			<p class="muted">
-				Deletes this build with all its progress and print logs for everyone on the team. This
+				Deletes this build with all its progress and print logs for everyone who can see it. This
 				cannot be undone.
 			</p>
 			{#if !confirming}

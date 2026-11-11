@@ -35,6 +35,13 @@ export async function createChapter(page: Page, name: string) {
 	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
 }
 
+/** On phones the nav links and menus sit behind the menu button: open it (a no-op on desktop). */
+export async function openNav(page: Page) {
+	const toggle = page.getByTestId('nav-toggle');
+	if ((await toggle.isVisible()) && (await toggle.getAttribute('aria-expanded')) !== 'true')
+		await toggle.click();
+}
+
 /** The MakeGood tuned layout the helpers pick unless a spec asks for another one. */
 export const TUNED_LAYOUT = 'Bambu X1 / P1 / A1 (24 plates)';
 
@@ -123,6 +130,19 @@ export async function ownerWithBuild(page: Page, label = 'owner') {
 	const chapterUrl = page.url();
 	const buildId = await createBuild(page, 'Test chair');
 	return { chapterUrl, buildId };
+}
+
+/**
+ * The Print tab hides Printed parts by default once a build is under way. Specs that look at a part
+ * after it was printed keep them visible (the choice is stored per build; call before opening Print).
+ */
+export async function keepPrintedVisible(page: Page, buildId: string) {
+	await page.evaluate((id) => {
+		const k = `tmt-ui:${id}`;
+		const u = JSON.parse(localStorage.getItem(k) ?? '{}');
+		u.hide = false;
+		localStorage.setItem(k, JSON.stringify(u));
+	}, buildId);
 }
 
 export function row(page: Page, slug: string) {

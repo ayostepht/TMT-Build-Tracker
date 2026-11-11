@@ -1,15 +1,16 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { printersHrefFor } from '#lib/workspace-links.ts';
+	import { onMount, tick } from 'svelte';
 	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
 	import {
-		printing,
 		updatePlate,
 		buildPlateLayouts,
 		plateThumbnailUrl,
 		arrangePlates,
 		forgetPrintTemplate,
 		getArrangement,
+		exportDownloadUrl,
 		type ArrangementDto,
 		type PlateLayoutInfo
 	} from '#lib/client/api.ts';
@@ -19,11 +20,12 @@
 	import RunTable from '#lib/components/RunTable.svelte';
 	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
 	import PlateTime from '#lib/components/PlateTime.svelte';
-	import StartOnPrinter from '#lib/components/StartOnPrinter.svelte';
+	import PlateControl from '#lib/components/PlateControl.svelte';
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
 	import SlicerTimeInput from '#lib/components/SlicerTimeInput.svelte';
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
+	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 
 	/** Setup wizard: plate pictures only, no print log or slicer grams. */
@@ -165,22 +167,57 @@
 			rearranging = false;
 		}
 	}
-	let logOpen = $state<Record<number, boolean>>({});
+	// Finished plates (every part Printed) collapse to one line, behind a toggle that is closed by
+	// default; the choice is remembered per build on this device.
+	const isFinished = (pl: Plate) =>
+		track && pl.parts.length > 0 && pl.parts.every((s) => status(s) === 'Printed');
+	const finishedCount = $derived(ctx.view.plates.filter(isFinished).length);
+	const printedKey = $derived(`tmt-files-printed:${ctx.id}`);
+	let printedOpen = $state(false);
+	let expandedPl = $state<Record<number, boolean>>({});
+	onMount(() => {
+		exportPref.load();
+		try {
+			printedOpen = localStorage.getItem(printedKey) === '1';
+		} catch {
+			/* storage unavailable: closed */
+		}
+		void openFromHash();
+	});
+	const printedLabel = $derived(
+		`${printedOpen ? 'Hide' : 'Show'} ${finishedCount} printed plate${finishedCount === 1 ? '' : 's'}`
+	);
+	function togglePrinted() {
+		printedOpen = !printedOpen;
+		try {
+			if (printedOpen) localStorage.setItem(printedKey, '1');
+			else localStorage.removeItem(printedKey);
+		} catch {
+			/* still works for this visit */
+		}
+	}
+	/** A link to #plate-N opens that plate even when it is finished and collapsed. */
+	async function openFromHash() {
+		const m = /^#plate-(\d+)$/.exec(location.hash);
+		if (!m) return;
+		const n = Number(m[1]);
+		const pl = ctx.view.plates.find((x) => x.number === n);
+		if (!pl) return;
+		if (isFinished(pl)) {
+			printedOpen = true;
+			expandedPl[n] = true;
+		}
+		await tick();
+		document.getElementById(`plate-${n}`)?.scrollIntoView({ block: 'start' });
+	}
+	const flavorShort = $derived(FLAVOR_OPTIONS.find((f) => f.key === exportPref.flavor)?.short);
+	const plateSecs = (pl: Plate) => (pl.estSeconds ? pl.estSeconds * Math.max(1, pl.runs) : 0);
+
 	// Plates that have both a slicer thumbnail and an arrangement: which one to show.
 	let diagramOn = $state<Record<number, boolean>>({});
 	let editing = $state<PrintRun | null>(null);
 	let deleteFirst = $state(false);
 	let editOpen = $state(false);
-	const startedOf = (pl: Plate) =>
-		pl.parts
-			.map((s) => (ctx.view.state[s]?.status === 'Printing' ? ctx.view.state[s].startedAt : null))
-			.filter((s): s is string => !!s)
-			.sort()[0] ?? null;
-	// Slugs a plate log covers: what is on the printer when something is, else the whole plate.
-	const loggable = (pl: Plate) => {
-		const on = pl.parts.filter((s) => status(s) === 'Printing');
-		return on.length ? on : pl.parts;
-	};
 
 	const partOf = (slug: string) => ctx.view.parts.find((p) => p.slug === slug);
 	const roleOf = (slug: string) => partOf(slug)?.role ?? '';
@@ -211,13 +248,10 @@
 			ctx.view.build.organizationId
 		)
 	);
-
-	function start(slugs: string[]) {
-		return ctx.act(() => printing(ctx.id, { action: 'start', slugs }));
-	}
 </script>
 
 <svelte:window
+	onhashchange={() => void openFromHash()}
 	ondragover={onDragOver}
 	ondragleave={(e) => {
 		if (e.relatedTarget === null) dragging = false;
@@ -380,175 +414,220 @@
 	</div>
 {/if}
 
+{#snippet plateExport(pl: Plate)}
+	{#if printer}
+		<span class="plate-export" data-testid="plate-export">
+			<!-- eslint-disable svelte/no-navigation-without-resolve -->
+			<a
+				class="btn sm"
+				href={exportDownloadUrl(ctx.id, exportPref.flavor, [pl.number])}
+				download
+				data-sveltekit-reload
+				data-testid="plate-export-btn"
+				aria-label="Export plate {pl.number} for {flavorShort}">Export · {flavorShort}</a
+			>
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
+		</span>
+	{/if}
+{/snippet}
+
+<div class="plates-bar">
+	{#if finishedCount}
+		<button
+			class="btn sm printed-toggle"
+			type="button"
+			aria-expanded={printedOpen}
+			data-testid="printed-plates-toggle"
+			onclick={togglePrinted}>{printedLabel}</button
+		>
+	{/if}
+	{#if printer}
+		<label class="plates-fmt">
+			<span class="meta">Export format</span>
+			<select data-testid="plate-export-format" bind:value={exportPref.flavor}>
+				{#each FLAVOR_OPTIONS as f (f.key)}<option value={f.key}>{f.label}</option>{/each}
+			</select>
+		</label>
+	{/if}
+</div>
+
 {#each ctx.view.plates as pl (pl.number)}
+	{@const fin = isFinished(pl)}
 	{@const runs = ctx.view.runs.filter((r) => r.plateNumber === pl.number)}
-	{@const idle = pl.parts.filter((s) => !['Printed', 'Printing'].includes(status(s) ?? ''))}
 	{@const done = pl.parts.filter((s) => status(s) === 'Printed').length}
 	{@const ri = runInfo(ctx.view, pl.number)}
 	{@const logged = runs.reduce((a, r) => a + (r.grams ?? 0), 0)}
-	<section class="plate-card" aria-label="Plate {pl.number}">
-		<div class="group-head">
-			<h2>Plate {pl.number} · {pl.name}</h2>
-			<span class="meta num"
-				>{draft ? `${pl.parts.length} parts` : `${done}/${pl.parts.length} printed`}</span
-			>
-			{#each rolesOf(pl) as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
-			{#if slicerTotal(pl)}
-				<span class="meta num" title="From your slicer grams"
-					>~{fmt(slicerTotal(pl))} g (slicer)</span
+	{#if fin && !printedOpen}
+		<!-- finished plates are collapsed -->
+	{:else if fin && !expandedPl[pl.number]}
+		<div class="plate-row" id="plate-{pl.number}" data-testid="plate-row">
+			<span class="pr-name"><b>Plate {pl.number}</b> · {pl.name}</span>
+			<span class="meta pr-ok">Printed</span>
+			{#if plateSecs(pl)}<span class="meta num">{fmtH(plateSecs(pl))}</span>{/if}
+			<span class="pr-actions">
+				{@render plateExport(pl)}
+				<button
+					class="btn sm ghost"
+					type="button"
+					aria-expanded="false"
+					aria-label="Show details for plate {pl.number}"
+					onclick={() => (expandedPl[pl.number] = true)}>Details</button
 				>
-			{/if}
-			<PlateTime plate={pl} />
-			{#if pl.runNote || pl.runs > 1}
-				<span class="meta" style="color:var(--warn);font-weight:600"
-					>{pl.runNote ?? `Print ${pl.runs} times`}{ri ? ` · run ${ri.run} of ${ri.of}` : ''}</span
-				>
-			{/if}
-			{#if logged}
-				<span class="meta num" style="color:var(--ok);font-weight:600">{fmt(logged)} g logged</span>
-			{/if}
+			</span>
 		</div>
+	{:else}
+		<section class="plate-card" id="plate-{pl.number}" aria-label="Plate {pl.number}">
+			<div class="group-head">
+				<h2>Plate {pl.number} · {pl.name}</h2>
+				<span class="meta num"
+					>{draft ? `${pl.parts.length} parts` : `${done}/${pl.parts.length} printed`}</span
+				>
+				{#each rolesOf(pl) as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
+				{#if slicerTotal(pl)}
+					<span class="meta num" title="From your slicer grams"
+						>~{fmt(slicerTotal(pl))} g (slicer)</span
+					>
+				{/if}
+				<PlateTime plate={pl} />
+				{#if pl.runNote || pl.runs > 1}
+					<span class="meta" style="color:var(--warn);font-weight:600"
+						>{pl.runNote ?? `Print ${pl.runs} times`}{ri
+							? ` · run ${ri.run} of ${ri.of}`
+							: ''}</span
+					>
+				{/if}
+				{#if logged}
+					<span class="meta num" style="color:var(--ok);font-weight:600"
+						>{fmt(logged)} g logged</span
+					>
+				{/if}
+			</div>
 
-		{#if arranged(pl.number) && arr}
-			{@const ap = arranged(pl.number)!}
-			{#if pl.thumbnailPath}
-				<div class="view-toggle" role="group" aria-label="Plate {pl.number} view">
-					<button
-						type="button"
-						class="seg"
-						aria-pressed={!diagramOn[pl.number]}
-						onclick={() => (diagramOn[pl.number] = false)}>Slicer preview</button
-					>
-					<button
-						type="button"
-						class="seg"
-						aria-pressed={!!diagramOn[pl.number]}
-						onclick={() => (diagramOn[pl.number] = true)}>Diagram</button
-					>
-				</div>
+			{#if arranged(pl.number) && arr}
+				{@const ap = arranged(pl.number)!}
+				{#if pl.thumbnailPath}
+					<div class="view-toggle" role="group" aria-label="Plate {pl.number} view">
+						<button
+							type="button"
+							class="seg"
+							aria-pressed={!diagramOn[pl.number]}
+							onclick={() => (diagramOn[pl.number] = false)}>Slicer preview</button
+						>
+						<button
+							type="button"
+							class="seg"
+							aria-pressed={!!diagramOn[pl.number]}
+							onclick={() => (diagramOn[pl.number] = true)}>Diagram</button
+						>
+					</div>
+				{/if}
+				{#if !pl.thumbnailPath || diagramOn[pl.number]}
+					<PlateArrangement
+						plate={ap}
+						footprints={arr.footprints}
+						silhouettes={arr.silhouettes ?? {}}
+						colorOf={(r) => ctx.filament(r)?.hex ?? '#888888'}
+						nameOf={(s) => partOf(s)?.name ?? s}
+						filamentLabel={(r) => filLabel(ctx.filament(r), r)}
+						perRun={pl.runs > 1}
+						bedLabel="{arr.printer?.bedX} × {arr.printer?.bedY} mm"
+					/>
+				{/if}
 			{/if}
-			{#if !pl.thumbnailPath || diagramOn[pl.number]}
-				<PlateArrangement
-					plate={ap}
-					footprints={arr.footprints}
-					silhouettes={arr.silhouettes ?? {}}
-					colorOf={(r) => ctx.filament(r)?.hex ?? '#888888'}
-					nameOf={(s) => partOf(s)?.name ?? s}
-					filamentLabel={(r) => filLabel(ctx.filament(r), r)}
-					perRun={pl.runs > 1}
-					bedLabel="{arr.printer?.bedX} × {arr.printer?.bedY} mm"
+			{#if pl.thumbnailPath && !(arranged(pl.number) && arr && diagramOn[pl.number])}
+				<img
+					class="plate-thumb"
+					src={plateThumbnailUrl(ctx.id, pl.number, pl.source)}
+					alt="Plate {pl.number} preview"
+					loading="lazy"
+					width="160"
+					height="160"
 				/>
 			{/if}
-		{/if}
-		{#if pl.thumbnailPath && !(arranged(pl.number) && arr && diagramOn[pl.number])}
-			<img
-				class="plate-thumb"
-				src={plateThumbnailUrl(ctx.id, pl.number, pl.source)}
-				alt="Plate {pl.number} preview"
-				loading="lazy"
-				width="160"
-				height="160"
-			/>
-		{/if}
-		{#if Object.keys(pl.filamentGrams).length}
-			<div class="fil-grams">
-				{#each Object.entries(pl.filamentGrams) as [role, g] (role)}
-					<span class="meta num"
-						>{filLabel(ctx.filament(role), role)} {fmt(g)} g{pl.runs > 1 ? ' per run' : ''}</span
+			{#if Object.keys(pl.filamentGrams).length}
+				<div class="fil-grams">
+					{#each Object.entries(pl.filamentGrams) as [role, g] (role)}
+						<span class="meta num"
+							>{filLabel(ctx.filament(role), role)} {fmt(g)} g{pl.runs > 1 ? ' per run' : ''}</span
+						>
+					{/each}
+				</div>
+			{/if}
+			<div class="now-parts">
+				{#each pl.parts as slug (slug)}
+					<button
+						class="now-part"
+						type="button"
+						title="Open in the build guide"
+						onclick={() => ctx.openGuide(slug)}
+						>{partOf(slug)?.name ?? slug}
+						{#if !draft}<span class="meta">· {status(slug)}</span>{/if}</button
 					>
 				{/each}
 			</div>
-		{/if}
-		<div class="now-parts">
-			{#each pl.parts as slug (slug)}
-				<button
-					class="now-part"
-					type="button"
-					title="Open in the build guide"
-					onclick={() => ctx.openGuide(slug)}
-					>{partOf(slug)?.name ?? slug}
-					{#if !draft}<span class="meta">· {status(slug)}</span>{/if}</button
-				>
-			{/each}
-		</div>
-
-		{#if ctx.canEdit && track}
-			<div class="slicer-row">
-				{#if pl.perPartRuns}
-					{#each pl.parts as slug (slug)}
-						<SlicerInput
-							label="Slicer {filLabel(ctx.filament(roleOf(slug)), partOf(slug)?.name)} per run"
-							value={pl.slicerByPart[slug]}
-							onsave={(v) => saveSlicer(pl, slug, v)}
-						/>
-					{/each}
-				{:else}
-					<SlicerInput
-						label={pl.runs > 1 ? 'Slicer per run' : 'Slicer'}
-						value={pl.slicerGrams}
-						title="Grams your slicer shows for this plate{pl.runs > 1 ? ' (one run)' : ''}"
-						onsave={(v) => saveSlicer(pl, null, v)}
-					/>
-				{/if}
-				<SlicerTimeInput
-					label={pl.runs > 1 ? 'Slicer time per run' : 'Slicer time'}
-					value={pl.estSource === 'manual' ? pl.estSeconds : null}
-					placeholder={pl.baseEstSeconds || pl.estSeconds
-						? fmtH(pl.baseEstSeconds || pl.estSeconds || 0)
-						: 'e.g. 14h 20m'}
-					onsave={(s) => saveTime(pl, s)}
-				/>
-				{#if pl.estSource === 'manual' && pl.baseEstSeconds}
-					<span class="meta" data-testid="time-override"
-						>overrides {pl.baseEstSource === 'slicer' ? 'file' : 'estimate'}
-						{fmtH(pl.baseEstSeconds)}</span
+			<div class="plate-tools">
+				{@render plateExport(pl)}
+				{#if fin}
+					<button class="btn sm ghost" type="button" onclick={() => (expandedPl[pl.number] = false)}
+						>Collapse</button
 					>
 				{/if}
-				{#if !pl.slicerGrams && !Object.keys(pl.slicerByPart).length}
-					<span class="meta">Using BOM weights until you enter slicer grams.</span>
-				{/if}
-				{#if idle.length}
+			</div>
+
+			{#if ctx.canEdit && track}
+				<div class="slicer-row">
 					{#if pl.perPartRuns}
-						{#each idle as slug (slug)}
-							<button class="btn sm" type="button" onclick={() => start([slug])}
-								>Start {filLabel(ctx.filament(roleOf(slug)), partOf(slug)?.name)} run</button
-							>
+						{#each pl.parts as slug (slug)}
+							<SlicerInput
+								label="Slicer {filLabel(ctx.filament(roleOf(slug)), partOf(slug)?.name)} per run"
+								value={pl.slicerByPart[slug]}
+								onsave={(v) => saveSlicer(pl, slug, v)}
+							/>
 						{/each}
 					{:else}
-						<button class="btn sm" type="button" onclick={() => start(idle)}>Start printing</button>
-						<StartOnPrinter slugs={idle} plateNumber={pl.number} />
+						<SlicerInput
+							label={pl.runs > 1 ? 'Slicer per run' : 'Slicer'}
+							value={pl.slicerGrams}
+							title="Grams your slicer shows for this plate{pl.runs > 1 ? ' (one run)' : ''}"
+							onsave={(v) => saveSlicer(pl, null, v)}
+						/>
 					{/if}
-				{/if}
-				<button
-					class="btn sm primary"
-					type="button"
-					style="margin-left:auto"
-					onclick={() => (logOpen[pl.number] = true)}>Log a print…</button
-				>
-				<LogRunSheet
-					bind:open={() => !!logOpen[pl.number], (v) => (logOpen[pl.number] = v)}
-					plateNumber={pl.number}
-					slugs={loggable(pl)}
-					startedAt={startedOf(pl)}
-					title="Log print: plate {pl.number}"
-				/>
-			</div>
-		{/if}
+					<SlicerTimeInput
+						label={pl.runs > 1 ? 'Slicer time per run' : 'Slicer time'}
+						value={pl.estSource === 'manual' ? pl.estSeconds : null}
+						placeholder={pl.baseEstSeconds || pl.estSeconds
+							? fmtH(pl.baseEstSeconds || pl.estSeconds || 0)
+							: 'e.g. 14h 20m'}
+						onsave={(s) => saveTime(pl, s)}
+					/>
+					{#if pl.estSource === 'manual' && pl.baseEstSeconds}
+						<span class="meta" data-testid="time-override"
+							>overrides {pl.baseEstSource === 'slicer' ? 'file' : 'estimate'}
+							{fmtH(pl.baseEstSeconds)}</span
+						>
+					{/if}
+					{#if !pl.slicerGrams && !Object.keys(pl.slicerByPart).length}
+						<span class="meta">Using BOM weights until you enter slicer grams.</span>
+					{/if}
+					<span style="margin-left:auto"><PlateControl plate={pl} alwaysLog /></span>
+				</div>
+			{/if}
 
-		{#if runs.length && track}
-			<div class="plate-log">
-				<RunTable
-					{runs}
-					canEdit={ctx.canEdit}
-					colorOf={pl.perPartRuns
-						? (r) => (r.partSlug ? filLabel(ctx.filament(roleOf(r.partSlug))) : '')
-						: undefined}
-					ondelete={(r) => ((editing = r), (deleteFirst = true), (editOpen = true))}
-					onedit={(r) => ((editing = r), (deleteFirst = false), (editOpen = true))}
-				/>
-			</div>
-		{/if}
-	</section>
+			{#if runs.length && track}
+				<div class="plate-log">
+					<RunTable
+						{runs}
+						canEdit={ctx.canEdit}
+						colorOf={pl.perPartRuns
+							? (r) => (r.partSlug ? filLabel(ctx.filament(roleOf(r.partSlug))) : '')
+							: undefined}
+						ondelete={(r) => ((editing = r), (deleteFirst = true), (editOpen = true))}
+						onedit={(r) => ((editing = r), (deleteFirst = false), (editOpen = true))}
+					/>
+				</div>
+			{/if}
+		</section>
+	{/if}
 {:else}
 	<p class="empty">This template has no plates yet.</p>
 {/each}
@@ -557,6 +636,82 @@
 {/if}
 
 <style>
+	.plates-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px 16px;
+		margin-bottom: 10px;
+	}
+	.plates-bar:empty {
+		display: none;
+	}
+	.plates-fmt {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.plates-fmt select {
+		width: auto;
+		max-width: 100%;
+		min-height: 36px;
+		padding: 4px 8px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--card);
+		color: var(--ink);
+		font: inherit;
+		font-size: 14px;
+	}
+	.plate-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 12px;
+		margin-bottom: 8px;
+		padding: 8px 12px;
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		background: var(--card);
+		scroll-margin-top: 56px;
+	}
+	.pr-name {
+		min-width: 0;
+		flex: 1 1 200px;
+		overflow-wrap: anywhere;
+	}
+	.pr-ok {
+		color: var(--ok);
+		font-weight: 600;
+	}
+	.pr-actions,
+	.plate-tools,
+	.plate-export {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+	}
+	.pr-actions :global(.btn),
+	.plate-tools :global(.btn) {
+		min-height: 40px;
+	}
+	@media (max-width: 600px) {
+		.pr-actions {
+			flex: 1 1 100%;
+		}
+	}
+	@media (pointer: coarse) {
+		.plates-fmt select {
+			font-size: 16px;
+			min-height: 40px;
+		}
+	}
+	.plate-card {
+		scroll-margin-top: 56px;
+	}
 	.layout-card {
 		margin-bottom: 12px;
 	}

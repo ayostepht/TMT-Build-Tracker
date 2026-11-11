@@ -1,10 +1,11 @@
 import { expect, test } from './fixtures';
-import { ownerWithBuild, row } from './helpers';
+import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 test('a past print log can be edited or deleted and part statuses follow', async ({ page }) => {
-	await ownerWithBuild(page, 'runedit');
+	const { buildId } = await ownerWithBuild(page, 'runedit');
+	await keepPrintedVisible(page, buildId);
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	await expect(page).toHaveURL(/\/print$/);
 	const parts = page.locator('.row');
@@ -80,11 +81,12 @@ test('a past print log can be edited or deleted and part statuses follow', async
 test('plate History on the Print tab shows the runs and deletes one after an in-app confirmation', async ({
 	page
 }) => {
-	await ownerWithBuild(page, 'platehistory');
+	const { buildId } = await ownerWithBuild(page, 'platehistory');
+	await keepPrintedVisible(page, buildId);
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
-	await page.getByLabel('Group by').selectOption('plate');
+	// Plate is the default grouping; on a phone the Group by control lives in the Filter sheet.
 	const head = page.locator('.group-head').first();
-	const logBtn = head.getByRole('button', { name: /^Log plate \d+ printed$/ });
+	const logBtn = head.getByRole('button', { name: /^Log a print on plate \d+$/ });
 	await expect(head.getByTestId('plate-history-toggle')).toHaveCount(0);
 
 	// A failed and a successful run on the plate.
@@ -94,7 +96,7 @@ test('plate History on the Print tab shows the runs and deletes one after an in-
 	await sheet.getByLabel('Notes').fill('Lifted at the corner');
 	await sheet.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(sheet).toBeHidden();
-	await head.getByRole('button', { name: /^Log plate \d+ printed$/ }).click();
+	await head.getByRole('button', { name: /^Log a print on plate \d+$/ }).click();
 	await sheet.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(sheet).toBeHidden();
 

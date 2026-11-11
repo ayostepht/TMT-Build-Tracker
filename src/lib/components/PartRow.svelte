@@ -3,13 +3,12 @@
 	import { fmt, plateOf } from '#lib/domain/index.ts';
 	import { partRuns } from '#lib/domain/logrun.ts';
 	import { runTargets } from '#lib/domain/actions.ts';
-	import { setPartStatus, updatePart } from '#lib/client/api.ts';
+	import { updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
 	import RunTable from './RunTable.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
-	import PlateStart from './PlateStart.svelte';
-	import LogPlateButton from './LogPlateButton.svelte';
+	import PlateControl from './PlateControl.svelte';
 
 	let { part, focus = false }: { part: PartDef; focus?: boolean } = $props();
 
@@ -112,8 +111,7 @@
 					data-v={s}
 					aria-pressed={st?.status === s}
 					disabled={!ctx.canEdit}
-					onclick={() => st?.status !== s && ctx.act(() => setPartStatus(ctx.id, part.slug, s))}
-					>{s}</button
+					onclick={() => st?.status !== s && ctx.setPartStatus(part.slug, s)}>{s}</button
 				>
 			{/each}
 		</div>
@@ -184,16 +182,7 @@
 					<div class="meta" style="margin-bottom:6px">
 						{plate.parts.map((s) => ctx.view.parts.find((x) => x.slug === s)?.name ?? s).join(', ')}
 					</div>
-					<PlateStart
-						{plate}
-						only={plate.perPartRuns ? part.slug : null}
-						label="Start printing plate {plate.number}"
-					/>
-					<LogPlateButton
-						{plate}
-						first={plate.perPartRuns ? part.slug : null}
-						label="Log plate {plate.number} printed…"
-					/>
+					<PlateControl {plate} only={plate.perPartRuns ? part.slug : null} />
 				{/if}
 				<h3 style="margin-top:12px">Assigned to</h3>
 				<select

@@ -544,6 +544,8 @@ describe('plain flavor', () => {
 		expect(exportFilename(p)).toMatch(/^TMT-Test-build-Elegoo-Centauri-Carbon-plain\.zip$/);
 		const one = plan({ flavor: 'plain', selected: [p.plates[1].number] });
 		expect(exportFilename(one)).toMatch(/plain-plate\d+\.3mf$/);
+		const oneOrca = plan({ flavor: 'orca', selected: [p.plates[1].number] });
+		expect(exportFilename(oneOrca)).toMatch(/orca-plate\d+\.3mf$/);
 		const single = (await collect(writeThreeMf(one, one.plates, io()))).bytes;
 		expect((await parseThreeMfBytes(single)).kind).toBe('plain');
 	});

@@ -1,15 +1,16 @@
 import { expect, test } from './fixtures';
-import { ownerWithBuild } from './helpers';
+import { keepPrintedVisible, ownerWithBuild } from './helpers';
 import type { Page } from '@playwright/test';
 
 /** Print tab grouped by Plate; returns the first plate group's "Log plate N printed" button and N. */
-async function firstPlateLog(page: Page) {
+async function firstPlateLog(page: Page, buildId: string) {
+	await keepPrintedVisible(page, buildId);
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	await expect(page.getByTestId('ready-to-print')).toHaveCount(0);
 	await page.getByLabel('Group by').selectOption('plate');
 	const heads = page
 		.locator('.group-head')
-		.getByRole('button', { name: /^Log plate \d+ printed$/ });
+		.getByRole('button', { name: /^Log a print on plate \d+$/ });
 	await expect(heads.first()).toBeVisible();
 	const name = (await heads.first().getAttribute('aria-label')) as string;
 	const plate = /\d+/.exec(name)![0];
@@ -17,8 +18,8 @@ async function firstPlateLog(page: Page) {
 }
 
 test('Log plate printed from a plate group: one-tap Success and undo', async ({ page }) => {
-	await ownerWithBuild(page);
-	const { plate, name } = await firstPlateLog(page);
+	const { buildId } = await ownerWithBuild(page);
+	const { plate, name } = await firstPlateLog(page, buildId);
 	const inHead = page.locator('.group-head').getByRole('button', { name, exact: true });
 
 	await inHead.click();
@@ -50,8 +51,8 @@ test('Log plate printed from a plate group: one-tap Success and undo', async ({ 
 test('A plate run shows in the Print log of a part on that plate, tagged with the plate', async ({
 	page
 }) => {
-	await ownerWithBuild(page);
-	const { plate, button } = await firstPlateLog(page);
+	const { buildId } = await ownerWithBuild(page);
+	const { plate, button } = await firstPlateLog(page, buildId);
 	await button.click();
 	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();
@@ -71,7 +72,7 @@ test('A part detail offers Log plate printed and logs the run', async ({ page })
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	const todo = page.locator('.row[data-s="To print"]').first();
 	await todo.getByRole('button', { name: /^Details for/ }).click();
-	const log = todo.getByRole('button', { name: /^Log plate \d+ printed$/ });
+	const log = todo.getByRole('button', { name: /^Log a print on plate \d+$/ });
 	await expect(log).toBeVisible();
 	await log.click();
 	await expect(page.getByRole('dialog').getByRole('button', { name: 'Success' })).toHaveAttribute(
@@ -81,8 +82,8 @@ test('A part detail offers Log plate printed and logs the run', async ({ page })
 });
 
 test('Choosing Failed does not prefill the plate grams (empty counts as 0 g)', async ({ page }) => {
-	await ownerWithBuild(page, 'failedgrams');
-	const { button } = await firstPlateLog(page);
+	const { buildId } = await ownerWithBuild(page, 'failedgrams');
+	const { button } = await firstPlateLog(page, buildId);
 	await button.click();
 	const sheet = page.getByRole('dialog');
 	const grams = sheet.getByLabel('Filament used (g)');

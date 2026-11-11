@@ -17,9 +17,9 @@
 </script>
 
 <section class="stack">
-	<div class="kicker">{data.team.personal ? 'Personal' : `Chapter (${data.role})`}</div>
+	<div class="kicker">{data.team.personal ? 'Just you' : `Chapter (${data.role})`}</div>
 	<h1>{data.team.name}</h1>
-	<nav class="tabs" aria-label="Workspace sections">
+	<nav class="tabs" aria-label="Chapter sections">
 		{#each tabs as t (t.href)}
 			<a href={t.href} aria-current={page.url.pathname === t.href ? 'page' : undefined}>{t.label}</a
 			>

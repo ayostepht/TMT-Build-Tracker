@@ -1,10 +1,11 @@
 import { expect, test } from './fixtures';
-import { ownerWithBuild, row } from './helpers';
+import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
 
 test('owner signs up, makes a chapter and build, and tracks a part to Printed', async ({
 	page
 }) => {
-	await ownerWithBuild(page);
+	const { buildId } = await ownerWithBuild(page);
+	await keepPrintedVisible(page, buildId);
 
 	const header = page.locator('.overall-top');
 	await expect(header).toContainText('0 of 33');
@@ -27,7 +28,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	// Finishing opens the sheet with Success preselected (Save enabled); nothing is logged until saved.
 	const plateNo = ((await page.locator('.now-plate').first().innerText()).match(/Plate (\d+)/i) ??
 		[])[1];
-	await page.getByRole('button', { name: /Finish & log print/ }).click();
+	await page.getByRole('button', { name: /Finish & log/ }).click();
 	const sheet = page.getByRole('dialog');
 	const save = sheet.getByRole('button', { name: 'Save', exact: true });
 	await expect(sheet).toBeVisible();
@@ -110,7 +111,7 @@ test('filament labels do not repeat the material', async ({ page }) => {
 	await ownerWithBuild(page, 'labels');
 	await expect(page.locator('body')).not.toContainText(/PETG Primary PETG|TPU 95A Accent TPU/);
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
-	await expect(page.locator('.chips').first().locator('.chip')).toHaveText([
+	await expect(page.locator('.ptb-chips').first().locator('.chip')).toHaveText([
 		'All filament',
 		'Accent PETG',
 		'Primary PETG',

@@ -1,5 +1,5 @@
 import { expect, newClientContext, test } from './fixtures';
-import { ownerWithBuild, signUp, startBuild, uniqueEmail } from './helpers';
+import { openNav, ownerWithBuild, signUp, startBuild, uniqueEmail } from './helpers';
 import { registerSyntheticGeometry, removeSyntheticGeometry } from './print-geometry-helper';
 
 const SHOTS = 'data/shots-ia';
@@ -237,7 +237,7 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 		await expect(tabs.getByRole('link', { name: t, exact: true })).toBeVisible();
 	await expect(tabs.getByRole('link', { name: 'Plates' })).toHaveCount(0);
 	// Order: Overview, Design, Print, Files, Finish, Settings.
-	expect(await tabs.getByRole('link').allTextContents()).toEqual([
+	expect((await tabs.getByRole('link').allTextContents()).map((t) => t.trim())).toEqual([
 		'Overview',
 		'Design',
 		'Print',
@@ -245,23 +245,42 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 		'Finish',
 		'⚙ Settings'
 	]);
+	// A phone's bottom bar fits all six without sideways scroll, targets at least 40px.
+	const boxes = await tabs.getByRole('link').evaluateAll((els) =>
+		els.map((e) => {
+			const r = e.getBoundingClientRect();
+			return { l: r.left, r: r.right, h: r.height };
+		})
+	);
+	for (const b of boxes) {
+		expect(b.l).toBeGreaterThanOrEqual(0);
+		expect(b.r).toBeLessThanOrEqual(390.5);
+		expect(b.h).toBeGreaterThanOrEqual(40);
+	}
 	await expect(tabs.getByRole('link', { name: 'Parts' })).toHaveCount(0);
 
 	// The Builds menu lists this build with its progress, All builds and New build.
+	await openNav(page);
 	await page.getByTestId('builds-menu').click();
 	const menu = page.getByTestId('builds-menu-panel');
 	await expect(menu).toContainText('Test chair');
 	await expect(menu.getByTestId('all-builds')).toBeVisible();
 	await expect(menu.getByTestId('menu-new-build')).toBeVisible();
 	await page.screenshot({ path: `${SHOTS}/nav-builds-menu-390.png` });
-	await page.keyboard.press('Escape');
+	await page.getByTestId('builds-menu').click();
 	await expect(page.getByRole('banner').getByTestId('nav-printers')).toBeVisible();
+	await expect(page.getByRole('banner').getByTestId('nav-designs')).toBeVisible();
 	await expect(menu).toHaveCount(0);
+	// The Builds item is the highlighted one while inside a build.
+	await expect(page.getByTestId('builds-menu')).toHaveClass(/\bon\b/);
 
-	// On a phone the build's name leads back to its Overview from other tabs and from Designs.
+	// On a phone the bottom bar leads back to the Overview from other tabs; Studio and Designs are
+	// in the menu and lead back to the build.
 	await page.goto(`/builds/${buildId}/print`);
-	await page.getByTestId('back-to-build').click();
+	await expect(page.getByTestId('back-to-build')).toHaveCount(0);
+	await tabs.getByRole('link', { name: 'Overview', exact: true }).click();
 	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}$`));
+	await openNav(page);
 	await page.getByRole('banner').getByRole('link', { name: 'Studio' }).click();
 	await expect(page).toHaveURL(/\/studio\?from=/);
 	await expect(page.getByTestId('back-to-build-link')).toContainText('Test chair');
@@ -270,7 +289,7 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 
 	// Chapter page tabs.
 	await page.goto(chapterUrl);
-	const ct = page.getByRole('navigation', { name: 'Workspace sections' });
+	const ct = page.getByRole('navigation', { name: 'Chapter sections' });
 	for (const t of ['Builds', 'Members', 'Printers', 'Integrations'])
 		await expect(ct.getByRole('link', { name: t, exact: true })).toBeVisible();
 	await ct.getByRole('link', { name: 'Integrations' }).click();
