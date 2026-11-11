@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
 	applyRun,
 	recomputeParts,
@@ -29,9 +29,11 @@ import {
 	builds,
 	organization,
 	printRuns,
+	printerJobs,
 	user
 } from '../db/schema';
 import { emitBuildEvent } from '../events';
+import { emitPrinterEvent } from '../printers/bus';
 import { parsePrinter } from '#lib/printers/printer.ts';
 import { isPersonalOrg } from '../teams';
 import { autoRearrangeBuild, REARRANGE_KINDS } from './arrange-plan';
@@ -277,6 +279,8 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 	const action = body.action;
 	if (!['start', 'stop', 'setStart', 'setEstimate'].includes(action as string))
 		bad('Unknown action');
+	// Printers whose live job was unlinked by "Take off printer" (their Overview chooser reappears).
+	const freed: { org: string; printerId: string }[] = [];
 	mutateBuild(db, buildId, userId, (tx, view, now) => {
 		const slugs = slugList(body.slugs, view);
 		switch (action) {
@@ -286,8 +290,33 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 					payload: { slugs },
 					patches: startPrinting(view, slugs, now)
 				};
-			case 'stop':
-				return { kind: 'printing.stop', payload: { slugs }, patches: stopPrinting(view, slugs) };
+			case 'stop': {
+				// The plate leaves the printer: a live job linked to these parts is no longer linked to
+				// the plate (the printer is still printing), so it can be linked again from the Overview.
+				const live = tx
+					.select()
+					.from(printerJobs)
+					.where(
+						and(
+							eq(printerJobs.buildId, buildId),
+							inArray(printerJobs.status, ['printing', 'paused'])
+						)
+					)
+					.all()
+					.filter((j) => (j.partSlugs ?? []).some((s) => slugs.includes(s)));
+				for (const j of live) {
+					tx.update(printerJobs)
+						.set({ buildId: null, plateNumber: null, partSlugs: null })
+						.where(eq(printerJobs.id, j.id))
+						.run();
+					freed.push({ org: view.build.organizationId, printerId: j.printerId });
+				}
+				return {
+					kind: 'printing.stop',
+					payload: { slugs, ...(live.length ? { unlinkedJobs: live.length } : {}) },
+					patches: stopPrinting(view, slugs)
+				};
+			}
 			case 'setStart': {
 				const when = typeof body.when === 'string' ? new Date(body.when) : null;
 				if (!when || Number.isNaN(when.getTime())) bad('when must be an ISO date-time');
@@ -310,6 +339,7 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 			}
 		}
 	});
+	for (const f of freed) emitPrinterEvent(f.org, { type: 'job', printerId: f.printerId });
 }
 
 export function addRun(db: Db, buildId: string, userId: string, body: unknown): string {

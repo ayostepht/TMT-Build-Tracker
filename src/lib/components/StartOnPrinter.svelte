@@ -2,6 +2,7 @@
 	import { expectOnPrinter, printing } from '#lib/client/api.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
+	import ExpectedConfirm from './ExpectedConfirm.svelte';
 
 	/**
 	 * "Start printing on <printer>" for plates, shown when the team has printers connected.
@@ -21,7 +22,17 @@
 			const perPart = ctx.view.plates.find((p) => p.number === plateNumber)?.perPartRuns;
 			await expectOnPrinter(printerId, ctx.id, plateNumber, perPart ? slugs : undefined);
 		});
+		// If that printer already runs an unlinked job, the confirmation shows right here.
+		dismissed = false;
+		await store.load();
 	}
+
+	let dismissed = $state(false);
+	const asking = $derived(
+		dismissed
+			? []
+			: store.expected.filter((e) => e.buildId === ctx.id && e.plateNumber === plateNumber)
+	);
 </script>
 
 {#if ctx.canEdit && list.length}
@@ -33,5 +44,10 @@
 			data-testid="start-on-printer"
 			onclick={() => go(p.id)}>Start on {p.name}</button
 		>
+	{/each}
+{/if}
+{#if ctx.canEdit}
+	{#each asking as e (e.printerId)}
+		<ExpectedConfirm exp={e} onother={() => (dismissed = true)} />
 	{/each}
 {/if}

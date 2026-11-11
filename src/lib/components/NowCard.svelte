@@ -215,8 +215,11 @@
 				<button
 					class="btn"
 					type="button"
-					onclick={() => ctx.act(() => printing(ctx.id, { action: 'stop', slugs }))}
-					>Take off printer</button
+					onclick={async () => {
+						await ctx.act(() => printing(ctx.id, { action: 'stop', slugs }));
+						// the printer's running job is unlinked now: show it in "Link to plate…" at once
+						void pstore.load();
+					}}>Take off printer</button
 				>
 			</div>
 		{/if}

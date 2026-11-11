@@ -11,7 +11,7 @@ import { stopPrinting } from '#lib/domain/actions.ts';
 import { defaultRunParts } from '#lib/domain/run-choice.ts';
 import { today } from '#lib/domain/format.ts';
 import type { BuildView, PartPatch } from '#lib/domain/types.ts';
-import type { PrinterJobView, PrinterStatus } from '#lib/printers/status.ts';
+import type { PrinterExpectedView, PrinterJobView, PrinterStatus } from '#lib/printers/status.ts';
 import { ApiError } from '../access';
 import {
 	addRun,
@@ -85,20 +85,14 @@ export function checkPartSlugs(
 	return slugs;
 }
 
-/** Find the build plate a printer file belongs to, or null when it is not clear. */
+/**
+ * Find the build plate a printer file belongs to, or null when it is not clear. Only the file name
+ * decides: a job is never linked by guessing (a "Start on <printer>" click is a suggestion the user
+ * confirms, see `pendingExpected`).
+ */
 export function findPlateForFile(db: Db, printer: PrinterRow, fileName: string): Candidate | null {
 	const actor = getMemberActor(db, printer.organizationId);
 	if (!actor) return null;
-	const exp = getExpected(db, printer.organizationId, printer.id);
-	if (exp && Date.now() - exp.at < 12 * 3600_000) {
-		const v = loadBuildView(db, exp.buildId, actor);
-		if (v && v.build.kind === 'build' && v.plates.some((p) => p.number === exp.plate))
-			return {
-				view: v,
-				plate: exp.plate,
-				partSlugs: exp.partSlugs?.filter((s) => v.state[s])
-			};
-	}
 	const rows = db
 		.select({ id: builds.id, phase: builds.phase })
 		.from(builds)
@@ -134,18 +128,7 @@ export function findPlateForFile(db: Db, printer: PrinterRow, fileName: string):
 		const pr = hits.filter(printingOn);
 		if (pr.length) hits = pr;
 	}
-	if (hits.length === 1) return hits[0];
-	if (hits.length > 1) return null;
-
-	// No name match: the one build planned for this printer with exactly one plate marked Printing.
-	const cands: Candidate[] = [];
-	for (const v of views) {
-		if (!samePrinterBuild(v, printer)) continue;
-		for (const pl of v.plates)
-			if (pl.parts.some((s) => v.state[s]?.status === 'Printing'))
-				cands.push({ view: v, plate: pl.number });
-	}
-	return cands.length === 1 ? cands[0] : null;
+	return hits.length === 1 ? hits[0] : null;
 }
 
 function linkPatches(
@@ -232,6 +215,61 @@ function attach(
 	}
 }
 
+const EXPECTED_MAX_AGE_MS = 12 * 3600_000;
+
+/** A new unlinked job: a fresh suggestion sent before it started becomes about this job; stale ones go. */
+function bindExpected(db: Db, printer: PrinterRow, job: JobRow) {
+	const exp = getExpected(db, printer.organizationId, printer.id);
+	if (!exp) return;
+	if (exp.jobId || Date.now() - exp.at >= EXPECTED_MAX_AGE_MS)
+		setExpected(db, printer.organizationId, printer.id, null);
+	else setExpected(db, printer.organizationId, printer.id, { ...exp, jobId: job.id });
+}
+
+/**
+ * "Start on <printer>": remember which plate the user says is printing there. With an unlinked
+ * job already running it is about that job; otherwise about the next one that starts.
+ */
+export function expectOnPrinterJob(
+	db: Db,
+	printerId: string,
+	e: { buildId: string; plate: number; partSlugs?: string[] }
+): void {
+	const printer = db.select().from(printers).where(eq(printers.id, printerId)).get();
+	if (!printer) throw new ApiError(404, 'Not found');
+	const j = activeJob(db, printerId);
+	setExpected(db, printer.organizationId, printerId, {
+		buildId: e.buildId,
+		plate: e.plate,
+		...(e.partSlugs ? { partSlugs: e.partSlugs } : {}),
+		...(j && !j.buildId ? { jobId: j.id } : {}),
+		at: Date.now()
+	});
+	emitPrinterEvent(printer.organizationId, { type: 'job', printerId });
+}
+
+/** Suggestions for a build: its plate was sent to a printer that now runs an unlinked job. */
+export function pendingExpected(db: Db, orgId: string, buildId: string): PrinterExpectedView[] {
+	const out: PrinterExpectedView[] = [];
+	for (const p of db.select().from(printers).where(eq(printers.organizationId, orgId)).all()) {
+		const exp = getExpected(db, orgId, p.id);
+		if (!exp || exp.buildId !== buildId || !exp.jobId) continue;
+		if (Date.now() - exp.at >= EXPECTED_MAX_AGE_MS) continue;
+		const j = activeJob(db, p.id);
+		if (!j || j.id !== exp.jobId || j.buildId) continue;
+		out.push({
+			printerId: p.id,
+			printerName: p.name,
+			buildId,
+			plateNumber: exp.plate,
+			partSlugs: exp.partSlugs ?? null,
+			jobId: j.id,
+			at: exp.at
+		});
+	}
+	return out;
+}
+
 function createJob(db: Db, printer: PrinterRow, s: PrinterStatus, now: Date): JobRow {
 	const startedAt = s.elapsedSec != null ? new Date(now.getTime() - s.elapsedSec * 1000) : now;
 	const job = db
@@ -247,6 +285,7 @@ function createJob(db: Db, printer: PrinterRow, s: PrinterStatus, now: Date): Jo
 		.get();
 	const c = findPlateForFile(db, printer, job.fileName);
 	if (c) attach(db, printer, job, c, s, true);
+	else bindExpected(db, printer, job);
 	return db.select().from(printerJobs).where(eq(printerJobs.id, job.id)).get()!;
 }
 
@@ -269,6 +308,9 @@ function finishJob(
 		})
 		.where(eq(printerJobs.id, job.id))
 		.run();
+	// A suggestion is about one job: it ends with it.
+	if (getExpected(db, printer.organizationId, printer.id)?.jobId === job.id)
+		setExpected(db, printer.organizationId, printer.id, null);
 	if (!job.buildId || job.plateNumber == null) return;
 	const actor = getMemberActor(db, printer.organizationId);
 	if (!actor) return;

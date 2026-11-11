@@ -530,3 +530,68 @@ test('Now printing shows the live printer box and camera tile at 390 and 1440, a
 	}
 	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
 });
+
+test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Take off printer brings the chooser back', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	const SHOTS_EXP = process.env.EXPECTED_SHOTS ?? 'data/shots-expected';
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'confirmprint');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Confirm Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	const idle = () => mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	idle();
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+
+	// 1. Printing, nothing sent from here: the plain chooser, never a guess.
+	mock.printing('benchy.gcode', 8);
+	await expect(page.getByTestId('link-plate')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByTestId('expected-confirm')).toHaveCount(0);
+	expect(await page.getByTestId('printer-live').count()).toBe(0);
+	idle();
+	await expect(page.getByTestId('unlinked-job')).toBeHidden({ timeout: 20_000 });
+
+	// 2. "Start on <printer>" first, then the printer starts a file with no plate in its name.
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('start-on-printer').first().click();
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+	mock.printing('ECC_0.4_tmt_4691_Overture PETG HF_0.2_11h1m.gcode', 5);
+	const ask = page.getByTestId('expected-confirm');
+	await expect(ask).toBeVisible({ timeout: 20_000 });
+	await expect(ask).toContainText(/Confirm Plate \d+/);
+	await expect(ask).toContainText('is printing on Confirm Centauri?');
+	await expect(page.getByTestId('link-plate')).toHaveCount(0);
+	expect(await page.getByTestId('printer-live').count()).toBe(0);
+	await page.screenshot({ path: `${SHOTS_EXP}/confirm-390.png` });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.screenshot({ path: `${SHOTS_EXP}/confirm-1440.png` });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await ask.getByTestId('expected-confirm-go').click();
+	await expect(page.getByTestId('printer-live')).toBeVisible({ timeout: 15_000 });
+	await expect(ask).toBeHidden();
+
+	// 3. Take off printer: the running job is unlinked and the chooser is back, no navigation.
+	await page.getByRole('button', { name: 'Take off printer' }).click();
+	await expect(page.getByTestId('link-plate')).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByTestId('printer-live')).toHaveCount(0);
+	await expect(page.getByTestId('expected-confirm')).toHaveCount(0);
+	idle();
+});
