@@ -70,7 +70,10 @@ Route each to the agent named in brackets.
   OctoEverywhere notification webhooks (needs a public URL, shared-secret check);
   `BuildPrinter` has no `teamPrinterId` link back to the team printer.
 - **Plates** [plates-3mf]: print-template "printer" and "manual" profile sources not
-  wired; 3D chair from 3MF only (no STEP) for user-uploaded templates.
+  wired; 3D chair from 3MF only (no STEP) for user-uploaded templates. Upload still
+  stores raw slot → role grams (`builds/plates.ts`, `part-profile.ts` learning): check
+  whether learned part profiles inherit stray slots (accounting filters them since
+  fix/filament-role-mismatch).
 - **Kit** [kit-and-startup]: template copies: switching back to the built-in kit leaves
   the unused copy; designs from the base kit don't apply to a copy.
 - **Security** [release-pwa, review by security-reviewer]: without a proxy a client can
