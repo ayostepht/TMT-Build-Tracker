@@ -8,6 +8,12 @@ import {
 } from '#lib/printers/status.ts';
 import { catalogPrinter } from '#lib/printers/catalog.ts';
 import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
+import {
+	parseShareLink,
+	SHARE_LINK_HOST_PLACEHOLDER,
+	SHARE_LINK_KEY,
+	isOctoEverywhereAddress
+} from '#lib/printers/share-link.ts';
 import { ApiError } from '../access';
 import type { Db } from '../db';
 import { printers } from '../db/schema';
@@ -74,6 +80,8 @@ export function getPrinter(db: Db, id: string): Row | undefined {
 export function parseHost(v: unknown): string {
 	if (typeof v !== 'string') return bad('host is required');
 	const h = v.trim();
+	if (isOctoEverywhereAddress(h))
+		return bad('That is an OctoEverywhere link: put it in the "OctoEverywhere shared link" field');
 	if (!h || h.length > 253 || !/^[A-Za-z0-9.:_-]+$/.test(h))
 		return bad('Enter just the printer address, like 192.168.0.50');
 	return h;
@@ -111,7 +119,14 @@ export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput 
 		if (!(PRINTER_KINDS as readonly unknown[]).includes(o.kind)) bad('Unknown printer type');
 		out.kind = o.kind as PrinterKind;
 	}
-	if (o.host !== undefined || !partial) out.host = parseHost(o.host);
+	const typedLink =
+		typeof (o.secrets as Obj | undefined)?.[SHARE_LINK_KEY] === 'string' &&
+		!!((o.secrets as Obj)[SHARE_LINK_KEY] as string).trim();
+	if (o.host !== undefined || !partial) {
+		// A printer reached through an OctoEverywhere link needs no address.
+		const blank = typeof o.host !== 'string' || !o.host.trim();
+		out.host = blank && typedLink ? SHARE_LINK_HOST_PLACEHOLDER : parseHost(o.host);
+	}
 	if (o.port !== undefined) {
 		if (o.port === null || o.port === '') out.port = null;
 		else if (
@@ -151,6 +166,12 @@ export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput 
 		for (const [k, v] of Object.entries(o.secrets as Obj)) {
 			if (typeof v !== 'string' || v.length > 300) bad(`${k} must be text`);
 			s[k] = (v as string).trim();
+			if (k === SHARE_LINK_KEY && s[k]) {
+				// Validated and normalised; the error never echoes the (secret) link.
+				const c = parseShareLink(s[k]);
+				if (!c.ok) bad(c.error);
+				else s[k] = c.origin;
+			}
 		}
 		out.secrets = s;
 	}
@@ -171,8 +192,11 @@ function mergeSecrets(kind: PrinterKind, current: Secrets, supplied: Secrets | u
 
 export function createPrinter(db: Db, orgId: string, userId: string, body: unknown): Row {
 	const p = parsePrinterInput(body, false);
-	checkCamera(p.cameraUrl, p.host!, p.kind!);
 	const secrets = mergeSecrets(p.kind!, {}, p.secrets);
+	if (!secrets[SHARE_LINK_KEY] && p.host === SHARE_LINK_HOST_PLACEHOLDER)
+		bad('Enter the printer address');
+	if (secrets[SHARE_LINK_KEY]) p.cameraUrl = null; // the link decides where the camera is
+	checkCamera(p.cameraUrl, p.host!, p.kind!);
 	return db
 		.insert(printers)
 		.values({
@@ -203,13 +227,16 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 	const kind = p.kind ?? (cur.kind as PrinterKind);
 	const kindChanged = kind !== cur.kind;
 	const host = p.host ?? cur.host;
-	const cameraUrl = !cameraSupported(kind)
-		? null
-		: p.cameraUrl !== undefined
-			? p.cameraUrl
-			: cur.cameraUrl;
-	checkCamera(cameraUrl, host, kind);
 	const secrets = mergeSecrets(kind, kindChanged ? {} : decryptSecrets(cur.secretEnc), p.secrets);
+	const linked = !!secrets[SHARE_LINK_KEY];
+	if (!linked && host === SHARE_LINK_HOST_PLACEHOLDER) bad('Enter the printer address');
+	const cameraUrl =
+		!cameraSupported(kind) || linked
+			? null
+			: p.cameraUrl !== undefined
+				? p.cameraUrl
+				: cur.cameraUrl;
+	checkCamera(cameraUrl, host, kind);
 	const set: Partial<typeof printers.$inferInsert> = {
 		secretEnc: Object.keys(secrets).length ? encryptSecrets(secrets) : null
 	};
@@ -221,7 +248,7 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 	if (p.enabled !== undefined) set.enabled = p.enabled;
 	if (p.cameraUrl !== undefined) set.cameraUrl = p.cameraUrl;
 	if (p.cameraEnabled !== undefined) set.cameraEnabled = p.cameraEnabled;
-	if (kind === 'bambu-lan') set.cameraUrl = null;
+	if (kind === 'bambu-lan' || linked) set.cameraUrl = null;
 	return db.update(printers).set(set).where(eq(printers.id, id)).returning().get();
 }
 
@@ -248,17 +275,24 @@ export function configFromInput(db: Db, orgId: string, body: unknown): PrinterCo
 	}
 	const kind = ((o.kind as string) ?? stored?.kind) as PrinterKind;
 	if (!(PRINTER_KINDS as readonly unknown[]).includes(kind)) bad('Unknown printer type');
-	const p = parsePrinterInput({ ...o, name: 'test', kind, host: o.host ?? stored?.host }, true);
+	const typedHost = typeof o.host === 'string' && o.host.trim() ? o.host : undefined;
+	const p = parsePrinterInput(
+		{ ...o, name: 'test', kind, host: typedHost ?? stored?.host ?? o.host ?? '' },
+		true
+	);
+	const secrets = mergeSecrets(
+		kind,
+		stored && stored.kind === kind ? decryptSecrets(stored.secretEnc) : {},
+		p.secrets
+	);
+	if (!secrets[SHARE_LINK_KEY] && p.host === SHARE_LINK_HOST_PLACEHOLDER)
+		bad('Enter the printer address');
 	return {
 		id: stored?.id ?? 'test',
 		kind,
 		host: p.host!,
 		port: p.port !== undefined ? p.port : (stored?.port ?? null),
-		secrets: mergeSecrets(
-			kind,
-			stored && stored.kind === kind ? decryptSecrets(stored.secretEnc) : {},
-			p.secrets
-		)
+		secrets
 	};
 }
 

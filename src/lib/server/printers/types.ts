@@ -53,6 +53,9 @@ export function backoff(attempt: number, base = 2000, max = 60000): number {
 	return Math.min(max, base * 2 ** Math.min(attempt, 6)) + Math.floor(Math.random() * 500);
 }
 
+/** Shared-link (third-party relay) reconnects: slower, so a relay that hangs up is not hammered. */
+export const linkBackoff = (attempt: number): number => backoff(attempt, 10_000, 300_000);
+
 export const num = (v: unknown): number | undefined =>
 	typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
@@ -66,5 +69,8 @@ export function temp(v: unknown): number | undefined {
 /** Strip anything that could be a credential from an error before it is shown or logged. */
 export function safeError(e: unknown): string {
 	const m = e instanceof Error ? e.message : String(e);
-	return m.replace(/[A-Za-z0-9+/=_-]{24,}/g, '***').slice(0, 200);
+	return m
+		.replace(/shared-[^.\s/]+\.octoeverywhere\.com/gi, '***')
+		.replace(/[A-Za-z0-9+/=_-]{24,}/g, '***')
+		.slice(0, 200);
 }

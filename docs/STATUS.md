@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-11 (plate history, cancelled prints, Moonraker security fix; last deploy r39, ee69a3a)._
+_Last updated: 2026-11-11 (OctoEverywhere shared link; last deploy r41, 7e05586)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -33,6 +33,7 @@ has not started.
 | Bundled MakeGood kit pack 1.0.1                                                | Done                                                                           |
 | Assembly checklist, photos, handoff, printable summary                         | Done                                                                           |
 | Read-only printer status + camera, job → plate linking                         | Done; SDCP and camera verified live, supervisor not tested during a full print |
+| Elegoo via OctoEverywhere shared link                                          | Done (r41); maintainer to enter the link and confirm live                      |
 | Spoolman (optional)                                                            | Done, mock-tested only                                                         |
 | Filament catalog + vendor supplement                                           | Done                                                                           |
 | Release (Unraid template, domain, public repo)                                 | Not started                                                                    |
@@ -65,7 +66,15 @@ Route each to the agent named in brackets.
   selected part's chip covers the lower third of the phone stage; phone toasts cover the
   stage top for ~8 s.
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Printers** [printers]: live supervisor test with the Centauri Carbon during a real
+- **Printers** [printers]: OctoEverywhere shared link for Elegoo (committed on branch
+  `feat/octoeverywhere-share-link`, PR #2, deployed r41): the maintainer enters
+  the link in the printer form and confirms status + camera live. Small follow-ups:
+  the Address box stretches tall next to the link field's helper text (desktop);
+  `printers.spec.ts:244` (plate layout picker) timed out once under host load, passed
+  alone (possible flake); open question whether a linked printer should keep a direct
+  LAN fallback (orchestrator suggests no). CC firmware reports `PrintInfo.Status` 20
+  mid-print: consider a proper label instead of treating it as a prep state.
+  Live supervisor test with the Centauri Carbon during a real
   print (auto-link needs plate numbers in file names; Elegoo Slicer's names lack them);
   OctoEverywhere notification webhooks (needs a public URL, shared-secret check);
   `BuildPrinter` has no `teamPrinterId` link back to the team printer.

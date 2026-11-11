@@ -26,6 +26,8 @@ export class MockSdcp extends MiniWsServer {
 	private cameraAt = 0;
 	/** Number of Cmd 386 requests received. */
 	cameraEnables = 0;
+	/** Push a status to every new client without being asked (what OctoEverywhere's relay does). */
+	pushOnConnect = false;
 	status: MockStatus = {
 		printStatus: 0,
 		machineStatus: [0],
@@ -41,6 +43,9 @@ export class MockSdcp extends MiniWsServer {
 
 	constructor() {
 		super();
+		this.onConnect = (socket) => {
+			if (this.pushOnConnect) sendJson(socket, this.statusMessage());
+		};
 		this.onMessage = (socket, text) => {
 			let msg: { Data?: { Cmd?: number; Data?: unknown } };
 			try {
