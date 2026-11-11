@@ -16,8 +16,6 @@ export interface LegendRow {
 	pieces: number;
 	/** "Tires ×8", "Harness and Straps: 3 pieces", or just the name. */
 	label: string;
-	/** Why it is turned onto another face ("stands on its edge, 248 mm tall"), when it is. */
-	reoriented: string | null;
 	/** Angle of a part that only fits the bed turned diagonally. */
 	rotated: number | null;
 	/** True when at least one copy is drawn as a box (no mesh outline known). */
@@ -42,7 +40,6 @@ export function legendRows(
 				: pieces > 1
 					? `${name}: ${its.length} pieces`
 					: `${name} ×${its.length}`;
-		const turned = its.find((i) => i.pose);
 		const rot = its.find((i) => i.rotation % 90 !== 0);
 		return {
 			slug,
@@ -52,7 +49,6 @@ export function legendRows(
 			items: its.length,
 			pieces,
 			label,
-			reoriented: turned?.pose?.desc ?? null,
 			rotated: rot ? Math.round(rot.rotation * 10) / 10 : null,
 			approx: its.some((i) => !hasOutline(i))
 		};

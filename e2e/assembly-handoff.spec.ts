@@ -275,7 +275,7 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 
 	await page.goto(`/builds/${buildId}/summary`);
 	await page.waitForLoadState('networkidle');
-	await expect(page.locator('.summary h1')).toHaveText('Test chair');
+	await expect(page.locator('.summary .sh-name')).toHaveText('Test chair');
 	await expect(page.locator('.summary')).toContainText('Sam Rivera');
 	await expect(page.locator('.summary')).toContainText('Riverside Clinic');
 	await expect(page.locator('.summary')).toContainText('2026-11-03');

@@ -138,22 +138,40 @@
 		if (!el?.closest('.menu-wrap')) open = null;
 		if (!el?.closest('.navpanel, .navtoggle')) navOpen = false;
 	}
+
+	// The top-bar menus are plain disclosures (a button with aria-expanded plus a list of links),
+	// not ARIA menus: Tab walks the items, so no arrow-key handling is promised.
+	let topbar = $state<HTMLElement>();
+	/** Escape closes the open menu or phone panel and returns focus to the button that opened it. */
+	function onWindowKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || e.defaultPrevented) return;
+		const inBar = !!topbar?.contains(document.activeElement);
+		if (open !== null) {
+			const btn = topbar?.querySelector<HTMLElement>(`[data-menu="${open}"]`);
+			open = null;
+			if (inBar || document.activeElement === document.body) btn?.focus();
+		} else if (navOpen) {
+			navOpen = false;
+			if (inBar || document.activeElement === document.body)
+				topbar?.querySelector<HTMLElement>('.navtoggle')?.focus();
+		}
+	}
+	/** Focus leaving a menu (or the phone panel) closes it. A null target (a click) is left to onWindowClick. */
+	function onTopbarFocusOut(e: FocusEvent) {
+		const to = e.relatedTarget as Element | null;
+		if (!to) return;
+		if (!to.closest('.menu-wrap')) open = null;
+		else if (open && !to.closest(`.menu-wrap:has([data-menu="${open}"])`)) open = null;
+		if (!to.closest('.navpanel, .navtoggle')) navOpen = false;
+	}
 </script>
 
-<svelte:window
-	onclick={onWindowClick}
-	onkeydown={(e) => {
-		if (e.key === 'Escape') {
-			open = null;
-			navOpen = false;
-		}
-	}}
-/>
+<svelte:window onclick={onWindowClick} onkeydown={onWindowKeydown} />
 
 <div class="navprogress" class:on={progress} aria-hidden="true"></div>
 
 <div class="wrap shell" class:has-tabs={!!current && !onSetup}>
-	<header class="topbar">
+	<header class="topbar" bind:this={topbar} onfocusout={onTopbarFocusOut}>
 		<a class="brand shell-brand" href={resolve('/(app)')}><AppMark />TMT Build Tracker</a>
 		<div class="chapter-slot">
 			{#if showSwitcher}
@@ -193,20 +211,20 @@
 						type="button"
 						class="navlink"
 						class:on={buildsActive}
-						aria-haspopup="true"
 						aria-expanded={open === 'builds'}
+						aria-controls="menu-builds"
+						data-menu="builds"
 						data-testid="builds-menu"
 						onclick={() => toggle('builds')}>Builds <span aria-hidden="true">▾</span></button
 					>
 					{#if open === 'builds'}
-						<div class="menu builds" role="menu" data-testid="builds-menu-panel">
+						<div class="menu builds" id="menu-builds" data-testid="builds-menu-panel">
 							{#if data.recentBuilds.length}
 								<div class="menu-h">Recent builds</div>
 								<ul>
 									{#each data.recentBuilds as b (b.id)}
 										<li>
 											<a
-												role="menuitem"
 												href={b.setupStep !== null
 													? resolve('/(app)/builds/[id]/setup', { id: b.id })
 													: resolve('/(app)/builds/[id]', { id: b.id })}
@@ -230,11 +248,8 @@
 								<div class="menu-h">No builds yet</div>
 							{/if}
 							<div class="menu-foot">
-								<a role="menuitem" href={resolve('/(app)/builds')} data-testid="all-builds"
-									>All builds</a
-								>
+								<a href={resolve('/(app)/builds')} data-testid="all-builds">All builds</a>
 								<a
-									role="menuitem"
 									class="btn primary sm"
 									href={resolve('/(app)/builds/new')}
 									data-testid="menu-new-build">New build</a
@@ -274,23 +289,22 @@
 					<button
 						type="button"
 						class="navlink"
-						aria-haspopup="true"
 						aria-expanded={open === 'settings'}
+						aria-controls="menu-settings"
+						data-menu="settings"
 						data-testid="workspace-settings-menu"
 						onclick={() => toggle('settings')}
 						>{workspace.personal ? 'My builds' : 'Chapter'} settings
 						<span aria-hidden="true">▾</span></button
 					>
 					{#if open === 'settings'}
-						<div class="menu account" role="menu" data-testid="workspace-settings-panel">
+						<div class="menu account" id="menu-settings" data-testid="workspace-settings-panel">
 							<div class="menu-h">{workspace.name}</div>
 							{#if membersHref}
-								<a role="menuitem" href={membersHref} data-testid="ws-members">Members</a>
+								<a href={membersHref} data-testid="ws-members">Members</a>
 							{/if}
 							{#if !data.publicMode}
-								<a role="menuitem" href={integrationsHref} data-testid="ws-integrations"
-									>Integrations</a
-								>
+								<a href={integrationsHref} data-testid="ws-integrations">Integrations</a>
 							{/if}
 						</div>
 					{/if}
@@ -300,29 +314,26 @@
 				<button
 					type="button"
 					class="navlink acct"
-					aria-haspopup="true"
 					aria-expanded={open === 'account'}
+					aria-controls="menu-account"
+					data-menu="account"
 					data-testid="account-menu"
 					onclick={() => toggle('account')}
 					><span class="who-name">{data.user?.name ?? 'Account'}</span>
 					<span aria-hidden="true">▾</span></button
 				>
 				{#if open === 'account'}
-					<div class="menu account" role="menu">
+					<div class="menu account" id="menu-account">
 						{#if data.user}<div class="menu-h">{data.user.email}</div>{/if}
 						{#if !showSwitcher}
-							<a role="menuitem" class="phone-only" href={resolve('/(app)/onboarding')}
-								>Create a chapter</a
-							>
+							<a class="phone-only" href={resolve('/(app)/onboarding')}>Create a chapter</a>
 						{/if}
 						{#if data.siteAdmin}
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-							<a role="menuitem" href={resolve('/(app)/admin/templates') + fromQuery}>Kit admin</a>
+							<a href={resolve('/(app)/admin/templates') + fromQuery}>Kit admin</a>
 						{/if}
-						<a role="menuitem" href={resolve('/(app)/account')} data-testid="account-link"
-							>Account</a
-						>
-						<button type="button" role="menuitem" onclick={signOut}>Sign out</button>
+						<a href={resolve('/(app)/account')} data-testid="account-link">Account</a>
+						<button type="button" onclick={signOut}>Sign out</button>
 					</div>
 				{/if}
 			</div>
@@ -333,12 +344,20 @@
 			>
 		{/if}
 	</header>
-	{@render children()}
+	<main id="main" class="app-main" tabindex="-1">
+		{@render children()}
+	</main>
 </div>
 
 <Toast />
 
 <style>
+	.app-main {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: inherit;
+		min-width: 0;
+	}
 	.navprogress {
 		position: fixed;
 		top: 0;

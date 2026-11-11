@@ -42,7 +42,9 @@
 	}
 </script>
 
-<div class="wrap">
+<svelte:head><title>Create account · TMT Build Tracker</title></svelte:head>
+
+<main id="main" class="wrap" tabindex="-1">
 	<div class="card auth">
 		<div>
 			<div class="kicker auth-brand"><AppMark size={24} />TMT Build Tracker</div>
@@ -91,7 +93,7 @@
 			>
 		</p>
 	</div>
-</div>
+</main>
 
 <style>
 	.auth-brand {

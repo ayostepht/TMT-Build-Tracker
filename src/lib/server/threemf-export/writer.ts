@@ -114,21 +114,9 @@ export function itemTransform(it: PlannedItem, ox: number, oy: number): string {
 	const a = (it.rotation * Math.PI) / 180;
 	const c = Math.abs(Math.cos(a)) < 1e-12 ? 0 : Math.cos(a);
 	const s = Math.abs(Math.sin(a)) < 1e-12 ? 0 : Math.sin(a);
-	if (!it.pose)
-		return [c, s, 0, -s, c, 0, 0, 0, 1, it.x - (it.ox ?? 0) + ox, it.y - (it.oy ?? 0) + oy, 0]
-			.map(num)
-			.join(' ');
-	// Re-oriented item: p' = Rz(rotation) * (M * p + t) + (x, y, 0), as a row-vector matrix
-	const M = it.pose.m;
-	const t = it.pose.t;
-	const Rz = [c, -s, 0, s, c, 0, 0, 0, 1];
-	const A = new Array<number>(9).fill(0);
-	for (let i = 0; i < 3; i++)
-		for (let j = 0; j < 3; j++)
-			for (let k = 0; k < 3; k++) A[i * 3 + j] += Rz[i * 3 + k] * M[k * 3 + j];
-	const bx = c * t[0] - s * t[1] + it.x - (it.ox ?? 0) + ox;
-	const by = s * t[0] + c * t[1] + it.y - (it.oy ?? 0) + oy;
-	return [A[0], A[3], A[6], A[1], A[4], A[7], A[2], A[5], A[8], bx, by, t[2]].map(num).join(' ');
+	return [c, s, 0, -s, c, 0, 0, 0, 1, it.x - (it.ox ?? 0) + ox, it.y - (it.oy ?? 0) + oy, 0]
+		.map(num)
+		.join(' ');
 }
 
 /** One file's view of the plan: renumbered objects and plates, offsets applied or not. */
@@ -362,7 +350,7 @@ function notes(plan: ExportPlan, paint?: Map<number, number>): string {
 		for (const it of p.items) {
 			const o = plan.objects.find((x) => x.id === it.objectId);
 			const key = `${p.index}:${o?.slug}`;
-			if (o && !it.pose && it.rotation % 90 !== 0 && !rotated.has(key))
+			if (o && it.rotation % 90 !== 0 && !rotated.has(key))
 				rotated.set(
 					key,
 					`  - ${o.name} (plate ${p.index}): rotated ${Math.round(it.rotation)}° flat on the bed`
@@ -382,24 +370,6 @@ function notes(plan: ExportPlan, paint?: Map<number, number>): string {
 			lines.push(
 				`  Orca and Bambu Studio take one excluded area (bed_exclude_area) per printer, so only "${plan.printer.keepOut[0].label}" is written to the project; the other areas are kept clear here but the slicer does not know them.`
 			);
-	}
-	const turned = new Map<string, string>();
-	for (const p of plan.plates)
-		for (const it of p.items) {
-			const o = plan.objects.find((x) => x.id === it.objectId);
-			const key = `${p.index}:${it.objectId}`;
-			if (it.pose && o && !turned.has(key))
-				turned.set(
-					key,
-					`  - ${o.name} (plate ${p.index}): ${it.pose.desc}; resting area about ${Math.round(it.pose.contactArea)} mm2, overhang estimate ${Math.round(it.pose.supportScore)} mm2`
-				);
-		}
-	if (turned.size) {
-		lines.push(
-			'',
-			'Re-oriented parts (did not fit the bed as MakeGood prints them; check supports)',
-			...turned.values()
-		);
 	}
 	if (paint) {
 		const painted = plan.objects.filter((o) => (paint.get(o.id) ?? 0) > 0);

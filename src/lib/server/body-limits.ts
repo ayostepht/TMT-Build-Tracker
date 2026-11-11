@@ -17,14 +17,12 @@ import { MAX_SNAPSHOT_BYTES } from './designs/files';
 const KB = 1024;
 const MB = 1024 * KB;
 
-/** JSON APIs and form posts. The largest real JSON body is far smaller; the biggest of all is the build import (own cap). */
+/** JSON APIs and form posts. The largest real JSON body is far smaller. */
 export const DEFAULT_BODY_CAP = 1 * MB;
 /** Better Auth requests: e-mail, password, name, a token. */
 export const AUTH_BODY_CAP = 64 * KB;
 /** STEP zips, independent of `MAX_3MF_MB` (the route enforces the same number). */
 export const STEP_ZIP_BYTES = 200 * MB;
-/** The prototype export a build is imported from (the route enforces the same number). */
-export const BUILD_IMPORT_BYTES = 2 * MB;
 /** Multipart framing and form fields around a raw file. */
 const FRAMING = 1 * MB;
 
@@ -76,12 +74,6 @@ export const BODY_CAP_RULES: BodyCapRule[] = [
 		methods: ['PUT'],
 		cap: () => MAX_SNAPSHOT_BYTES,
 		what: 'design snapshot PNG'
-	},
-	{
-		pattern: /^\/api\/builds\/[^/]+\/import$/,
-		methods: ['POST'],
-		cap: () => BUILD_IMPORT_BYTES,
-		what: 'prototype export JSON'
 	},
 	{
 		pattern: /^\/api\/auth\//,

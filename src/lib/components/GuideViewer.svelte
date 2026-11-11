@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
+	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 	import { guidePageImageUrl } from '#lib/client/api.ts';
 	import { MAKEGOOD_GUIDE_URL } from '#lib/makegood.ts';
 
 	const ctx = getBuildCtx();
 	let index = $state(0);
-	let closeBtn = $state<HTMLButtonElement>();
-	let lastFocus: Element | null = null;
+	let vbox = $state<HTMLElement>();
 
 	const slug = $derived(ctx.guide?.slug ?? null);
 	const part = $derived(slug ? ctx.view.parts.find((p) => p.slug === slug) : undefined);
@@ -73,17 +73,14 @@
 			const want = ctx.guide.page;
 			const at = want === undefined ? -1 : tabs.findIndex((t) => t.page === want);
 			index = at >= 0 ? at : 0;
-			lastFocus = document.activeElement;
-			tick().then(() => closeBtn?.focus());
 		}
 	});
 
 	function close() {
 		ctx.guide = null;
-		if (lastFocus instanceof HTMLElement) lastFocus.focus();
 	}
 	function onkeydown(e: KeyboardEvent) {
-		if (!ctx.guide) return;
+		if (!ctx.guide || !isTopTrap(vbox)) return;
 		if (e.key === 'Escape') close();
 		else if (e.key === 'ArrowLeft' && index > 0) index--;
 		else if (e.key === 'ArrowRight' && index < tabs.length - 1) index++;
@@ -94,7 +91,15 @@
 
 {#if ctx.guide}
 	<div class="viewer" onclick={(e) => e.target === e.currentTarget && close()} role="presentation">
-		<div class="vbox" role="dialog" aria-modal="true" aria-labelledby="vTitle">
+		<div
+			class="vbox"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="vTitle"
+			tabindex="-1"
+			bind:this={vbox}
+			use:trapFocus={{ initial: '[data-initial]' }}
+		>
 			<div class="vhead">
 				<h2 id="vTitle">
 					{part ? part.name : 'Build guide'}
@@ -104,12 +109,8 @@
 							: ctx.view.build.templateName}</span
 					>
 				</h2>
-				<button
-					class="vclose"
-					type="button"
-					aria-label="Close guide"
-					bind:this={closeBtn}
-					onclick={close}>×</button
+				<button class="vclose" type="button" aria-label="Close guide" data-initial onclick={close}
+					>×</button
 				>
 			</div>
 			<div class="vtabs" role="tablist" aria-label="Guide pages">

@@ -9,7 +9,6 @@ import {
 	orientsOf,
 	type ArrangedPlate
 } from './arrange.ts';
-import { computePoses } from './orient.ts';
 
 const roles: ArrangeRole[] = [
 	{ key: 'primary', name: 'Primary', material: 'PETG' },
@@ -424,78 +423,58 @@ describe('arrange: determinism and recolor', () => {
 	});
 });
 
-describe('arrange: re-orientation', () => {
-	// 320 x 190 x 20 slab: too big flat for a 256 bed (even tilted), fits standing on its long edge
-	const slab = (withOrient: boolean): ArrangePart => {
-		const mesh = {
-			positions: [
-				-160, -95, 0, 160, -95, 0, 160, 95, 0, -160, 95, 0, -160, -95, 20, 160, -95, 20, 160, 95,
-				20, -160, 95, 20
-			],
-			indices: [
-				0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3,
-				0, 4, 3, 4, 7
-			]
-		};
-		return {
+describe('arrange: flat only (no 3D re-orientation)', () => {
+	// 320 x 190 x 20 slab: too big flat for a 256 bed (even turned), would only fit standing on its long edge
+	const slab = (): ArrangePart => ({
+		slug: 'wing-left',
+		name: 'Wing Left',
+		role: 'accent',
+		units: 1,
+		footprint: {
 			slug: 'wing-left',
-			name: 'Wing Left',
-			role: 'accent',
-			units: 1,
-			footprint: {
-				slug: 'wing-left',
-				pieces: [
-					{
-						name: 'wing',
-						w: 320,
-						d: 190,
-						h: 20,
-						copies: 1,
-						mesh: 'wing-left.bin',
-						...(withOrient ? { orient: computePoses(mesh) } : {})
-					}
-				]
-			}
-		};
-	};
+			pieces: [{ name: 'wing', w: 320, d: 190, h: 20, copies: 1, mesh: 'wing-left.bin' }]
+		}
+	});
 	const printer: ArrangePrinter = { ...bed(256), bedZ: 256 };
 
 	// Hard rule (maintainer, 2026-11-04): never change which face is down; only flat rotations.
 	it('never re-orients in 3D: a part that only fits stood up stays flat and is oversize', () => {
-		const r = run([slab(true)], printer);
+		const r = run([slab()], printer);
 		expect(r.plates).toHaveLength(1);
 		const it = r.plates[0].items[0];
-		expect(it.pose).toBeUndefined();
+		expect(it.rotation % 90).toBe(0);
+		expect(it.w).toBe(320);
+		expect(it.d).toBe(190);
+		expect(Object.keys(it)).not.toContain('pose');
 		expect(r.plates[0].oversize).toBe(true);
-		expect(r.warnings.some((x) => x.code === 'reoriented')).toBe(false);
 		expect(r.warnings.some((x) => x.code === 'oversize')).toBe(true);
 	});
 
 	it('keeps the profile orientation whenever it fits', () => {
-		const p = slab(true);
+		const p = slab();
 		p.footprint.pieces[0].w = 200;
 		p.footprint.pieces[0].d = 100;
 		const r = run([p], printer);
-		expect(r.plates[0].items[0].pose).toBeUndefined();
+		expect(Object.keys(r.plates[0].items[0])).not.toContain('pose');
 		expect(r.warnings).toEqual([]);
 	});
 
-	it('seed footprints cannot be re-oriented: the oversize warning points to the import', () => {
-		const r = run([slab(false)], printer);
+	it('a part that does not fit flat is oversize and the warning gives advice', () => {
+		const r = run([slab()], printer);
 		expect(r.plates[0].oversize).toBe(true);
 		expect(r.warnings[0].code).toBe('oversize');
 		expect(r.warnings[0].message).toContain('another profile');
 	});
 
 	it('respects the build height', () => {
-		const r = run([slab(true)], { ...bed(256), bedZ: 150 });
+		const r = run([slab()], { ...bed(256), bedZ: 150 });
 		expect(r.plates[0].oversize).toBe(true);
 		expect(r.warnings[0].message).toContain('bigger bed');
 	});
 
 	it('is deterministic', () => {
-		const a = run([slab(true), part('b', 'accent', 60, 60)], printer);
-		const b = run([slab(true), part('b', 'accent', 60, 60)], printer);
+		const a = run([slab(), part('b', 'accent', 60, 60)], printer);
+		const b = run([slab(), part('b', 'accent', 60, 60)], printer);
 		expect(JSON.stringify(a)).toBe(JSON.stringify(b));
 	});
 });

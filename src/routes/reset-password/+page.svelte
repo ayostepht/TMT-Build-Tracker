@@ -58,7 +58,7 @@
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<div class="wrap">
+<main id="main" class="wrap" tabindex="-1">
 	<div class="card auth">
 		<div>
 			<div class="kicker auth-brand"><AppMark size={24} />TMT Build Tracker</div>
@@ -106,7 +106,7 @@
 			</form>
 		{/if}
 	</div>
-</div>
+</main>
 
 <style>
 	.auth-brand {

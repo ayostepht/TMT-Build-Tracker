@@ -254,17 +254,17 @@
 <style>
 	.cf {
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 	.row2 {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 	.field {
 		display: grid;
-		gap: 4px;
-		font-size: 13px;
+		gap: var(--sp-2);
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		min-width: 0;
 	}
@@ -272,31 +272,31 @@
 	select,
 	textarea {
 		font-weight: 400;
-		font-size: 15px;
+		font-size: var(--fs-base);
 		min-width: 0;
 		width: 100%;
 		box-sizing: border-box;
-		padding: 9px 10px;
+		padding: var(--sp-5) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
 		font-family: inherit;
 	}
 	input[type='color'] {
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 	}
 	.colorrow {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
 		flex-wrap: wrap;
 	}
 	.colorrow input[type='color'] {
 		width: 48px;
-		padding: 2px;
+		padding: var(--sp-1);
 		height: 38px;
 		padding: 0;
 		flex: none;
@@ -308,15 +308,15 @@
 	.err {
 		margin: 0;
 		color: var(--bad);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		justify-content: flex-end;
 		position: sticky;
 		bottom: 0;
-		padding: 8px 0 12px;
+		padding: var(--sp-4) 0 var(--sp-6);
 		background: var(--card);
 	}
 </style>

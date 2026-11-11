@@ -104,36 +104,36 @@
 <style>
 	.check {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: flex-start;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.save {
 		display: grid;
-		gap: 12px;
+		gap: var(--sp-6);
 	}
 	p {
 		margin: 0;
 	}
 	.done {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		background: var(--ok-soft);
-		border-radius: 8px;
-		padding: 10px 12px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-5) var(--sp-6);
 	}
 	.link {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.link input {
 		flex: 1;
 		min-width: 0;
-		padding: 7px 10px;
+		padding: var(--sp-4) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
-		font: 13px var(--f-mono);
+		font: var(--fs-sm) var(--f-mono);
 	}
 </style>

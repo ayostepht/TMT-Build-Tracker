@@ -153,7 +153,8 @@ describe('plate layout optimiser', () => {
 
 	it('only flat-rotates: no pose, rotation about z only', () => {
 		const r = run(scene());
-		for (const pl of r.plates) for (const i of pl.items) expect(i.pose).toBeUndefined();
+		for (const pl of r.plates)
+			for (const i of pl.items) expect(Object.keys(i)).not.toContain('pose');
 	});
 });
 
@@ -263,7 +264,7 @@ describe("the maintainer's Centauri Carbon wings (tmt_4691.3mf)", () => {
 			const m = metrics(r.plates[0], parts, p);
 			expect(m.minClearance).toBeGreaterThanOrEqual(fileClearance - 0.06);
 			// flat rotation only
-			expect(r.plates[0].items[0].pose).toBeUndefined();
+			expect(Object.keys(r.plates[0].items[0])).not.toContain('pose');
 		});
 	}
 	it('a wing that only fits off-centre because of the zone is placed off-centre', () => {

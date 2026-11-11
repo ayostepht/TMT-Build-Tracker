@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { focusIn } from '#lib/client/focus-trap.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -46,7 +47,13 @@
 					>
 				</div>
 			{:else}
-				<div role="alertdialog" aria-label="Confirm move" style="display:grid;gap:10px">
+				<div
+					role="alertdialog"
+					aria-label="Confirm move"
+					tabindex="-1"
+					use:focusIn={'button:not(.primary)'}
+					style="display:grid;gap:10px"
+				>
 					<strong>Move "{ctx.view.build.name}" to {target?.name}?</strong>
 					<div>
 						<button class="btn primary" type="button" onclick={move}>Move build</button>

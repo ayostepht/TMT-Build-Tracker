@@ -8,6 +8,8 @@
 	const from = $derived(back ? `?from=${back.id}` : '');
 </script>
 
+<svelte:head><title>Kit admin · TMT Build Tracker</title></svelte:head>
+
 <section class="stack">
 	<div class="kicker">Kit admin</div>
 	{#if back}

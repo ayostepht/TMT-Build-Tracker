@@ -99,17 +99,17 @@
 	.sheet {
 		background: var(--card);
 		border: 1px solid var(--accent);
-		border-radius: 10px;
-		padding: 5px 6px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-3) var(--sp-3);
 		display: grid;
-		gap: 6px;
-		box-shadow: 0 2px 10px rgb(0 0 0 / 0.25);
+		gap: var(--sp-3);
+		box-shadow: var(--shadow-1);
 		max-width: 100%;
 		box-sizing: border-box;
 	}
 	.cardtop {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
 		min-width: 0;
 	}
@@ -119,20 +119,20 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.both {
 		display: flex;
-		gap: 4px;
+		gap: var(--sp-2);
 		align-items: center;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		flex: none;
 		min-height: 32px;
 		cursor: pointer;
 	}
 	.guide {
 		flex: none;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		white-space: nowrap;
 	}
 	.x {
@@ -143,7 +143,7 @@
 		border-radius: 50%;
 		background: var(--paper);
 		color: var(--ink);
-		font: 600 18px/1 var(--f-body);
+		font: 600 var(--fs-lg)/1 var(--f-body);
 		cursor: pointer;
 		padding: 0;
 	}
@@ -152,11 +152,11 @@
 	}
 	.note {
 		margin: 0;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.opts {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		overflow-x: auto;
 		overscroll-behavior-x: contain;
 		scrollbar-width: thin;
@@ -167,19 +167,19 @@
 		display: flex;
 		align-items: center;
 		text-align: left;
-		padding: 4px 6px;
+		padding: var(--sp-2) var(--sp-3);
 		min-height: 44px;
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--paper);
 		color: var(--ink);
 		font: inherit;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		cursor: pointer;
 	}
 	.lab {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		align-items: center;
 		min-width: 0;
 	}
@@ -201,9 +201,9 @@
 	}
 	.only {
 		flex: none;
-		font: 600 11px/1 var(--f-body);
-		padding: 3px 6px;
-		border-radius: 999px;
+		font: 600 var(--fs-xs)/1 var(--f-body);
+		padding: var(--sp-2) var(--sp-3);
+		border-radius: var(--r-pill);
 		border: 1px solid var(--warn);
 		color: var(--warn);
 		white-space: nowrap;
@@ -211,7 +211,7 @@
 	.narrow {
 		display: none;
 	}
-	@media (max-width: 520px) {
+	@media (max-width: 760px) {
 		.wide {
 			display: none;
 		}
@@ -219,7 +219,7 @@
 			display: inline;
 		}
 		.title b {
-			font-size: 13px;
+			font-size: var(--fs-sm);
 		}
 	}
 	@media (min-width: 900px) {

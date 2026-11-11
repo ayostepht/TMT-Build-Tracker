@@ -107,13 +107,12 @@ describe.skipIf(!packFile || !existsSync(packFile))('the real kit pack', () => {
 			expect(painted).toBe(manifest.contents.paintedFaces);
 			expect(rows.reduce((a, r) => a + r.paintedFaces, 0)).toBe(manifest.contents.paintedFaces);
 
-			// no poses came back, and every X/P/A part fits flat on a 256 x 256 bed
+			// every X/P/A part fits flat on a 256 x 256 bed
 			const xpa = geometryRows.filter((r) => /tmt_4691/i.test(r.origin)).map((r) => r.slug);
 			expect(xpa.length).toBeGreaterThan(10);
 			const U = 254;
 			for (const slug of xpa)
 				for (const pc of fps.get(slug)!.pieces) {
-					expect(pc.orient?.poses ?? []).toEqual([]);
 					const fits = boxOrients(pc as FitPiece, true, U, U).some((o) => o.w <= U && o.d <= U);
 					expect(fits, `${slug} ${pc.name} ${pc.w}x${pc.d}`).toBe(true);
 				}

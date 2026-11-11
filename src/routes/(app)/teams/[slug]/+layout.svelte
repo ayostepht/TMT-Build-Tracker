@@ -16,6 +16,8 @@
 	]);
 </script>
 
+<svelte:head><title>{data.team.name} · TMT Build Tracker</title></svelte:head>
+
 <section class="stack">
 	<div class="kicker">{data.team.personal ? 'Just you' : `Chapter (${data.role})`}</div>
 	<h1>{data.team.name}</h1>

@@ -45,18 +45,6 @@
 				></span>
 				<span class="txt">
 					<span class="name">{r.label}</span>
-					{#if r.reoriented}
-						<span class="note turned" data-testid="legend-reoriented"
-							><span
-								class="tag"
-								title="Does not fit the bed in its usual orientation, so it is turned onto another face: {r.reoriented}. Check supports in your slicer."
-								><svg class="glyph" viewBox="-6 -6 12 12" aria-hidden="true"
-									><circle r="4.3" class="g-dash" /></svg
-								>re-oriented</span
-							>
-							{r.reoriented}</span
-						>
-					{/if}
 					{#if r.rotated != null}
 						<span class="note"
 							><span
@@ -176,10 +164,6 @@
 		stroke-width: 1.6px;
 		stroke-linecap: round;
 		stroke-linejoin: round;
-	}
-	.g-dash {
-		stroke-dasharray: 3 2.2;
-		stroke-linecap: butt;
 	}
 	.tag.approx {
 		background: var(--line);

@@ -23,7 +23,7 @@ import type { Db } from '../db';
 import { buildPlates, builds, templatePlateLayouts, templatePrintGeometry } from '../db/schema';
 import { loadBuildView } from './view';
 import { estimateArrangedPlates, loadTimeModel } from './time-model';
-import { ensureOrientations, ensureSilhouettes } from '../print-geometry/store';
+import { ensureSilhouettes } from '../print-geometry/store';
 
 export const ARRANGED_LAYOUT = 'arranged';
 export const ARRANGED_SOURCE = 'arranged';
@@ -38,7 +38,6 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Print footprints stored for a template, by slug (seed rows and imported rows alike). */
 export function loadFootprints(db: Db, templateId: string): Map<string, PrintFootprint> {
-	ensureOrientations(db, templateId);
 	ensureSilhouettes(db, templateId);
 	const out = new Map<string, PrintFootprint>();
 	for (const r of db

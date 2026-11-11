@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { tick } from 'svelte';
 	import AskDialog from './AskDialog.svelte';
+	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { deletePhoto, photoUrl, uploadPhoto } from '#lib/client/api.ts';
 	import { downscalePhoto } from '#lib/client/images.ts';
@@ -20,8 +20,7 @@
 	let error = $state('');
 	let open = $state<number | null>(null);
 	let input = $state<HTMLInputElement>();
-	let closeBtn = $state<HTMLButtonElement>();
-	let lastFocus: Element | null = null;
+	let lbox = $state<HTMLElement>();
 	const asking = createAsk();
 
 	async function pick(e: Event & { currentTarget: HTMLInputElement }) {
@@ -61,18 +60,15 @@
 	}
 
 	function show(i: number) {
-		lastFocus = document.activeElement;
 		open = i;
-		tick().then(() => closeBtn?.focus());
 	}
 	function close() {
 		open = null;
-		if (lastFocus instanceof HTMLElement) lastFocus.focus();
 	}
 	function onkeydown(e: KeyboardEvent) {
 		if (open === null) return;
 		// A question on top (delete photo) takes Escape; the viewer stays.
-		if (asking.current) return;
+		if (asking.current || !isTopTrap(lbox)) return;
 		if (e.key === 'Escape') close();
 		else if (e.key === 'ArrowLeft' && open > 0) open--;
 		else if (e.key === 'ArrowRight' && open < photos.length - 1) open++;
@@ -133,19 +129,23 @@
 		onclick={(e) => e.target === e.currentTarget && close()}
 		role="presentation"
 	>
-		<div class="lbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
+		<div
+			class="lbox"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Photo viewer"
+			tabindex="-1"
+			bind:this={lbox}
+			use:trapFocus={{ initial: '[data-initial]' }}
+		>
 			<div class="lhead">
 				<span class="muted"
 					>{open + 1} of {photos.length} · {cur.createdByName ?? 'Someone'}, {ago(
 						cur.createdAt
 					)}</span
 				>
-				<button
-					type="button"
-					class="x"
-					aria-label="Close photo"
-					bind:this={closeBtn}
-					onclick={close}>×</button
+				<button type="button" class="x" aria-label="Close photo" data-initial onclick={close}
+					>×</button
 				>
 			</div>
 			<div class="limg"><img src={photoUrl(ctx.id, cur.id)} alt={cur.caption || `${label}`} /></div>

@@ -309,8 +309,9 @@ test('top nav Printers reaches the printers page from a build; a personal worksp
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(w);
 		await openNav(page);
 		await page.getByTestId('workspace-settings-menu').click();
-		await expect(page.getByRole('menuitem', { name: 'Integrations' })).toBeVisible();
-		await expect(page.getByRole('menuitem', { name: 'Members' })).toHaveCount(0);
+		const panel = page.getByTestId('workspace-settings-panel');
+		await expect(panel.getByRole('link', { name: 'Integrations' })).toBeVisible();
+		await expect(panel.getByRole('link', { name: 'Members' })).toHaveCount(0);
 		await page.screenshot({ path: `data/shots-nav/menu-account-${w}-light.png` });
 		await page.keyboard.press('Escape');
 	}

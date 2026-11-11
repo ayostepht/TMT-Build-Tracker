@@ -333,7 +333,7 @@
 			snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
 		/>
 		<div
-			class="tabs"
+			class="ds-seg ds-seg--fill dw-tabs"
 			role="tablist"
 			aria-label="Design panel"
 			tabindex="-1"
@@ -348,7 +348,6 @@
 					aria-selected={tab === t.id}
 					aria-controls="tabpanel-{t.id}"
 					tabindex={tab === t.id ? 0 : -1}
-					class="tab"
 					onclick={() => setTab(t.id)}>{t.label}</button
 				>
 			{/each}
@@ -422,7 +421,7 @@
 			/>
 
 			{#if ctx.view.variantGroups.length}
-				<section class="card" aria-label="Variant options">
+				<section class="ds-card" aria-label="Variant options">
 					<h2>Options</h2>
 					<p class="muted">
 						Switching an option updates the 3D view, the part list and the totals.
@@ -455,7 +454,7 @@
 	.design {
 		--stageh: clamp(200px, 34vh, 320px);
 		display: grid;
-		gap: 12px;
+		gap: var(--sp-6);
 		align-items: start;
 	}
 	.design.embedded {
@@ -467,7 +466,7 @@
 		top: var(--stick, 0px);
 		z-index: 6;
 		background: var(--paper);
-		padding: 0 0 8px;
+		padding: 0 0 var(--sp-4);
 	}
 	.stagebox {
 		position: relative;
@@ -475,7 +474,7 @@
 	}
 	.panel {
 		display: grid;
-		gap: 16px;
+		gap: var(--sp-8);
 		min-width: 0;
 	}
 	/* "Previewing X" sits on top of the stage so it never moves the layout; the viewer below keeps its touches. */
@@ -487,15 +486,15 @@
 		z-index: 2;
 		margin: 0;
 		display: flex;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: center;
 		justify-content: space-between;
-		padding: 6px 8px 6px 12px;
-		font-size: 14px;
+		padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-6);
+		font-size: var(--fs-md);
 		background: var(--card);
 		border: 1px solid var(--accent);
-		border-radius: 8px;
-		box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+		border-radius: var(--r-lg);
+		box-shadow: var(--shadow-1);
 		pointer-events: none;
 	}
 	.prev .btn {
@@ -508,60 +507,38 @@
 	.stalenote {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 12px;
+		gap: var(--sp-4) var(--sp-6);
 		align-items: center;
 		justify-content: space-between;
-		padding: 8px 10px;
-		border-radius: 8px;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-lg);
 		background: var(--warn-soft);
 		color: var(--warn);
-		font-size: 14px;
+		font-size: var(--fs-md);
 		font-weight: 600;
 		min-width: 0;
 	}
 	.stale-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	h2 {
 		margin: 0;
 	}
-	.tabs {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 4px;
-		padding: 4px;
-		background: var(--accent-soft);
-		border-radius: 10px;
+	.dw-tabs {
 		position: sticky;
 		top: calc(var(--stick, 0px) + var(--stageh) + 8px);
 		z-index: 5;
-		/* Not a scroller (the global .tabs rule makes it one): three fixed columns, nothing to pan. */
-		overflow: visible;
 	}
-	.tab {
-		border: 0;
-		background: transparent;
-		color: var(--ink);
-		font: 600 15px/1 var(--f-body);
-		padding: 11px 8px;
-		border-radius: 7px;
-		cursor: pointer;
-	}
-	.tab[aria-selected='true'] {
-		background: var(--card);
-		box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
-		color: var(--accent);
-	}
-	.tab:focus-visible {
+	.dw-tabs > button:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}
 	[role='tabpanel'],
 	.view {
 		display: grid;
-		gap: 16px;
+		gap: var(--sp-8);
 		min-width: 0;
 	}
 	[role='tabpanel'][hidden] {
@@ -614,7 +591,7 @@
 			height: var(--fill, 70vh);
 			padding-bottom: 0;
 			align-items: stretch;
-			gap: 16px;
+			gap: var(--sp-8);
 		}
 		.stagecol {
 			position: static;
@@ -635,7 +612,7 @@
 			min-height: 0;
 			overflow-y: auto;
 			overscroll-behavior: contain;
-			padding: 0 6px 24px 0;
+			padding: 0 var(--sp-3) var(--sp-10) 0;
 			scrollbar-gutter: stable;
 		}
 		.panel > * {
@@ -648,9 +625,8 @@
 		.panel.picking {
 			overflow: hidden;
 		}
-		.tabs {
+		.dw-tabs {
 			top: 0;
-			margin: 0;
 		}
 		.partsTab {
 			--pt: calc(var(--tabsh, 52px) + 4px);

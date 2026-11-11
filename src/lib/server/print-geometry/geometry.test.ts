@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { strToU8 } from 'fflate';
 import { eq } from 'drizzle-orm';
-import { ORIENT_VERSION } from '#lib/domain/orient.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import { loadFootprints } from '../builds/arrange-plan';
 import { openDb, runMigrations, type Db } from '../db';
@@ -238,7 +237,7 @@ describe('importPrintGeometry', () => {
 		);
 	});
 
-	it('stores re-orientation poses on import and computes them lazily for older rows', async () => {
+	it('stores the flat outline on import, computes it lazily for older rows, never poses', async () => {
 		await importPrintGeometry(db, templateId, file(threeMf()), 'profile.3mf');
 		const get = () =>
 			db
@@ -247,20 +246,22 @@ describe('importPrintGeometry', () => {
 				.where(eq(templatePrintGeometry.slug, 'wing-left'))
 				.get()!;
 		const fp = get().footprint as unknown as PrintFootprint;
-		expect(fp.pieces[0].orient?.poses.length).toBeGreaterThan(0);
-		// simulate a row imported before poses existed
-		delete fp.pieces[0].orient;
+		expect(fp.pieces[0].sil?.profile.rings.length).toBeGreaterThan(0);
+		expect('orient' in fp.pieces[0]).toBe(false);
+		// simulate a row imported before outlines existed
+		delete fp.pieces[0].sil;
 		db.update(templatePrintGeometry)
 			.set({ footprint: fp as unknown as Record<string, unknown> })
 			.where(eq(templatePrintGeometry.slug, 'wing-left'))
 			.run();
-		expect((get().footprint as unknown as PrintFootprint).pieces[0].orient).toBeUndefined();
+		expect((get().footprint as unknown as PrintFootprint).pieces[0].sil).toBeUndefined();
 		const got = loadFootprints(db, templateId).get('wing-left')!;
-		expect(got.pieces[0].orient?.poses.length).toBeGreaterThan(0);
+		expect(got.pieces[0].sil?.profile.rings.length).toBeGreaterThan(0);
+		expect('orient' in got.pieces[0]).toBe(false);
 		// cached in the row
-		expect((get().footprint as unknown as PrintFootprint).pieces[0].orient?.v).toBe(ORIENT_VERSION);
-		// seed rows (no mesh) have no poses
-		expect(loadFootprints(db, templateId).get('rims-1-4')?.pieces[0].orient).toBeUndefined();
+		expect((get().footprint as unknown as PrintFootprint).pieces[0].sil?.v).toBeGreaterThan(0);
+		// seed rows (no mesh) have no outline
+		expect(loadFootprints(db, templateId).get('rims-1-4')?.pieces[0].sil).toBeUndefined();
 	});
 
 	it('reads 3MFs out of a zip', async () => {

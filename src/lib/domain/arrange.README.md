@@ -120,11 +120,13 @@ group. Pieces are packed one by one first (densest); a part's group is used only
 over plates and the group gives fewer plates (or fewer split parts). A group that does not fit the bed
 (margin, keep-outs) is packed piece by piece, and only then does the part get the `split` note. Groups are ignored when they hold more objects than the part's copies call for.
 
-## Re-orientation (parts bigger than the bed)
+## Flat rotation only (no 3D re-orientation)
 
-When a piece does not fit in its profile orientation (0/90 degrees or a free in-plane angle),
-and its footprint carries `orient` (poses computed on import by `orient.ts`), the arranger uses
-the best fitting resting pose: `ArrangedItem.pose` = `{ m, t, h, hull, desc, ... }`, so a mesh
-vertex goes `p' = Rz(rotation) * (m * p + t) + (x - ox, y - oy, 0)`. `ox, oy` is the offset of
-the turned outline's box centre from the mesh origin (free angles only; absent for 0/90). Items
-without `pose` use the stored mesh as is. Seed footprints (no meshes) cannot be re-oriented.
+HARD RULE: parts are never re-oriented in 3D. Every mesh keeps the face-down orientation of its
+source file; the arranger and the exporter only rotate it about z (0/90 degrees, or a free in-plane
+angle when only that fits): a mesh vertex goes `p' = Rz(rotation) * p + (x - ox, y - oy, 0)`. `ox, oy`
+is the offset of the turned outline's box centre from the mesh origin (free angles only; absent for
+0/90). A part that does not fit flat is reported as oversize with advice. The 3D pose search
+(`orient.ts`, `ArrangedItem.pose`) was removed on 2026-11-11; stored arrangements that still carry a
+`pose` are treated as stale and re-arranged flat, and legacy `orient` data on stored footprints is
+ignored.

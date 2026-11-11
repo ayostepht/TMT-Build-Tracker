@@ -1,6 +1,5 @@
 // Bundles the CLI cores into build/cli/ so the production image, which has no
 // devDependencies and no TypeScript sources, can run the scripts:
-//   src/lib/server/builds/import-cli.ts        -> build/cli/import-cli.js    (scripts/import-prototype.mjs)
 //   src/lib/server/print-geometry/import-cli.ts -> build/cli/geometry-cli.js (scripts/import-print-geometry.mjs)
 //   src/lib/server/kitpack/cli.ts               -> build/cli/kitpack-cli.js  (scripts/build-kit-pack.mjs)
 //   src/lib/server/reset-password-cli.ts        -> build/cli/reset-password-cli.js (scripts/reset-password-link.mjs)
@@ -17,7 +16,6 @@ export default defineConfig({
 		target: 'node22',
 		rollupOptions: {
 			input: {
-				'import-cli': 'src/lib/server/builds/import-cli.ts',
 				'geometry-cli': 'src/lib/server/print-geometry/import-cli.ts',
 				'kitpack-cli': 'src/lib/server/kitpack/cli.ts',
 				'reset-password-cli': 'src/lib/server/reset-password-cli.ts'

@@ -128,7 +128,8 @@ _Every specialist in `.claude/agents/` follows this; agent files only add area r
 - **HARD RULE: never re-orient parts in 3D.** Parts keep the face-down orientation from
   their source file. The arranger and the 3MF export may only rotate parts flat about Z
   (0/90° or a free in-plane angle). Never change which face is down, stand a part on an
-  edge, or tilt it (`ALLOW_3D_REORIENT = false` in `src/lib/domain/arrange.ts`). A part
+  edge, or tilt it (no code exists that can: the 3D re-orientation code was removed on
+  2026-11-11; do not add any back, see the header of `src/lib/domain/arrange.ts`). A part
   that doesn't fit flat is reported as oversize, with advice.
 - **Printers are read-only.** The only command ever sent is Elegoo SDCP Cmd 386
   `{"Enable":1}` (camera on), through `sdcpEnvelope`. Never move, heat, pause, stop or start.

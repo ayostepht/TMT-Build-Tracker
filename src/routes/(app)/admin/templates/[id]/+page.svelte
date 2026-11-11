@@ -11,6 +11,8 @@
 	const back = $derived(page.data.backBuild as { id: string; name: string } | null);
 </script>
 
+<svelte:head><title>{data.template.name} · Kit admin · TMT Build Tracker</title></svelte:head>
+
 <section class="stack">
 	<div class="kicker">Kit admin</div>
 	{#if back}

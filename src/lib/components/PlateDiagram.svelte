@@ -17,7 +17,7 @@
 	 * with a soft shadow, and a numbered badge on every piece. The
 	 * numbers match the legend next to it. Badges scale to their part; parts too small for one
 	 * get it beside them on a thin leader (copies close together share one), see `badge-layout`.
-	 * A dashed ring around a badge marks a re-oriented part, a small arrow arc a rotated one. Pieces without a known mesh are drawn as dashed
+	 * A small arrow arc around a badge marks a part rotated flat on the bed. Pieces without a known mesh are drawn as dashed
 	 * rounded boxes ("approximate"). Presentational; bed y points up, so the SVG flips it.
 	 */
 	let {
@@ -68,7 +68,7 @@
 			const sil = it.sil ? silhouettes[it.sil] : undefined;
 			const piece = footprints[it.slug]?.pieces[it.piece];
 			// For an oversize part the box can exceed the bed: draw it unrotated
-			const flat = plate.oversize && !it.pose;
+			const flat = plate.oversize;
 			const rot = flat ? 0 : it.rotation;
 			const dx = it.x - (flat ? 0 : (it.ox ?? 0));
 			const dy = it.y - (flat ? 0 : (it.oy ?? 0));
@@ -112,7 +112,6 @@
 				approx: !sil,
 				n: row?.n ?? 0,
 				name: row?.name ?? it.slug,
-				turned: !!it.pose,
 				rotated: it.rotation % 90 !== 0
 			};
 		})
@@ -135,13 +134,11 @@
 			}
 		).map((b) => {
 			const its = b.ids.map((i) => shapes[i]);
-			const turned = its.find((s) => s.turned);
 			const rotated = its.find((s) => s.rotated);
 			const row = numberOf.get(b.slug);
 			return {
 				...b,
 				n: row?.n ?? 0,
-				turned: turned?.it.pose?.desc ?? null,
 				rotated: rotated ? Math.round(rotated.it.rotation) : null
 			};
 		});
@@ -276,11 +273,7 @@
 				onpointerleave={() => pick(null)}
 				onclick={() => onselect?.(s.it.slug)}
 			>
-				<title
-					>{s.n ? `${s.n}. ` : ''}{s.name}{s.approx ? ' (approximate shape)' : ''}{s.turned
-						? ' (re-oriented)'
-						: ''}</title
-				>
+				<title>{s.n ? `${s.n}. ` : ''}{s.name}{s.approx ? ' (approximate shape)' : ''}</title>
 			</use>
 		{/each}
 	</g>
@@ -315,18 +308,11 @@
 					<circle class="anchor" cx={to[0]} cy={to[1]} r={Math.max(0.9, b.r * 0.2)} />
 				{/each}
 				<g transform="translate({b.x} {b.y})">
-					{#if b.turned}
-						<g data-testid="reoriented-badge" data-slug={b.slug}>
-							<title>Re-oriented: {b.turned}</title>
-							<circle class="ring-halo" r={b.r + 1.7} />
-							<circle class="ring-turned" r={b.r + 1.7} />
-						</g>
-					{/if}
 					{#if b.rotated != null}
 						<g data-testid="rotated-badge" data-slug={b.slug}>
 							<title>{numberOf.get(b.slug)?.name ?? b.slug}: rotated {b.rotated}° on the bed</title>
-							<path class="ring-halo" d={arc(b.r + (b.turned ? 2.2 : 0))} />
-							<path class="ring-rotated" d={arc(b.r + (b.turned ? 2.2 : 0))} />
+							<path class="ring-halo" d={arc(b.r)} />
+							<path class="ring-rotated" d={arc(b.r)} />
 						</g>
 					{/if}
 					<circle class="disc" r={b.r} />
@@ -532,7 +518,6 @@
 		stroke: var(--accent);
 	}
 	.ring-halo,
-	.ring-turned,
 	.ring-rotated {
 		fill: none;
 		stroke-linecap: round;
@@ -543,13 +528,8 @@
 		stroke: #fff;
 		stroke-width: 4.2px;
 	}
-	.ring-turned,
 	.ring-rotated {
 		stroke: #d98200;
 		stroke-width: 2.2px;
-	}
-	.ring-turned {
-		stroke-dasharray: 3.2 2.4;
-		stroke-linecap: butt;
 	}
 </style>

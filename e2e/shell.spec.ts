@@ -3,7 +3,6 @@ import {
 	createBuild,
 	invite,
 	joinViaInvite,
-	signInAsAdmin,
 	startBuild,
 	toSetupStep,
 	createChapter,
@@ -12,7 +11,6 @@ import {
 	signUp,
 	uniqueEmail
 } from './helpers';
-import { newClientContext } from './fixtures';
 import type { Page } from '@playwright/test';
 
 // Phone shell (Stage 2): one-row top bar, one-line build header, bottom tab bar, error page,
@@ -341,22 +339,11 @@ test('a build started from a design goes through the setup wizard', async ({ pag
 	await expect(page.getByTestId('setup-step-1')).toHaveClass(/done/);
 });
 
-test('Settings: spools fit their card, colors point to Design, the prototype import is admin-only', async ({
-	page,
-	browser
-}) => {
-	const adminCtx = await newClientContext(browser);
-	const adminPage = await adminCtx.newPage();
-	await signInAsAdmin(adminPage);
-	await adminCtx.close();
-
+test('Settings: spools fit their card, colors point to Design', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const { buildId } = await ownerWithBuild(page, 'settings');
 	await page.goto(`/builds/${buildId}/settings`);
 	await page.waitForLoadState('networkidle');
-	await expect(
-		page.getByRole('heading', { name: 'Import from the original prototype' })
-	).toHaveCount(0);
 	await expect(page.getByTestId('change-colors')).toBeVisible();
 	const bad = await page.evaluate(() => {
 		const card = document

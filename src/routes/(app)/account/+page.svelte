@@ -34,7 +34,7 @@
 	}
 </script>
 
-<svelte:head><title>Account</title></svelte:head>
+<svelte:head><title>Account · TMT Build Tracker</title></svelte:head>
 
 <section class="stack narrow acct-page">
 	<div class="kicker">Account</div>

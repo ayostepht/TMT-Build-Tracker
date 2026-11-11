@@ -141,7 +141,7 @@ test('sign-out clears the model runtime cache and keeps the app shell precache',
 	expect(shellBefore.length).toBeGreaterThan(0);
 
 	await page.getByTestId('account-menu').click();
-	await page.getByRole('menuitem', { name: 'Sign out' }).click();
+	await page.getByRole('button', { name: 'Sign out' }).click();
 	await expect(page).toHaveURL(/\/login/);
 
 	await expect.poll(names).not.toContain('tmt-runtime-v1');

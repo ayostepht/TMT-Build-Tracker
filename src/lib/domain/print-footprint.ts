@@ -4,7 +4,6 @@
  * volume, see src/lib/server/print-geometry/). Pure, browser-safe.
  */
 import type { FitPiece, Pt } from './geom2d.ts';
-import type { OrientData } from './orient.ts';
 import type { PieceSilhouettes } from './silhouette.ts';
 
 /** One distinct printed object of a part (connectors have several, a wing one). */
@@ -27,9 +26,7 @@ export interface PrintPiece {
 	partSettings?: Record<string, string>;
 	/** Painted triangles kept with the mesh (supports, seam); the export writes them back. */
 	paint?: { supports: number; seam: number };
-	/** Alternative resting poses for beds the profile orientation does not fit (imported geometry only; computed on import or on first use). */
-	orient?: OrientData;
-	/** True top-down outlines (profile orientation and one per pose); computed on import or on first use. */
+	/** True top-down outline of the piece as stored (profile orientation); computed on import or on first use. */
 	sil?: PieceSilhouettes;
 }
 

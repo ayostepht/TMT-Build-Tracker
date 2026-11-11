@@ -339,25 +339,6 @@ docker exec <container> node scripts/import-print-geometry.mjs \
 
 `--file` may be repeated and may be a zip of 3MFs. `--init` migrates and seeds a brand new (scratch) database first.
 
-## Importing from the original prototype
-
-If you tracked a build in the original single-page prototype, you can bring its progress over (part statuses, print logs, slicer weights, spool counts). Export the prototype's saved data (ask Claude to export it, or copy the artifact database) into a folder laid out as `parts/<part-id>.json`, `plates/<number>.json` and `settings/filament.json`, then bundle it into one file:
-
-```bash
-node scripts/bundle-prototype-export.mjs ./my-export ./export.json
-```
-
-Then either open the build's **Settings** tab and use **Import from the original prototype** (it shows a preview and any warnings first; a build that already has progress needs "Replace existing progress"), or run the importer inside the container (`--dry-run` only prints what would happen):
-
-```bash
-docker cp export.json <container>:/tmp/export.json
-docker exec <container> node --import ./scripts/proxy-origin.mjs scripts/import-prototype.mjs --list
-docker exec <container> node --import ./scripts/proxy-origin.mjs scripts/import-prototype.mjs \
-  --db /data/tmt.db --file /tmp/export.json --build <build-id> --dry-run
-```
-
-Use `--new "Name" --workspace <id-or-slug> --design <design-slug>` instead of `--build` to create the build too, and `--replace` to overwrite existing progress. The web import accepts up to 2 MB, which is plenty for one build.
-
 ## Development
 
 Requires Node 22.

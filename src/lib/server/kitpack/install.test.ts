@@ -118,9 +118,10 @@ function sourceKit(note = 'profile.3mf') {
 						sparse_infill_density: '15%'
 					},
 					paint: { supports: 2, seam: 1 },
-					orient: { v: 2, profile: { contactArea: 1, supportScore: 0 }, poses: [{} as never] },
-					sil: { v: 1, profile: { rings: [] } as never, poses: [{} as never] }
-				}
+					// legacy keys of the removed 3D pose search: packs and rows still carry them
+					orient: { v: 2, profile: { contactArea: 1, supportScore: 0 }, poses: [{}] },
+					sil: { v: 1, profile: { rings: [] }, poses: [{}] }
+				} as never
 			]
 		};
 		db.update(templatePrintGeometry)
@@ -211,7 +212,7 @@ describe('kit pack install', () => {
 		writeIndex(packs, [pack.entry]);
 	});
 
-	it('strips poses and machine settings, keeps paint counts', () => {
+	it('strips machine settings, keeps paint counts, leaves legacy pose keys out', () => {
 		expect(pack.res.manifest.contents).toMatchObject({
 			parts: 3,
 			meshes: 3,
@@ -245,8 +246,10 @@ describe('kit pack install', () => {
 			expect(r.sourceNote).toBe('kitpack:1.0.0');
 			const fp = r.footprint as unknown as PrintFootprint;
 			expect(fp.pieces[0].settings).toEqual({ wall_loops: '4', sparse_infill_density: '15%' });
-			expect(fp.pieces[0].orient?.poses).toEqual([]);
-			expect(fp.pieces[0].sil?.poses).toEqual([]);
+			const legacy = fp.pieces[0] as unknown as { orient?: unknown; sil?: { poses?: unknown } };
+			expect(legacy.orient).toBeUndefined();
+			expect(legacy.sil).toBeDefined();
+			expect(legacy.sil?.poses).toBeUndefined();
 			const m = decodeMesh(readFileSync(join(printDir(tid), `${slug}.bin`)));
 			expect(m.paint).toEqual(mesh(PARTS.indexOf(slug)).paint);
 			expect(checkRoundTrip(mesh(PARTS.indexOf(slug)), m, slug)).toBeLessThanOrEqual(0.0051);

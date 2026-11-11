@@ -144,28 +144,6 @@ export const updateRun = (
 	}
 ) => call('PATCH', `${b(id)}/runs/${encodeURIComponent(runId)}`, patch);
 
-export interface ImportSummary {
-	parts: number;
-	runs: number;
-	plates: number;
-	spools: number;
-	warnings: string[];
-	/** The build has no progress yet (importing needs no "replace"). */
-	empty: boolean;
-}
-
-/** Import progress from the original prototype. `dryRun` only reports what would happen. */
-export const importPrototype = (
-	id: string,
-	data: unknown,
-	opts: { replace?: boolean; dryRun?: boolean } = {}
-) =>
-	call<ImportSummary & { replaced?: boolean }>(
-		'POST',
-		`${b(id)}/import${opts.dryRun ? '?dryRun=1' : ''}`,
-		{ data, replace: opts.replace === true }
-	);
-
 // ---- Design tab and shareable designs
 
 export interface DesignRoleInput {

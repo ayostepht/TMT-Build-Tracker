@@ -40,7 +40,12 @@
 
 <svelte:head><title>{copy.title} · TMT Build Tracker</title></svelte:head>
 
-<div class:wrap={standalone}>
+<svelte:element
+	this={standalone ? 'main' : 'div'}
+	class:wrap={standalone}
+	id={standalone ? 'main' : undefined}
+	tabindex={standalone ? -1 : undefined}
+>
 	<section class="err" data-testid="error-page" role="alert">
 		<div class="err-code num" aria-hidden="true">{status}</div>
 		<h1>{copy.title}</h1>
@@ -55,7 +60,7 @@
 			{/if}
 		</div>
 	</section>
-</div>
+</svelte:element>
 
 <style>
 	.err {

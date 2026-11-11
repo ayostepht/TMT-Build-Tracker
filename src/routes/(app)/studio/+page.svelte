@@ -49,6 +49,16 @@
 		}
 	}
 
+	/** Opens the element as a modal <dialog> (native focus trap, Esc, inert page). */
+	function modal(node: HTMLDialogElement) {
+		node.showModal();
+		return {
+			destroy() {
+				if (node.open) node.close();
+			}
+		};
+	}
+
 	const ago = (ms: number) => new Date(ms).toLocaleDateString(undefined, { dateStyle: 'medium' });
 </script>
 
@@ -93,7 +103,7 @@
 		</div>
 	{:else if creating}
 		<form
-			class="card stack narrow"
+			class="ds-card stack narrow"
 			method="post"
 			action="?/create"
 			use:enhance
@@ -130,7 +140,7 @@
 	<h2>Your drafts</h2>
 	<ul class="grid" aria-label="Drafts">
 		{#each data.drafts as d (d.id)}
-			<li class="card draft" data-draft={d.name}>
+			<li class="ds-card draft" data-draft={d.name}>
 				{#if d.colors.length}
 					<a
 						class="swatches"
@@ -218,29 +228,34 @@
 </section>
 
 {#if confirmDelete}
-	<div class="backdrop" role="presentation">
-		<div
-			class="dialog card"
-			role="alertdialog"
-			aria-labelledby="delDraft"
-			data-testid="delete-dialog"
-		>
+	<dialog
+		class="ds-modal dialog"
+		role="alertdialog"
+		aria-labelledby="delDraft"
+		data-testid="delete-dialog"
+		use:modal
+		onclose={() => (confirmDelete = null)}
+	>
+		<div class="ds-modal__body dbody">
 			<strong id="delDraft">Delete the draft "{confirmDelete.name}"?</strong>
 			<p class="muted">Its colors, plates and uploaded files are removed. This cannot be undone.</p>
-			<div class="acts">
-				<button class="btn danger solid" type="button" onclick={remove} data-testid="confirm-delete"
-					>Delete draft</button
-				>
-				<button class="btn" type="button" onclick={() => (confirmDelete = null)}>Cancel</button>
-			</div>
 		</div>
-	</div>
+		<div class="ds-modal__foot">
+			<button class="btn danger solid" type="button" onclick={remove} data-testid="confirm-delete"
+				>Delete draft</button
+			>
+			<!-- svelte-ignore a11y_autofocus -->
+			<button class="btn" type="button" autofocus onclick={() => (confirmDelete = null)}
+				>Cancel</button
+			>
+		</div>
+	</dialog>
 {/if}
 
 <style>
 	section.stack {
 		display: grid;
-		gap: 16px;
+		gap: var(--sp-8);
 	}
 	h1,
 	h2,
@@ -250,14 +265,14 @@
 	}
 	.top {
 		display: flex;
-		gap: 16px;
+		gap: var(--sp-8);
 		align-items: flex-end;
 		justify-content: space-between;
 		flex-wrap: wrap;
 	}
 	.titles {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		flex: 1 1 320px;
 		min-width: 0;
 	}
@@ -266,12 +281,12 @@
 	}
 	.newbtn {
 		min-height: 44px;
-		padding-inline: 24px;
+		padding-inline: var(--sp-10);
 	}
 	.acts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
 	}
 	.acts .btn {
@@ -280,9 +295,9 @@
 	}
 	.acts input {
 		flex: 1 1 160px;
-		padding: 8px 10px;
+		padding: var(--sp-4) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
 	}
@@ -291,18 +306,18 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 14px;
+		gap: var(--sp-7);
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 	}
 	.draft {
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-content: start;
 	}
 	.swatches {
 		display: flex;
 		height: 72px;
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		overflow: hidden;
 		border: 1px solid var(--line);
 	}
@@ -311,12 +326,12 @@
 	}
 	.shared {
 		display: grid;
-		gap: 10px;
-		margin-top: 8px;
+		gap: var(--sp-5);
+		margin-top: var(--sp-4);
 	}
 	.shead {
 		display: flex;
-		gap: 12px;
+		gap: var(--sp-6);
 		align-items: center;
 		justify-content: space-between;
 		flex-wrap: wrap;
@@ -324,9 +339,9 @@
 	.strip6 {
 		list-style: none;
 		margin: 0;
-		padding: 0 0 4px;
+		padding: 0 0 var(--sp-2);
 		display: flex;
-		gap: 12px;
+		gap: var(--sp-6);
 		overflow-x: auto;
 	}
 	.strip6 li {
@@ -334,14 +349,14 @@
 	}
 	.strip6 a {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		text-decoration: none;
 		color: var(--ink);
 	}
 	.gthumb {
 		display: block;
 		aspect-ratio: 4 / 3;
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		overflow: hidden;
 		border: 1px solid var(--line);
 		background: var(--card);
@@ -358,24 +373,17 @@
 		border-radius: 0;
 	}
 	.gname {
-		font-size: 14px;
+		font-size: var(--fs-md);
 		font-weight: 600;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgb(0 0 0 / 0.45);
-		display: grid;
-		place-items: center;
-		padding: 16px;
-		z-index: 50;
-	}
 	.dialog {
 		max-width: 420px;
+	}
+	.dbody {
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 </style>

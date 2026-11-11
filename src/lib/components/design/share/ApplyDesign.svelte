@@ -91,23 +91,23 @@
 <style>
 	.apply {
 		display: grid;
-		gap: 12px;
+		gap: var(--sp-6);
 	}
 	p {
 		margin: 0;
 	}
 	.strip {
 		display: flex;
-		gap: 4px;
+		gap: var(--sp-2);
 		flex-wrap: wrap;
 	}
 	.row {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 	.confirm {
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 </style>

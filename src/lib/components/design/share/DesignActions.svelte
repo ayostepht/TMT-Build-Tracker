@@ -49,14 +49,14 @@
 		align-items: center;
 		justify-content: space-between;
 		flex-wrap: wrap;
-		gap: 6px 10px;
+		gap: var(--sp-3) var(--sp-5);
 	}
 	.status {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.btns {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		flex-wrap: wrap;
 	}
 </style>

@@ -168,7 +168,7 @@
 		</div>
 
 		<div class="side">
-			<section class="card">
+			<section class="ds-card">
 				<h2>Filaments</h2>
 				<ul class="slots">
 					{#each bySlot as s (s.role.key)}
@@ -190,7 +190,7 @@
 			{#if error}<div class="error" role="alert">{error}</div>{/if}
 			{#if note}<div class="muted" role="status">{note}</div>{/if}
 
-			<section class="card" id="use" class:flash bind:this={useCard}>
+			<section class="ds-card" id="use" class:flash bind:this={useCard}>
 				<h2 tabindex="-1" bind:this={useHeading}>Use this design</h2>
 				<div class="opt">
 					<h3>Start a new build</h3>
@@ -235,7 +235,7 @@
 			</section>
 
 			{#if d.mine}
-				<section class="card">
+				<section class="ds-card">
 					<h2>Sharing</h2>
 					<p class="muted small">
 						{d.isPublic
@@ -296,14 +296,14 @@
 <style>
 	.confirm {
 		display: grid;
-		gap: 12px;
+		gap: var(--sp-6);
 	}
 	.confirm p {
 		margin: 0;
 	}
 	section.stack {
 		display: grid;
-		gap: 16px;
+		gap: var(--sp-8);
 	}
 	h1,
 	h2,
@@ -312,29 +312,29 @@
 		margin: 0;
 	}
 	h3 {
-		font-size: 15px;
+		font-size: var(--fs-base);
 	}
 	.top {
 		display: flex;
-		gap: 12px;
+		gap: var(--sp-6);
 		align-items: flex-end;
 		justify-content: space-between;
 		flex-wrap: wrap;
 	}
 	.titles {
 		display: grid;
-		gap: 4px;
+		gap: var(--sp-2);
 		min-width: 0;
 	}
 	.usebtn {
 		display: inline-flex;
 		align-items: center;
 		min-height: 44px;
-		padding-inline: 20px;
+		padding-inline: var(--sp-9);
 	}
 	.cols {
 		display: grid;
-		gap: 16px;
+		gap: var(--sp-8);
 		align-items: start;
 	}
 	.stagebox {
@@ -343,12 +343,12 @@
 	}
 	.snap {
 		width: 100%;
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		border: 1px solid var(--line);
 	}
 	.side {
 		display: grid;
-		gap: 14px;
+		gap: var(--sp-7);
 		min-width: 0;
 	}
 	.slots {
@@ -356,11 +356,11 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 12px;
+		gap: var(--sp-6);
 	}
 	.slots li {
 		display: flex;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: flex-start;
 	}
 	.txt {
@@ -369,7 +369,7 @@
 		gap: 1px;
 	}
 	.parts {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.parts summary {
 		cursor: pointer;
@@ -377,8 +377,8 @@
 		width: fit-content;
 	}
 	#use {
-		scroll-margin-top: 12px;
-		gap: 16px;
+		scroll-margin-top: var(--sp-6);
+		gap: var(--sp-8);
 	}
 	#use h2:focus {
 		outline: none;
@@ -408,28 +408,28 @@
 	}
 	.opt {
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 	.opt + .opt {
 		border-top: 1px solid var(--line);
-		padding-top: 16px;
+		padding-top: var(--sp-8);
 	}
 	.small {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.acts {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 	select,
 	input {
-		padding: 8px 10px;
+		padding: var(--sp-4) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
-		font-size: 15px;
+		font-size: var(--fs-base);
 	}
 	/* The primary action stays reachable on a phone while the page scrolls. */
 	@media (max-width: 899px) {
@@ -441,7 +441,7 @@
 			top: 0;
 			z-index: 5;
 			background: var(--paper);
-			padding: 8px 0;
+			padding: var(--sp-4) 0;
 			align-items: center;
 			border-bottom: 1px solid var(--line);
 		}
@@ -450,7 +450,7 @@
 			display: none;
 		}
 		.top h1 {
-			font-size: 20px;
+			font-size: var(--fs-lg);
 		}
 	}
 	@media (min-width: 900px) {

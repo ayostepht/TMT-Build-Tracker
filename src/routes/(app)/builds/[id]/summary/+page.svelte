@@ -61,7 +61,7 @@
 
 	<header class="sh">
 		<div class="kicker">{b.templateName} · build summary</div>
-		<h1>{b.name}</h1>
+		<h2 class="sh-name">{b.name}</h2>
 		<dl class="facts">
 			{#if recipient}<div>
 					<dt>Recipient</dt>
@@ -157,6 +157,11 @@
 </article>
 
 <style>
+	/* The page's <h1> is the build header's; this keeps the summary's look as an <h2>. */
+	.sh-name {
+		font-size: var(--fs-3xl);
+		line-height: 1.05;
+	}
 	.summary {
 		display: grid;
 		gap: 18px;

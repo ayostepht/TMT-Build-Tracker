@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { focusIn } from '#lib/client/focus-trap.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { deleteBuild, updateBuild } from '#lib/client/api.ts';
@@ -68,7 +69,13 @@
 				>
 			</div>
 		{:else}
-			<div role="alertdialog" aria-labelledby="delTitle" style="display:grid;gap:10px">
+			<div
+				role="alertdialog"
+				aria-labelledby="delTitle"
+				tabindex="-1"
+				use:focusIn={'button:not(.danger)'}
+				style="display:grid;gap:10px"
+			>
 				<strong id="delTitle">Delete "{b.name}" for good?</strong>
 				<div>
 					<button class="btn danger solid" type="button" onclick={remove}>Delete draft</button>

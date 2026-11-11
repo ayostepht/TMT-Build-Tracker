@@ -42,7 +42,7 @@ COPY --from=builder --chown=node:node /app/build ./build
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/drizzle ./drizzle
-COPY --from=builder --chown=node:node /app/scripts/proxy-origin.mjs /app/scripts/response-defaults.mjs /app/scripts/import-prototype.mjs /app/scripts/import-print-geometry.mjs /app/scripts/bundle-prototype-export.mjs /app/scripts/build-kit-pack.mjs /app/scripts/reset-password-link.mjs ./scripts/
+COPY --from=builder --chown=node:node /app/scripts/proxy-origin.mjs /app/scripts/response-defaults.mjs /app/scripts/import-print-geometry.mjs /app/scripts/build-kit-pack.mjs /app/scripts/reset-password-link.mjs ./scripts/
 COPY --from=kitpack --chown=node:node /kitpacks ./kitpacks
 USER node
 VOLUME /data

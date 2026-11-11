@@ -133,16 +133,16 @@
 <style>
 	.parts {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.phead {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		background: var(--paper);
 	}
 	.top {
 		display: flex;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: center;
 		justify-content: space-between;
 		flex-wrap: wrap;
@@ -152,44 +152,44 @@
 		margin: 0;
 	}
 	h3 {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
-		padding: 4px 2px;
+		padding: var(--sp-2) var(--sp-1);
 		background: var(--paper);
 		position: sticky;
 		top: var(--pt, 0px);
 		z-index: 2;
 	}
 	input {
-		padding: 7px 10px;
+		padding: var(--sp-4) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
-		font-size: 15px;
+		font-size: var(--fs-base);
 		min-width: 0;
 		flex: 1 1 160px;
 	}
 	.pchips {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		overflow-x: auto;
 		overscroll-behavior-x: contain;
 		scrollbar-width: none;
-		padding-bottom: 2px;
+		padding-bottom: var(--sp-1);
 	}
 	.pchip {
 		flex: none;
 		display: inline-flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		align-items: center;
 		min-height: 32px;
-		padding: 4px 10px;
+		padding: var(--sp-2) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 999px;
+		border-radius: var(--r-pill);
 		background: var(--card);
 		color: var(--ink);
-		font: 500 13px/1 var(--f-body);
+		font: 500 var(--fs-sm)/1 var(--f-body);
 		cursor: pointer;
 	}
 	.pchip:hover {
@@ -208,24 +208,24 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 2px;
+		gap: var(--sp-1);
 	}
 	.row {
 		all: unset;
 		box-sizing: border-box;
 		width: 100%;
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
 		min-height: 36px;
-		padding: 4px 10px;
+		padding: var(--sp-2) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--card);
 		cursor: pointer;
 		/* Keep a scrolled-to row clear of the sticky group header (and the filter row on desktop). */
 		scroll-margin-top: calc(var(--pt, 0px) + 34px);
-		scroll-margin-bottom: 8px;
+		scroll-margin-bottom: var(--sp-4);
 	}
 	.row:hover {
 		border-color: var(--accent);
@@ -240,7 +240,7 @@
 	}
 	.name {
 		font-weight: 500;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -248,13 +248,13 @@
 	}
 	.slotname {
 		margin-left: auto;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		white-space: nowrap;
 	}
 	.tag {
-		font: 500 10px/1 var(--f-mono);
-		padding: 3px 5px;
-		border-radius: 4px;
+		font: 500 var(--fs-xs)/1 var(--f-mono);
+		padding: var(--sp-2) var(--sp-3);
+		border-radius: var(--r-sm);
 		background: var(--paper);
 		border: 1px solid var(--line);
 		color: var(--muted);
@@ -266,7 +266,7 @@
 			position: sticky;
 			top: var(--pt, 0px);
 			z-index: 3;
-			padding-top: 4px;
+			padding-top: var(--sp-2);
 		}
 		.pchips {
 			flex-wrap: wrap;

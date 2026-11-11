@@ -84,37 +84,21 @@ describe('computeSilhouette', () => {
 	});
 
 	it('caps the number of points', () => {
-		const s = computeSilhouette(disc(60), null, { maxPoints: 200 })!;
+		const s = computeSilhouette(disc(60), { maxPoints: 200 })!;
 		const n = s.rings.reduce((a, r) => a + r.length, 0);
 		expect(n).toBeLessThanOrEqual(200);
 		expect(n).toBeGreaterThan(12);
 		expect(Math.abs(ringArea(s.rings[0]) - Math.PI * 3600)).toBeLessThan(Math.PI * 3600 * 0.05);
 	});
 
-	it('applies a pose before projecting', () => {
-		// lying plate 40 x 20; stand it on its long edge: x stays, y <- z, z <- -y
-		const mesh = plate(40, 20);
-		const m = [1, 0, 0, 0, 0, 1, 0, -1, 0];
-		const s = computeSilhouette(mesh, { m, t: [0, 0, 0] })!;
-		// all z are 2, so the projection is a 40 wide sliver of ~0 depth: nothing solid enough to outline
-		expect(s === null || s.rings.length <= 1).toBe(true);
-		// a 90 degree turn about z gives 20 x 40
-		const rot = [0, -1, 0, 1, 0, 0, 0, 0, 1];
-		const r = computeSilhouette(mesh, { m: rot, t: [0, 0, 0] })!;
-		const ys = r.rings[0].map((p) => p[1]);
-		expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(39);
-	});
-
 	it('returns null for an empty mesh', () => {
 		expect(computeSilhouette({ positions: [], indices: [] })).toBeNull();
 	});
 
-	it('computes the profile and one silhouette per pose', () => {
-		const res = computePieceSilhouettes(plate(30, 30), [
-			{ m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] }
-		])!;
-		expect(res.poses).toHaveLength(1);
+	it('computes the profile outline of a piece', () => {
+		const res = computePieceSilhouettes(plate(30, 30))!;
 		expect(res.profile.rings.length).toBe(1);
+		expect('poses' in res).toBe(false);
 	});
 });
 

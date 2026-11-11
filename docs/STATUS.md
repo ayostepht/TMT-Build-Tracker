@@ -16,8 +16,8 @@ done. Keep it under ~150 lines.
 2. Ask the maintainer: push Stage 2; merge PR #13 (CI: e2e without apt, image gated on
    e2e, Dependabot grouping; its run is green); delete the unused `PlateStart.svelte`,
    `LogPlateButton.svelte`, `FilamentPicker.svelte`; tidy Dependabot PRs #3-#12.
-3. Start Stage 4 (cleanup and design system) from Next steps; leftovers are under Open
-   items.
+3. Continue Stage 4 from Next steps (second design-system wave; dependency moves; the
+   migration squash is parked); leftovers are under Open items.
 4. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
 
 ## Where we are
@@ -28,7 +28,7 @@ has not started.
 | Area                                                                           | State                                                                          |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | Builds, chapters, roles, live updates, activity                                | Done                                                                           |
-| Prototype import, print logs (log sheet, edit, delete, undo)                   | Done                                                                           |
+| Print logs (log sheet, edit, delete, undo)                                     | Done                                                                           |
 | Variants (seat, rear caster, footrest, rim), accessories                       | Done                                                                           |
 | 3D designer, palettes, swatch picker, shareable designs                        | Done (redesigned r31-r37)                                                      |
 | Setup wizard; build tabs Overview · Design · Print · Files · Finish · Settings | Done                                                                           |
@@ -50,6 +50,10 @@ Reference result: Elegoo Centauri Carbon (256 × 256, cutter keep-out, pack 1.0.
 plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced file.
 
 ## Waiting on the maintainer
+
+- (2026-11-11) Re-check on Unraid with the real kit pack after the re-orientation removal:
+  Elegoo Centauri Carbon → 21 plates, no warnings, export guard clean. Keep or delete the
+  GitHub release asset for kit pack 1.0.0 (no longer baked into the image)?
 
 - (2026-11-11) After the next deploy behind https, on a real iPhone and Android phone:
   install from the browser, icon and name ("TMT Builds"), splash, status bar and safe areas
@@ -164,7 +168,8 @@ Route each to the agent named in brackets.
 - **Printers on the public instance: off for now, bridge later** (a companion container
   makers run at home that pushes read-only status). Self-hosted installs keep server-side
   connections, limited to private address ranges (2026-11-10).
-- **Remove** the prototype import and the 3D re-orientation code (2026-11-10, Stage 4).
+- The prototype import and the 3D re-orientation code are **removed** (decided 2026-11-10,
+  done 2026-11-11). The activity sentence for old import rows is kept on purpose.
 - Don't re-run the full ~6 min e2e suite before every deploy when agents ran their specs.
 - **Site admins** (2026-11-11): `ADMIN_EMAILS` (authoritative), plus admins granted in the
   app (`site_admin` table), plus on self-hosted installs the first account while neither
@@ -196,9 +201,18 @@ its own `E2E_PORT`; the local `docker build` needs kit-pack download credentials
 job failed twice on 2026-11-11 installing the browser (runner could not reach Ubuntu's
 package server): re-run before reading it as a code failure.
 
-1. **Stage 4, cleanup and design system**: remove prototype import and re-orientation
-   code, slim the image, style scales, class-name leaks, contrast, design studio a11y pass
-   and Options placement. Open: squash migrations (needs a journal reset on the test copy).
+1. **Stage 4, cleanup and design system** (in progress). Done: prototype import and 3D
+   re-orientation code removed, kit pack 1.0.0 dropped from the image, unused components
+   removed, scales and primitives in `app.css`, contrast guard, shell accessibility.
+   Left: per-owner sweep of hard-coded sizes and leaked global class names (inventory in
+   the 2026-11-11 design-system report: 52 files, worst `PlatesPanel`, `PlateUpload`,
+   `PlateDiagram`, `LogRunSheet`), `PartList` `.row` rename with its eight specs, retire the
+   deprecated globals, focus trapping in `BedPicker`, the upload sheet, the studio delete
+   overlay and two inline confirms, keyboard access to plate diagram parts, dark-mode
+   contrast of the skip link and the assembly step number, `three`/`pdfjs-dist` to
+   devDependencies (a dependency change: runs alone), legacy redirects, duplicate helpers.
+   Open: squash migrations (needs a journal reset on the test copy; would also fix
+   `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision).
 2. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
    CONTRIBUTING/SECURITY, `v1.0.0`, e2e gating the image, Unraid template (+ Community
    Apps), repo public.

@@ -1,21 +1,18 @@
 <script lang="ts">
+	import { focusIn } from '#lib/client/focus-trap.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import { BUILD_PHASES, type BuildPhase, type FilamentRole } from '#lib/domain/types.ts';
 	import { filamentLabel } from '#lib/domain/labels.ts';
 	import { updateBuild, updateFilament, deleteBuild } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
-	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
 	import SpoolLink from '#lib/components/SpoolLink.svelte';
 	import DraftSettings from '#lib/components/build/DraftSettings.svelte';
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
-	/** Install-wide admin: the prototype import (a repo script, going away) is for them only. */
-	const siteAdmin = $derived((page.data as { siteAdmin?: boolean }).siteAdmin === true);
 
 	// Drafts start from the saved values; they only reset when the saved value changes.
 	let name = $derived(b.name);
@@ -54,6 +51,8 @@
 		if (await ctx.act(() => deleteBuild(ctx.id))) await goto(resolve('/(app)'));
 	}
 </script>
+
+<svelte:head><title>Settings · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
 
 {#if b.kind === 'draft'}
 	<DraftSettings />
@@ -143,7 +142,6 @@
 	</section>
 
 	<MoveToChapter />
-	{#if siteAdmin}<ImportPrototype />{/if}
 
 	{#if ctx.view.role === 'owner'}
 		<section class="card danger-zone">
@@ -162,6 +160,8 @@
 				<div
 					role="alertdialog"
 					aria-labelledby="delTitle"
+					tabindex="-1"
+					use:focusIn={'input'}
 					class="stack"
 					style="display:grid;gap:10px"
 				>

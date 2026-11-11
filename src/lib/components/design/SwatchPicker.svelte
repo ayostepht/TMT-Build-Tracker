@@ -379,7 +379,7 @@
 				{#each ['petg', 'tpu'] as const as f (f)}
 					<button
 						type="button"
-						class="chip"
+						class="ds-badge sp-chip"
 						aria-pressed={family === f}
 						onclick={() => setFamily(f)}
 					>
@@ -414,7 +414,7 @@
 		<div class="filters" role="group" aria-label="Filters">
 			{#if hidden > 0 || allTypes}
 				<label
-					class="chip tog"
+					class="ds-badge sp-chip sp-tog"
 					title={allTypes
 						? 'Tagged swatches are not used by palettes'
 						: `${hidden} hidden: silk, matte, other hardness, filled …`}
@@ -444,7 +444,7 @@
 			<div class="chips brandchips" role="group" aria-label="Brands">
 				<button
 					type="button"
-					class="chip"
+					class="ds-badge sp-chip"
 					aria-pressed={brands.length === 0}
 					onclick={() => (brands = [])}
 				>
@@ -453,7 +453,7 @@
 				{#each chipBrands as b (b)}
 					<button
 						type="button"
-						class="chip"
+						class="ds-badge sp-chip"
 						aria-pressed={brands.includes(b)}
 						onclick={() => toggleBrand(b)}
 					>
@@ -479,7 +479,7 @@
 
 		<div class="detail" aria-live="polite" data-testid="swatch-detail">
 			{#if detail}
-				<span class="dot" style="background-color:{detail[2]}" aria-hidden="true"></span>
+				<span class="sp-dot" style="background-color:{detail[2]}" aria-hidden="true"></span>
 				<span class="dtxt">
 					<b>{nameOf(detail)}</b>
 					<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
@@ -492,7 +492,7 @@
 						>{/if}
 				</span>
 			{:else if current}
-				<span class="dot" style="background-color:{current.hex}" aria-hidden="true"></span>
+				<span class="sp-dot" style="background-color:{current.hex}" aria-hidden="true"></span>
 				<span class="dtxt">
 					<b>{current.name}</b>
 					<span class="muted">{current.material} · {current.hex}</span>
@@ -515,7 +515,7 @@
 								aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
 								onclick={() => pick(o.t)}
 							>
-								<span class="dot sm" style="background-color:{o.t[2]}" aria-hidden="true"></span>
+								<span class="sp-dot sm" style="background-color:{o.t[2]}" aria-hidden="true"></span>
 								<span class="mtxt"
 									><b>{o.t[0]} · {o.t[1]}</b> <span class="muted">{o.t[3]} · {o.t[2]}</span></span
 								>
@@ -553,7 +553,8 @@
 										aria-label="Use {myNameOf(f)}, {customMaterialLabel(f)}, {f.hex}"
 										onclick={() => pickMine(f)}
 									>
-										<span class="dot sm" style="background-color:{f.hex}" aria-hidden="true"></span>
+										<span class="sp-dot sm" style="background-color:{f.hex}" aria-hidden="true"
+										></span>
 										<span class="mtxt">
 											<b>{myNameOf(f)}</b>
 											<span class="muted"
@@ -692,37 +693,37 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 10px 12px 0;
+		gap: var(--sp-4);
+		padding: var(--sp-5) var(--sp-6) 0;
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 12px;
+		border-radius: var(--r-xl);
 		outline: none;
 	}
 	header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	h2 {
 		margin: 0;
-		font-size: 20px;
+		font-size: var(--fs-lg);
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	h3 {
-		margin: 0 0 6px;
-		font: 600 13px/1 var(--f-body);
+		margin: 0 0 var(--sp-3);
+		font: 600 var(--fs-sm)/1 var(--f-body);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: var(--muted);
 	}
 	.searchrow {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
 	}
 	.searchrow input {
@@ -731,12 +732,12 @@
 	}
 	.filters {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		align-items: center;
 		flex-wrap: nowrap;
 		overflow-x: auto;
 		overscroll-behavior-x: contain;
-		padding-bottom: 4px;
+		padding-bottom: var(--sp-2);
 		scrollbar-width: thin;
 	}
 	.filters > * {
@@ -744,19 +745,20 @@
 	}
 	.chips {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		flex-wrap: wrap;
 	}
 	.brandchips {
 		flex-wrap: nowrap;
 	}
-	.chip {
+	.sp-chip {
 		white-space: nowrap;
 		cursor: pointer;
 		flex: none;
 	}
-	.tog {
-		gap: 4px;
+	.sp-tog {
+		color: var(--muted);
+		gap: var(--sp-2);
 	}
 	select {
 		max-width: 170px;
@@ -767,10 +769,10 @@
 	.detail {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--sp-5);
 		min-height: 40px;
 	}
-	.dot {
+	.sp-dot {
 		width: 36px;
 		height: 36px;
 		border-radius: 50%;
@@ -790,9 +792,9 @@
 	}
 	.check {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		align-items: center;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		flex-wrap: wrap;
 	}
 	.body {
@@ -800,17 +802,17 @@
 		min-height: 0;
 		overflow-y: auto;
 		display: grid;
-		gap: 14px;
+		gap: var(--sp-7);
 		align-content: start;
-		padding-bottom: 16px;
+		padding-bottom: var(--sp-8);
 		overscroll-behavior: contain;
 	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, 36px);
-		gap: 8px;
+		gap: var(--sp-4);
 		justify-content: space-between;
-		padding: 4px;
+		padding: var(--sp-2);
 	}
 	.sw {
 		position: relative;
@@ -820,7 +822,7 @@
 		border: 2px solid var(--line);
 		padding: 0;
 		cursor: pointer;
-		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+		box-shadow: var(--ring-swatch);
 	}
 	.sw:hover,
 	.sw:focus-visible {
@@ -839,7 +841,7 @@
 		background: var(--card);
 		color: var(--ink);
 		border: 1px solid var(--ink);
-		font: 700 10px/12px var(--f-body);
+		font: 700 var(--fs-xs)/12px var(--f-body);
 		text-align: center;
 		pointer-events: none;
 	}
@@ -850,48 +852,48 @@
 	}
 	.nhead {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		align-items: center;
 		width: 100%;
 		text-align: left;
 		background: none;
 		border: 1px solid var(--line);
-		border-radius: 8px;
-		padding: 6px 10px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-3) var(--sp-5);
 		min-height: 36px;
-		font: 600 13px/1 var(--f-body);
+		font: 600 var(--fs-sm)/1 var(--f-body);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: var(--muted);
 		cursor: pointer;
 	}
 	.nhead + .grid {
-		margin-top: 10px;
+		margin-top: var(--sp-5);
 	}
 	.others summary {
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	.others ul {
 		list-style: none;
-		margin: 4px 0 0;
+		margin: var(--sp-2) 0 0;
 		padding: 0;
 		max-height: 112px;
 		overflow-y: auto;
 		display: grid;
-		gap: 2px;
+		gap: var(--sp-1);
 	}
 	.opick {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--sp-4);
 		width: 100%;
 		text-align: left;
 		background: none;
 		border: 1px solid var(--line);
-		border-radius: 8px;
-		padding: 2px 6px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-1) var(--sp-3);
 		min-height: 36px;
 		cursor: pointer;
 		color: inherit;
@@ -899,27 +901,27 @@
 	}
 	.why {
 		color: var(--muted);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.mine li.empty {
 		border: 0;
-		padding: 2px 0;
-		font-size: 13px;
+		padding: var(--sp-1) 0;
+		font-size: var(--fs-sm);
 	}
 	.mine {
 		list-style: none;
-		margin: 0 0 6px;
+		margin: 0 0 var(--sp-3);
 		padding: 0;
 		display: grid;
-		gap: 4px;
+		gap: var(--sp-2);
 	}
 	.mine li {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--sp-2);
 		border: 1px solid var(--line);
-		border-radius: 10px;
-		padding: 2px 4px 2px 2px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1);
 	}
 	.mine li.on {
 		border-color: var(--accent);
@@ -931,11 +933,11 @@
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--sp-5);
 		text-align: left;
 		background: none;
 		border: 0;
-		padding: 6px;
+		padding: var(--sp-3);
 		cursor: pointer;
 		color: inherit;
 		font: inherit;
@@ -953,7 +955,7 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.dot.sm {
+	.sp-dot.sm {
 		width: 28px;
 		height: 28px;
 	}
@@ -963,9 +965,9 @@
 		flex: none;
 		background: none;
 		border: 0;
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		cursor: pointer;
-		font-size: 16px;
+		font-size: var(--fs-field);
 		color: var(--muted);
 	}
 	.ico:hover,
@@ -977,7 +979,7 @@
 		flex: none;
 	}
 	.small {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		margin: 0;
 	}
 	/* Phones: 44 px touch targets, a roomier swatch grid. */
@@ -988,9 +990,9 @@
 		}
 		.grid {
 			grid-template-columns: repeat(auto-fill, 44px);
-			gap: 6px;
+			gap: var(--sp-3);
 		}
-		.chip,
+		.sp-chip,
 		.btn.sm,
 		.nhead,
 		.opick,
@@ -999,9 +1001,9 @@
 			min-height: 44px;
 		}
 		.searchrow input {
-			padding: 0 10px;
+			padding: 0 var(--sp-5);
 		}
-		.dot {
+		.sp-dot {
 			width: 32px;
 			height: 32px;
 		}
@@ -1011,7 +1013,7 @@
 	}
 	@media (min-width: 900px) {
 		.sheet {
-			padding: 14px 16px 0;
+			padding: var(--sp-7) var(--sp-8) 0;
 		}
 		.filters {
 			flex-wrap: wrap;

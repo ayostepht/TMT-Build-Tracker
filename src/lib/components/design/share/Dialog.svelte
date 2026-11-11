@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 
 	/** Small modal: centered card on desktop, bottom sheet on phones. Escape or the backdrop closes it. */
 	let {
@@ -10,52 +11,30 @@
 	}: { title: string; onclose: () => void; children: Snippet; testid?: string } = $props();
 
 	let box = $state<HTMLElement>();
-	let opener: HTMLElement | null = null;
-	const FOCUSABLE =
-		'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], textarea:not([disabled])';
-
-	$effect(() => {
-		opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		box?.querySelector<HTMLElement>('input, select, button.primary')?.focus();
-		return () => opener?.focus();
-	});
-
-	function key(e: KeyboardEvent) {
-		if (e.key !== 'Tab' || !box) return;
-		const els = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)];
-		if (!els.length) return;
-		const first = els[0];
-		const last = els[els.length - 1];
-		if (e.shiftKey && document.activeElement === first) {
-			e.preventDefault();
-			last.focus();
-		} else if (!e.shiftKey && document.activeElement === last) {
-			e.preventDefault();
-			first.focus();
-		}
-	}
+	const uid = $props.id();
 </script>
 
 <svelte:window
 	onkeydown={(e) => {
-		if (e.key === 'Escape') onclose();
+		if (e.key === 'Escape' && isTopTrap(box)) onclose();
 	}}
 />
 
 <div class="back" role="presentation" onclick={onclose}>
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="dlg"
 		role="dialog"
 		aria-modal="true"
-		aria-label={title}
+		aria-labelledby="{uid}-title"
 		tabindex="-1"
 		data-testid={testid}
 		bind:this={box}
-		onkeydown={key}
+		use:trapFocus={{ initial: 'input, select, button.primary' }}
 		onclick={(e) => e.stopPropagation()}
 	>
 		<header>
-			<h2>{title}</h2>
+			<h2 id="{uid}-title">{title}</h2>
 			<button type="button" class="x" aria-label="Close" onclick={onclose}>×</button>
 		</header>
 		<div class="body">{@render children()}</div>

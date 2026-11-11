@@ -2,11 +2,11 @@
  * True top-down outline of a printed piece, for the plate diagrams. Pure and
  * framework-free (no DB, Node or Svelte).
  *
- * The mesh triangles (after the pose rotation, if any) are projected to XY and rasterised
+ * The mesh triangles (as stored: face-down, never re-oriented) are projected to XY and rasterised
  * into a bitmap at ~0.6 mm. The bitmap is blurred a little and contoured with marching
  * squares, which gives smooth outer contours and holes (pockets, openings). The contours are
  * simplified (Douglas-Peucker, ~0.5 mm) and capped to a point budget. The result is kept per
- * piece and per pose in the print-geometry footprint json (`PrintPiece.sil`), in the same
+ * piece in the print-geometry footprint json (`PrintPiece.sil`), in the same
  * frame as `PrintPiece.hull`: around the box centre, before `ArrangedItem.rotation`.
  *
  * Rings follow the "inside on the left" rule: outer contours turn counter-clockwise (positive
@@ -26,11 +26,14 @@ export interface Silhouette {
 	r: number;
 }
 
-/** Stored per piece (`PrintPiece.sil`); `poses[i]` belongs to `PrintPiece.orient.poses[i]`. */
+/**
+ * Stored per piece (`PrintPiece.sil`). Rows and packs written before the 3D re-orientation code was
+ * removed also carry `poses` (and `PrintPiece` an `orient` block) in their JSON; unknown keys are
+ * ignored (plain casts, no schema validation) and never read or written any more.
+ */
 export interface PieceSilhouettes {
 	v: number;
 	profile: Silhouette;
-	poses: Silhouette[];
 }
 
 export interface SilMesh {
@@ -214,14 +217,9 @@ function distanceField(bits: Uint8Array, W: number, H: number): Float32Array {
 }
 
 /**
- * Outline of the mesh seen from above. `xf` (a pose: row-major 3x3 `m`, translation `t`) is
- * applied first; without it the mesh is used as stored. Returns null for an empty mesh.
+ * Outline of the mesh seen from above, as stored. Returns null for an empty mesh.
  */
-export function computeSilhouette(
-	mesh: SilMesh,
-	xf?: { m: readonly number[]; t: readonly number[] } | null,
-	opts: SilOptions = {}
-): Silhouette | null {
+export function computeSilhouette(mesh: SilMesh, opts: SilOptions = {}): Silhouette | null {
 	const nv = Math.floor(mesh.positions.length / 3);
 	const nt = Math.floor(mesh.indices.length / 3);
 	if (nv < 3 || nt < 1) return null;
@@ -234,15 +232,12 @@ export function computeSilhouette(
 	for (let i = 0; i < nv; i++) {
 		const x = mesh.positions[i * 3];
 		const y = mesh.positions[i * 3 + 1];
-		const z = mesh.positions[i * 3 + 2];
-		const X = xf ? xf.m[0] * x + xf.m[1] * y + xf.m[2] * z + xf.t[0] : x;
-		const Y = xf ? xf.m[3] * x + xf.m[4] * y + xf.m[5] * z + xf.t[1] : y;
-		px[i] = X;
-		py[i] = Y;
-		if (X < minX) minX = X;
-		if (X > maxX) maxX = X;
-		if (Y < minY) minY = Y;
-		if (Y > maxY) maxY = Y;
+		px[i] = x;
+		py[i] = y;
+		if (x < minX) minX = x;
+		if (x > maxX) maxX = x;
+		if (y < minY) minY = y;
+		if (y > maxY) maxY = y;
 	}
 	if (!(maxX > minX) || !(maxY > minY)) return null;
 	const res = Math.max(opts.res ?? 0.6, Math.max(maxX - minX, maxY - minY) / 1000);
@@ -436,19 +431,10 @@ export function computeSilhouette(
 	};
 }
 
-/** Silhouettes of a piece in its profile orientation and in each of its poses. */
-export function computePieceSilhouettes(
-	mesh: SilMesh,
-	poses: readonly { m: readonly number[]; t: readonly number[] }[],
-	opts?: SilOptions
-): PieceSilhouettes | null {
-	const profile = computeSilhouette(mesh, null, opts);
-	if (!profile) return null;
-	return {
-		v: SIL_VERSION,
-		profile,
-		poses: poses.map((p) => computeSilhouette(mesh, p, opts) ?? profile)
-	};
+/** Silhouette of a piece in its stored (profile) orientation. */
+export function computePieceSilhouettes(mesh: SilMesh, opts?: SilOptions): PieceSilhouettes | null {
+	const profile = computeSilhouette(mesh, opts);
+	return profile ? { v: SIL_VERSION, profile } : null;
 }
 
 /** Rotate rings (degrees, counter-clockwise, about the origin) and move them by (dx, dy). */

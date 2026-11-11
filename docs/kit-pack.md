@@ -44,8 +44,9 @@ file. Re-importing the profile 3MF (kit drop zone or the CLI) stores groups and 
 
 ### What is dropped or reduced
 
-- **Poses** (`orient.poses`) are unused and left out; `orient` stays as an empty stub of the current
-  version so nothing recomputes them. Silhouettes keep only the profile outline (`sil.poses` is empty).
+- **Poses** (the removed 3D re-orientation search: `orient`, `sil.poses`) are left out of new packs.
+  Packs up to 1.0.1 still carry empty stubs of them; readers ignore these keys. Silhouettes keep
+  only the profile outline.
 - **Settings** are limited to the per-object MakeGood print settings (walls, infill, supports,
   brim, layer height, shells). Machine, filament, temperature, speed and project-level keys are
   removed (`cleanSettings` in `src/lib/server/kitpack/build.ts`).

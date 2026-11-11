@@ -45,7 +45,7 @@
 		</p>
 	</div>
 	<div class="filters">
-		<div class="seg" role="group" aria-label="Show">
+		<div class="ds-seg" role="group" aria-label="Show">
 			<button type="button" aria-pressed={scope === 'all'} onclick={() => (scope = 'all')}>
 				All
 			</button>
@@ -61,7 +61,7 @@
 
 	<ul class="grid">
 		{#each shown as d (d.id)}
-			<li class="card design" data-design={d.slug}>
+			<li class="ds-card design" data-design={d.slug}>
 				<a
 					class="thumb"
 					href={resolve('/(app)/designs/[slug]', { slug: d.slug })}
@@ -82,7 +82,7 @@
 					<h3><a href={resolve('/(app)/designs/[slug]', { slug: d.slug })}>{d.name}</a></h3>
 					<div class="muted">
 						{d.authorName ?? 'Included with the kit'} · {d.templateName}
-						{#if !d.isPublic}<span class="set">private</span>{/if}
+						{#if !d.isPublic}<span class="ds-badge ds-badge--sm">private</span>{/if}
 					</div>
 				</div>
 				<ul class="fils">
@@ -113,7 +113,7 @@
 <style>
 	section.stack {
 		display: grid;
-		gap: 16px;
+		gap: var(--sp-8);
 	}
 	h1,
 	h3,
@@ -122,7 +122,7 @@
 	}
 	.ghead {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.lead {
 		max-width: 62ch;
@@ -130,7 +130,7 @@
 	/* Not ".bar": app.css uses that name for the 10 px progress bar, which clipped this row. */
 	.filters {
 		display: flex;
-		gap: 10px;
+		gap: var(--sp-5);
 		flex-wrap: wrap;
 		align-items: center;
 	}
@@ -138,61 +138,40 @@
 		flex: 1 1 200px;
 		max-width: 420px;
 		min-height: 40px;
-		padding: 8px 10px;
+		padding: var(--sp-4) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--card);
 		color: var(--ink);
-		font-size: 15px;
+		font-size: var(--fs-base);
 	}
 	.count {
-		font-size: 14px;
+		font-size: var(--fs-md);
 		margin-left: auto;
-	}
-	.seg {
-		display: inline-flex;
-		border: 1px solid var(--line);
-		border-radius: 6px;
-		overflow: hidden;
-	}
-	.seg button {
-		border: 0;
-		background: var(--card);
-		color: var(--ink);
-		padding: 8px 16px;
-		min-height: 40px;
-		cursor: pointer;
-		font: inherit;
-		font-size: 15px;
-		font-weight: 500;
-	}
-	.seg button[aria-pressed='true'] {
-		background: var(--accent);
-		color: #fff;
 	}
 	.grid {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 14px;
+		gap: var(--sp-7);
 		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 	}
 	.design {
 		align-content: start;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 	.meta {
 		display: grid;
-		gap: 2px;
+		gap: var(--sp-1);
 	}
 	.meta .muted {
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.thumb {
 		display: block;
 		aspect-ratio: 4 / 3;
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		overflow: hidden;
 		background: var(--paper);
 		border: 1px solid var(--line);
@@ -215,13 +194,13 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 4px;
-		font-size: 14px;
+		gap: var(--sp-2);
+		font-size: var(--fs-md);
 	}
 	.fils li {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--sp-4);
 		min-width: 0;
 	}
 	.role {
@@ -233,10 +212,10 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.use {
 		justify-self: start;
-		margin-top: 2px;
+		margin-top: var(--sp-1);
 	}
 </style>

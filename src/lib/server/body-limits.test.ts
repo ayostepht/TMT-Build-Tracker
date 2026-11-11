@@ -41,12 +41,11 @@ describe('bodyCapFor', () => {
 		expect(bodyCapFor('POST', '/api/builds/b1/plates/upload').cap).toBe(513 * MB);
 	});
 
-	it('allows STEP zips 200 MB, photos 9 MB, guide pages 3 MB, snapshots 2 MB, imports 2 MB', () => {
+	it('allows STEP zips 200 MB, photos 9 MB, guide pages 3 MB, snapshots 2 MB', () => {
 		expect(bodyCapFor('POST', '/api/templates/t1/model').cap).toBe(201 * MB);
 		expect(bodyCapFor('POST', '/api/builds/b1/photos').cap).toBe(9 * MB + 64 * 1024);
 		expect(bodyCapFor('POST', '/api/templates/t1/guide/pages/4').cap).toBe(3 * MB);
 		expect(bodyCapFor('PUT', '/api/designs/d1/snapshot').cap).toBe(2 * MB);
-		expect(bodyCapFor('POST', '/api/builds/b1/import').cap).toBe(2 * MB);
 	});
 
 	it('keeps sign-in requests tiny', () => {

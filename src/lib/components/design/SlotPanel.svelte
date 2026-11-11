@@ -41,7 +41,7 @@
 </script>
 
 <section class="slots" aria-label="Filament slots">
-	<div class="head">
+	<div class="slot-head">
 		<h2>Colors</h2>
 		<span class="muted" data-testid="design-total">
 			{fmt(totalG)} g in {view.filaments.length} slots{shortCount ? `, ${shortCount} short` : ''}
@@ -121,13 +121,13 @@
 <style>
 	.slots {
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
-	.head {
+	.slot-head {
 		display: flex;
 		justify-content: space-between;
 		align-items: baseline;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 	h2 {
@@ -138,15 +138,15 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.slot {
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 10px;
-		padding: 10px 12px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-5) var(--sp-6);
 		display: flex;
-		gap: 12px;
+		gap: var(--sp-6);
 		align-items: flex-start;
 	}
 	.slot.on {
@@ -162,7 +162,7 @@
 		height: 56px;
 		border-radius: 50%;
 		border: 2px solid var(--line);
-		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+		box-shadow: var(--ring-swatch);
 		padding: 0;
 		display: block;
 	}
@@ -178,13 +178,13 @@
 	.big.tpu {
 		background-image: repeating-linear-gradient(
 			45deg,
-			rgba(255, 255, 255, 0.28) 0 3px,
+			var(--tpu-stripe) 0 3px,
 			transparent 3px 7px
 		) !important;
 	}
 	.main {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		min-width: 0;
 		flex: 1;
 	}
@@ -197,7 +197,7 @@
 	.pick:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
-		border-radius: 6px;
+		border-radius: var(--r-md);
 	}
 	.fname {
 		overflow: hidden;
@@ -205,7 +205,7 @@
 		white-space: nowrap;
 	}
 	.need {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	.need.short {
@@ -220,7 +220,7 @@
 	}
 	.acts {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 </style>

@@ -18,7 +18,6 @@ import { openDb, runMigrations, type Db } from '../db';
 import { member, organization, templates, user } from '../db/schema';
 import type { ExtractedPart } from '../print-geometry/extract';
 import type { PrintMesh } from '../print-geometry/mesh-format';
-import { computePoses } from '#lib/domain/orient.ts';
 import { storeExtractedParts } from '../print-geometry/store';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
@@ -697,11 +696,10 @@ describe.skipIf(!process.env.TMT_EXPORT_DUMP)('dump synthetic exports', () => {
 	});
 });
 
-describe('re-oriented parts', () => {
+describe('oversize parts stay flat', () => {
 	const slab = cube(320, 190, 20);
 	const shapes = { 'wing-left': { mesh: slab, copies: 1 } };
 	const fps = footprints(shapes);
-	fps.get('wing-left')!.pieces[0].orient = computePoses(slab);
 	const view = viewFor(['wing-left']);
 
 	// Hard rule (maintainer, 2026-11-04): never change which face is down; only flat rotations.
@@ -709,8 +707,7 @@ describe('re-oriented parts', () => {
 		const p = plan({ view, footprints: fps });
 		expect(p.plates).toHaveLength(1);
 		const item = p.plates[0].items[0];
-		expect(item.pose).toBeUndefined();
-		expect(p.warnings.some((w) => w.code === 'reoriented')).toBe(false);
+		expect(Object.keys(item)).not.toContain('pose');
 		const { bytes } = await collect(writeThreeMf(p, p.plates, io(shapes)));
 		const z = unzipSync(bytes);
 		const model = text(z, '3D/3dmodel.model');

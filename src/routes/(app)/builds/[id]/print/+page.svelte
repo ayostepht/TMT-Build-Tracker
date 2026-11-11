@@ -166,7 +166,7 @@
 	}}
 />
 
-<main>
+<div>
 	{#each groups as g (g.key)}
 		<section
 			class="group"
@@ -197,4 +197,4 @@
 	{:else}
 		<div class="empty">Nothing left to show here. Everything in this filter is printed.</div>
 	{/each}
-</main>
+</div>

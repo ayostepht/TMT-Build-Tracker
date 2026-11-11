@@ -55,7 +55,7 @@ import {
 } from './arrange-plan';
 import { loadBuildView } from './view';
 import { clearProfiles, learnFromSummary, storeProfiles } from './part-profiles';
-import { ensureOrientations, ensureSilhouettes } from '../print-geometry/store';
+import { ensureSilhouettes } from '../print-geometry/store';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -740,7 +740,6 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 		.map((p) => p.arrangement!);
 	// Outlines for the diagram: only what is on the plates; computed once, then cached in the row.
 	const onPlates = new Set(stored.flatMap((pl) => pl.parts));
-	ensureOrientations(db, view.build.templateId);
 	ensureSilhouettes(db, view.build.templateId, onPlates);
 	const footprints = loadFootprints(db, view.build.templateId);
 	const plan = planArrangement(view, footprints, layoutHintFor(db, view.build.templateId));
@@ -752,7 +751,7 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 				used[s] = {
 					...fp,
 					groups: undefined,
-					pieces: fp.pieces.map((pc) => ({ ...pc, orient: undefined, sil: undefined }))
+					pieces: fp.pieces.map((pc) => ({ ...pc, sil: undefined }))
 				};
 		}
 	const silhouettes: Record<string, Silhouette> = {};
@@ -761,16 +760,8 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 		items: pl.items.map((it) => {
 			const pc = footprints.get(it.slug)?.pieces[it.piece];
 			if (!pc?.sil) return it;
-			let key = `${it.slug}:${it.piece}`;
-			let sil = pc.sil.profile;
-			if (it.pose) {
-				const idx =
-					pc.orient?.poses.findIndex((p) => p.m.every((v, i) => v === it.pose!.m[i])) ?? -1;
-				if (idx < 0 || !pc.sil.poses[idx]) return it; // pose not found: draw the box instead
-				key += `:${idx}`;
-				sil = pc.sil.poses[idx];
-			}
-			silhouettes[key] = sil;
+			const key = `${it.slug}:${it.piece}`;
+			silhouettes[key] = pc.sil.profile;
 			return { ...it, sil: key };
 		})
 	}));
@@ -787,6 +778,8 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 				}
 			: null,
 		stale:
+			// arrangements stored before the 3D re-orientation code was removed carry a legacy `pose`
+			stored.some((pl) => pl.items.some((i) => 'pose' in i)) ||
 			(row?.plateLayout === ARRANGED_LAYOUT &&
 				!!plan &&
 				signature(plan.result.plates) !== signature(stored)) ||

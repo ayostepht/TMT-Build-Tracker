@@ -7,7 +7,6 @@ import { join } from 'node:path';
 import { zipSync, type Zippable } from 'fflate';
 import { eq } from 'drizzle-orm';
 import type { PrintFootprint, PrintPiece } from '#lib/domain/print-footprint.ts';
-import { ORIENT_VERSION } from '#lib/domain/orient.ts';
 import { templateHardwarePath, templateModelPath } from '../config';
 import type { Db } from '../db';
 import {
@@ -185,10 +184,11 @@ export function buildKitPack(db: Db, opt: BuildOptions): BuildResult {
 					if (Object.keys(ps.kept).length) pc.partSettings = ps.kept;
 					else delete pc.partSettings;
 				}
-				// Poses are unused: an empty stub with the current version keeps them from being
-				// recomputed on the first arrange. Only the profile outline of the silhouettes stays.
-				if (pc.orient) pc.orient = { v: ORIENT_VERSION, profile: pc.orient.profile, poses: [] };
-				if (pc.sil) pc.sil = { ...pc.sil, poses: [] };
+				// Legacy keys of the removed 3D pose search (still in older rows) are left out of
+				// new packs; readers ignore them either way.
+				const legacy = pc as unknown as { orient?: unknown; sil?: { poses?: unknown } };
+				delete legacy.orient;
+				if (legacy.sil) delete legacy.sil.poses;
 				if (!pc.mesh) throw new KitPackError(`${r.slug}: piece ${pc.name} has no mesh`);
 				const src = readFileSync(join(printDir(tpl.id), pc.mesh));
 				const mesh = decodeMesh(src);

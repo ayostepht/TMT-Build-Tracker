@@ -227,17 +227,17 @@
 		inset: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--sp-2);
 		align-items: center;
 		justify-content: center;
 		text-align: center;
-		padding: 16px;
-		color: var(--muted, #6b7280);
-		font-size: 0.9rem;
+		padding: var(--sp-8);
+		color: var(--muted);
+		font-size: var(--fs-md);
 		pointer-events: none;
 	}
 	.cv-msg.lost {
-		background: color-mix(in srgb, var(--card, #fff) 85%, transparent);
+		background: color-mix(in srgb, var(--card) 85%, transparent);
 	}
 	.cv-msg.lost .btn {
 		pointer-events: auto;

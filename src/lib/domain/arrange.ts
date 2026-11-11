@@ -17,20 +17,22 @@
  * a new plate; a block too large for one bed is split item by item. Afterwards
  * underfilled plates are merged whenever the printer's multi-material slots allow
  * and the materials are compatible (PETG never shares a plate with TPU).
+ *
+ * HARD RULE (maintainer, 2026-11-04; the 3D code was removed 2026-11-11): parts are never
+ * re-oriented in 3D. They keep the face-down orientation of their source file; the arranger
+ * only rotates them flat about z (0/90 degrees or a free in-plane angle). A part that does
+ * not fit flat is reported as oversize. There is no code that can tilt or stand a part up.
  */
 import { boxOrients, fitOutline, rotatePoints, turnedOutlineBox, type Pt } from './geom2d.ts';
 import { findFreePosition, optimizeLayout, type OptItem } from './plate-optimize.ts';
-import { chooseOrientation, describePose, type OrientData, type PrintPose } from './orient.ts';
 import {
 	GROUP_VERSION,
 	groupFit,
 	type PrintFootprint,
 	type SourceGroup
 } from './print-footprint.ts';
-import type { PieceSilhouettes, Silhouette } from './silhouette.ts';
+import type { Silhouette } from './silhouette.ts';
 import type { BuildPrinter } from './types.ts';
-
-const EPS = 1e-6;
 
 export interface ArrangeRole {
 	key: string;
@@ -69,7 +71,7 @@ export interface ArrangeUnsized {
 export interface ArrangePrinter {
 	bedX: number;
 	bedY: number;
-	/** Build volume height; parts taller than this (minus a small margin) are not re-oriented onto their end. Unknown = no limit. */
+	/** Build volume height (used by the export guard). */
 	bedZ?: number;
 	/** Keep-out border around the bed edge. */
 	margin: number;
@@ -99,15 +101,6 @@ export interface ArrangeInput {
 	options?: ArrangeOptions;
 }
 
-/** The 3D pose of a re-oriented item: stored vertex p -> m*p + t, then rotation about z and move to (x, y). */
-export type ItemPose = Pick<
-	PrintPose,
-	'kind' | 'm' | 't' | 'h' | 'hull' | 'contactArea' | 'supportScore'
-> & {
-	/** "stands on its edge, 248 mm tall" */
-	desc: string;
-};
-
 export interface ArrangedItem {
 	slug: string;
 	/** Index into the part footprint's `pieces`. */
@@ -126,8 +119,6 @@ export interface ArrangedItem {
 	/** Where the turned mesh's box centre lies relative to its origin; the mesh is moved to (x - ox, y - oy). Absent for 0/90 degrees. */
 	ox?: number;
 	oy?: number;
-	/** Set when the part is re-oriented in 3D (it did not fit in its profile orientation). */
-	pose?: ItemPose;
 	/** Response only (GET /arrangement): key into ArrangementInfo.silhouettes for this item's outline. */
 	sil?: string;
 	/**
@@ -160,7 +151,7 @@ export interface ArrangedPlate {
 	};
 }
 
-export type ArrangeWarningCode = 'oversize' | 'split' | 'unsized' | 'unknown-role' | 'reoriented';
+export type ArrangeWarningCode = 'oversize' | 'split' | 'unsized' | 'unknown-role';
 export interface ArrangeWarning {
 	code: ArrangeWarningCode;
 	slug: string;
@@ -273,7 +264,7 @@ class MaxRects {
 
 // ---- internals
 
-/** A placement candidate: box after turning by `rot` degrees; `pose` when the part is re-oriented in 3D. */
+/** A placement candidate: box after turning by `rot` degrees about z. */
 interface Orient {
 	w: number;
 	d: number;
@@ -281,7 +272,6 @@ interface Orient {
 	/** Centre of the turned outline relative to the mesh origin (free angles only). */
 	ox?: number;
 	oy?: number;
-	pose?: ItemPose;
 }
 
 interface Item {
@@ -297,7 +287,6 @@ interface Item {
 	order: number; // index of the part in the input
 	ox?: number;
 	oy?: number;
-	pose?: ItemPose;
 	/** A rigid group of pieces (source layout): one packing item standing for all `members`. */
 	grp?: { g: SourceGroup; members: Item[] };
 	/** Source group this item came from (also when the group had to be broken up), for the split note. */
@@ -314,7 +303,6 @@ interface PlateState {
 		rot: number;
 		ox?: number;
 		oy?: number;
-		pose?: ItemPose;
 	})[];
 	roles: Set<string>;
 	runs: number;
@@ -381,61 +369,6 @@ export function plateTitle(names: string[]): string {
 /** Placement candidates for a box (see `boxOrients`). Exported for tests. */
 export const orientsOf = boxOrients;
 
-/** Headroom kept below the build volume when a part is stood up. */
-const HEIGHT_MARGIN = 2;
-
-/** Must stay false: see the hard rule in pieceOrients and CLAUDE.md. */
-const ALLOW_3D_REORIENT = false;
-
-/**
- * Placement candidates for one piece: its profile orientation (0/90 degrees, or turned in
- * the plane when only that fits); when none fits and the piece carries orientation data
- * (imported geometry), the best fitting resting pose instead. Exported for tests.
- */
-export function pieceOrients(
-	pc: {
-		w: number;
-		d: number;
-		h?: number;
-		hull?: Pt[];
-		sil?: PieceSilhouettes;
-		orient?: OrientData;
-	},
-	rotate: boolean,
-	usableX: number,
-	usableY: number,
-	maxH = Infinity
-): Orient[] {
-	const base: Orient[] = boxOrients(pc, rotate, usableX, usableY);
-	// HARD RULE (maintainer, 2026-11-04): parts keep the face-down orientation from their
-	// source file; only flat rotations about Z are allowed. Never change which face is down,
-	// stand a part on an edge, or lift it off the bed. 3D resting poses are disabled.
-	if (!ALLOW_3D_REORIENT) return base;
-	const fits = (o: { w: number; d: number }) => o.w <= usableX + EPS && o.d <= usableY + EPS;
-	if (!rotate || !pc.orient?.poses.length || base.some(fits)) return base;
-	const ch = chooseOrientation(
-		{ w: pc.w, d: pc.d, h: pc.h ?? 0, hull: pc.hull },
-		pc.orient.poses,
-		{ usableX, usableY, maxH },
-		true
-	);
-	if (!ch.pose) return base;
-	const pose = ch.pose;
-	const info: ItemPose = {
-		kind: pose.kind,
-		m: pose.m,
-		t: pose.t,
-		h: pose.h,
-		hull: pose.hull,
-		contactArea: pose.contactArea,
-		supportScore: pose.supportScore,
-		desc: describePose(pose, pc.h ?? 0)
-	};
-	return boxOrients(pose, true, usableX, usableY)
-		.filter(fits)
-		.map((o) => ({ ...o, pose: info }));
-}
-
 /**
  * Arrange parts onto plates for a printer. Pieces are packed one by one (densest); the rigid source
  * group of a part (pieces laid out as in the kit author's profile) is used only for parts that
@@ -472,7 +405,6 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 	const usableY = Math.max(0, printer.bedY - 2 * margin);
 	const binW = usableX + spacing;
 	const binH = usableY + spacing;
-	const maxH = printer.bedZ ? printer.bedZ - HEIGHT_MARGIN : Infinity;
 	const mergeBelow = input.options?.mergeBelow ?? 0.6;
 	const compat = input.options?.compatible ?? defaultCompatible;
 	const slots = Math.max(1, Math.floor(printer.mmSlots || 1));
@@ -521,7 +453,7 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 					copy: c,
 					w: pc.w,
 					d: pc.d,
-					orients: pieceOrients(pc, p.rotate !== false, usableX, usableY, maxH),
+					orients: boxOrients(pc, p.rotate !== false, usableX, usableY),
 					role: p.role,
 					order: partIndex.get(p.slug)!
 				});
@@ -570,8 +502,7 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 				pd: o.d,
 				rot: o.rot,
 				ox: o.ox,
-				oy: o.oy,
-				pose: o.pose
+				oy: o.oy
 			});
 			next.roles.add(it.role);
 		}
@@ -906,7 +837,6 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 		});
 		out.forEach((o, k) => {
 			const it = items[k];
-			if (it.pose) return;
 			it.x = round1(o.x);
 			it.y = round1(o.y);
 			it.w = round1(o.w);
@@ -943,8 +873,7 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 				d: round1(i.pd),
 				rotation: i.rot,
 				role: i.role,
-				...(i.ox || i.oy ? { ox: i.ox, oy: i.oy } : {}),
-				...(i.pose ? { pose: i.pose } : {})
+				...(i.ox || i.oy ? { ox: i.ox, oy: i.oy } : {})
 			}));
 		if (pl && input.options?.optimize !== false) optimizeItems(units, rawItems);
 		const items: ArrangedItem[] = [];
@@ -1077,15 +1006,6 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 				slug,
 				message: `${partOf.get(slug)?.name ?? slug} is split over plates ${nums.length > 2 ? `${nums.slice(0, -1).join(', ')} and ${nums[nums.length - 1]}` : nums.join(' and ')} because its copies do not fit one plate.`
 			});
-	const turned = new Map<string, string>();
-	for (const p of result)
-		for (const i of p.items) if (i.pose && !turned.has(i.slug)) turned.set(i.slug, i.pose.desc);
-	for (const [slug, desc] of turned)
-		warnings.push({
-			code: 'reoriented',
-			slug,
-			message: `${partOf.get(slug)?.name ?? slug} re-oriented to fit ${printer.bedX}×${printer.bedY} (${desc}); check supports in your slicer.`
-		});
 	return { plates: result, warnings };
 }
 

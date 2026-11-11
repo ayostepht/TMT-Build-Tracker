@@ -113,7 +113,7 @@
 		min-height: 220px;
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		overflow: hidden;
 	}
 	.empty {
@@ -121,9 +121,9 @@
 		display: grid;
 		place-content: center;
 		justify-items: center;
-		gap: 8px;
+		gap: var(--sp-4);
 		text-align: center;
-		padding: 24px;
+		padding: var(--sp-10);
 	}
 	.empty p {
 		margin: 0;

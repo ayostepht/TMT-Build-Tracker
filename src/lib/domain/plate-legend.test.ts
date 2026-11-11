@@ -42,24 +42,14 @@ describe('legendRows', () => {
 		]);
 	});
 
-	it('names a single object plainly and reports turned and rotated parts', () => {
+	it('names a single object plainly and reports rotated parts', () => {
 		const rows = legendRows(
 			{
 				parts: ['wing'],
 				items: [
 					item('wing', 0, {
 						rotation: 33,
-						sil: 'wing:0:2',
-						pose: {
-							kind: 'face',
-							m: [],
-							t: [0, 0, 0],
-							h: 100,
-							hull: [],
-							contactArea: 1,
-							supportScore: 0,
-							desc: 'stands on its edge, 248 mm tall'
-						}
+						sil: 'wing:0'
 					})
 				]
 			},
@@ -67,7 +57,6 @@ describe('legendRows', () => {
 		);
 		expect(rows[0]).toMatchObject({
 			label: 'Wing Left',
-			reoriented: 'stands on its edge, 248 mm tall',
 			rotated: 33,
 			approx: false
 		});
