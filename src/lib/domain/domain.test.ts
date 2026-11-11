@@ -188,6 +188,9 @@ describe('actions', () => {
 		expect(validPrintedOn('2026-03-05', now)).toBe(true);
 		expect(validPrintedOn('2026-03-06', now)).toBe(false); // future
 		expect(validPrintedOn('2026-02-30', now)).toBe(false); // not a date
+		expect(validPrintedOn('2020-01-01', now)).toBe(true); // floor is inclusive
+		expect(validPrintedOn('2019-12-31', now)).toBe(false); // before the floor
+		expect(validPrintedOn('0000-01-01', now)).toBe(false);
 		expect(validPrintedOn('5 March', now)).toBe(false);
 		expect(validPrintedOn(20260301, now)).toBe(false);
 	});

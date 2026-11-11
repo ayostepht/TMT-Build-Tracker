@@ -18,6 +18,21 @@ export function evictCount(entries: number, max = RUNTIME_MAX_ENTRIES): number {
 	return Math.max(0, entries - max);
 }
 
+/**
+ * Build files left out of the precache (fetched from the network on demand, HTTP-cached): the
+ * pdf.js worker, 1.3 MB used only by the kit admin's guide import.
+ */
+export function isPrecacheExcluded(path: string): boolean {
+	return (
+		path === '/robots.txt' || /^\/_app\/immutable\/assets\/pdf\.worker\.min\.[^/]+\.mjs$/.test(path)
+	);
+}
+
+/** Only a complete same-origin 200 is stored; opaque, redirected-error or partial responses are not. */
+export function isCacheableResponse(res: { type: string; status: number }): boolean {
+	return res.type === 'basic' && res.status === 200;
+}
+
 /** Paths the worker never handles, whatever else matches (data, auth, streams, downloads). */
 const NEVER = /^\/(api|invite|reset-password)(\/|$)/;
 
@@ -27,7 +42,7 @@ export function isOfflineFallbackRequest(mode: string, pathname: string): boolea
 }
 
 /**
- * `shell`: cache-first from the precache (hashed build output, fonts, icons, offline page).
+ * `shell`: cache-first, only for exact members of the precache (hashed build output, fonts, icons, offline page).
  * `model`: runtime cache for a kit GLB, only when the URL is versioned with `?v=`.
  * `null`: not ours.
  */
@@ -40,6 +55,9 @@ export function cacheKind(
 		return /[?&]v=[^&]+/.test(search) ? 'model' : null;
 	}
 	if (NEVER.test(pathname)) return null;
-	if (pathname.startsWith('/_app/immutable/') || precached.includes(pathname)) return 'shell';
+	// Exact membership only (the precache already lists every `/_app/immutable/*` file); a prefix
+	// rule would also match odd paths such as `..%2f`. Encoded or dot-dot paths are never ours.
+	if (/%|\.\./.test(pathname)) return null;
+	if (precached.includes(pathname)) return 'shell';
 	return null;
 }

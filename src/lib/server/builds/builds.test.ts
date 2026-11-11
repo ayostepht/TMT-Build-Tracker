@@ -146,6 +146,12 @@ describe('mutations', () => {
 		expect(bad({ status: 'Printed', printedOn: '2999-01-01' })).toThrowError(
 			expect.objectContaining({ status: 400 })
 		);
+		expect(bad({ status: 'Printed', printedOn: '0000-01-01' })).toThrowError(
+			expect.objectContaining({ status: 400 })
+		);
+		expect(bad({ status: 'Printed', printedOn: '2019-12-31' })).toThrowError(
+			expect.objectContaining({ status: 400 })
+		);
 		expect(bad({ status: 'Printed', printedOn: 'yesterday' })).toThrowError(
 			expect.objectContaining({ status: 400 })
 		);

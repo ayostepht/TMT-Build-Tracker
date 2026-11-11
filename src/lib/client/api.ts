@@ -8,6 +8,7 @@ import type {
 import type { BuildPhase, BuildView, PartStatus, PrintRunInput } from '#lib/domain/types.ts';
 import type { ThreeMfPlate, ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { PartSnapshot } from '#lib/domain/logrun.ts';
+import { clearPrivateCaches } from './private-caches.ts';
 
 async function call<T = Record<string, never>>(
 	method: string,
@@ -25,6 +26,8 @@ async function call<T = Record<string, never>>(
 	} catch {
 		/* non-JSON error body */
 	}
+	// The session is gone: drop cached private kit models (fire and forget, never throws).
+	if (res.status === 401 && url.startsWith('/api/')) void clearPrivateCaches();
 	if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
 	return data as T;
 }

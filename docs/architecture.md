@@ -409,6 +409,13 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   The model runtime cache (`RUNTIME_CACHE` in `sw-rules.ts`) is bounded to 12 entries (oldest
   evicted) and is the only cache that can hold per-user content: `clearPrivateCaches()` in
   `pwa.ts` deletes it (never the shell precache) and sign-out / account deletion call it.
+  Hardening: the shell rule is exact membership in the precache list (no `/_app/immutable/`
+  prefix; paths with `%` or `..` never match) and stores only `basic` 200 responses;
+  `putModel` swallows quota errors. The pdf.js worker (`isPrecacheExcluded`, 1.27 MB, kit guide
+  import only) is not precached: it loads from the network on demand (guide import needs
+  connectivity); precache is about 2.3 MB. A 401 from any `/api/` call in `client/api.ts`, and
+  sign-out, call `clearPrivateCaches()` (`client/private-caches.ts`), which also posts on
+  `BroadcastChannel('tmt-auth')`; `initPwa` listens so other tabs clear too.
   `src/service-worker.ts` is excluded from svelte-check (`tsconfig.json`); `npm run build`
   type-checks it.
 - **Request pipeline** (`hooks.server.ts`): boot validation (`bootProblems`, exit 1) → body

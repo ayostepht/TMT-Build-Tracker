@@ -204,7 +204,7 @@ export function setPartStatus(
 	mutateBuild(db, buildId, userId, (_tx, view, now) => {
 		if (!view.state[slug]) throw new ApiError(404, 'Unknown part');
 		if (printedOn !== undefined && !validPrintedOn(printedOn, now))
-			bad('printedOn must be a date (YYYY-MM-DD) that is not in the future');
+			bad('printedOn must be a date (YYYY-MM-DD) between 2020-01-01 and today');
 		return {
 			kind: 'part.status',
 			payload: { slug, from: view.state[slug].status, to: status },

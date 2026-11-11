@@ -7,6 +7,8 @@ import { assets, immutable } from '$app/manifest';
 import {
 	cacheKind,
 	evictCount,
+	isCacheableResponse,
+	isPrecacheExcluded,
 	isOfflineFallbackRequest,
 	OFFLINE_URL,
 	RUNTIME_CACHE
@@ -28,14 +30,18 @@ const KEEP = new Set([SHELL_CACHE, RUNTIME_CACHE]);
 // Manifest paths come without a leading slash.
 const toPath = (f: { path: string }) => `/${f.path.replace(/^\//, '')}`;
 const PRECACHE = [...new Set([...immutable, ...assets].map(toPath))].filter(
-	(p) => p !== '/robots.txt'
+	(p) => !isPrecacheExcluded(p)
 );
 
 /** Keep the model cache bounded (RUNTIME_MAX_ENTRIES, oldest first). */
 async function putModel(cache: Cache, req: Request, res: Response) {
-	await cache.put(req, res);
-	const keys = await cache.keys();
-	for (const k of keys.slice(0, evictCount(keys.length))) await cache.delete(k);
+	try {
+		await cache.put(req, res);
+		const keys = await cache.keys();
+		for (const k of keys.slice(0, evictCount(keys.length))) await cache.delete(k);
+	} catch {
+		// Quota or storage error: skip caching this model; the page already has the network copy.
+	}
 }
 
 sw.addEventListener('install', (event) => {
@@ -79,7 +85,7 @@ sw.addEventListener('fetch', (event) => {
 				const hit = await caches.match(req, { ignoreSearch: false });
 				if (hit) return hit;
 				const res = await fetch(req);
-				if (res.ok) {
+				if (isCacheableResponse(res)) {
 					const copy = res.clone();
 					event.waitUntil(caches.open(SHELL_CACHE).then((c) => c.put(req, copy)));
 				}
@@ -94,7 +100,7 @@ sw.addEventListener('fetch', (event) => {
 				const hit = await cache.match(req);
 				if (hit) return hit;
 				const res = await fetch(req);
-				if (res.status === 200 && !req.headers.has('range')) {
+				if (isCacheableResponse(res) && !req.headers.has('range')) {
 					const copy = res.clone();
 					event.waitUntil(putModel(cache, req, copy));
 				}

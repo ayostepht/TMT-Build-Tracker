@@ -1,5 +1,5 @@
 import { toasts } from '#lib/components/toast.svelte.ts';
-import { RUNTIME_CACHE } from './sw-rules.ts';
+import { listenForAuthClear } from './private-caches.ts';
 
 /**
  * Update prompt for the service worker that SvelteKit registers (`src/service-worker.ts`).
@@ -37,6 +37,7 @@ export function createUpdatePrompter(deps: PromptDeps, accept: () => void) {
 export function initPwa(): void {
 	if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 	const sw = navigator.serviceWorker;
+	listenForAuthClear();
 	let accepted = false;
 	let reg: ServiceWorkerRegistration | undefined;
 
@@ -89,16 +90,4 @@ export function initPwa(): void {
 	});
 }
 
-/**
- * Drops the worker's runtime cache (kit model GLBs, which can be a private copy's) so nothing of a
- * signed-out person stays on a shared device. The versioned shell precache is kept. Safe without
- * `caches` (plain http) or with nothing cached; never throws.
- */
-export async function clearPrivateCaches(): Promise<void> {
-	try {
-		if (typeof caches === 'undefined') return;
-		await caches.delete(RUNTIME_CACHE);
-	} catch {
-		// Nothing useful to do: the next sign-out tries again.
-	}
-}
+export { clearPrivateCaches } from './private-caches.ts';

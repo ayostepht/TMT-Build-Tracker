@@ -26,11 +26,19 @@ export function applyPatches(view: BuildView, patches: PartPatch[]): BuildView {
 	return { ...view, state };
 }
 
-/** A `YYYY-MM-DD` that is a real calendar date and not after today (local, like `today()`). */
+/** Earliest printedOn accepted: the kit did not exist before 2020. */
+export const PRINTED_ON_FLOOR = '2020-01-01';
+
+/** A `YYYY-MM-DD` that is a real calendar date, from 2020-01-01 to today (local, like `today()`). */
 export function validPrintedOn(value: unknown, now: Date): value is string {
 	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
 	const d = new Date(value + 'T00:00:00Z');
-	return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value && value <= today(now);
+	return (
+		!isNaN(d.getTime()) &&
+		d.toISOString().slice(0, 10) === value &&
+		value >= PRINTED_ON_FLOOR &&
+		value <= today(now)
+	);
 }
 
 /**
