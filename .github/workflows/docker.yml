@@ -30,32 +30,31 @@ jobs:
 
   # Runs in parallel with `test`. `image` needs both, so a failing browser run blocks
   # publishing from main and tags.
-  # The job runs in the official Playwright image (browsers and system libraries are
-  # preinstalled), so nothing is fetched through apt. Keep the tag in sync with the
-  # @playwright/test version in package-lock.json; the "Playwright version matches" step fails
-  # with a clear message when they drift (Dependabot bumps the lockfile, not this tag).
+  # Chromium is installed without `--with-deps`: the runner already carries the shared libraries
+  # (it ships Chrome), and the apt step only adds font packages, which failed whenever the
+  # Ubuntu mirrors were unreachable. The app self-hosts its web fonts and the specs have no
+  # screenshot comparisons. The browser download is cached per Playwright version.
   e2e:
     env:
       KITPACK_DOWNLOAD: 'off'
-      HOME: /root
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container:
-      image: mcr.microsoft.com/playwright:v1.64.0-noble
-      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
-      # The image's bundled Node may not be 22; the project runs Node 22.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Playwright version matches the container image
-        run: |
-          want="1.64.0"
-          have="$(node -p "require('@playwright/test/package.json').version")"
-          test "$have" = "$want" || { echo "package-lock has Playwright $have, workflow image is v$want: update the e2e container tag"; exit 1; }
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pwcache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - run: npx playwright install chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
