@@ -6,6 +6,10 @@ state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, wh
 
 ## 2026-11
 
+- **r43** (eba0e72, CI green): Stage 4 wave 2: component styles on the design tokens,
+  focus trapping with an inert background, one printer stream per chapter; agent
+  definitions drop removed code. No migration or startup change; landing, Print/Files tabs
+  and live printer status checked on a copy of the live data.
 - **r42** (1907861): the audit so far: Stage 1 security hardening, Stage 2 phone shell and
   landing (Now printing / Next up), Stage 3 installable PWA, Stage 4 removals (prototype
   import, 3D re-orientation code), kit pack 1.0.0 out of the image, better-auth 1.7.18,

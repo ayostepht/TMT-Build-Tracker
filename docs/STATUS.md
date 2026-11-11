@@ -1,9 +1,8 @@
 # Project status
 
-_Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`, eba0e72. Test
-copy: r42 = 1907861; r43 (Stage 4 wave 2, 39023ab or later) was handed to the Unraid agent,
-check `docs/CHANGELOG.md`. A third Stage 4 wave was IN FLIGHT and uncommitted when the
-session's context was reset: see Pick up here)._
+_Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`. Test copy is
+on r43 = eba0e72 (Stage 4 wave 2). A third Stage 4 wave was IN FLIGHT and uncommitted when
+the session's context was reset: see Pick up here)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -116,8 +115,13 @@ Route each to the agent named in brackets.
   every direct install: `scripts/proxy-origin.mjs` always sets `x-forwarded-proto`, which
   `client-ip.ts` `shouldWarnUndeclaredProxy` then sees. Base the hint on headers the client
   actually sent.
-- **Printers** [printers]: OctoEverywhere shared link for Elegoo works live on r42 (status,
-  camera, with the reconnect backoff fix). `share-link.ts` `HOST_RE` only accepts
+- **Files tab** [plates-3mf, app-shell]: on one r43 load the plate-layout heading read
+  "MakeGood profile" while the select showed "Your uploaded 3MF" (greyed); an earlier load
+  headed "Your uploaded 3MF". Heading and select can disagree; reproduce before fixing.
+- **Printers** [printers]: OctoEverywhere shared link for Elegoo works live (status, camera,
+  with the reconnect backoff fix; re-checked on r43). On r43 the landing Camera expander's
+  first `camera/snapshot` got a 502 twice in one browser session, then 200s on direct
+  retries: watch for a first-open race in the reworked `CameraTile`. `share-link.ts` `HOST_RE` only accepts
   `shared-[a-z0-9]{8,64}`; revisit if a real link is rejected. Small follow-ups:
   the Address box stretches tall next to the link field's helper text (desktop);
   `printers.spec.ts:244` (plate layout picker) timed out once under host load, passed
