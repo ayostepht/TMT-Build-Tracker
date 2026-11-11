@@ -14,6 +14,11 @@
  */
 import { randomBytes } from 'node:crypto';
 import type { PrinterFilament, PrinterStatus } from '#lib/printers/status.ts';
+import {
+	SHARE_LINK_HOST_PLACEHOLDER,
+	shareLinkOf,
+	shareLinkSocketUrl
+} from '#lib/printers/share-link.ts';
 import { probeMainboardId } from '../discovery';
 import {
 	backoff,
@@ -73,6 +78,10 @@ export async function enableSdcpCamera(
 ): Promise<boolean> {
 	const timeout = opts.timeoutMs ?? 5000;
 	const settle = opts.settleMs ?? 1500;
+	// Through an OctoEverywhere link the camera needs no Cmd 386 (OctoEverywhere keeps the stream
+	// up), so no second socket is opened on the printer's own connection slots.
+	if (shareLinkOf(cfg.secrets)) return false;
+	if (cfg.host === SHARE_LINK_HOST_PLACEHOLDER) return false; // link missing: never dial the placeholder
 	const id = cfg.secrets.mainboardId || (await probeMainboardId(cfg.host)) || '';
 	if (!id) return false;
 	return new Promise<boolean>((resolve) => {
@@ -226,10 +235,16 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	let attributes: Obj | undefined;
 	let lastStatus: Obj | undefined;
 
-	const url = `ws://${cfg.host}:${cfg.port ?? 3030}/websocket`;
+	// OctoEverywhere shared link: the printer keeps its one connection to OctoEverywhere and we
+	// ride on it (wss, no port, no UDP discovery, no polling). Otherwise the printer's own socket.
+	const link = shareLinkOf(cfg.secrets);
+	const url = link
+		? shareLinkSocketUrl(link.origin)
+		: `ws://${cfg.host}:${cfg.port ?? 3030}/websocket`;
+	let askedAttributes = false;
 
 	const send = (cmd: 0 | 1) => {
-		if (!ws || ws.readyState !== 1) return;
+		if (!ws || ws.readyState !== 1 || (link && !mainboardId)) return;
 		ws.send(sdcpEnvelope(cmd, {}, mainboardId));
 	};
 
@@ -251,7 +266,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 
 	async function open() {
 		if (subj.closed) return;
-		if (!mainboardId) {
+		if (!mainboardId && !link) {
 			mainboardId = (await probeMainboardId(cfg.host)) ?? '';
 			if (subj.closed) return;
 		}
@@ -266,6 +281,8 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		sock.onopen = () => {
 			attempt = 0;
 			armStale();
+			askedAttributes = false;
+			if (link) return; // OctoEverywhere pushes status by itself; the MainboardID comes with it
 			send(1);
 			send(0);
 			clearInterval(poll);
@@ -285,6 +302,12 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			if (!mainboardId) {
 				if (typeof id === 'string' && id) mainboardId = id;
 				else if (topic.includes('/')) mainboardId = topic.split('/').pop() ?? '';
+			}
+			// Through the link the id is known only once the first push arrives: ask for the
+			// attributes (Cmd 1, read-only) once, then rely on the pushed status.
+			if (link && mainboardId && !askedAttributes) {
+				askedAttributes = true;
+				send(1);
 			}
 			if (isObj(msg.Attributes)) {
 				attributes = msg.Attributes;
@@ -312,6 +335,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		status$: (cb) => subj.subscribe(cb),
 		/** Cmd 386 on our own open socket (the printer limits clients); a temporary one otherwise. */
 		enableCamera: async () => {
+			if (link) return false; // no Cmd 386 through OctoEverywhere
 			if (ws && ws.readyState === 1 && mainboardId) {
 				try {
 					ws.send(cameraOnEnvelope(mainboardId));

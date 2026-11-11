@@ -16,6 +16,12 @@ export const PRINTER_KIND_INFO: Record<
 				label: 'Mainboard ID (optional)',
 				secret: false,
 				hint: 'Found automatically; fill in only if status stays empty.'
+			},
+			{
+				key: 'shareLink',
+				label: 'OctoEverywhere shared link (optional)',
+				secret: true,
+				hint: "Uses OctoEverywhere's existing connection instead of one of the printer's limited direct connections."
 			}
 		],
 		hint: 'Centauri Carbon and other SDCP printers. Read-only status over WebSocket.'

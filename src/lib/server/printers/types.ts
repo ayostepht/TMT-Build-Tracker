@@ -66,5 +66,8 @@ export function temp(v: unknown): number | undefined {
 /** Strip anything that could be a credential from an error before it is shown or logged. */
 export function safeError(e: unknown): string {
 	const m = e instanceof Error ? e.message : String(e);
-	return m.replace(/[A-Za-z0-9+/=_-]{24,}/g, '***').slice(0, 200);
+	return m
+		.replace(/shared-[^.\s/]+\.octoeverywhere\.com/gi, '***')
+		.replace(/[A-Za-z0-9+/=_-]{24,}/g, '***')
+		.slice(0, 200);
 }

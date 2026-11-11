@@ -1,4 +1,5 @@
 /** Printer camera URL rules shared by server and browser. No Node imports. */
+import { isShareLinkHost } from './share-link.ts';
 import type { PrinterKind } from './status.ts';
 
 /** Bambu's LAN camera is a proprietary stream (RTSPS / port 6000 JPEG protocol): not supported. */
@@ -43,6 +44,9 @@ export function checkCameraUrl(raw: string, printerHost: string): CameraUrlCheck
 		return { ok: false, error: 'Leave user name and password out of the camera address' };
 	if (normalizeHost(u.hostname) !== normalizeHost(printerHost))
 		return { ok: false, error: 'The camera must be on the same address as the printer' };
+	// An OctoEverywhere share-link host is reached over https on the default port only.
+	if (isShareLinkHost(normalizeHost(printerHost)) && (u.protocol !== 'https:' || u.port))
+		return { ok: false, error: 'The camera must use https on the default port' };
 	return { ok: true, url: u };
 }
 
