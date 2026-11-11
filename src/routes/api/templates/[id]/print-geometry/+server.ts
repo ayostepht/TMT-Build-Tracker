@@ -1,15 +1,10 @@
-import { randomUUID } from 'node:crypto';
-import { unlink } from 'node:fs/promises';
-import { join } from 'node:path';
-import { ApiError } from '#lib/server/access.ts';
 import { respond } from '#lib/server/api.ts';
-import { importsDir, maxThreeMfBytes } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { requireAdminForTemplate } from '#lib/server/models/guard.ts';
-import { saveUpload } from '#lib/server/models/uploads.ts';
-import { importPrintGeometry, listPrintGeometry } from '#lib/server/print-geometry/import.ts';
+import { listPrintGeometry } from '#lib/server/print-geometry/import.ts';
 import { templateSeeds } from '#lib/server/seed/index.ts';
 import { seedTemplates } from '#lib/server/seed/run.ts';
+import { uploadPrintGeometry } from '#lib/server/templates/print-geometry-upload.ts';
 import { clearImportedGeometry } from '#lib/server/print-geometry/store.ts';
 import type { RequestHandler } from './$types';
 
@@ -28,21 +23,14 @@ export const GET: RequestHandler = (event) =>
 export const POST: RequestHandler = (event) =>
 	respond(async () => {
 		requireAdminForTemplate(event, event.params.id);
-		const dest = join(importsDir(), `geometry-${randomUUID()}.upload`);
-		await saveUpload(event.request, dest, {
-			maxBytes: maxThreeMfBytes(),
-			magic: 'PK\x03\x04',
-			what: '3MF or zip file'
-		});
-		try {
-			const name = (event.url.searchParams.get('name') ?? 'upload.3mf').split(/[\\/]/).pop()!;
-			return await importPrintGeometry(getDb(), event.params.id, dest, name);
-		} catch (e) {
-			if (e instanceof ApiError) throw e;
-			throw new ApiError(400, e instanceof Error ? e.message : 'Could not read that file');
-		} finally {
-			await unlink(dest).catch(() => {});
-		}
+		const name = (event.url.searchParams.get('name') ?? 'upload.3mf').split(/[\\/]/).pop()!;
+		return await uploadPrintGeometry(
+			getDb(),
+			event.locals.user!,
+			event.params.id,
+			event.request,
+			name
+		);
 	});
 
 /** Site admin: forget imported geometry (meshes and rows); the kit's seed footprints come back on the next start. */

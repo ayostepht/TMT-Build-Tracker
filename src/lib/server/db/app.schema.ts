@@ -667,3 +667,16 @@ export const buildPartProfiles = sqliteTable(
 	},
 	(t) => [primaryKey({ columns: [t.buildId, t.partSlug] })]
 );
+
+// ---- Site admins assigned in-app (in addition to any configured by env). Additive; the
+// access rule lives in access.ts.
+
+export const siteAdmin = sqliteTable('site_admin', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	grantedBy: text('granted_by').references(() => user.id, { onDelete: 'set null' }),
+	grantedAt: integer('granted_at', { mode: 'timestamp_ms' })
+		.notNull()
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+});

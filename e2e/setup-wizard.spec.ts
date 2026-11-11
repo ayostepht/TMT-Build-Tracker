@@ -159,10 +159,13 @@ test('"Upload your own files" makes a workspace-owned copy of the kit', async ({
 			junk
 		);
 		expect(theirs.status()).toBe(404);
-		const status = await (
-			await other.request.get(`/api/templates/${own.build.templateId}/kit-status`)
-		).json();
-		expect(status.canImport).toBe(false);
+		// Another workspace's copy is not even readable.
+		expect(
+			(await other.request.get(`/api/templates/${own.build.templateId}/kit-status`)).status()
+		).toBe(404);
+		expect(
+			(await other.request.get(`/api/templates/${own.build.templateId}/model.glb`)).status()
+		).toBe(404);
 	} finally {
 		await ctx.close();
 	}

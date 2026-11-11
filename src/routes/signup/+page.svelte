@@ -48,6 +48,11 @@
 			<h1>Create account</h1>
 		</div>
 		{#if error}<div class="error" role="alert">{error}</div>{/if}
+		{#if data.accountsPaused}
+			<p class="muted" role="status" data-testid="accounts-paused">
+				This server is not taking new accounts right now.
+			</p>
+		{/if}
 		{#if data.signup === 'closed'}
 			<p>Sign-up is closed on this server. Ask the admin for an account.</p>
 		{:else}

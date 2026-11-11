@@ -3,13 +3,16 @@
  * kit, matches its objects to the template's parts and stores footprints, hulls, meshes
  * and the author's settings. A later import replaces the slugs it contains.
  */
-import { createReadStream, readFileSync, statSync } from 'node:fs';
-import { unzipSync } from 'fflate';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../db';
 import { templateParts, templatePrintGeometry } from '../db/schema';
+import { maxThreeMfBytes } from '../config';
 import { SEED_NOTE } from '../seed/run';
 import { extractPartGeometry, type ExtractedPart, type ExtractReport } from './extract';
+import { extractNestedThreeMfs } from './nested-zip';
 import { readEntries, type SourceFactory } from './reader';
 import { storeExtractedParts } from './store';
 
@@ -22,7 +25,13 @@ export interface ImportResult {
 	report: ImportFileReport[];
 }
 
-const MAX_NESTED_ZIP = 300 * 1024 * 1024;
+/** Bundle limits: sizes follow the upload limit (`MAX_3MF_MB`), counts are generous for a kit. */
+const nestedLimits = () => ({
+	maxEntries: 10_000,
+	maxFiles: 100,
+	maxEntryBytes: maxThreeMfBytes(),
+	maxTotalBytes: maxThreeMfBytes()
+});
 
 async function entryNames(open: SourceFactory): Promise<string[]> {
 	const names: string[] = [];
@@ -59,76 +68,88 @@ export async function importPrintGeometry(
 		() => createReadStream(path, { highWaterMark: 1 << 20 }),
 		{ path }
 	);
-	const names = await entryNames(open);
-	const jobs: { label: string; open: SourceFactory; nested: boolean }[] = [];
-	// A zip of stored 3MFs shows their inner entries ('3D/3dmodel.model') to a streaming reader, so
-	// look at how the zip starts: a 3MF opens with its own parts, a bundle with a .3mf file.
-	const first = names[0] ?? '';
-	const isBundle =
-		/\.3mf$/i.test(first) ||
-		(!/^(\[Content_Types\]|3D\/|Metadata\/|_rels\/)/.test(first) &&
-			names.some((n) => /\.3mf$/i.test(n)));
-	if (!isBundle && names.includes('3D/3dmodel.model')) {
-		jobs.push({ label: fileName, open, nested: false });
-	} else {
-		const nested = names.filter((n) => /\.3mf$/i.test(n));
-		if (!nested.length) throw new Error('No 3MF file found in that upload');
-		if (statSync(path).size > MAX_NESTED_ZIP) throw new Error('That zip is too large to unpack');
-		const files = unzipSync(readFileSync(path), { filter: (f) => /\.3mf$/i.test(f.name) });
-		for (const [name, bytes] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b)))
-			jobs.push({ label: name, open: () => [bytes], nested: true });
-	}
-	const report: ImportFileReport[] = [];
-	let imported = 0;
-	// Files of one bundle are one batch: pieces of the same part from different files add up.
-	const batch = new Map<string, ExtractedPart>();
-	for (const job of jobs) {
-		let res;
-		try {
-			res = await extractPartGeometry(
-				job.open,
-				parts,
-				job.nested
-					? job.label
-							.replace(/\.3mf$/i, '')
-							.split('/')
-							.pop()
-					: undefined
-			);
-		} catch (e) {
+	let scratch: string | undefined;
+	try {
+		const names = await entryNames(open);
+		const jobs: { label: string; open: SourceFactory; nested: boolean }[] = [];
+		// A zip of stored 3MFs shows their inner entries ('3D/3dmodel.model') to a streaming reader, so
+		// look at how the zip starts: a 3MF opens with its own parts, a bundle with a .3mf file.
+		const first = names[0] ?? '';
+		const isBundle =
+			/\.3mf$/i.test(first) ||
+			(!/^(\[Content_Types\]|3D\/|Metadata\/|_rels\/)/.test(first) &&
+				names.some((n) => /\.3mf$/i.test(n)));
+		if (!isBundle && names.includes('3D/3dmodel.model')) {
+			jobs.push({ label: fileName, open, nested: false });
+		} else {
+			const nested = names.filter((n) => /\.3mf$/i.test(n));
+			if (!nested.length) throw new Error('No 3MF file found in that upload');
+			// Unpacked one by one to a scratch folder next to the upload (streamed, capped), then read
+			// like any 3MF on disk; removed in the finally below.
+			scratch = await mkdtemp(join(dirname(path), 'nested-'));
+			for (const f of await extractNestedThreeMfs(path, scratch, nestedLimits()))
+				jobs.push({
+					label: f.name,
+					open: Object.assign(() => createReadStream(f.path, { highWaterMark: 1 << 20 }), {
+						path: f.path
+					}),
+					nested: true
+				});
+		}
+		const report: ImportFileReport[] = [];
+		let imported = 0;
+		// Files of one bundle are one batch: pieces of the same part from different files add up.
+		const batch = new Map<string, ExtractedPart>();
+		for (const job of jobs) {
+			let res;
+			try {
+				res = await extractPartGeometry(
+					job.open,
+					parts,
+					job.nested
+						? job.label
+								.replace(/\.3mf$/i, '')
+								.split('/')
+								.pop()
+						: undefined
+				);
+			} catch (e) {
+				report.push({
+					file: job.label,
+					parts: [],
+					matched: 0,
+					unmatched: [],
+					warnings: [`Could not read this file: ${(e as Error).message}`],
+					ms: 0
+				});
+				continue;
+			}
+			if (job.nested) {
+				for (const p of res.parts) {
+					const cur = batch.get(p.slug);
+					if (!cur) batch.set(p.slug, { ...p, pieces: [...p.pieces] });
+					else {
+						for (const pc of p.pieces)
+							if (!cur.pieces.some((x) => x.name.toLowerCase() === pc.name.toLowerCase()))
+								cur.pieces.push(pc);
+						if (p.groups?.length) cur.groups = [...(cur.groups ?? []), ...p.groups];
+					}
+				}
+			} else imported += storeExtractedParts(db, templateId, res.parts, fileName);
 			report.push({
 				file: job.label,
-				parts: [],
-				matched: 0,
-				unmatched: [],
-				warnings: [`Could not read this file: ${(e as Error).message}`],
-				ms: 0
+				parts: res.parts.map((p) => p.slug),
+				matched: res.report.matched,
+				unmatched: res.report.unmatched,
+				warnings: res.report.warnings,
+				ms: res.report.ms
 			});
-			continue;
 		}
-		if (job.nested) {
-			for (const p of res.parts) {
-				const cur = batch.get(p.slug);
-				if (!cur) batch.set(p.slug, { ...p, pieces: [...p.pieces] });
-				else {
-					for (const pc of p.pieces)
-						if (!cur.pieces.some((x) => x.name.toLowerCase() === pc.name.toLowerCase()))
-							cur.pieces.push(pc);
-					if (p.groups?.length) cur.groups = [...(cur.groups ?? []), ...p.groups];
-				}
-			}
-		} else imported += storeExtractedParts(db, templateId, res.parts, fileName);
-		report.push({
-			file: job.label,
-			parts: res.parts.map((p) => p.slug),
-			matched: res.report.matched,
-			unmatched: res.report.unmatched,
-			warnings: res.report.warnings,
-			ms: res.report.ms
-		});
+		if (batch.size) imported += storeExtractedParts(db, templateId, [...batch.values()], fileName);
+		return { imported, report };
+	} finally {
+		if (scratch) await rm(scratch, { recursive: true, force: true });
 	}
-	if (batch.size) imported += storeExtractedParts(db, templateId, [...batch.values()], fileName);
-	return { imported, report };
 }
 
 export interface PrintGeometrySummaryRow {

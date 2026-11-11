@@ -2,6 +2,8 @@ import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { error } from '@sveltejs/kit';
+import { getDb } from '#lib/server/db/index.ts';
+import { canViewTemplate } from '#lib/server/templates/fork.ts';
 import { gzipFile } from '#lib/server/compress.ts';
 import { templateHardwarePath } from '#lib/server/config.ts';
 import type { RequestHandler } from './$types';
@@ -10,6 +12,8 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ params, locals, request }) => {
 	if (!locals.user) error(401, 'Sign in required');
 	if (!/^[A-Za-z0-9_-]+$/.test(params.id)) error(404, 'Not found');
+	// Another workspace's kit copy is not readable (404, same as a missing file).
+	if (!canViewTemplate(getDb(), locals.user, params.id)) error(404, 'Not found');
 	const path = templateHardwarePath(params.id);
 	let size: number;
 	let mtimeMs: number;

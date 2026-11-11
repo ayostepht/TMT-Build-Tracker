@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { effectiveSignup } from '#lib/server/auth-policy.ts';
+import { accountsPaused, effectiveSignup } from '#lib/server/auth-policy.ts';
 import { appMode, oidcConfig, signupMode } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { safeRedirect } from '#lib/server/teams.ts';
@@ -15,6 +15,7 @@ export const load: PageServerLoad = ({ locals, url }) => {
 	return {
 		sso: oidc ? { providerName: oidc.providerName } : null,
 		signup: effectiveSignup(getDb(), { publicMode, signup: signupMode() }),
+		accountsPaused: accountsPaused(getDb()),
 		redirectTo: to
 	};
 };

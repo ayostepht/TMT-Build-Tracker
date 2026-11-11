@@ -220,12 +220,17 @@ export class ModelScanner {
 	}
 }
 
+/** Inflated cap of a model entry (the same 512 MB the plate parser scans at most). */
+const MAX_MODEL_ENTRY = 512 * 1024 * 1024;
+/** Inflated cap of an entry collected into memory (the settings configs; the plate parser uses 64 MB). */
+const MAX_BUFFERED_ENTRY = 64 * 1024 * 1024;
+
 /** Streams selected zip entries (by exact name) to a callback; everything else is never inflated. */
 export async function streamEntries(
 	source: Source,
 	want: (name: string) => ModelScanner | Uint8Array[] | null,
 	onDone?: (name: string, data: ModelScanner | Uint8Array) => void,
-	maxEntryBytes = 1 << 30
+	maxEntryBytes = MAX_MODEL_ENTRY
 ): Promise<void> {
 	let failure: Error | null = null;
 	const uz = new Unzip((file) => {
@@ -234,6 +239,8 @@ export async function streamEntries(
 		if (!sink) return;
 		let size = 0;
 		let dead = false;
+		const cap =
+			sink instanceof ModelScanner ? maxEntryBytes : Math.min(maxEntryBytes, MAX_BUFFERED_ENTRY);
 		file.ondata = (err, chunk, final) => {
 			if (dead) return;
 			if (err) {
@@ -242,7 +249,7 @@ export async function streamEntries(
 				return;
 			}
 			size += chunk.length;
-			if (size > maxEntryBytes) {
+			if (size > cap) {
 				dead = true;
 				file.terminate();
 				failure ??= new Error(`${file.name} is too large to read`);
@@ -291,7 +298,7 @@ export async function readEntries(
 	open: SourceFactory,
 	want: (name: string) => ModelScanner | Uint8Array[] | null,
 	onDone?: (name: string, data: ModelScanner | Uint8Array) => void,
-	maxEntryBytes = 1 << 30
+	maxEntryBytes = MAX_MODEL_ENTRY
 ): Promise<void> {
 	let dir: Awaited<ReturnType<typeof readZipDirectory>> | null = null;
 	if (open.path) dir = await readZipDirectory(open.path).catch(() => null);
@@ -300,10 +307,12 @@ export async function readEntries(
 		const sink = want(e.name);
 		if (!sink) continue;
 		let size = 0;
+		const cap =
+			sink instanceof ModelScanner ? maxEntryBytes : Math.min(maxEntryBytes, MAX_BUFFERED_ENTRY);
 		try {
 			for await (const chunk of entryChunks(open.path!, e)) {
 				size += chunk.length;
-				if (size > maxEntryBytes) throw new Error('is too large to read');
+				if (size > cap) throw new Error('is too large to read');
 				if (sink instanceof ModelScanner) sink.push(chunk, false);
 				else sink.push(chunk);
 			}

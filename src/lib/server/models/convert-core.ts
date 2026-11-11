@@ -138,6 +138,37 @@ function concatGeo(list: Geo[]): Geo {
 	return { pos, nrm, idx };
 }
 
+/** Largest single STEP entry we will inflate (fflate allocates the size the zip declares). */
+export const MAX_ENTRY_BYTES = 512 * 1024 * 1024;
+/** Largest total of inflated entries over one conversion. */
+export const MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
+
+/**
+ * fflate `filter` for one entry that refuses to allocate anything the zip merely claims: an
+ * entry declaring more than `maxEntry` bytes, or pushing the running total over `maxTotal`, fails
+ * the job with a clear message before any buffer is made.
+ */
+export function entryFilter(
+	name: string,
+	budget: { used: number },
+	maxEntry = MAX_ENTRY_BYTES,
+	maxTotal = MAX_TOTAL_BYTES
+) {
+	return (e: { name: string; originalSize: number }): boolean => {
+		if (e.name !== name) return false;
+		if (e.originalSize > maxEntry)
+			throw new Error(
+				`${name.split('/').pop()} claims ${Math.round(e.originalSize / 1048576)} MB uncompressed, over the ${Math.round(maxEntry / 1048576)} MB limit per file`
+			);
+		budget.used += e.originalSize;
+		if (budget.used > maxTotal)
+			throw new Error(
+				`The zip holds more than ${Math.round(maxTotal / 1048576)} MB of STEP files uncompressed`
+			);
+		return true;
+	};
+}
+
 export async function convertStepZipToGlb(opts: {
 	zipPath: string;
 	/** Final GLB is written here via `<outPath>.tmp` + rename. */
@@ -178,6 +209,7 @@ export async function convertStepZipToGlb(opts: {
 	const initOcct = require('occt-import-js') as () => Promise<Occt>;
 	let occt = await initOcct();
 
+	const budget = { used: 0 };
 	const geoByFile = new Map<string, Geo>();
 	const total = plan.files.length || 1;
 	let done = 0;
@@ -185,7 +217,7 @@ export async function convertStepZipToGlb(opts: {
 		const t = Date.now();
 		onProgress(5 + Math.round((85 * done) / total), `Converting ${f.entry.split('/').pop()}`);
 		try {
-			const data = unzipSync(zip, { filter: (e) => e.name === f.entry })[f.entry];
+			const data = unzipSync(zip, { filter: entryFilter(f.entry, budget) })[f.entry];
 			if (!data) throw new Error('Entry could not be read');
 			const res = occt.ReadStepFile(data, TESSELLATION);
 			if (!res.success) throw new Error('OpenCascade could not read the STEP file');

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../access';
 import { createBuild } from '../builds/create';
@@ -17,8 +17,11 @@ import {
 import { assertTemplateAdmin } from '../models/guard';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
+import { QuotaError } from '../quota';
 import {
 	canManageTemplate,
+	canViewTemplate,
+	countKitCopies,
 	chooseBuildTemplate,
 	defaultTemplate,
 	forkTemplate,
@@ -156,5 +159,76 @@ describe('chooseBuildTemplate', () => {
 		const id = mk();
 		expect(() => chooseBuildTemplate(db, id, 'viewer', true)).toThrow(ApiError);
 		expect(() => chooseBuildTemplate(db, id, 'other', true)).toThrow(ApiError);
+	});
+});
+
+describe('kit copies limit', () => {
+	afterEach(() => vi.unstubAllEnvs());
+	const u = (id: string) => ({ id, email: `${id}@example.test` });
+
+	it('refuses past the limit with 409 + code, per workspace', () => {
+		vi.stubEnv('QUOTA_KIT_COPIES_PER_WORKSPACE', '2');
+		forkTemplate(db, 'org1', baseId, 'A', 'owner');
+		forkTemplate(db, 'org1', baseId, 'B', 'owner');
+		let err: unknown;
+		try {
+			forkTemplate(db, 'org1', baseId, 'C', 'owner');
+		} catch (e) {
+			err = e;
+		}
+		expect(err).toBeInstanceOf(QuotaError);
+		expect(err).toMatchObject({ status: 409, code: 'quota' });
+		expect(countKitCopies(db, 'org1')).toBe(2);
+		expect(() => forkTemplate(db, 'org2', baseId, 'Z', 'other')).not.toThrow();
+	});
+
+	it('one slot left: of two parallel-looking requests exactly one succeeds', () => {
+		vi.stubEnv('QUOTA_KIT_COPIES_PER_WORKSPACE', '1');
+		const results = [1, 2].map((i) => {
+			try {
+				return forkTemplate(db, 'org1', baseId, `K${i}`, 'owner');
+			} catch (e) {
+				return e;
+			}
+		});
+		expect(results.filter((r) => typeof r === 'string')).toHaveLength(1);
+		expect(countKitCopies(db, 'org1')).toBe(1);
+	});
+
+	it('no limit set: unlimited; site admin exempt', () => {
+		for (let i = 0; i < 5; i++) forkTemplate(db, 'org1', baseId, `N${i}`, 'owner');
+		vi.stubEnv('QUOTA_KIT_COPIES_PER_WORKSPACE', '1');
+		expect(() => forkTemplate(db, 'org1', baseId, 'admin one', 'admin')).not.toThrow();
+		expect(() => forkTemplate(db, 'org1', baseId, 'nope', 'owner')).toThrow(QuotaError);
+	});
+
+	it('at the limit, switching to "own" reuses an unused copy; unused copies count', () => {
+		vi.stubEnv('QUOTA_KIT_COPIES_PER_WORKSPACE', '1');
+		const mk = (name: string) =>
+			createBuild(
+				db,
+				{ organizationId: 'org1', templateId: baseId, designId: null, name, setup: true },
+				'owner'
+			);
+		const a = mk('First');
+		const own = chooseBuildTemplate(db, a, 'owner', true).templateId;
+		chooseBuildTemplate(db, a, 'owner', false); // the copy is now unused but still counts
+		expect(countKitCopies(db, 'org1')).toBe(1);
+		const b = mk('Second');
+		expect(chooseBuildTemplate(db, b, 'owner', true).templateId).toBe(own);
+		// Now in use by b: a third build cannot get a copy.
+		const c = mk('Third');
+		expect(() => chooseBuildTemplate(db, c, 'owner', true)).toThrow(QuotaError);
+		expect(countKitCopies(db, 'org1')).toBe(1);
+	});
+
+	it('canViewTemplate: built-in for all, a copy for its members and admins only', () => {
+		const fork = forkTemplate(db, 'org1', baseId, 'Mine');
+		for (const id of ['owner', 'viewer', 'other'])
+			expect(canViewTemplate(db, u(id), baseId)).toBe(true);
+		for (const id of ['owner', 'editor', 'viewer', 'admin'])
+			expect(canViewTemplate(db, u(id), fork)).toBe(true);
+		expect(canViewTemplate(db, u('other'), fork)).toBe(false);
+		expect(canViewTemplate(db, u('other'), 'missing')).toBe(false);
 	});
 });

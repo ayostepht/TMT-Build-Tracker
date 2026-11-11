@@ -10,6 +10,10 @@
 //    or Host. A browser cannot forge these on a cross-site request, and the
 //    Origin header must still match, so CSRF protection stays intact.
 import http from 'node:http';
+import { installResponseDefaults } from './response-defaults.mjs';
+
+// Static files and error pages never reach hooks.server.ts: give them the security headers too.
+installResponseDefaults(http.ServerResponse.prototype);
 
 process.env.PROTOCOL_HEADER ??= 'x-forwarded-proto';
 process.env.HOST_HEADER ??= 'x-forwarded-host';

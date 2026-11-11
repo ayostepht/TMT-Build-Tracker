@@ -21,6 +21,7 @@ import {
 	user
 } from '../db/schema';
 import { emitBuildEvent } from '../events';
+import { assertRunTotal } from '../quota';
 import { applyPatches, loadBuildView } from './view';
 
 export interface ImportPreview extends ImportCounts {
@@ -69,11 +70,15 @@ function isEmpty(view: BuildView): boolean {
 }
 
 function convert(view: BuildView, data: unknown): PrototypeConversion {
+	let c: PrototypeConversion;
 	try {
-		return convertPrototype(view, data as PrototypeExport);
+		c = convertPrototype(view, data as PrototypeExport);
 	} catch (e) {
 		throw new ApiError(400, e instanceof Error ? e.message : 'Invalid export');
 	}
+	// An import replaces or fills an empty build, so its runs are the build's whole run count.
+	assertRunTotal(c.runs.length);
+	return c;
 }
 
 /** Dry run: what an import would do. Writes nothing. */

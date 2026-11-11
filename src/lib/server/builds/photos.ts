@@ -4,10 +4,11 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { PHOTO_KINDS, type PhotoKind } from '#lib/domain/types.ts';
 import { ApiError, buildAccess } from '../access';
-import { uploadsDir } from '../config';
+import { diskHasRoom, uploadsDir } from '../config';
 import type { Db } from '../db';
 import { buildPhotos } from '../db/schema';
 import { extensionOf, sniffImage, stripImageMetadata, type ImageType } from '../images';
+import { assertUnder, assertUploadRoom, countPhotos } from '../quota';
 import { mutateBuild } from './actions';
 
 export const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -65,6 +66,15 @@ export async function addPhoto(
 	const full = checked(input.file, MAX_PHOTO_BYTES, 'photo');
 	const thumb = input.thumb ? checked(input.thumb, MAX_THUMB_BYTES, 'thumbnail') : null;
 
+	// Quota, from the bytes we will actually store (never the client's declared size). Checked up
+	// front so an over-limit upload writes nothing, and again inside the insert transaction.
+	const addBytes = full.bytes.length + (thumb?.bytes.length ?? 0);
+	if (!diskHasRoom()) throw new ApiError(507, 'The server is almost out of disk space');
+	db.transaction((tx) => {
+		assertUnder(tx, 'photosPerBuild', () => countPhotos(tx, buildId), { userId });
+		assertUploadRoom(tx, access.organizationId, addBytes, { userId });
+	});
+
 	const id = randomUUID();
 	const path = `photos/${buildId}/${id}.${extensionOf(full.type)}`;
 	const thumbPath = thumb ? `photos/${buildId}/${id}-thumb.${extensionOf(thumb.type)}` : null;
@@ -73,6 +83,9 @@ export async function addPhoto(
 	if (thumb && thumbPath) await writeFile(absolute(thumbPath), thumb.bytes);
 	try {
 		mutateBuild(db, buildId, userId, (tx, _view, now) => {
+			// Re-check in the same transaction as the insert (the files are not counted until the row exists).
+			assertUnder(tx, 'photosPerBuild', () => countPhotos(tx, buildId), { userId });
+			assertUploadRoom(tx, access.organizationId, addBytes, { userId });
 			tx.insert(buildPhotos)
 				.values({
 					id,

@@ -10,6 +10,7 @@ import { isHex, normHex } from '#lib/domain/color.ts';
 import { ApiError, requireEditor, requireMember } from '../access';
 import type { Db } from '../db';
 import { customFilaments } from '../db/schema';
+import { assertUnder, countCustomFilaments } from '../quota';
 
 /** 409 carrying the id of the filament that already has the same brand, material and color name. */
 export class DuplicateFilamentError extends ApiError {
@@ -104,11 +105,17 @@ export function createCustomFilament(
 	const input = parseCustomInput(body);
 	const dup = findDuplicate(db, orgId, input);
 	if (dup) throw new DuplicateFilamentError(dup.id);
-	const row = db
-		.insert(customFilaments)
-		.values({ organizationId: orgId, ...input, notes: input.notes ?? '', createdBy: userId })
-		.returning()
-		.get();
+	// Count and insert in one synchronous transaction so parallel requests cannot both pass.
+	const row = db.transaction((tx) => {
+		assertUnder(tx, 'customFilamentsPerWorkspace', () => countCustomFilaments(tx, orgId), {
+			userId
+		});
+		return tx
+			.insert(customFilaments)
+			.values({ organizationId: orgId, ...input, notes: input.notes ?? '', createdBy: userId })
+			.returning()
+			.get();
+	});
 	return toView(row);
 }
 

@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const QUOTA_VARS = [
+	'QUOTA_ACCOUNTS_TOTAL',
+	'QUOTA_SIGNUPS_PER_DAY',
+	'QUOTA_MEMBERSHIPS_PER_USER',
+	'QUOTA_CONCURRENT_UPLOADS_PER_USER',
+	'MIN_FREE_DISK_MB',
 	'QUOTA_BUILDS_PER_WORKSPACE',
 	'QUOTA_DRAFTS_PER_USER',
 	'QUOTA_CHAPTERS_PER_USER',
@@ -11,6 +16,7 @@ const QUOTA_VARS = [
 	'QUOTA_CUSTOM_FILAMENTS_PER_WORKSPACE',
 	'QUOTA_SAVED_DESIGNS_PER_USER',
 	'QUOTA_UPLOAD_MB_PER_WORKSPACE',
+	'QUOTA_UPLOAD_MB_PER_USER',
 	'QUOTA_STEP_CONVERSIONS_PER_USER',
 	'QUOTA_SSE_CONNECTIONS_PER_USER'
 ];
@@ -39,6 +45,8 @@ async function load(vars: Record<string, string | undefined> = {}) {
 		'ORIGIN',
 		'BODY_SIZE_LIMIT',
 		'MAX_3MF_MB',
+		'WRITE_RATE_PER_MIN',
+		'WRITE_RATE_BURST',
 		...QUOTA_VARS
 	];
 	for (const k of keys) delete process.env[k];
@@ -225,6 +233,24 @@ describe('validatePublicMode', () => {
 		expect(p.join('\n')).toMatch(/half configured/);
 		expect(p.join('\n')).toMatch(/XFF_DEPTH/);
 	});
+	it('reports malformed write rate values, accepts digits and off', async () => {
+		const bad = (
+			await load({ BETTER_AUTH_SECRET: GOOD_SECRET, WRITE_RATE_PER_MIN: 'fast' })
+		).bootProblems();
+		expect(bad.join('\n')).toMatch(/WRITE_RATE_PER_MIN/);
+		const bad2 = (
+			await load({ BETTER_AUTH_SECRET: GOOD_SECRET, WRITE_RATE_BURST: '-1' })
+		).bootProblems();
+		expect(bad2.join('\n')).toMatch(/WRITE_RATE_BURST/);
+		const ok = (
+			await load({
+				BETTER_AUTH_SECRET: GOOD_SECRET,
+				WRITE_RATE_PER_MIN: 'off',
+				WRITE_RATE_BURST: '30'
+			})
+		).bootProblems();
+		expect(ok).toEqual([]);
+	});
 });
 
 describe('authSecret', () => {
@@ -355,8 +381,13 @@ describe('quotas', () => {
 			customFilamentsPerWorkspace: 50,
 			savedDesignsPerUser: 50,
 			uploadBytesPerWorkspace: 2048 * 1024 * 1024,
+			uploadBytesPerUser: 4096 * 1024 * 1024,
 			stepConversionsPerUser: 1,
-			sseConnectionsPerUser: 6
+			sseConnectionsPerUser: 12,
+			accountsTotal: 500,
+			signupsPerDay: 50,
+			membershipsPerUser: 10,
+			concurrentUploadsPerUser: 2
 		});
 	});
 
@@ -377,6 +408,12 @@ describe('quotas', () => {
 		).quotas();
 		expect(self.draftsPerUser).toBe(5);
 		expect(self.uploadBytesPerWorkspace).toBe(500 * 1024 * 1024);
+		const perUser = (await load({ QUOTA_UPLOAD_MB_PER_USER: '700' })).quotas();
+		expect(perUser.uploadBytesPerUser).toBe(700 * 1024 * 1024);
+		expect(
+			(await load({ TMT_MODE: 'public', QUOTA_UPLOAD_MB_PER_USER: 'off' })).quotas()
+				.uploadBytesPerUser
+		).toBeNull();
 		expect(self.buildsPerWorkspace).toBeNull();
 	});
 
@@ -397,6 +434,48 @@ describe('quotas', () => {
 	it('reports a bad quota as a boot problem', async () => {
 		const c = await load({ NODE_ENV: 'development', QUOTA_SSE_CONNECTIONS_PER_USER: 'lots' });
 		expect(c.bootProblems().join(' ')).toMatch(/QUOTA_SSE_CONNECTIONS_PER_USER/);
+	});
+});
+
+describe('maxThreeMfBytes', () => {
+	const MB = 1024 * 1024;
+	it('defaults to 1024 MB in selfhost and 256 MB in public mode; MAX_3MF_MB wins', async () => {
+		expect((await load()).maxThreeMfBytes()).toBe(1024 * MB);
+		expect((await load({ TMT_MODE: 'public' })).maxThreeMfBytes()).toBe(256 * MB);
+		expect((await load({ TMT_MODE: 'public', MAX_3MF_MB: '600' })).maxThreeMfBytes()).toBe(
+			600 * MB
+		);
+		expect((await load({ MAX_3MF_MB: '300' })).maxThreeMfBytes()).toBe(300 * MB);
+	});
+});
+
+describe('minFreeDiskBytes and diskHasRoom', () => {
+	const MB = 1024 * 1024;
+	it('is off in selfhost and 2048 MB in public mode; the variable wins', async () => {
+		expect((await load()).minFreeDiskBytes()).toBe(0);
+		expect((await load({ TMT_MODE: 'public' })).minFreeDiskBytes()).toBe(2048 * MB);
+		expect((await load({ TMT_MODE: 'public', MIN_FREE_DISK_MB: '500' })).minFreeDiskBytes()).toBe(
+			500 * MB
+		);
+		expect((await load({ TMT_MODE: 'public', MIN_FREE_DISK_MB: 'off' })).minFreeDiskBytes()).toBe(
+			0
+		);
+		expect((await load({ MIN_FREE_DISK_MB: '10' })).minFreeDiskBytes()).toBe(10 * MB);
+	});
+
+	it('rejects a bad value as a boot problem', async () => {
+		const c = await load({ NODE_ENV: 'development', MIN_FREE_DISK_MB: 'lots' });
+		expect(c.bootProblems().join(' ')).toMatch(/MIN_FREE_DISK_MB/);
+	});
+
+	it('has room when the limit is off, when it is tiny, and when statfs fails; not when huge', async () => {
+		const off = await load();
+		expect(off.diskHasRoom('.')).toBe(true);
+		expect((await load({ MIN_FREE_DISK_MB: '1' })).diskHasRoom('.')).toBe(true);
+		expect((await load({ MIN_FREE_DISK_MB: '999999999999' })).diskHasRoom('.')).toBe(false);
+		expect(
+			(await load({ MIN_FREE_DISK_MB: '999999999999' })).diskHasRoom('/definitely/not/here')
+		).toBe(true);
 	});
 });
 

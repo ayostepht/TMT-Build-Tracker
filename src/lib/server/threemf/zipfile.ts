@@ -27,7 +27,10 @@ const CD_SIG = 0x02014b50;
 const LOCAL_SIG = 0x04034b50;
 
 /** Entries of the zip at `path`, in central directory order. Throws when it is not a readable zip. */
-export async function readZipDirectory(path: string): Promise<ZipFileEntry[]> {
+export async function readZipDirectory(
+	path: string,
+	maxEntries = Infinity
+): Promise<ZipFileEntry[]> {
 	const fh = await open(path, 'r');
 	try {
 		const { size } = await fh.stat();
@@ -54,6 +57,7 @@ export async function readZipDirectory(path: string): Promise<ZipFileEntry[]> {
 			cdOffset = Number(z.readBigUInt64LE(48));
 		}
 		if (cdOffset + cdSize > size) throw new Error('bad zip directory');
+		if (count > maxEntries) throw new Error('The zip has too many entries');
 		const cd = Buffer.alloc(cdSize);
 		await fh.read(cd, 0, cdSize, cdOffset);
 		const out: ZipFileEntry[] = [];

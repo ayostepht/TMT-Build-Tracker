@@ -740,3 +740,16 @@ export const promoteDraft = (buildId: string) => call('POST', `${b(buildId)}/pro
 /** A Studio draft in a workspace (no tracking); returns its id. */
 export const createDraft = (organizationId: string, templateId: string, name: string) =>
 	call<{ id: string }>('POST', '/api/builds', { organizationId, templateId, name, kind: 'draft' });
+
+export interface FoundAccount {
+	id: string;
+	name: string;
+	email: string;
+	isAdmin: boolean;
+	canGrant: boolean;
+}
+
+/** Site admins only: accounts matching `q` (name or email), for the hand-over picker. */
+export const searchAccounts = async (q: string) =>
+	(await call<{ users?: FoundAccount[] }>('GET', `/api/account/users?q=${encodeURIComponent(q)}`))
+		.users ?? [];

@@ -33,6 +33,8 @@ import {
 	user
 } from '../db/schema';
 import { emitBuildEvent } from '../events';
+import { assertRunRoom, assertUnder, countBuilds, pruneActivity } from '../quota';
+import { repointBuildsOffTemplates } from './repoint';
 import { emitPrinterEvent } from '../printers/bus';
 import { parsePrinter } from '#lib/printers/printer.ts';
 import { isPersonalOrg } from '../teams';
@@ -120,6 +122,7 @@ export function mutateBuild(
 		tx.insert(activity)
 			.values({ buildId, userId, kind: o.kind, payload: o.payload ?? {}, at: now })
 			.run();
+		pruneActivity(tx, buildId);
 		return o;
 	});
 	publish(db, buildId, userId, out.kind, now);
@@ -178,6 +181,7 @@ export function promoteDraft(db: Db, buildId: string, userId: string): void {
 	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
 	if (access.kind !== 'draft') throw new ApiError(400, 'This is already a build');
 	mutateBuild(db, buildId, userId, (tx) => {
+		assertUnder(tx, 'buildsPerWorkspace', () => countBuilds(tx, access.organizationId), { userId });
 		tx.update(builds).set({ kind: 'build', setupStep: 5 }).where(eq(builds.id, buildId)).run();
 		return { kind: 'build.promote', payload: {} };
 	});
@@ -384,6 +388,7 @@ function runOutcome(
 			printer: optStr(body.printer, 'printer', 100) ?? null,
 			note: typeof body.note === 'string' ? body.note.slice(0, 2000) : ''
 		};
+		assertRunRoom(tx, buildId);
 		const row = tx
 			.insert(printRuns)
 			.values({
@@ -649,7 +654,17 @@ export function moveBuild(db: Db, buildId: string, userId: string, body: unknown
 		.where(eq(organization.id, targetId))
 		.get();
 	db.transaction((tx) => {
+		// A draft does not count toward a workspace's builds; a tracked build does.
+		if (access.kind !== 'draft')
+			assertUnder(tx, 'buildsPerWorkspace', () => countBuilds(tx, targetId), { userId });
 		tx.update(builds).set({ organizationId: targetId }).where(eq(builds.id, buildId)).run();
+		// A kit copy owned by the personal workspace stays behind: the build goes back to the base kit.
+		const tpl = tx
+			.select({ id: builds.templateId })
+			.from(builds)
+			.where(eq(builds.id, buildId))
+			.get();
+		if (tpl) repointBuildsOffTemplates(tx, [tpl.id]);
 		tx.insert(activity)
 			.values({
 				buildId,
@@ -854,6 +869,7 @@ export function mutateBuildSystem(
 				at: now
 			})
 			.run();
+		pruneActivity(tx, buildId);
 		return o;
 	});
 	emitBuildEvent(buildId, { type: 'changed', kind: out.kind, by, at: now.toISOString() });

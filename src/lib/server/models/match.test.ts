@@ -97,3 +97,40 @@ describe('wantedFiles', () => {
 		]);
 	});
 });
+
+describe('STEP zip entry caps', () => {
+	it('refuses an entry that declares a huge size without allocating it', async () => {
+		const { entryFilter, MAX_ENTRY_BYTES } = await import('./convert-core');
+		const f = entryFilter('a.step', { used: 0 });
+		expect(f({ name: 'other.step', originalSize: 2 ** 40 })).toBe(false);
+		expect(f({ name: 'a.step', originalSize: 10 })).toBe(true);
+		expect(() =>
+			entryFilter('a.step', { used: 0 })({ name: 'a.step', originalSize: MAX_ENTRY_BYTES + 1 })
+		).toThrow(/over the 512 MB limit/);
+	});
+
+	it('refuses once the cumulative size passes the cap', async () => {
+		const { entryFilter } = await import('./convert-core');
+		const budget = { used: 0 };
+		expect(entryFilter('a', budget, 100, 150)({ name: 'a', originalSize: 100 })).toBe(true);
+		expect(() => entryFilter('b', budget, 100, 150)({ name: 'b', originalSize: 100 })).toThrow(
+			/uncompressed/
+		);
+	});
+
+	it('stops a crafted zip declaring 4 GB before fflate allocates', async () => {
+		const { zipSync, unzipSync } = await import('fflate');
+		const { entryFilter } = await import('./convert-core');
+		const z = zipSync({ 'big.step': new Uint8Array(10) }, { level: 0 });
+		// Patch the declared uncompressed size (central directory + local header) to 4 GB - 1.
+		const dv = new DataView(z.buffer, z.byteOffset, z.byteLength);
+		for (let i = 0; i < z.length - 4; i++) {
+			const sig = dv.getUint32(i, true);
+			if (sig === 0x02014b50) dv.setUint32(i + 24, 0xfffffffe, true);
+			if (sig === 0x04034b50) dv.setUint32(i + 22, 0xfffffffe, true);
+		}
+		expect(() => unzipSync(z, { filter: entryFilter('big.step', { used: 0 }) })).toThrow(
+			/over the 512 MB limit/
+		);
+	});
+});

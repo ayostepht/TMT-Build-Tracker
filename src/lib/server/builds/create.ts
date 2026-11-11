@@ -5,6 +5,7 @@ import { ApiError, requireEditor } from '../access';
 import { canSeeDesign } from '../designs/access';
 import { arrangeForPrinter } from './plates';
 import type { Db } from '../db';
+import { assertUnder, countBuilds, countDrafts } from '../quota';
 import {
 	activity,
 	buildFilaments,
@@ -48,8 +49,17 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 		throw new ApiError(400, 'Delivery date must be YYYY-MM-DD');
 
 	const newId = db.transaction((tx) => {
+		// Count and insert in this one synchronous transaction: parallel requests cannot both pass.
+		if (input.kind === 'draft')
+			assertUnder(tx, 'draftsPerUser', () => countDrafts(tx, userId), { userId });
+		else
+			assertUnder(tx, 'buildsPerWorkspace', () => countBuilds(tx, input.organizationId), {
+				userId
+			});
 		const tpl = tx.select().from(templates).where(eq(templates.id, input.templateId)).get();
-		if (!tpl) throw new ApiError(400, 'Unknown template');
+		// A workspace-owned kit copy is usable only in the workspace that owns it.
+		if (!tpl || (tpl.ownerOrgId && tpl.ownerOrgId !== input.organizationId))
+			throw new ApiError(400, 'Unknown template');
 
 		const choices = input.variantChoices ?? {};
 		const badChoice = validateChoices(tpl.variantGroups, choices);

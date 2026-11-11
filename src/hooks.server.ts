@@ -17,6 +17,7 @@ import {
 	tooLargeResponse
 } from '#lib/server/body-limits.ts';
 import { securityHeaders, withHeaders } from '#lib/server/security-headers.ts';
+import { writeRateResponse } from '#lib/server/write-rate.ts';
 
 export const init: ServerInit = () => {
 	if (building) return;
@@ -90,6 +91,8 @@ const handleLimited = async (event: RequestEvent, resolve: Parameters<Handle>[0]
 	const session = await auth.api.getSession({ headers: event.request.headers });
 	event.locals.session = session?.session ?? null;
 	event.locals.user = session?.user ?? null;
+	const limited = writeRateResponse(event.locals.user, event.request.method, event.url.pathname);
+	if (limited) return limited;
 	return compressResponse(event.request, await resolve(event));
 };
 

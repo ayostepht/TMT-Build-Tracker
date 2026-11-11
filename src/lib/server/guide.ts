@@ -5,10 +5,14 @@ import { ApiError } from './access';
 import { uploadsDir } from './config';
 import type { Db } from './db';
 import { templateGuidePages } from './db/schema';
+import { assertUploadRoom } from './quota';
+import { templateOwnerOrg } from './templates/kit-upload';
 import { extensionOf, sniffImage, stripImageMetadata, type ImageType } from './images';
 
 export const MAX_GUIDE_PAGE_BYTES = 3 * 1024 * 1024;
 const MAX_PDF_PAGE = 2000;
+/** Stored page images per template (the real maker guide is far below this). */
+export const MAX_GUIDE_PAGES = 300;
 
 const guideDir = (templateId: string) => join(uploadsDir(), 'guide', templateId);
 
@@ -44,11 +48,16 @@ async function uploadedFiles(templateId: string): Promise<Map<number, string>> {
 	return out;
 }
 
-/** Store one rendered PDF page (site admin). Image only (JPEG, PNG or WebP), at most 3 MB. */
+/**
+ * Store one rendered PDF page. Image only (JPEG, PNG or WebP), at most 3 MB, at most
+ * `MAX_GUIDE_PAGES` pages per template. With `quota`, a workspace's kit copy must also have room for
+ * the new bytes minus the page it replaces. Every refusal comes before a file is touched.
+ */
 export async function saveGuidePage(
 	templateId: string,
 	n: unknown,
-	bytes: Uint8Array
+	bytes: Uint8Array,
+	quota?: { db: Db; userId: string }
 ): Promise<{ pdfPage: number; size: number }> {
 	const pdfPage = parsePage(n);
 	if (bytes.length === 0) throw new ApiError(400, 'The page image is empty');
@@ -57,6 +66,24 @@ export async function saveGuidePage(
 	const type = sniffImage(bytes);
 	if (!type) throw new ApiError(400, 'The page must be a JPEG, PNG or WebP image');
 	const clean = stripImageMetadata(bytes, type);
+	const existing = await uploadedFiles(templateId);
+	const old = existing.get(pdfPage);
+	if (!old && existing.size >= MAX_GUIDE_PAGES)
+		throw new ApiError(409, `A guide can hold at most ${MAX_GUIDE_PAGES} page images`);
+	if (quota) {
+		const orgId = templateOwnerOrg(quota.db, templateId);
+		if (orgId) {
+			let oldBytes = 0;
+			if (old)
+				try {
+					oldBytes = (await stat(join(guideDir(templateId), old))).size;
+				} catch {
+					/* vanished */
+				}
+			const delta = clean.length - oldBytes;
+			if (delta > 0) assertUploadRoom(quota.db, orgId, delta, { userId: quota.userId });
+		}
+	}
 	await mkdir(guideDir(templateId), { recursive: true });
 	await rm(join(guideDir(templateId), `${pdfPage}.webp`), { force: true });
 	await rm(join(guideDir(templateId), `${pdfPage}.jpg`), { force: true });

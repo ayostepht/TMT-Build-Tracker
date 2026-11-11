@@ -1,6 +1,8 @@
+import { statSync } from 'node:fs';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { effectivePartRoles } from '#lib/domain/design.ts';
 import { ApiError } from '../access';
+import { diskHasRoom } from '../config';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
 import {
@@ -11,9 +13,23 @@ import {
 	templates,
 	user
 } from '../db/schema';
+import {
+	assertUnder,
+	assertUploadRoom,
+	countSavedDesigns,
+	quotaLimit,
+	snapshotWorkspace
+} from '../quota';
 import { listTeams } from '../teams';
 import { canSeeDesign, type DesignRow } from './access';
-import { hasSnapshot, isPng, MAX_SNAPSHOT_BYTES, removeSnapshot, writeSnapshot } from './files';
+import {
+	hasSnapshot,
+	isPng,
+	MAX_SNAPSHOT_BYTES,
+	removeSnapshot,
+	snapshotPath,
+	writeSnapshot
+} from './files';
 import type { DesignRole } from './mutate';
 
 export interface DesignSummary {
@@ -196,19 +212,22 @@ export function createDesign(db: Db, userId: string, body: unknown): { id: strin
 		material: f.material,
 		hex: f.hex
 	}));
-	const row = db
-		.insert(colorDesigns)
-		.values({
-			templateId: view.build.templateId,
-			slug: uniqueSlug(db, name),
-			name,
-			authorUserId: userId,
-			roles,
-			partRoles: effectivePartRoles(view),
-			isPublic: body.isPublic === true
-		})
-		.returning({ id: colorDesigns.id, slug: colorDesigns.slug })
-		.get();
+	const row = db.transaction((tx) => {
+		assertUnder(tx, 'savedDesignsPerUser', () => countSavedDesigns(tx, userId), { userId });
+		return tx
+			.insert(colorDesigns)
+			.values({
+				templateId: view.build.templateId,
+				slug: uniqueSlug(db, name),
+				name,
+				authorUserId: userId,
+				roles,
+				partRoles: effectivePartRoles(view),
+				isPublic: body.isPublic === true
+			})
+			.returning({ id: colorDesigns.id, slug: colorDesigns.slug })
+			.get();
+	});
 	return row;
 }
 
@@ -256,6 +275,20 @@ export async function saveSnapshot(
 	requireAuthor(d, userId);
 	if (bytes.length > MAX_SNAPSHOT_BYTES) throw new ApiError(413, 'Image is larger than 2 MB');
 	if (!isPng(bytes)) bad('The preview must be a PNG image');
+	if (!diskHasRoom()) throw new ApiError(507, 'The server is almost out of disk space');
+	// Charged to the author's personal workspace; replacing a preview only adds the difference.
+	if (quotaLimit('uploadBytesPerWorkspace') !== null || quotaLimit('uploadBytesPerUser') !== null) {
+		const org = snapshotWorkspace(db, userId);
+		if (org) {
+			let old = 0;
+			try {
+				old = statSync(snapshotPath(d.id)).size;
+			} catch {
+				/* no preview yet */
+			}
+			assertUploadRoom(db, org, Math.max(1, bytes.length - old), { userId });
+		}
+	}
 	await writeSnapshot(d.id, bytes);
 }
 

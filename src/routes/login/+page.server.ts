@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { effectiveSignup, loginErrorMessage } from '#lib/server/auth-policy.ts';
+import { accountsPaused, effectiveSignup, loginErrorMessage } from '#lib/server/auth-policy.ts';
 import { appMode, oidcConfig, signupMode, socialProviders } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { safeRedirect } from '#lib/server/teams.ts';
@@ -17,8 +17,10 @@ export const load: PageServerLoad = ({ locals, url }) => {
 		providers: publicMode ? (['google', 'github'] as const).filter((p) => social[p]) : [],
 		sso: oidc ? { providerName: oidc.providerName } : null,
 		signup: effectiveSignup(getDb(), { publicMode, signup: signupMode() }),
+		accountsPaused: accountsPaused(getDb()),
 		redirectTo: to,
 		// Fixed texts only: the query string never reaches the page as text.
+		notice: url.searchParams.get('notice') === 'deleted' ? 'Your account was deleted.' : null,
 		authError: loginErrorMessage(url.searchParams.get('error'))
 	};
 };

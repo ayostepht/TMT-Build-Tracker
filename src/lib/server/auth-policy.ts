@@ -1,7 +1,8 @@
 import { and, eq, gt, sql } from 'drizzle-orm';
 import type { Db } from './db';
 import { invitation, user } from './db/schema';
-import type { SignupMode } from './config';
+import { isSiteAdmin } from './access';
+import { quotas, type SignupMode } from './config';
 
 /**
  * Who may get an account and who may use invitations, as pure functions of the database
@@ -49,12 +50,51 @@ export function effectiveSignup(db: Db, cfg: PolicyConfig): SignupMode {
 	return cfg.signup;
 }
 
+export const ACCOUNTS_PAUSED_CODE = 'signups_paused';
+export const ACCOUNTS_PAUSED_MESSAGE = 'This server is not taking new accounts right now.';
+
+/** Accounts created in the last 24 hours. */
+export function recentSignupCount(db: Db, now = new Date()): number {
+	return (
+		db
+			.select({ n: sql<number>`count(*)` })
+			.from(user)
+			.where(gt(user.createdAt, new Date(now.getTime() - 24 * 3600 * 1000)))
+			.get()?.n ?? 0
+	);
+}
+
+/**
+ * True when `QUOTA_ACCOUNTS_TOTAL` or `QUOTA_SIGNUPS_PER_DAY` is reached (both unlimited in
+ * self-host unless set). Ignores who is asking: site admins are exempted in `decideNewUser`.
+ */
+export function accountsPaused(db: Db, now = new Date()): boolean {
+	const q = quotas();
+	if (q.accountsTotal !== null && userCount(db) >= q.accountsTotal) return true;
+	if (q.signupsPerDay !== null && recentSignupCount(db, now) >= q.signupsPerDay) return true;
+	return false;
+}
+
 /** Decision for `databaseHooks.user.create.before`: covers email sign-up and SSO first login. */
 export function decideNewUser(
 	db: Db,
 	candidate: { email?: string | null; emailVerified?: boolean | null },
 	cfg: PolicyConfig,
 	now = new Date()
+): NewUserDecision {
+	const base = decideByPolicy(db, candidate, cfg, now);
+	if (!base.ok) return base;
+	// Account caps apply to everyone but site admins (an ADMIN_EMAILS address; verified in public mode).
+	if (accountsPaused(db, now) && !isSiteAdmin(db, { id: '', ...candidate }))
+		return { ok: false, code: ACCOUNTS_PAUSED_CODE, message: ACCOUNTS_PAUSED_MESSAGE };
+	return base;
+}
+
+function decideByPolicy(
+	db: Db,
+	candidate: { email?: string | null; emailVerified?: boolean | null },
+	cfg: PolicyConfig,
+	now: Date
 ): NewUserDecision {
 	if (cfg.publicMode) {
 		if (candidate.emailVerified !== true)
@@ -103,6 +143,8 @@ export function loginErrorMessage(code: string | null | undefined): string | nul
 			return 'Sign-up is closed on this server. Ask the admin for an account.';
 		case 'invitation_required':
 			return 'This server only creates accounts for invited people. Open the invitation link you were sent, then sign in with the invited email address.';
+		case ACCOUNTS_PAUSED_CODE:
+			return ACCOUNTS_PAUSED_MESSAGE + ' You can still sign in if you already have an account.';
 		case 'access_denied':
 			return 'Sign-in was cancelled.';
 		default:

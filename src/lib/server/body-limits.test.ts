@@ -15,6 +15,7 @@ const MB = 1024 * 1024;
 
 afterEach(() => {
 	delete process.env.MAX_3MF_MB;
+	delete process.env.TMT_MODE;
 });
 
 describe('bodyCapFor', () => {
@@ -30,6 +31,14 @@ describe('bodyCapFor', () => {
 		process.env.MAX_3MF_MB = '300';
 		expect(bodyCapFor('POST', '/api/builds/b1/plates/upload').cap).toBe(301 * MB);
 		expect(bodyCapFor('POST', '/api/templates/t1/print-geometry').cap).toBe(301 * MB);
+	});
+
+	it('uses the 256 MB default in public mode, and an explicit MAX_3MF_MB still wins', () => {
+		process.env.TMT_MODE = 'public';
+		expect(bodyCapFor('POST', '/api/builds/b1/plates/upload').cap).toBe(257 * MB);
+		expect(bodyCapFor('POST', '/api/templates/t1/print-geometry').cap).toBe(257 * MB);
+		process.env.MAX_3MF_MB = '512';
+		expect(bodyCapFor('POST', '/api/builds/b1/plates/upload').cap).toBe(513 * MB);
 	});
 
 	it('allows STEP zips 200 MB, photos 9 MB, guide pages 3 MB, snapshots 2 MB, imports 2 MB', () => {

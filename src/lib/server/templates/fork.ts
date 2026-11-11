@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNull, notInArray, or } from 'drizzle-orm';
 import {
 	ApiError,
 	canEditRole,
@@ -8,8 +8,11 @@ import {
 	type SiteAdminCandidate
 } from '../access';
 import type { Db } from '../db';
+import { canSeeDesign } from '../designs/access';
+import { assertUnder, quotaLimit } from '../quota';
 import {
 	builds,
+	colorDesigns,
 	templateAssemblySteps,
 	templateFilamentRoles,
 	templateGuidePages,
@@ -33,6 +36,41 @@ export function listTemplatesFor(db: Db, orgId: string) {
 		.where(or(isNull(templates.ownerOrgId), eq(templates.ownerOrgId, orgId)))
 		.orderBy(asc(templates.createdAt), asc(templates.name))
 		.all();
+}
+
+/** Kit copies (templates with an owner) a workspace holds, used or not: they all hold disk. */
+export function countKitCopies(db: Db, orgId: string): number {
+	return (
+		db.select({ n: count() }).from(templates).where(eq(templates.ownerOrgId, orgId)).get()?.n ?? 0
+	);
+}
+
+/**
+ * May this user read the template (model, layouts, kit status, ...)? Built-in kits: everyone.
+ * A workspace's copy: members of that workspace, site admins, and anyone who can see a color
+ * design made on it (shared gallery designs show the copy's model).
+ */
+export function canViewTemplate(db: Db, user: SiteAdminCandidate, templateId: string): boolean {
+	const t = db
+		.select({ ownerOrgId: templates.ownerOrgId })
+		.from(templates)
+		.where(eq(templates.id, templateId))
+		.get();
+	if (!t) return false;
+	if (!t.ownerOrgId) return true;
+	if (getMemberRole(db, t.ownerOrgId, user.id)) return true;
+	if (isSiteAdmin(db, user)) return true;
+	return db
+		.select()
+		.from(colorDesigns)
+		.where(eq(colorDesigns.templateId, templateId))
+		.all()
+		.some((d) => canSeeDesign(db, d, user.id));
+}
+
+/** 404 (never 403: does not reveal the copy exists) unless `canViewTemplate`. */
+export function assertTemplateViewable(db: Db, user: SiteAdminCandidate, templateId: string): void {
+	if (!canViewTemplate(db, user, templateId)) throw new ApiError(404, 'Not found');
 }
 
 /** The template a new build starts on: the oldest global one (the built-in MakeGood kit). */
@@ -88,11 +126,19 @@ function slugify(name: string): string {
  * workspace. Builds, color designs, the 3D model and imported print geometry are not copied: the
  * workspace adds its own files to the copy. Returns the new template id.
  */
-export function forkTemplate(db: Db, orgId: string, baseTemplateId: string, name: string): string {
+export function forkTemplate(
+	db: Db,
+	orgId: string,
+	baseTemplateId: string,
+	name: string,
+	userId = ''
+): string {
 	const title = name.trim().slice(0, 120);
 	if (!title) throw new ApiError(400, 'Name is required');
 	return db.transaction((txRaw) => {
 		const tx = txRaw as unknown as Db;
+		// Count and insert in this one synchronous transaction, so two requests cannot both pass.
+		assertUnder(tx, 'kitCopiesPerWorkspace', () => countKitCopies(tx, orgId), { userId });
 		const base = tx.select().from(templates).where(eq(templates.id, baseTemplateId)).get();
 		if (!base) throw new ApiError(404, 'Template not found');
 		// Fork the original kit, not a fork of it.
@@ -217,7 +263,30 @@ export function chooseBuildTemplate(
 			)
 			.orderBy(desc(templates.createdAt))
 			.get();
-		target = existing?.id ?? forkTemplate(db, b.organizationId, rootId, title);
+		target =
+			existing?.id ??
+			db.transaction((txRaw) => {
+				const tx = txRaw as unknown as Db;
+				// At the copies limit, reuse a copy no build uses (left by switching back to the
+				// built-in kit) instead of refusing. Self-hosted (no limit) always makes a new one.
+				const limit = quotaLimit('kitCopiesPerWorkspace');
+				if (limit !== null && countKitCopies(tx, b.organizationId) >= limit) {
+					const unused = tx
+						.select({ id: templates.id })
+						.from(templates)
+						.where(
+							and(
+								eq(templates.ownerOrgId, b.organizationId),
+								eq(templates.baseTemplateId, rootId),
+								notInArray(templates.id, tx.select({ id: builds.templateId }).from(builds))
+							)
+						)
+						.orderBy(desc(templates.createdAt))
+						.get();
+					if (unused) return unused.id;
+				}
+				return forkTemplate(tx, b.organizationId, rootId, title, userId);
+			});
 	}
 	if (target !== b.templateId)
 		db.update(builds).set({ templateId: target }).where(eq(builds.id, buildId)).run();

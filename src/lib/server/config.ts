@@ -1,3 +1,4 @@
+import { statfsSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -279,6 +280,8 @@ export function bootProblems(): string[] {
 	guard(() => trustedProxy());
 	guard(() => publicUrl());
 	guard(() => quotas());
+	guard(() => minFreeDiskBytes());
+	guard(() => writeRateVars());
 	if (mode === 'public') problems.push(...validatePublicMode());
 	return [...new Set(problems)];
 }
@@ -356,10 +359,14 @@ export function kitpackDownloadEnabled(): boolean {
 	return !/^(off|0|false|no)$/i.test((env.KITPACK_DOWNLOAD ?? '').trim());
 }
 
-/** Largest 3MF upload in bytes: `MAX_3MF_MB`, default 1024. Sliced projects with G-code for every plate reach several hundred MB. */
+/**
+ * Largest 3MF upload in bytes: `MAX_3MF_MB` when set, otherwise 1024 (selfhost) or 256 (public mode,
+ * where strangers upload). Sliced projects with G-code for every plate reach several hundred MB.
+ */
 export function maxThreeMfBytes(): number {
 	const mb = Number(process.env.MAX_3MF_MB);
-	return (Number.isFinite(mb) && mb > 0 ? mb : 1024) * 1024 * 1024;
+	const fallback = isPublicMode() ? 256 : 1024;
+	return (Number.isFinite(mb) && mb > 0 ? mb : fallback) * 1024 * 1024;
 }
 
 /** Largest request body adapter-node's `BODY_SIZE_LIMIT` allows, in bytes; `Infinity` when set to it, null when unset or unparsable. */
@@ -422,13 +429,23 @@ export interface Quotas {
 	savedDesignsPerUser: number | null;
 	/** Bytes of uploaded files (photos, kept 3MFs, snapshots, guide images) in one workspace; the variable is in MB. `QUOTA_UPLOAD_MB_PER_WORKSPACE` */
 	uploadBytesPerWorkspace: number | null;
+	/** Bytes of uploaded files across every workspace one user owns (their personal one and their chapters); the variable is in MB. `QUOTA_UPLOAD_MB_PER_USER` */
+	uploadBytesPerUser: number | null;
 	/** STEP to GLB conversions one user may have queued or running. `QUOTA_STEP_CONVERSIONS_PER_USER` */
 	stepConversionsPerUser: number | null;
 	/** Open live-update (SSE) connections one user may hold. `QUOTA_SSE_CONNECTIONS_PER_USER` */
 	sseConnectionsPerUser: number | null;
+	/** Accounts on the instance, all together; sign-up is refused at the limit. `QUOTA_ACCOUNTS_TOTAL` */
+	accountsTotal: number | null;
+	/** New accounts created in the last 24 hours, all together. `QUOTA_SIGNUPS_PER_DAY` */
+	signupsPerDay: number | null;
+	/** Chapters one user may be a member of (created or joined). `QUOTA_MEMBERSHIPS_PER_USER` */
+	membershipsPerUser: number | null;
+	/** File uploads one user may have in flight at once. `QUOTA_CONCURRENT_UPLOADS_PER_USER` */
+	concurrentUploadsPerUser: number | null;
 }
 
-type CountKey = Exclude<keyof Quotas, 'uploadBytesPerWorkspace'>;
+type CountKey = Exclude<keyof Quotas, 'uploadBytesPerWorkspace' | 'uploadBytesPerUser'>;
 
 /** Variable name, selfhost default, public default. */
 const QUOTA_COUNTS: Record<CountKey, [string, number | null, number]> = {
@@ -442,10 +459,16 @@ const QUOTA_COUNTS: Record<CountKey, [string, number | null, number]> = {
 	customFilamentsPerWorkspace: ['QUOTA_CUSTOM_FILAMENTS_PER_WORKSPACE', null, 50],
 	savedDesignsPerUser: ['QUOTA_SAVED_DESIGNS_PER_USER', null, 50],
 	stepConversionsPerUser: ['QUOTA_STEP_CONVERSIONS_PER_USER', null, 1],
-	sseConnectionsPerUser: ['QUOTA_SSE_CONNECTIONS_PER_USER', null, 6]
+	sseConnectionsPerUser: ['QUOTA_SSE_CONNECTIONS_PER_USER', null, 12],
+	accountsTotal: ['QUOTA_ACCOUNTS_TOTAL', null, 500],
+	signupsPerDay: ['QUOTA_SIGNUPS_PER_DAY', null, 50],
+	membershipsPerUser: ['QUOTA_MEMBERSHIPS_PER_USER', null, 10],
+	concurrentUploadsPerUser: ['QUOTA_CONCURRENT_UPLOADS_PER_USER', null, 2]
 };
 const QUOTA_UPLOAD_VAR = 'QUOTA_UPLOAD_MB_PER_WORKSPACE';
 const QUOTA_UPLOAD_PUBLIC_MB = 2048;
+const QUOTA_UPLOAD_USER_VAR = 'QUOTA_UPLOAD_MB_PER_USER';
+const QUOTA_UPLOAD_USER_PUBLIC_MB = 4096;
 
 /** `off` (also `unlimited`, `none`) is null; digits are that number (0 forbids the thing); empty is `fallback`; anything else throws. */
 function quotaValue(name: string, fallback: number | null): number | null {
@@ -469,5 +492,41 @@ export function quotas(): Quotas {
 	}
 	const mb = quotaValue(QUOTA_UPLOAD_VAR, pub ? QUOTA_UPLOAD_PUBLIC_MB : null);
 	out.uploadBytesPerWorkspace = mb === null ? null : mb * 1024 * 1024;
+	const userMb = quotaValue(QUOTA_UPLOAD_USER_VAR, pub ? QUOTA_UPLOAD_USER_PUBLIC_MB : null);
+	out.uploadBytesPerUser = userMb === null ? null : userMb * 1024 * 1024;
 	return out;
+}
+
+/** Validates `WRITE_RATE_PER_MIN` and `WRITE_RATE_BURST` (digits or `off`) at boot; `write-rate.ts` does the parsing for use. */
+function writeRateVars(): void {
+	quotaValue('WRITE_RATE_PER_MIN', null);
+	quotaValue('WRITE_RATE_BURST', null);
+}
+
+/** Default free space to keep on the data volume in public mode, in MB. */
+const MIN_FREE_DISK_PUBLIC_MB = 2048;
+
+/**
+ * Free space (bytes) the data volume must keep before uploads are accepted: `MIN_FREE_DISK_MB`
+ * (digits, or `off`/`0`), default 0 (off) in selfhost and 2048 MB in public mode. 0 means off.
+ */
+export function minFreeDiskBytes(): number {
+	const mb = quotaValue('MIN_FREE_DISK_MB', isPublicMode() ? MIN_FREE_DISK_PUBLIC_MB : 0);
+	return (mb ?? 0) * 1024 * 1024;
+}
+
+/**
+ * True when the volume holding `dir` has at least `minFreeDiskBytes()` free. Also true when the
+ * limit is off or the free space cannot be read (statfs missing or failing), so a platform quirk
+ * never blocks uploads. Upload routes answer 507 when this is false.
+ */
+export function diskHasRoom(dir: string = dataDir()): boolean {
+	const min = minFreeDiskBytes();
+	if (min <= 0) return true;
+	try {
+		const st = statfsSync(dir);
+		return Number(st.bavail) * Number(st.bsize) >= min;
+	} catch {
+		return true;
+	}
 }

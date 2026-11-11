@@ -147,11 +147,15 @@ describe('isSiteAdmin', () => {
 				.run();
 	};
 
-	it('self-hosted: ADMIN_EMAILS match (verified or not) or the earliest user', () => {
+	it('self-hosted: ADMIN_EMAILS match (verified or not); the earliest user only while no listed account exists', () => {
 		seed();
-		setEnv({ ADMIN_EMAILS: 'Boss@Example.com, raw@example.com' });
+		setEnv({ ADMIN_EMAILS: 'nobody@example.com' });
 		expect(isSiteAdmin(db, { id: 'u1', email: 'first@example.com', emailVerified: false })).toBe(
 			true
+		);
+		setEnv({ ADMIN_EMAILS: 'Boss@Example.com, raw@example.com' });
+		expect(isSiteAdmin(db, { id: 'u1', email: 'first@example.com', emailVerified: false })).toBe(
+			false
 		);
 		expect(isSiteAdmin(db, { id: 'u2', email: 'boss@example.com', emailVerified: true })).toBe(
 			true

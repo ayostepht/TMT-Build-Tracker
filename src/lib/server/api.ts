@@ -53,7 +53,14 @@ export async function respond(fn: () => unknown | Promise<unknown>): Promise<Res
 		const out = await fn();
 		return json({ ok: true, ...(out && typeof out === 'object' ? out : {}) });
 	} catch (e) {
-		if (e instanceof ApiError) return json({ error: e.message }, { status: e.status });
+		if (e instanceof ApiError) {
+			// An error may carry a machine-readable `code` (quota refusals send 'quota').
+			const code = (e as { code?: unknown }).code;
+			return json(
+				{ error: e.message, ...(typeof code === 'string' ? { code } : {}) },
+				{ status: e.status }
+			);
+		}
 		console.error('[tmt] api error', e);
 		return json({ error: 'Internal error' }, { status: 500 });
 	}

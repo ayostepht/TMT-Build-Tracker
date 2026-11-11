@@ -57,7 +57,14 @@
 			<div class="kicker">TMT Build Tracker</div>
 			<h1>Sign in</h1>
 		</div>
+		{#if data.notice}<p role="status">{data.notice}</p>{/if}
 		{#if error}<div class="error" role="alert">{error}</div>{/if}
+		{#if data.accountsPaused}
+			<p class="muted" role="status" data-testid="accounts-paused">
+				This server is not taking new accounts right now. You can still sign in if you already have
+				one.
+			</p>
+		{/if}
 		{#if data.authError}<div class="error" role="alert">{data.authError}</div>{/if}
 		{#if data.publicMode}
 			{#each data.providers as p (p)}

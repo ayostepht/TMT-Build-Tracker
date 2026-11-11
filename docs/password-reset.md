@@ -32,7 +32,7 @@ https://tmt.example.com/reset-password#token=...
 Expires 2026-11-11T14:00:00.000Z (one hour). Works once.
 ```
 
-Send the link to the person privately. A wrong address or an SSO-only account prints one
+Send the link to the person privately. Treat the link like a password: do not paste it into chat or tickets; it works once and expires in an hour. A wrong address or an SSO-only account prints one
 line starting with `Error:` and exits non-zero.
 
 ## What happens

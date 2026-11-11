@@ -1,7 +1,8 @@
 import { unlink } from 'node:fs/promises';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import { ApiError } from '../access.ts';
 import { templateModelPath } from '../config.ts';
+import { assertUnder, QuotaError, quotaLimit } from '../quota.ts';
 import type { Db } from '../db/index.ts';
 import { templateModelJobs, templateModels, templateParts } from '../db/schema.ts';
 import { convertStepZip, type ConvertResult, type ConvertTemplate } from './convert.ts';
@@ -21,10 +22,57 @@ export function setConverter(fn: Converter | null): void {
 	converter = fn ?? convertStepZip;
 }
 
+/** Conversions a user has queued or running (they hold CPU; finished and failed ones free the slot). */
+export function countActiveConversions(db: Db, userId: string): number {
+	return (
+		db
+			.select({ n: count() })
+			.from(templateModelJobs)
+			.where(
+				and(
+					eq(templateModelJobs.createdBy, userId),
+					inArray(templateModelJobs.status, ['queued', 'running'])
+				)
+			)
+			.get()?.n ?? 0
+	);
+}
+
+/**
+ * Refuses (QuotaError, 409, code 'quota') when the user already has `stepConversionsPerUser`
+ * conversions queued or running. Site admins and unlimited installs pass. Cheap: use it before
+ * streaming an upload; `createJob` repeats it atomically with the insert.
+ */
+export function assertConversionSlot(db: Db, userId: string | null): void {
+	if (!userId) return;
+	try {
+		assertUnder(db, 'stepConversionsPerUser', () => countActiveConversions(db, userId), { userId });
+	} catch (e) {
+		if (e instanceof QuotaError) {
+			const limit = quotaLimit('stepConversionsPerUser') ?? 0;
+			throw new QuotaError(
+				limit === 0
+					? 'Model conversions are not allowed on this server. Ask the admin.'
+					: `You already have ${limit === 1 ? 'a model conversion' : `${limit} model conversions`} queued or running, the limit on this server. Wait for it to finish and try again.`
+			);
+		}
+		throw e;
+	}
+}
+
 export function createJob(
 	db: Db,
 	input: { templateId: string; inputPath: string; userId: string | null; fileName: string }
 ): ModelJob {
+	return db.transaction((txRaw) => insertJob(txRaw as unknown as Db, input));
+}
+
+function insertJob(
+	db: Db,
+	input: { templateId: string; inputPath: string; userId: string | null; fileName: string }
+): ModelJob {
+	// Count and insert in one synchronous transaction: parallel requests cannot both pass.
+	assertConversionSlot(db, input.userId);
 	const active = db
 		.select({ id: templateModelJobs.id })
 		.from(templateModelJobs)

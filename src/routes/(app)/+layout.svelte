@@ -262,6 +262,9 @@
 								<a role="menuitem" class="phone-only" href={integrationsHref}>Integrations</a>
 							{/if}
 						{/if}
+						<a role="menuitem" href={resolve('/(app)/account')} data-testid="account-link"
+							>Account</a
+						>
 						<button type="button" role="menuitem" onclick={signOut}>Sign out</button>
 					</div>
 				{/if}

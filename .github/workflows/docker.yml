@@ -22,6 +22,8 @@ jobs:
         run: |
           test -n "$(git ls-files ':(literal)src/routes/api/builds/[id]/export.3mf/+server.ts')"
           test -n "$(git ls-files ':(literal)src/routes/api/templates/[id]/model.glb/+server.ts')"
+      - name: Audit production dependencies (fails on high or critical advisories)
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run check
       - run: npm run lint
       - run: npm test

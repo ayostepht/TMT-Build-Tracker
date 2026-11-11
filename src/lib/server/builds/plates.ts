@@ -37,7 +37,8 @@ import type { ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { Silhouette } from '#lib/domain/silhouette.ts';
 import { ApiError, buildAccess } from '../access';
-import { uploadsDir } from '../config';
+import { diskHasRoom, uploadsDir } from '../config';
+import { assertUploadRoom, parsedUploadBytes } from '../quota';
 import type { Db } from '../db';
 import { buildPlates, builds, buildUploads, printRuns, templatePlateLayouts } from '../db/schema';
 import { mutateBuild } from './actions';
@@ -294,6 +295,14 @@ export function createUpload(
 		.from(buildUploads)
 		.where(and(eq(buildUploads.buildId, buildId), eq(buildUploads.status, 'parsed')))
 		.all();
+	// Kept on disk: the plate thumbnails (the 3MF itself is deleted after parsing). Replacing the
+	// build's pending uploads counts only the difference; refused before anything is written.
+	const newBytes = parsed.plates.reduce((n, p) => n + (p.thumbnail?.length ?? 0), 0);
+	const freed = stale.reduce((n, s) => n + parsedUploadBytes(s.id), 0);
+	// The route checked the disk floor before the body arrived; thumbnails are written now, so check again.
+	if (newBytes > 0 && !diskHasRoom(uploadsDir()))
+		throw new ApiError(507, 'The server is almost out of disk space');
+	if (newBytes > freed) assertUploadRoom(db, access.organizationId, newBytes - freed, { userId });
 	for (const s of stale) rmSync(uploadDir(s.id), { recursive: true, force: true });
 	if (stale.length)
 		db.update(buildUploads)

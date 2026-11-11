@@ -3,6 +3,7 @@ import type { TeamRole } from '#lib/domain/types.ts';
 import { normalizeRole } from './access';
 import type { Db } from './db';
 import { builds, invitation, member, organization } from './db/schema';
+import { assertUnder, QuotaError, quotaLimit } from './quota';
 
 export interface TeamSummary {
 	id: string;
@@ -157,4 +158,107 @@ export function slugify(name: string): string {
 			.replace(/^-+|-+$/g, '')
 			.slice(0, 40) || 'chapter'
 	);
+}
+
+// ---- chapter quotas (shared by our routes and the Better Auth organization plugin hooks)
+
+/** Memberships of a user in real chapters (the personal workspace is not a chapter). */
+function chapterRows(db: Db, userId: string) {
+	return db
+		.select({ orgId: member.organizationId, role: member.role, metadata: organization.metadata })
+		.from(member)
+		.innerJoin(organization, eq(organization.id, member.organizationId))
+		.where(eq(member.userId, userId))
+		.all()
+		.filter((r) => !isPersonalMetadata(r.metadata));
+}
+
+/** Chapters the user created (owns). `chaptersPerUser`. */
+export function countChaptersOwned(db: Db, userId: string): number {
+	return chapterRows(db, userId).filter((r) => normalizeRole(r.role) === 'owner').length;
+}
+
+/** Chapters the user belongs to, created or joined. `membershipsPerUser`. */
+export function countChapterMemberships(db: Db, userId: string): number {
+	return chapterRows(db, userId).length;
+}
+
+export function countChapterMembers(db: Db, orgId: string): number {
+	return (
+		db
+			.select({ n: sql<number>`count(*)` })
+			.from(member)
+			.where(eq(member.organizationId, orgId))
+			.get()?.n ?? 0
+	);
+}
+
+export function countPendingInvites(db: Db, orgId: string): number {
+	return (
+		db
+			.select({ n: sql<number>`count(*)` })
+			.from(invitation)
+			.where(
+				and(
+					eq(invitation.organizationId, orgId),
+					eq(invitation.status, 'pending'),
+					gt(invitation.expiresAt, new Date())
+				)
+			)
+			.get()?.n ?? 0
+	);
+}
+
+type ChapterQuotaKey =
+	'chaptersPerUser' | 'membershipsPerUser' | 'membersPerChapter' | 'pendingInvitesPerChapter';
+
+const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
+/** Sentences shown to the user (the generic quota text does not name chapters). */
+const CHAPTER_SENTENCES: Record<ChapterQuotaKey, (limit: number) => string> = {
+	chaptersPerUser: (l) =>
+		l === 0
+			? 'Chapters cannot be created on this server. Ask the admin.'
+			: `You already created ${plural(l, 'chapter')}, the limit on this server. Delete one or ask the admin.`,
+	membershipsPerUser: (l) =>
+		l === 0
+			? 'Joining chapters is not allowed on this server. Ask the admin.'
+			: `You already belong to ${plural(l, 'chapter')}, the limit on this server. Leave one first or ask the admin.`,
+	membersPerChapter: (l) =>
+		`This chapter already has ${plural(l, 'member')}, the limit on this server. Remove someone or ask the admin.`,
+	pendingInvitesPerChapter: (l) =>
+		l === 0
+			? 'Invitations are not allowed on this server. Ask the admin.'
+			: `This chapter already has ${plural(l, 'open invitation')}, the limit on this server. Cancel one or ask the admin.`
+};
+
+function chapterQuota(db: Db, key: ChapterQuotaKey, count: () => number, userId: string): void {
+	try {
+		assertUnder(db, key, count, { userId });
+	} catch (e) {
+		if (e instanceof QuotaError) throw new QuotaError(CHAPTER_SENTENCES[key](quotaLimit(key) ?? 0));
+		throw e;
+	}
+}
+
+/** Throws `QuotaError` when the user may not create another chapter. */
+export function assertCanCreateChapter(db: Db, userId: string): void {
+	chapterQuota(db, 'chaptersPerUser', () => countChaptersOwned(db, userId), userId);
+	chapterQuota(db, 'membershipsPerUser', () => countChapterMemberships(db, userId), userId);
+}
+
+/** Throws `QuotaError` when the user may not join the chapter (their own cap, then the chapter's). */
+export function assertCanJoinChapter(db: Db, userId: string, orgId: string): void {
+	chapterQuota(db, 'membershipsPerUser', () => countChapterMemberships(db, userId), userId);
+	assertCanAddMember(db, userId, orgId);
+}
+
+/** The chapter's own size cap (`membersPerChapter`). */
+export function assertCanAddMember(db: Db, userId: string, orgId: string): void {
+	chapterQuota(db, 'membersPerChapter', () => countChapterMembers(db, orgId), userId);
+}
+
+/** Throws `QuotaError` when the chapter already has its limit of open invitations. */
+export function assertCanInvite(db: Db, userId: string, orgId: string): void {
+	chapterQuota(db, 'pendingInvitesPerChapter', () => countPendingInvites(db, orgId), userId);
 }

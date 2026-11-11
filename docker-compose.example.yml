@@ -39,9 +39,15 @@ services:
       # if there is more than one proxy, only if every request comes through the proxy:
       # ADDRESS_HEADER: X-Forwarded-For
       # XFF_DEPTH: 1
-      # Optional. Largest slicer 3MF in MB (default 1024); the image allows bodies up to 1100 MB (BODY_SIZE_LIMIT, keep it above MAX_3MF_MB + 1 MB). Other routes accept at most 1 MB (photos 9 MB, STEP zips 200 MB).
+      # Optional. Largest slicer 3MF in MB (default 1024, 256 in public mode); the image allows bodies up to 1100 MB (BODY_SIZE_LIMIT, keep it above MAX_3MF_MB + 1 MB). Other routes accept at most 1 MB (photos 9 MB, STEP zips 200 MB).
       # MAX_3MF_MB: 1024
-      # Optional limits, QUOTA_* (whole number, or off). Read at start but not enforced yet; see .env.example.
+      # Optional limits, QUOTA_* (whole number, or off). Read at start; see .env.example for the full list and defaults.
       # QUOTA_BUILDS_PER_WORKSPACE: 10
+      # Optional. Free MB to keep on /data (uploads refused below it; 0/off = no check; default 2048 in public mode).
+      # MIN_FREE_DISK_MB: 2048
+      # Optional. Per-user API write rate limit (whole number per minute, or off; site admins exempt). Default 120/min with
+      # burst 60 in public mode, off self-hosted. 429 with Retry-After when exceeded.
+      # WRITE_RATE_PER_MIN: 120
+      # WRITE_RATE_BURST: 60
       # Optional. off = no background printer status connections.
       # TMT_PRINTERS: off
