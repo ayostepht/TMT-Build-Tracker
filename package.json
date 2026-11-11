@@ -37,10 +37,12 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.24.1",
 		"globals": "^17.6.0",
+		"pdfjs-dist": "^6.5.438",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^4.1.0",
 		"svelte": "^5.57.2",
 		"svelte-check": "^4.6.0",
+		"three": "^0.187.0",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.60.1",
 		"vite": "^8.3.6",
@@ -59,8 +61,6 @@
 		"fflate": "^0.8.3",
 		"meshoptimizer": "^1.3.0",
 		"mqtt": "^5.16.1",
-		"occt-import-js": "^0.0.23",
-		"pdfjs-dist": "^6.5.438",
-		"three": "^0.187.0"
+		"occt-import-js": "^0.0.23"
 	}
 }

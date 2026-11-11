@@ -459,6 +459,9 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   for its back link from `event.url.host`.
 - Image: `ghcr.io/ayostepht/tmt-build-tracker` (`latest`, semver, `sha-<short>`), kit pack
   baked in, `VOLUME /data`, `HEALTHCHECK` on `/api/health`, `BODY_SIZE_LIMIT=1100M`.
+  `three` and `pdfjs-dist` are devDependencies: browser-only, bundled by Vite into
+  `build/client` (the pdf.js worker is a hashed static asset), so `npm prune --omit=dev`
+  leaves them out of the image. Keep it that way: nothing on the server may import them.
 - Unraid template `unraid/tmt-build-tracker.xml`; install guide in `README.md`.
 - **PWA**: `static/manifest.webmanifest` (light colors; dark `theme-color` via media meta tags
   in `src/app.html`), icons in `static/icons/`, `static/offline.html` (self-contained, no app JS).
