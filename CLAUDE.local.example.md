@@ -2,7 +2,7 @@
 
 Copy to `CLAUDE.local.md` (gitignored) and fill in for this machine. Only private values
 and machine facts go here; rules and workflow live in `CLAUDE.md` and
-`docs/dev-environments.md`. The maintainer keeps the canonical copy outside git: ask for
+`docs/dev/dev-environments.md`. The maintainer keeps the canonical copy outside git: ask for
 it instead of guessing.
 
 ## This machine

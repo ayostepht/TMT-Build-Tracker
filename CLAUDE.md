@@ -8,11 +8,11 @@ mobility trainer) chairs: teams ("chapters") plan, print, assemble and hand off 
 | File | What it holds | Who reads it |
 | --- | --- | --- |
 | `CLAUDE.md` (this) | Rules, stack gotchas, conventions, how work is done | Everyone |
-| `docs/STATUS.md` | Current state, open items, decisions, next steps | Orchestrator, every session |
+| `docs/dev/STATUS.md` | Current state, open items, decisions, next steps | Orchestrator, every session |
 | `docs/architecture.md` | Where code lives and how each area works | Subagents, for their section |
-| `docs/dev-environments.md` | Machines, setup, e2e locking, deploy outline | Orchestrator on a new machine |
+| `docs/dev/dev-environments.md` | Machines, setup, e2e locking, deploy outline | Orchestrator on a new machine |
 | `CLAUDE.local.md` (untracked) | This machine's private values: test copy, printer, deploy specifics | Orchestrator |
-| `docs/CHANGELOG.md` | Deploy history | Append only |
+| `docs/dev/CHANGELOG.md` | Deploy history | Append only |
 | `README.md`, `docs/guides/*.md` | Install and operator guides (public-facing) | Makers; `release-pwa` |
 | `.claude/agents/*.md` | Specialist subagents | Claude Code |
 
@@ -20,17 +20,17 @@ mobility trainer) chairs: teams ("chapters") plan, print, assemble and hand off 
 
 _Subagents: skip this section; follow "Subagent contract" below._
 
-**Start of session:** read `docs/STATUS.md`, then `CLAUDE.local.md`. If `CLAUDE.local.md`
-is missing, follow "New machine" in `docs/dev-environments.md` before anything else.
+**Start of session:** read `docs/dev/STATUS.md`, then `CLAUDE.local.md`. If `CLAUDE.local.md`
+is missing, follow "New machine" in `docs/dev/dev-environments.md` before anything else.
 
 **You do:** talk to the maintainer, plan, split work, brief subagents, read their reports,
-decide, update `docs/STATUS.md` / `docs/CHANGELOG.md` / `docs/architecture.md`, commit,
+decide, update `docs/dev/STATUS.md` / `docs/dev/CHANGELOG.md` / `docs/architecture.md`, commit,
 push and deploy (with the maintainer's OK).
 
 **You don't:** edit anything under `src/`, `e2e/`, `scripts/`, `drizzle/`, `static/` or
 config files, and you don't run tests, builds or the dev server. If a fix is one line,
 it still goes to the owning agent. Reading code to write a good brief is fine. The one
-exception is the deploy routine in `docs/dev-environments.md` (image build, backup,
+exception is the deploy routine in `docs/dev/dev-environments.md` (image build, backup,
 migration rehearsal, container swap), which is yours. Other exceptions only when the
 maintainer says so in this session.
 
@@ -40,7 +40,7 @@ install first, then start parallel work. A task that adds a dependency runs alon
 
 **Briefs carry the machine:** agents don't read `CLAUDE.local.md`. On the Unraid dev
 container, say in every brief that Node isn't installed and commands run in containers per
-`docs/dev-environments.md`.
+`docs/dev/dev-environments.md`.
 
 **Routing:**
 
@@ -82,7 +82,7 @@ changes, look at one desktop and one phone screenshot from the report before tel
 maintainer it's done.
 
 **End of session (and before a context reset):** fold the agents' STATUS notes into
-`docs/STATUS.md` (rewrite in place, delete what's done), add a `docs/CHANGELOG.md` entry
+`docs/dev/STATUS.md` (rewrite in place, delete what's done), add a `docs/dev/CHANGELOG.md` entry
 per deploy, update the touched `docs/architecture.md` sections, commit them with the work.
 
 **Ask the maintainer** before: deploying, deleting anything, schema changes on the test
@@ -94,7 +94,7 @@ upstream, making the repo public).
 _Every specialist in `.claude/agents/` follows this; agent files only add area rules._
 
 - **Start:** read this file's Ground rules and Conventions, your section of
-  `docs/architecture.md`, and the open items for your area in `docs/STATUS.md`. Read the
+  `docs/architecture.md`, and the open items for your area in `docs/dev/STATUS.md`. Read the
   tests next to the code before changing it.
 - **Stay in scope:** edit only the files the brief gives you. If the task needs a file
   outside it, or would break a Ground rule or a STATUS decision, stop and report back.
@@ -104,16 +104,16 @@ _Every specialist in `.claude/agents/` follows this; agent files only add area r
   emails, access codes) in code, tests, fixtures or reports.
 - **Blocked or denied command** (permission prompt, hook): stop and report it. Never retry
   it with a different spelling or another tool.
-- **Clean up:** dev servers and throwaway containers per `docs/dev-environments.md`
+- **Clean up:** dev servers and throwaway containers per `docs/dev/dev-environments.md`
   (ports 5173-5199, containers named `tmt-*`, `--rm`); leave no background processes or
   containers running. Send exactly one final report.
 - **Where commands run:** on the Unraid dev container there is no Node: run every `npm`,
   `npx` and image build inside throwaway containers exactly as in
-  `docs/dev-environments.md` ("Running tools on the Unraid dev container"). Check with
+  `docs/dev/dev-environments.md` ("Running tools on the Unraid dev container"). Check with
   `command -v node` before your first command. Never run `npm install`/`npm ci` unless the
   brief says so.
 - **E2E:** use `--reporter=line` (the html reporter hangs on failure) and the lock
-  described in `docs/dev-environments.md` for this machine. Run your specs alone and with
+  described in `docs/dev/dev-environments.md` for this machine. Run your specs alone and with
   specs that share data; the full suite only when asked.
 - **Report (final message), in this order:**
   1. Files changed (and migrations generated).
@@ -121,7 +121,7 @@ _Every specialist in `.claude/agents/` follows this; agent files only add area r
   3. Skipped checks and why (e.g. real-file tests without `KITPACK_DIR`, no Docker).
   4. Screenshot paths (UI work), app bugs found but not fixed.
   5. Questions or decisions for the maintainer.
-  6. **STATUS notes:** 2-5 lines for `docs/STATUS.md`, and **Architecture notes:** what
+  6. **STATUS notes:** 2-5 lines for `docs/dev/STATUS.md`, and **Architecture notes:** what
      changed in your `docs/architecture.md` section (or "none").
 
 ## Ground rules
@@ -210,8 +210,8 @@ npm run dev          # dev server
 npm run check        # svelte-check / types
 npm run lint
 npm test             # vitest (agents: npx vitest run <files>)
-# Unraid dev container: no Node; wrap these as in docs/dev-environments.md
-npm run test:e2e     # playwright, see docs/dev-environments.md
+# Unraid dev container: no Node; wrap these as in docs/dev/dev-environments.md
+npm run test:e2e     # playwright, see docs/dev/dev-environments.md
 npm run build
 docker build -t tmt-build-tracker:dev .
 ```

@@ -1,8 +1,8 @@
 # Architecture and area notes
 
 Reference for whoever changes code (the specialist subagents). The orchestrator does not
-need to read this. Rules live in `CLAUDE.md`; current state lives in `docs/STATUS.md`;
-history lives in `docs/CHANGELOG.md`. This file says **where things are and how they work
+need to read this. Rules live in `CLAUDE.md`; current state lives in `docs/dev/STATUS.md`;
+history lives in `docs/dev/CHANGELOG.md`. This file says **where things are and how they work
 today**. When behaviour changes, update the matching section here in the same commit.
 
 Sections match the subagents in `.claude/agents/`:
@@ -438,6 +438,15 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   account menu carries the Help link (`help-link`); About is reached from Help. Help quotes
   UI labels and tracking behaviour verbatim: when a label or a rule in `domain/actions.ts`,
   `pace.ts` or `NowCard` changes, re-check the copy. Spec: `e2e/help-about.spec.ts`.
+- **Privacy and Terms**: `/privacy` and `/terms` sit outside `(app)` (readable signed out),
+  share `components/LegalPage.svelte`, and their loads return only `{ publicMode, signedIn }`
+  with `cache-control: private, no-cache`. Linked from login, signup, Help and About
+  (`privacy-link`, `terms-link`). Spec: `e2e/legal.spec.ts` (structure, not sentences).
+- **Landing navigation**: the chapter page has a quick `nav` (`landing-quick`) of build
+  pills built from `data.landing.views` (max 4, then "All builds"); Now printing and Next up
+  cards carry a `landing-open-build` pill to the build's Overview (the compact Now card's
+  "Details" goes to Print); Builds list cards (`build-card`) are stretched links with the
+  Setup pill above the link. Grid tracks are `minmax(0, 1fr)` so long names truncate.
 - **Landing**: `/` redirects to the chapter page (`teams/[slug]`), which shows
   `landing/LandingBoard` (Now printing and Next up for up to 3 builds; one `BuildCtx` per
   build via `CtxScope`; polls every 20 s, no per-build SSE; cap `LANDING_BUILD_CAP` = 6; `nextUpPlate` in

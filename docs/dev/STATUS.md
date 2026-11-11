@@ -4,7 +4,7 @@ _Last updated: 2026-11-11 (audit Stages 1-4 done and deployed: test copy on r44 
 which also carries the first Stage 5 slice. Stage 5 in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
-decided. History goes in `docs/CHANGELOG.md`; how things work goes in
+decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
 `docs/architecture.md`. Rewrite entries in place rather than appending; delete what is
 done. Keep it under ~150 lines.
 
@@ -15,10 +15,10 @@ done. Keep it under ~150 lines.
    Files tab below), `engines` in `package.json` and version in `/api/health` (unblocked:
    the dependency move landed), user-facing changelog, Unraid Community Apps template.
 2. Fix the Files tab heading race (open items, Files tab) [plates-3mf].
-3. CI: the `image` job of the `docker` workflow failed twice on 6ce39e3 within 3 s, before
-   any step ran (no log: BlobNotFound); `test` and `e2e` passed, and the same Dockerfile built
-   locally. It passed on f0eba3c and 578eb84. Look at the run in the GitHub UI (annotations
-   aren't readable with this machine's token): GHCR has no image for 6ce39e3 yet.
+3. CI is blocked by billing, not code: every job fails in seconds with "recent account
+   payments have failed or your spending limit needs to be increased" (the private repo has
+   used its free Actions minutes; GHCR has no image after 578eb84). The maintainer chose to
+   use fewer minutes while private: see Open items, Release.
 4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
    (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
    test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
@@ -58,12 +58,16 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
-- (2026-11-11) Stage 5: supply the privacy and terms text; say whether the agent and
-  machine notes (`CLAUDE.md`, `docs/dev-environments.md`, `.claude/agents/`) should move out
-  of the public docs path and where to; confirm `github.com/ayostepht/TMT-Build-Tracker` and
-  the `ghcr.io/ayostepht/...` image as the final public addresses; confirm the MakeGood
-  guide URL (`src/lib/makegood.ts`, today the same as the model page); read `SECURITY.md`
-  ("acknowledgement within a few days", loopback printer targets named as in scope).
+- (2026-11-11) Read `/privacy` and `/terms` (text written for you, on `main`, not deployed).
+  Open questions: is "independent project, not made, endorsed or run by MakeGood, not
+  affiliated" right; "for adult makers" and the advice on children's details and photos;
+  keep storing session IP addresses (auth library default) or turn that off; turn on
+  encryption of the stored SSO provider tokens (`encryptOAuthTokens`, recommended; needs a
+  check against existing sign-ins on the test copy).
+- (2026-11-11) Landing navigation (on `main`, not deployed): a build's name can now be a
+  button up to three times (quick row, its card, the Builds list). Keep the quick row, or
+  drop it and keep the card buttons?
+- (2026-11-11) GitHub billing: check Settings → Billing and plans → Actions usage.
 
 - (2026-11-11) Keep or delete the GitHub release asset for kit pack 1.0.0 (no longer baked
   into the image)? (The 21-plate re-check after the re-orientation removal passed on r42.)
@@ -141,7 +145,7 @@ Route each to the agent named in brackets.
   fix/filament-role-mismatch).
 - **Kit** [kit-and-startup]: template copies: switching back to the built-in kit leaves
   the unused copy; designs from the base kit don't apply to a copy.
-- **Security** (Stage 1 done; `docs/audit-2026-11.md` has the findings and their status).
+- **Security** (Stage 1 done; `docs/dev/audit-2026-11.md` has the findings and their status).
   Open Lows, none blocking: storage totals are re-measured from disk on every upload
   (`quota.ts` `workspaceUploadBytes`; a cache needs an invalidation call from photo, plate
   and kit writes); the converted GLB after a STEP conversion is only counted at the next
@@ -217,6 +221,12 @@ Route each to the agent named in brackets.
   (`ds-seg` accent underline, one accent colour for the selected status/Result option,
   small camera dialog title). While a dialog is open a toast shows above it but
   cannot be clicked (Undo waits until the dialog closes): accepted as is.
+- **Docs layout** (2026-11-11, maintainer left the call to the orchestrator): process notes
+  live in `docs/dev/` (STATUS, CHANGELOG = deploy history, dev-environments, the audit,
+  archive); `docs/architecture.md` and `docs/guides/` are the public contributor and
+  operator docs; `CLAUDE.md` and `.claude/agents/` stay where Claude Code reads them.
+- Public addresses confirmed (2026-11-11): `github.com/ayostepht/TMT-Build-Tracker` and the
+  `ghcr.io/ayostepht/...` image. `SECURITY.md` read and acknowledged by the maintainer.
 - Git history is kept as is when the repo goes public (private-range LAN addresses in old
   commits are accepted; no rewrite). Branch protection (no force push, no deletion,
   required `test` + `e2e`) is set the moment the repo is public: GitHub refuses it on a
@@ -224,7 +234,7 @@ Route each to the agent named in brackets.
 
 ## Next steps (in order)
 
-Stages from `docs/audit-2026-11.md` Part 2 (items, owners and exit checks are there).
+Stages from `docs/dev/audit-2026-11.md` Part 2 (items, owners and exit checks are there).
 Stage 0 and **Stage 1 (safe to expose) are done**: modes, SSO-only public sign-in, sign-up
 switch, outbound guard, trusted-proxy rate limits, boot validation, security headers and
 CSP, body caps, quotas and write limits, streaming-only uploads with zip caps, account
@@ -249,13 +259,17 @@ also fix `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle; Type
 1. **Stage 5, docs and 1.0** (started). Done: Docker-first README (95 lines) with ten
    guides in `docs/guides/`, `CONTRIBUTING.md`, `SECURITY.md`, `.nvmrc`; in-app `/help` and
    `/about` (version from `package.json`, Help link in the account menu), fact-checked
-   against the tracking code, with `e2e/help-about.spec.ts`. Not verified: the Caddy and
+   against the tracking code; `/privacy` and `/terms` (signed-out pages, text follows the
+   mode, each privacy statement checked against the code; a change to what the app stores
+   or sends must be mirrored there); the build guide link (`MAKEGOOD_GUIDE_URL`, MakeGood's
+   PDF on Google Drive; `MAKEGOOD_MODEL_URL` is the MakerWorld page); process docs moved to
+   `docs/dev/`; landing navigation (quick row, build buttons on board cards, whole-card
+   Builds list). Specs: `help-about`, `legal`, `landing`. Not verified: the Caddy and
    Traefik sections against real proxies; the quick start run by a stranger (the image is
    still private); arm64. Left: README screenshots (phone Now card, plate arranger, 3D
-   designer, printer card), privacy and terms pages (maintainer's text), `engines`, name and
-   version in `package.json` and `/api/health`, user-facing changelog, moving agent notes
-   out of the public docs path (maintainer's call), `v1.0.0`, e2e gating the image, an e2e
-   run with a kit pack installed, Unraid template (+ Community Apps), repo public.
+   designer, printer card), `engines`, name and version in `package.json` and
+   `/api/health`, user-facing changelog, `v1.0.0`, e2e gating the image, an e2e run with a
+   kit pack installed, Unraid template (+ Community Apps), repo public.
 2. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
    plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),
    Prusa Link and Duet adapters; printer supervisor live test.

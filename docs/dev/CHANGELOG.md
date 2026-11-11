@@ -2,7 +2,7 @@
 
 Append-only history, newest first. "rN" is the Nth deploy to the maintainer's test copy.
 Nobody needs to read this to work; current behaviour is in `docs/architecture.md`, current
-state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, why, commit).
+state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, why, commit).
 
 ## 2026-11
 
@@ -49,7 +49,7 @@ state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, wh
 - **r33** (780cd6f): Palettes becomes its own tab; Schoolhouse brand chip; link sweep
   (action links → `.btn.go`/`.btn.back`/`.btn.ghost`/`.pill-link`, `.linkbtn` removed).
 - **r31-r32** (24ce2b2, ef930bb): design studio redesign from the UX audit
-  (`docs/archive/ux-audit-design-studio-2026-11.md`): two-pane desktop, pinned phone stage,
+  (`docs/dev/archive/ux-audit-design-studio-2026-11.md`): two-pane desktop, pinned phone stage,
   picker in pane, part chip, DesignActions.
 - **r30** (a1a31e1): filament supplement (Schoolhouse Spools, missing Overture TPU 95A).
   SpoolmanDB upstream PR parked (needs measured spool weights).

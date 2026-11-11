@@ -14,7 +14,7 @@ each machine's untracked `CLAUDE.local.md`, whose shape is `CLAUDE.local.example
 Both push to the same GitHub repo. **At session start:** `git fetch`; if `main` and
 `origin/main` differ, or you're on a branch, say so to the maintainer before working. **At
 session end:** everything committed; push with the maintainer's OK so the other machine
-picks up from `docs/STATUS.md`.
+picks up from `docs/dev/STATUS.md`.
 
 Commit identity on every machine: the GitHub noreply address in `CLAUDE.local.md`
 (`git config user.name`/`user.email`, global or per repo), never a personal email: the repo becomes public.
@@ -118,7 +118,7 @@ The exact commands (container name, ports, mounts, env file) are in the Unraid
 6. **Rollback:** stop and remove, tag the previous `:rNN` as `:test`, run again. If a
    migration ran, first restore `tmt-backup-pre-rNN.db` over `tmt.db` while stopped, and
    move aside any `tmt.db-wal` / `tmt.db-shm`.
-7. Add the deploy to `docs/CHANGELOG.md` as `rNN`; tell the maintainer what to check on
+7. Add the deploy to `docs/dev/CHANGELOG.md` as `rNN`; tell the maintainer what to check on
    their phone.
 
 Recurring maintainer steps: print geometry on the test copy is imported with

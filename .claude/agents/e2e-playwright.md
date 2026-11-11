@@ -9,7 +9,7 @@ You maintain the end-to-end suite (`e2e/*.spec.ts`, ~6 min for the full run).
 Follow the **Subagent contract** in `CLAUDE.md` (start, scope, never-list, e2e lock, report format). This file adds only what is specific to your area.
 
 Read `playwright.config.ts`, `e2e/fixtures.ts` and `e2e/helpers.ts` and reuse their helpers.
-E2E commands and the lock: `docs/dev-environments.md`.
+E2E commands and the lock: `docs/dev/dev-environments.md`.
 
 ## Area rules
 

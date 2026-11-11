@@ -1,6 +1,6 @@
 # Design studio UX audit (TMT Build Tracker)
 
-> **Archived 2026-11-10.** Historical record of the r31-r33 redesign. Approved decisions are in `docs/STATUS.md` (Decisions); open findings (M6, L1-L4) are listed there. The screenshots referenced below are gone.
+> **Archived 2026-11-10.** Historical record of the r31-r33 redesign. Approved decisions are in `docs/dev/STATUS.md` (Decisions); open findings (M6, L1-L4) are listed there. The screenshots referenced below are gone.
 
 > Snapshot of the 2026-11-09 audit (before r31). Line numbers and screenshots refer to that state; most findings
 > are implemented (see STATUS "Design studio redesign and mobile fixes"). Open: M6 Options placement, L1-L4 a11y.

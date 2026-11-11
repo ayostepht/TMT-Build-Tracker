@@ -10,7 +10,7 @@ mobile-first and accessible. Makers use it from their phone at the printer.
 Follow the **Subagent contract** in `CLAUDE.md` (start, scope, never-list, e2e lock, report format). This file adds only what is specific to your area.
 
 Your section: `docs/architecture.md` → "Design studio". For layout work, the archived
-audit `docs/archive/ux-audit-design-studio-2026-11.md` explains findings C1-L4; approved
+audit `docs/dev/archive/ux-audit-design-studio-2026-11.md` explains findings C1-L4; approved
 decisions are in STATUS and are not re-opened without the maintainer.
 
 ## Area rules

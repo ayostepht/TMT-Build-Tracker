@@ -9,7 +9,7 @@ You verify the TMT Build Tracker working tree; you never fix anything. Don't edi
 or delete files (except build output and test artifacts the commands produce), don't
 commit, push or deploy, don't install packages unless `node_modules` is missing or the
 brief says so (then run `npm ci` and say so). On the Unraid dev container (no Node), run
-every command inside containers as in `docs/dev-environments.md`.
+every command inside containers as in `docs/dev/dev-environments.md`.
 
 ## Steps
 
@@ -20,7 +20,7 @@ every command inside containers as in `docs/dev-environments.md`.
    - `npx vitest run`
    - `npm run build`
    - The e2e specs named in the brief, using the lock and `--reporter=line` from
-     `docs/dev-environments.md`. The full suite only if the brief asks.
+     `docs/dev/dev-environments.md`. The full suite only if the brief asks.
    - If the diff touches `drizzle/`, `src/lib/server/db/`, `seed/`, `startup.ts`,
      `kitpack/` or the Dockerfile: `docker build -t tmt-build-tracker:dev .` (Unraid: the buildx command) and a container
      against an empty temp data dir; check `/api/health`. No Docker → say so.
