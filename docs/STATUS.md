@@ -20,7 +20,10 @@ done. Keep it under ~150 lines.
    toggle and the "rotated N°" badge (need print geometry), the Now card while printing,
    printer badges other than "Printing", toasts over dialogs on a phone; the old tab URLs
    are 404s and `/print#plates` still moves on to `/files#plates`.
-3. Then Stage 5 from Next steps (docs work can start on the Mac while Unraid does 1).
+3. **Stage 5 is in progress** (see Next steps 2 for what is done and left). Next slices:
+   README screenshots (need a seeded instance: Unraid, after r44), `engines` in
+   `package.json` and version in `/api/health` (after the dependency move lands), user-facing
+   changelog, Unraid Community Apps template.
 4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
    (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
    test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
@@ -57,6 +60,13 @@ Reference result: Elegoo Centauri Carbon (256 × 256, cutter keep-out, pack 1.0.
 plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced file.
 
 ## Waiting on the maintainer
+
+- (2026-11-11) Stage 5: supply the privacy and terms text; say whether the agent and
+  machine notes (`CLAUDE.md`, `docs/dev-environments.md`, `.claude/agents/`) should move out
+  of the public docs path and where to; confirm `github.com/ayostepht/TMT-Build-Tracker` and
+  the `ghcr.io/ayostepht/...` image as the final public addresses; confirm the MakeGood
+  guide URL (`src/lib/makegood.ts`, today the same as the model page); read `SECURITY.md`
+  ("acknowledgement within a few days", loopback printer targets named as in scope).
 
 - (2026-11-11) Keep or delete the GitHub release asset for kit pack 1.0.0 (no longer baked
   into the image)? (The 21-plate re-check after the re-orientation removal passed on r42.)
@@ -239,9 +249,16 @@ package server): re-run before reading it as a code failure.
    purpose (`teams.ts`: 40 chars, fallback `chapter`; `templates/fork.ts`: 30, `kit`). Open: squash migrations (needs a journal reset on the test copy; would also fix
    `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision);
    TypeScript 7 (Dependabot PR #11 fails check: a deliberate upgrade).
-2. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
-   CONTRIBUTING/SECURITY, `v1.0.0`, e2e gating the image, Unraid template (+ Community
-   Apps), repo public.
+2. **Stage 5, docs and 1.0** (started). Done: Docker-first README (95 lines) with ten
+   guides in `docs/guides/`, `CONTRIBUTING.md`, `SECURITY.md`, `.nvmrc`; in-app `/help` and
+   `/about` (version from `package.json`, Help link in the account menu), fact-checked
+   against the tracking code, with `e2e/help-about.spec.ts`. Not verified: the Caddy and
+   Traefik sections against real proxies; the quick start run by a stranger (the image is
+   still private); arm64. Left: README screenshots (phone Now card, plate arranger, 3D
+   designer, printer card), privacy and terms pages (maintainer's text), `engines`, name and
+   version in `package.json` and `/api/health`, user-facing changelog, moving agent notes
+   out of the public docs path (maintainer's call), `v1.0.0`, e2e gating the image, an e2e
+   run with a kit pack installed, Unraid template (+ Community Apps), repo public.
 3. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
    plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),
    Prusa Link and Duet adapters; printer supervisor live test.

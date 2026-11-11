@@ -55,7 +55,7 @@ docker run --rm -e NPM_CONFIG_UPDATE_NOTIFIER=false -v <HOST_REPO>:/app -w /app 
 
 # e2e (one or more specs; drop the spec for the full ~6 min suite)
 docker run --rm --name tmt-e2e -e NPM_CONFIG_UPDATE_NOTIFIER=false -v <HOST_REPO>:/app -w /app \
-  mcr.microsoft.com/playwright:v1.64.0-noble \
+  mcr.microsoft.com/playwright:v1.65.0-noble \
   sh -c 'flock /app/node_modules/.e2e.lock npx -y -p node@22 sh -c "npm run test:e2e -- e2e/palettes.spec.ts --reporter=line"'
 
 # image build (host Docker has no buildx; the Dockerfile needs BuildKit)

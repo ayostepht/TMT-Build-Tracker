@@ -432,6 +432,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - `AppMark.svelte` is the app mark (`static/icons/icon.svg`; PNGs regenerate from it) in the
   top bar and signed-out headers. Sign-out, "Sign in again" and account deletion call
   `clearPrivateCaches()` (`client/pwa.ts`).
+- **Help and About**: `(app)/help` (Getting started, Printing day, Glossary, FAQ; in-page
+  nav `help-nav`) and `(app)/about` (MakeGood credit, license, GitHub issues link) are static,
+  signed-in pages with no data loads. About imports `version` from `package.json`. The
+  account menu carries the Help link (`help-link`); About is reached from Help. Help quotes
+  UI labels and tracking behaviour verbatim: when a label or a rule in `domain/actions.ts`,
+  `pace.ts` or `NowCard` changes, re-check the copy. Spec: `e2e/help-about.spec.ts`.
 - **Landing**: `/` redirects to the chapter page (`teams/[slug]`), which shows
   `landing/LandingBoard` (Now printing and Next up for up to 3 builds; one `BuildCtx` per
   build via `CtxScope`; polls every 20 s, no per-build SSE; cap `LANDING_BUILD_CAP` = 6; `nextUpPlate` in
@@ -441,6 +447,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Release and deployment (`release-pwa`)
 
+- Docs for operators: `README.md` holds only the intro, the Docker quick start and a guide
+  list; everything else lives in `docs/guides/*.md` (unraid, reverse-proxy, sso,
+  backup-and-upgrade, printers, environment, troubleshooting, phone-install, site-admin,
+  slicer-export). A new env variable goes in `guides/environment.md`. Contributor docs:
+  `CONTRIBUTING.md`, `SECURITY.md`, `.nvmrc` (22).
 - Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`). The preload
   strips any inbound `x-tmt-forwarded-original` and sets it only when the client itself sent
   a forwarding header; `client-ip.ts` `shouldWarnUndeclaredProxy` reads only that marker for

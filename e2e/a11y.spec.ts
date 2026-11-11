@@ -74,7 +74,9 @@ for (const [width, height] of [
 				'/designs',
 				'/studio',
 				'/account',
-				'/onboarding'
+				'/onboarding',
+				'/help',
+				'/about'
 			]) {
 				await page.goto(path);
 				await page.waitForLoadState('networkidle');

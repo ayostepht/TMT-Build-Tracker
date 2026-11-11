@@ -332,6 +332,7 @@
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 							<a href={resolve('/(app)/admin/templates') + fromQuery}>Kit admin</a>
 						{/if}
+						<a href={resolve('/(app)/help')} data-testid="help-link">Help</a>
 						<a href={resolve('/(app)/account')} data-testid="account-link">Account</a>
 						<button type="button" onclick={signOut}>Sign out</button>
 					</div>

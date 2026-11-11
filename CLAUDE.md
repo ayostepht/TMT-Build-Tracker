@@ -13,6 +13,7 @@ mobility trainer) chairs: teams ("chapters") plan, print, assemble and hand off 
 | `docs/dev-environments.md` | Machines, setup, e2e locking, deploy outline | Orchestrator on a new machine |
 | `CLAUDE.local.md` (untracked) | This machine's private values: test copy, printer, deploy specifics | Orchestrator |
 | `docs/CHANGELOG.md` | Deploy history | Append only |
+| `README.md`, `docs/guides/*.md` | Install and operator guides (public-facing) | Makers; `release-pwa` |
 | `.claude/agents/*.md` | Specialist subagents | Claude Code |
 
 ## Main session: you are the orchestrator
