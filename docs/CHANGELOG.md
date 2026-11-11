@@ -6,6 +6,10 @@ state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, wh
 
 ## 2026-11
 
+- **r41** (7e05586, PR #2): Elegoo printers can connect through an OctoEverywhere shared
+  link (encrypted secret) instead of the LAN address, so TMT doesn't use one of the
+  Centauri Carbon's limited direct connections; status and camera go via OctoEverywhere,
+  no Cmd 386 on that path. No schema change, no rehearsal.
 - **r40** (a9bedcb, PR #1): a plate's filament grams go only to its parts' roles (the
   sliced file put plate 15, accent PETG, on the TPU black slot: 423 g "used" with no TPU
   printed); Spoolman deduction uses the same rule. No schema change, no rehearsal.
