@@ -17,7 +17,7 @@ session end:** everything committed; push with the maintainer's OK so the other 
 picks up from `docs/STATUS.md`.
 
 Commit identity on every machine: the GitHub noreply address in `CLAUDE.local.md`
-(`git config user.email` per repo), never a personal email: the repo becomes public.
+(`git config user.name`/`user.email`, global or per repo), never a personal email: the repo becomes public.
 
 Claude Code project memory is per machine and per path, so it does not travel. Anything
 durable belongs in this repo's docs, not in memory.
@@ -46,8 +46,11 @@ subsection once done.
 ## Running tools on the Unraid dev container
 
 The dev container has no Node. Run tooling in throwaway containers through the Docker
-socket, mounting the repo by its **host** path (`/workspace` inside = the host path in
-`CLAUDE.local.md`); inside them the repo is `/app`.
+socket, mounting the repo by its **host** path; inside them the repo is `/app`.
+
+- `<HOST_REPO>` = `/mnt/user/appdata/claude-unraid-manager/workspace/TMT-Build-Tracker`
+  (`/workspace` in the dev container = `/mnt/user/appdata/claude-unraid-manager/workspace`)
+- `<MAKEGOOD_FILES>` = `/mnt/user/appdata/tmt-build-tracker/makegood_files`
 
 ```bash
 # check, lint, unit tests
@@ -106,13 +109,14 @@ The exact commands (container name, ports, mounts, env file) are in the Unraid
 
 1. `verifier` gate green on the commit; commit with the STATUS/CHANGELOG update.
 2. Build the image as `tmt-build-tracker:rNN` (above). Old `rNN` tags are kept for rollback.
-3. **Rehearse** when schema, seed or startup change: copy the latest backup into a
-   `migrate-rehearsal/rNN/` folder in the test copy's data dir, start a throwaway
-   container `tmt-rehearsal-rNN` from the new image on it, wait for `/api/health`, read
-   the logs, compare row counts with the live DB, stop and remove it.
-4. **Back up** the live DB with better-sqlite3 `.backup()` inside the running container to
+3. **Back up** the live DB with better-sqlite3 `.backup()` inside the running container to
    `tmt-backup-pre-rNN.db` in its data dir (about 4 MB each; prune old ones with the
    maintainer's OK).
+4. **Rehearse** when schema, seed or startup change, on the backup you just made: copy it
+   into a `migrate-rehearsal/rNN/` folder in the test copy's data dir, start a throwaway
+   container `tmt-rehearsal-rNN` from the new image on it, wait for `/api/health`, read
+   the logs, compare row counts with the live DB, stop and remove it. Problems → stop,
+   don't swap.
 5. **Swap:** stop and remove the container, tag `:rNN` as `:test`, `docker run` it with
    the same flags; poll `/api/health` until 200 (2 s interval, 60 s max).
 6. **Rollback:** stop and remove, tag the previous `:rNN` as `:test`, run again. If a

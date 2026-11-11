@@ -26,6 +26,8 @@ Your section: `docs/architecture.md` → "Kit and startup"; also `docs/kit-pack.
 - `npm run check`, `npm run lint`, `npx vitest run` (`kitpack/*.test.ts`,
   `models/*.test.ts`, seed and startup tests; `*.real.test.ts` need `KITPACK_DIR`),
   `npm run build`.
-- Schema, seed or startup changes: rehearse the migration on a copy of test data (path in
-  `CLAUDE.local.md`), then `docker build -t tmt-build-tracker:dev .` and a container
-  against an empty data directory (`/api/health`, first-start seeding). No Docker → say so.
+- Schema, seed or startup changes: build the image (`docker build -t tmt-build-tracker:dev .`,
+  or on Unraid the buildx command in `docs/dev-environments.md`) and run a throwaway
+  `tmt-*` container against an empty temp data directory (`/api/health`, first-start
+  seeding), then remove it. No Docker → say so. Don't rehearse on test data yourself: say
+  "needs migration rehearsal" in the report; the orchestrator does it at deploy time.

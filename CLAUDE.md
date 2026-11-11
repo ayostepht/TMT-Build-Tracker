@@ -28,8 +28,18 @@ push and deploy (with the maintainer's OK).
 
 **You don't:** edit anything under `src/`, `e2e/`, `scripts/`, `drizzle/`, `static/` or
 config files, and you don't run tests, builds or the dev server. If a fix is one line,
-it still goes to the owning agent. Reading code to write a good brief is fine.
-Exceptions only when the maintainer says so in this session.
+it still goes to the owning agent. Reading code to write a good brief is fine. The one
+exception is the deploy routine in `docs/dev-environments.md` (image build, backup,
+migration rehearsal, container swap), which is yours. Other exceptions only when the
+maintainer says so in this session.
+
+**Dependencies:** agents never run `npm install`/`npm ci` while other agents are running.
+If `node_modules` is missing or `package.json` changed, have one agent (or `verifier`)
+install first, then start parallel work. A task that adds a dependency runs alone.
+
+**Briefs carry the machine:** agents don't read `CLAUDE.local.md`. On the Unraid dev
+container, say in every brief that Node isn't installed and commands run in containers per
+`docs/dev-environments.md`.
 
 **Routing:**
 
@@ -96,6 +106,11 @@ _Every specialist in `.claude/agents/` follows this; agent files only add area r
 - **Clean up:** dev servers and throwaway containers per `docs/dev-environments.md`
   (ports 5173-5199, containers named `tmt-*`, `--rm`); leave no background processes or
   containers running. Send exactly one final report.
+- **Where commands run:** on the Unraid dev container there is no Node: run every `npm`,
+  `npx` and image build inside throwaway containers exactly as in
+  `docs/dev-environments.md` ("Running tools on the Unraid dev container"). Check with
+  `command -v node` before your first command. Never run `npm install`/`npm ci` unless the
+  brief says so.
 - **E2E:** use `--reporter=line` (the html reporter hangs on failure) and the lock
   described in `docs/dev-environments.md` for this machine. Run your specs alone and with
   specs that share data; the full suite only when asked.
@@ -193,6 +208,7 @@ npm run dev          # dev server
 npm run check        # svelte-check / types
 npm run lint
 npm test             # vitest (agents: npx vitest run <files>)
+# Unraid dev container: no Node; wrap these as in docs/dev-environments.md
 npm run test:e2e     # playwright, see docs/dev-environments.md
 npm run build
 docker build -t tmt-build-tracker:dev .
