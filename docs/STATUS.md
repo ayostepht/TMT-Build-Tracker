@@ -1,8 +1,9 @@
 # Project status
 
-_Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`. Test copy is
-on r42, 1907861: Stages 1-3 and the Stage 4 removals; 39023ab, Stage 4 wave 2, is not
-deployed yet)._
+_Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`, eba0e72. Test
+copy: r42 = 1907861; r43 (Stage 4 wave 2, 39023ab or later) was handed to the Unraid agent,
+check `docs/CHANGELOG.md`. A third Stage 4 wave was IN FLIGHT and uncommitted when the
+session's context was reset: see Pick up here)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -11,11 +12,36 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. Ask the maintainer: deploy 39023ab (Stage 4 wave 2) as r43; tidy the remaining Dependabot PRs; keep or delete the kit pack
-   1.0.0 release asset.
-2. Continue Stage 4 from Next steps (second design-system wave; dependency moves; the
-   migration squash is parked); leftovers are under Open items.
-3. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
+1. **Finish the in-flight Stage 4 wave 3** (started 2026-11-11, context reset mid-wave).
+   The maintainer approved the new shared styles ("They look good!"), so six agents were
+   dispatched to make the whole app use `ds-seg` / `ds-badge` / `ds-modal` / `ds-card`
+   instead of the deprecated globals in `app.css`. Their edits may be complete, partial or
+   absent in the working tree: run `git status` and `git diff --stat` first. The brief they
+   shared is saved (untracked) at `.playwright-mcp/stage4-wave3-common.md`. Scopes:
+   build-state (`PartRow` status control and `LogRunSheet` results → `ds-seg`; log and
+   Filter sheets → `ds-modal`; `.chip`, `.set`, `.now-card`); plates-3mf (plate view toggle,
+   `.plate-card`, upload sheet and `BedPicker` dialog → native `<dialog class="ds-modal">`
+   if feasible; an arrangement with an invalid item becomes `stale`); app-shell (`.tpl`,
+   `.set`, `.phase`, `.verdict`, `GuideViewer`, the shared `design/share/Dialog.svelte` and
+   `AskDialog` → `ds-modal`, `.crumb`/`.mini`, `VariantChooser` `.group`); printers (status
+   pills → `ds-badge`, camera dialog head); design-studio-ui (additive `app.css` support
+   such as a compact `ds-seg`, `.card`/`ds-card` unified, a leak-guard unit test, a removal
+   plan for the deprecated globals: NOT deleted yet); release-pwa (false "reverse proxy"
+   startup hint found on r42: base it on headers the client sent; `backPath` host check and
+   a wrong comment in `write-rate.ts`).
+   To finish: if agents' reports are lost, re-dispatch each owner with "review the
+   uncommitted changes in your files against the saved brief, complete them, run your
+   checks, report"; then `verifier` (full gate) and `security-reviewer` (only
+   `write-rate.ts`, `client-ip.ts`, `proxy-origin.mjs`, dialogs); commit; push (standing
+   OK to push verified work); then dispatch design-studio-ui to delete the deprecated
+   globals from `app.css` once nothing uses them, gate again, push.
+2. Remaining Stage 4 after that: `three`/`pdfjs-dist` to devDependencies (a dependency
+   change: runs alone); legacy redirects; duplicate helpers. Then Stage 5 from Next steps.
+3. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
+   (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
+   test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
+   public (then turn on branch protection at once; Dependabot is otherwise tidy).
+4. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
 
