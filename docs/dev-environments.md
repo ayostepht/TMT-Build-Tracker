@@ -48,9 +48,11 @@ subsection once done.
 The dev container has no Node. Run tooling in throwaway containers through the Docker
 socket, mounting the repo by its **host** path; inside them the repo is `/app`.
 
-- `<HOST_REPO>` = `/mnt/user/appdata/claude-unraid-manager/workspace/TMT-Build-Tracker`
-  (`/workspace` in the dev container = `/mnt/user/appdata/claude-unraid-manager/workspace`)
-- `<MAKEGOOD_FILES>` = `/mnt/user/appdata/tmt-build-tracker/makegood_files`
+- `<HOST_REPO>`: look it up (read-only) with
+  `docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}'`
+  and append `/TMT-Build-Tracker`.
+- `<MAKEGOOD_FILES>`: only for real-file tests; the orchestrator puts the path (from
+  `CLAUDE.local.md`) in the brief.
 
 ```bash
 # check, lint, unit tests
