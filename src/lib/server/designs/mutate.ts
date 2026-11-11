@@ -12,9 +12,8 @@ import { mutateBuild } from '../builds/actions';
 import type { Db } from '../db';
 import { buildFilaments, builds, colorDesigns, templateFilamentRoles } from '../db/schema';
 import { canSeeDesign } from './access';
+import { isObj, type Obj } from '#lib/domain/guards.ts';
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 function bad(msg: string): never {
 	throw new ApiError(400, msg);
 }

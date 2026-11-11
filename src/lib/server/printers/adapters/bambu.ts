@@ -1,3 +1,4 @@
+import { isObj, type Obj } from '#lib/domain/guards.ts';
 /**
  * Bambu Lab LAN mode: MQTT over TLS on 8883, user `bblp`, password = LAN access code, topic
  * `device/<serial>/report`. The only message we publish is the `pushall` info request that
@@ -24,9 +25,6 @@ import {
 	type AdapterHandle,
 	type PrinterConfig
 } from '../types';
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 export function normalizeBambu(p: Obj): PrinterStatus {
 	const g = typeof p.gcode_state === 'string' ? p.gcode_state.toUpperCase() : '';

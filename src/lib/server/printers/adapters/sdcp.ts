@@ -1,3 +1,4 @@
+import { isObj, type Obj } from '#lib/domain/guards.ts';
 /**
  * Elegoo SDCP (Smart Device Control Protocol v3) over WebSocket, read-only except for one
  * maintainer-approved write: Cmd 386 `{ Enable: 1 }` (camera on; port 3031 answers
@@ -144,9 +145,6 @@ export async function enableSdcpCamera(
 
 const POLL_MS = 4000;
 const STALE_MS = 20000;
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const PREP = new Set([1, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
 

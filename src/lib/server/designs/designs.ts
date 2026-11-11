@@ -31,6 +31,7 @@ import {
 	writeSnapshot
 } from './files';
 import type { DesignRole } from './mutate';
+import { isObj } from '#lib/domain/guards.ts';
 
 export interface DesignSummary {
 	id: string;
@@ -55,8 +56,6 @@ export interface DesignDetail extends DesignSummary {
 	parts: { slug: string; name: string; section: string; role: string }[];
 }
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 function bad(msg: string): never {
 	throw new ApiError(400, msg);
 }

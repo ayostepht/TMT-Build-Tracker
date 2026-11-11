@@ -47,6 +47,8 @@ Sections match the subagents in `.claude/agents/`:
 
 ## Build state (`build-state`)
 
+- `domain/guards.ts`: the one `isObj` / `Obj` plain-object guard; server, printer, kit pack
+  and Spoolman modules import it instead of defining their own.
 - **Mutations:** `mutateBuild` (users) / `mutateBuildSystem` (printer-driven) in
   `src/lib/server/builds/actions.ts`: access check → domain function → patches + `activity`
   row in one transaction → SSE emit. State rules live in `src/lib/domain/actions.ts` and

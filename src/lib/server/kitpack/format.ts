@@ -1,3 +1,4 @@
+import { isObj } from '#lib/domain/guards.ts';
 /**
  * Kit pack format (`tmt-kitpack-1`): a zip (`.kitpack`) holding the converted files of one
  * template, so a fresh install has the standard kit without uploading anything. See
@@ -82,9 +83,6 @@ const VERSION = /^[0-9]+(\.[0-9]+){0,3}$/;
 export function isSafePackPath(p: string): boolean {
 	return SAFE_PATH.test(p) && !p.split('/').some((s) => s === '..' || s === '' || s === '.');
 }
-
-const isObj = (v: unknown): v is Record<string, unknown> =>
-	typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Compare dotted numeric versions ("1.2.0" vs "1.10"); missing segments count as 0. */
 export function compareVersions(a: string, b: string): number {

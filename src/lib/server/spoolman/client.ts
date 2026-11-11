@@ -1,3 +1,4 @@
+import { isObj } from '#lib/domain/guards.ts';
 /**
  * Server-side client for Spoolman's REST API (`/api/v1`). Short timeouts, readable errors.
  * Every request goes through the outbound guard (`printers/outbound.ts`): refused in public mode,
@@ -53,8 +54,6 @@ export function normalizeSpoolmanUrl(raw: string): string {
 	return `${u.origin}${path}`;
 }
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const s = (v: unknown) => (typeof v === 'string' && v ? v : null);
 

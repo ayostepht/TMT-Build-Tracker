@@ -18,7 +18,9 @@ done. Keep it under ~150 lines.
    "rotated N°" badge (need print geometry), the Now card while printing, printer badges
    other than "Printing", toasts over dialogs on a phone.
 3. Remaining Stage 4 after that: `three`/`pdfjs-dist` to devDependencies (a dependency
-   change: runs alone); legacy redirects; duplicate helpers. Then Stage 5 from Next steps.
+   change: runs alone, on Unraid for the image build); legacy redirects and
+   `src/lib/index.ts` (maintainer asked 2026-11-11: delete or keep until 1.0). Then Stage 5
+   from Next steps.
 4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
    (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
    test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
@@ -234,8 +236,10 @@ package server): re-run before reading it as a code failure.
    stored arrangement is treated as stale (no more 500 on export), the false reverse-proxy
    startup hint fixed, the deprecated globals deleted from `app.css` (373 lines; kept on
    purpose: `.tiles`, `.sw`, `.mini` via `Swatch`, `.spools`, `.clock`, `.tpl-list`, the
-   other `.now-*`). Left: `three`/`pdfjs-dist` to devDependencies (runs alone); legacy redirects; duplicate
-   helpers. Open: squash migrations (needs a journal reset on the test copy; would also fix
+   other `.now-*`). One shared `isObj` (`domain/guards.ts`). Left: `three`/`pdfjs-dist` to devDependencies
+   (runs alone, needs an image build: do it on Unraid); legacy redirects and
+   `src/lib/index.ts` (deletions: maintainer's call). The two `slugify` copies stay on
+   purpose (`teams.ts`: 40 chars, fallback `chapter`; `templates/fork.ts`: 30, `kit`). Open: squash migrations (needs a journal reset on the test copy; would also fix
    `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision);
    TypeScript 7 (Dependabot PR #11 fails check: a deliberate upgrade).
 2. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,

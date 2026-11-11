@@ -1,3 +1,4 @@
+import { isObj } from '#lib/domain/guards.ts';
 /**
  * Where a printer's camera is: the team's override, the printer type's default, or what the
  * printer itself reports (Moonraker webcam list, OctoPrint settings). Every URL that comes out
@@ -53,8 +54,6 @@ export function toCameraTarget(r: typeof printers.$inferSelect): CameraTarget {
 	};
 }
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 
 const hostPart = (h: string) => (h.includes(':') && !h.startsWith('[') ? `[${h}]` : h);

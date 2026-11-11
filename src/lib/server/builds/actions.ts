@@ -41,6 +41,7 @@ import { parsePrinter } from '#lib/printers/printer.ts';
 import { isPersonalOrg } from '../teams';
 import { autoRearrangeBuild, REARRANGE_KINDS } from './arrange-plan';
 import { applyPatches, loadBuildView } from './view';
+import { isObj, type Obj } from '#lib/domain/guards.ts';
 
 interface Outcome {
 	kind: string;
@@ -48,11 +49,6 @@ interface Outcome {
 	patches?: PartPatch[];
 }
 
-type Obj = Record<string, unknown>;
-
-function isObj(v: unknown): v is Obj {
-	return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
 function bad(msg: string): never {
 	throw new ApiError(400, msg);
 }

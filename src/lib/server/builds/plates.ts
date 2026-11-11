@@ -1,3 +1,4 @@
+import { isObj, type Obj } from '#lib/domain/guards.ts';
 /**
  * Plate layouts and slicer uploads for a build (Milestone 5).
  *
@@ -57,8 +58,6 @@ import { loadBuildView } from './view';
 import { clearProfiles, learnFromSummary, storeProfiles } from './part-profiles';
 import { ensureSilhouettes } from '../print-geometry/store';
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const bad = (m: string): never => {
 	throw new ApiError(400, m);
 };

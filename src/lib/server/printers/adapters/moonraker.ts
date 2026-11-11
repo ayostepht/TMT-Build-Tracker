@@ -1,3 +1,4 @@
+import { isObj, type Obj } from '#lib/domain/guards.ts';
 /** Klipper via Moonraker: WebSocket JSON-RPC with `printer.objects.subscribe`. Read-only. */
 import type { PrinterStatus } from '#lib/printers/status.ts';
 import {
@@ -23,9 +24,6 @@ import {
 	type AdapterHandle,
 	type PrinterConfig
 } from '../types';
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Merge a (partial) status update into the accumulated object tree. */
 export function mergeStatus(into: Obj, patch: Obj): Obj {

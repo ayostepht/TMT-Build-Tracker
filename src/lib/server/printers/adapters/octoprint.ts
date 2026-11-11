@@ -1,3 +1,4 @@
+import { isObj, type Obj } from '#lib/domain/guards.ts';
 /** OctoPrint over REST polling (`/api/job`, `/api/printer`) with an X-Api-Key. Read-only. */
 import type { PrinterStatus } from '#lib/printers/status.ts';
 import { cleanHost } from '#lib/printers/address.ts';
@@ -12,9 +13,6 @@ import {
 	safeText
 } from '../outbound';
 import { num, safeError, StatusSubject, type AdapterHandle, type PrinterConfig } from '../types';
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 export function normalizeOctoprint(job: Obj, printer: Obj | null): PrinterStatus {
 	const stateText = typeof job.state === 'string' ? job.state : '';
