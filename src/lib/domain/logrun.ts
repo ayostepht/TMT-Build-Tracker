@@ -98,3 +98,16 @@ export function partRuns(view: BuildView, slug: string): PrintRun[] {
 		r.plateNumber == null ? r.partSlug === slug : runTargets(view, r).includes(slug)
 	);
 }
+
+/**
+ * Grams to prefill for a print that stopped part-way: the plate/run grams scaled by the
+ * printer-reported progress (0-100), rounded. Null when either is unknown or it rounds to 0.
+ */
+export function progressGrams(
+	total: number | null | undefined,
+	progress: number | null | undefined
+): number | null {
+	if (!total || total <= 0 || progress == null || !(progress > 0)) return null;
+	const g = Math.round((total * Math.min(100, progress)) / 100);
+	return g > 0 ? g : null;
+}

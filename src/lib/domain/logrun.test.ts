@@ -3,6 +3,7 @@ import {
 	elapsedSeconds,
 	hoursFromSeconds,
 	partRuns,
+	progressGrams,
 	runOutcomeSummary,
 	snapshotParts
 } from './logrun.ts';
@@ -98,5 +99,19 @@ describe('partRuns', () => {
 		const r2 = run({ partSlug: a });
 		const r3 = run({ plateNumber: multi.number, partSlugs: [a] });
 		expect(partRuns(withRuns([r1, r2, r3]), a)).toEqual([r1, r2, r3]);
+	});
+});
+
+describe('progressGrams', () => {
+	it('scales the grams by progress and rounds', () => {
+		expect(progressGrams(41, 40)).toBe(16);
+		expect(progressGrams(140, 100)).toBe(140);
+		expect(progressGrams(140, 250)).toBe(140);
+	});
+	it('is null when unknown or zero', () => {
+		expect(progressGrams(null, 40)).toBeNull();
+		expect(progressGrams(41, null)).toBeNull();
+		expect(progressGrams(41, 0)).toBeNull();
+		expect(progressGrams(10, 2)).toBeNull(); // rounds to 0
 	});
 });

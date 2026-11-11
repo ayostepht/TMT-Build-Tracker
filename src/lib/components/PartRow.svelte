@@ -3,7 +3,7 @@
 	import { fmt, plateOf } from '#lib/domain/index.ts';
 	import { partRuns } from '#lib/domain/logrun.ts';
 	import { runTargets } from '#lib/domain/actions.ts';
-	import { setPartStatus, updatePart, deleteRun } from '#lib/client/api.ts';
+	import { setPartStatus, updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
 	import RunTable from './RunTable.svelte';
@@ -34,16 +34,16 @@
 		return `Plate ${r.plateNumber} · ${n >= total ? 'whole plate' : `${n} of ${total} parts`}`;
 	}
 
+	// Delete goes through the edit sheet's in-app confirmation (same as the plate history and Files tab).
 	function removeRun(r: PrintRun) {
-		if (r.plateNumber != null) {
-			const n = runTargets(ctx.view, r).length;
-			const msg =
-				n > 1
-					? `This removes the print log for all ${n} parts on plate ${r.plateNumber}.`
-					: `This removes this print log entry for plate ${r.plateNumber}.`;
-			if (!confirm(msg)) return;
-		}
-		ctx.act(() => deleteRun(ctx.id, r.id));
+		editing = r;
+		deleteFirst = true;
+		editOpen = true;
+	}
+	function editRun(r: PrintRun) {
+		editing = r;
+		deleteFirst = false;
+		editOpen = true;
 	}
 	const pages = $derived(
 		part.guideRefs.map((g) => ({
@@ -65,6 +65,7 @@
 	let logOpen = $state(false);
 	let editing = $state<PrintRun | null>(null);
 	let editOpen = $state(false);
+	let deleteFirst = $state(false);
 </script>
 
 <div class="row" class:flash={focus} id="part-{part.slug}" data-s={st?.status} data-id={part.slug}>
@@ -216,7 +217,7 @@
 						canEdit={ctx.canEdit}
 						{scopeOf}
 						ondelete={removeRun}
-						onedit={(r) => ((editing = r), (editOpen = true))}
+						onedit={editRun}
 					/>
 				{:else}
 					<div class="empty">
@@ -233,7 +234,7 @@
 						startedAt={st?.status === 'Printing' ? st.startedAt : null}
 						title="Log print: {part.name}"
 					/>
-					<LogRunSheet bind:open={editOpen} editRun={editing} />
+					<LogRunSheet bind:open={editOpen} editRun={editing} {deleteFirst} />
 				{/if}
 			</div>
 		</div>

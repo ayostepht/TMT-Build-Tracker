@@ -237,6 +237,12 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			const plate = num(p.plateNumber);
 			return `${who} linked ${str(p.printer) ?? 'a printer'}'s print to ${plate !== null ? plateRef(plate) : 'a plate'}`;
 		}
+		case 'printer.job.unstarted': {
+			const pr = str(p.printer) ?? 'The printer';
+			const plate = num(p.plateNumber);
+			const target = plate !== null ? plateRef(plate) : (str(p.fileName) ?? 'a print');
+			return `${pr} ${p.result === 'failed' ? 'stopped' : 'cancelled'} ${target} before it started; nothing was logged`;
+		}
 		case 'printer.job.release': {
 			const plate = num(p.plateNumber);
 			return `${who} dismissed ${str(p.printer) ?? 'the printer'}'s stopped print${plate !== null ? ` of ${plateRef(plate)}` : ''}; its parts are no longer marked as printing`;

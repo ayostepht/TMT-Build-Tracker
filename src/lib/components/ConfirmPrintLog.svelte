@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { jobAction } from '#lib/client/api.ts';
-	import { plateRunGrams } from '#lib/domain/index.ts';
+	import { plateRunGrams, progressGrams } from '#lib/domain/index.ts';
 	import type { PrinterJobView } from '#lib/printers/status.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 
@@ -10,9 +10,13 @@
 	const ctx = getBuildCtx();
 
 	// Prefilled once from the job; the user edits from there.
+	const total = untrack(() =>
+		plateRunGrams(ctx.view, job.plateNumber ?? 0, job.partSlugs ?? undefined)
+	);
 	const init = untrack(() => ({
 		result: job.status === 'done' ? 'Success' : 'Failed',
-		grams: String(plateRunGrams(ctx.view, job.plateNumber ?? 0, job.partSlugs ?? undefined) ?? ''),
+		// A finished print used its plate's grams; one that stopped part-way only an estimate of them.
+		grams: String((job.status === 'done' ? total : progressGrams(total, job.progress)) ?? ''),
 		hours:
 			job.startedAt && job.finishedAt
 				? String(
@@ -77,8 +81,12 @@
 					step="1"
 					inputmode="decimal"
 					bind:value={grams}
+					placeholder={job.status === 'done' ? 'g' : 'optional'}
 					data-testid="confirm-grams"
 				/>
+				{#if job.status !== 'done' && init.grams !== ''}<small class="hint"
+						>Estimated from {Math.round(job.progress ?? 0)}% progress; edit if different.</small
+					>{/if}
 			</label>
 			<label class="field"
 				>Hours
@@ -97,7 +105,9 @@
 				class="btn"
 				type="button"
 				disabled={busy}
-				onclick={() => run(() => jobAction(job.id, { action: 'dismiss' }))}>Dismiss</button
+				data-testid="confirm-dismiss"
+				onclick={() => run(() => jobAction(job.id, { action: 'dismiss' }))}
+				>{job.status === 'done' ? 'Dismiss' : 'Don’t log'}</button
 			>
 		</div>
 		{#if err}<div class="error" role="alert" style="white-space:normal">{err}</div>{/if}
@@ -134,6 +144,10 @@
 		background: var(--paper);
 		min-width: 0;
 		font-size: 15px;
+	}
+	.hint {
+		color: var(--muted);
+		font-size: 12px;
 	}
 	.acts {
 		display: flex;

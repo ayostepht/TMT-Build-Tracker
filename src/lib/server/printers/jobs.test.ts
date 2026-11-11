@@ -17,14 +17,23 @@ import {
 	user
 } from '../db/schema';
 import { createBuild } from '../builds/create';
-import { addRun, printingAction, updatePlate } from '../builds/actions';
+import { addRun, deleteRun, printingAction, updatePlate } from '../builds/actions';
+import { filamentStats } from '#lib/domain/accounting.ts';
 import { loadBuildView } from '../builds/view';
 import { onBuildEvents } from '../builds/test-helpers';
 import { getExpected, setExpected, setOrgSettings } from '../org-settings';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { subscribePrinterEvents } from './bus';
-import { buildJobs, confirmJob, dismissJob, linkJob, pendingExpected, processStatus } from './jobs';
+import {
+	buildJobs,
+	confirmJob,
+	dismissJob,
+	expectOnPrinterJob,
+	linkJob,
+	pendingExpected,
+	processStatus
+} from './jobs';
 import { Supervisor } from './supervisor';
 import { createPrinter } from './store';
 import type { ConnectFn, StatusCallback } from './types';
@@ -493,6 +502,33 @@ describe('per-part runs (wheel rims: one color per print)', () => {
 		expect(partStatus('rims-1-4')).toBe('Printing');
 	});
 
+	it('a part whose runs are all done, set back to Printing for a job cancelled at 0%, returns to Printed', () => {
+		for (const d of ['2026-11-01', '2026-11-02'])
+			addRun(db, buildId, 'owner', {
+				plateNumber: 13,
+				partSlug: 'rims-1-4',
+				date: d,
+				result: 'Success',
+				grams: 100
+			});
+		expect(partStatus('rims-1-4')).toBe('Printed');
+		processStatus(db, printerId, printing('benchy.gcode', 0, 20, { layer: 1 }), at(5));
+		db.update(printers)
+			.set({ lastStatus: printing('benchy.gcode', 0, 20, { layer: 1 }) as never })
+			.run();
+		const id = jobs()[0].id;
+		linkJob(db, id, 'org1', 'owner', buildId, 13, ['rims-1-4']);
+		expect(partStatus('rims-1-4')).toBe('Printing');
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 0, fileName: 'benchy.gcode', layer: 1 },
+			at(8)
+		);
+		expect(jobs()[0].runId).toBe('dismissed');
+		expect(partStatus('rims-1-4')).toBe('Printed');
+	});
+
 	it('confirm logs only the chosen part too', () => {
 		updatePlate(db, buildId, 'owner', 13, { slicerByPart: { 'rims-1-4': 140, 'rims-2-3': 148 } });
 		processStatus(db, printerId, printing(FILE, 5, 300), at(5));
@@ -546,6 +582,19 @@ describe('suggestions from "Start on printer" and take-off', () => {
 		expect(getExpected(db, 'org1', printerId)).toBeNull();
 	});
 
+	it('the job event a client reloads on already carries the bound suggestion', () => {
+		const seen: { pending: number; jobId: string | null }[] = [];
+		expectOnPrinterJob(db, printerId, { buildId, plate: 2 });
+		const off = subscribePrinterEvents('org1', (e) => {
+			if (e.type !== 'job') return;
+			const p = pendingExpected(db, 'org1', buildId);
+			seen.push({ pending: p.length, jobId: p[0]?.jobId ?? null });
+		});
+		processStatus(db, printerId, printing('mystery.gcode', 5, 300), at(5));
+		off();
+		expect(seen.length).toBeGreaterThan(0);
+		expect(seen.every((x) => x.pending === 1 && x.jobId === jobs()[0].id)).toBe(true);
+	});
 	it('a suggestion never applies to a second job', () => {
 		expectPlate(2);
 		processStatus(db, printerId, printing(slicerFile, 1, 30), at(1));
@@ -584,5 +633,223 @@ describe('suggestions from "Start on printer" and take-off', () => {
 		expect(ev.length).toBeGreaterThan(0);
 		// the Overview offers it again
 		expect(buildJobs(db, buildId, 'org1').map((j) => j.id)).toEqual([jobs()[0].id]);
+	});
+});
+
+describe('cancelled or failed prints', () => {
+	const FILE = 'Plate 1 - Handle Left.gcode';
+	const filamentUsed = () =>
+		filamentStats(loadBuildView(db, buildId, 'owner')!).reduce((a, f) => a + f.used, 0);
+	const stop = (progress: number, extra: Partial<PrinterStatus> = {}, min = 20) =>
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress, fileName: FILE, ...extra },
+			at(min)
+		);
+
+	it('cancelled at 0% logs nothing and puts the parts back (auto-log on and off)', () => {
+		for (const auto of [true, false]) {
+			db.delete(printerJobs).run();
+			db.delete(activity).run();
+			setOrgSettings(db, 'org1', { autoLogPrints: auto });
+			updatePlate(db, buildId, 'owner', 1, { slicerGrams: 41 });
+			processStatus(db, printerId, printing(FILE, 0, 20, { layer: 1 }), at(1));
+			expect(partStatus('handle-left'), `auto ${auto}`).toBe('Printing');
+			stop(0, { layer: 1 }, 3);
+			expect(jobs()[0]).toMatchObject({ status: 'cancelled', runId: 'dismissed' });
+			expect(db.select().from(printRuns).all()).toHaveLength(0);
+			expect(buildJobs(db, buildId, 'org1')).toHaveLength(0);
+			expect(partStatus('handle-left')).toBe('To print');
+			expect(filamentUsed()).toBe(0);
+			const act = db
+				.select()
+				.from(activity)
+				.where(eq(activity.kind, 'printer.job.unstarted'))
+				.get()!;
+			expect(act.payload).toMatchObject({
+				plateNumber: 1,
+				result: 'cancelled',
+				by: 'Shop Centauri'
+			});
+		}
+	});
+
+	it('cancelled at 40% still asks: nothing logged until confirmed, parts stay Printing', () => {
+		setOrgSettings(db, 'org1', { autoLogPrints: true });
+		updatePlate(db, buildId, 'owner', 1, { slicerGrams: 41 });
+		processStatus(db, printerId, printing(FILE, 40, 1500, { layer: 40 }), at(25));
+		stop(40, { layer: 40 });
+		expect(db.select().from(printRuns).all()).toHaveLength(0);
+		expect(partStatus('handle-left')).toBe('Printing');
+		expect(buildJobs(db, buildId, 'org1')[0].pendingConfirm).toBe(true);
+		expect(filamentUsed()).toBe(0);
+		expect(
+			db.select().from(activity).where(eq(activity.kind, 'printer.job.unstarted')).all()
+		).toHaveLength(0);
+	});
+
+	it('confirming a stopped print defaults to Failed with grams scaled by progress', () => {
+		updatePlate(db, buildId, 'owner', 1, { slicerGrams: 41 });
+		processStatus(db, printerId, printing(FILE, 40, 1500, { layer: 40 }), at(25));
+		stop(40, { layer: 40 });
+		confirmJob(db, jobs()[0].id, 'org1', 'owner', {});
+		const run = db.select().from(printRuns).get()!;
+		expect(run).toMatchObject({ result: 'Failed', grams: 16 });
+		expect(partStatus('handle-left')).toBe('Reprint');
+		expect(filamentUsed()).toBe(16);
+	});
+
+	it('"Don\'t log" (dismiss) at 40% returns the parts to To print and counts nothing', () => {
+		processStatus(db, printerId, printing(FILE, 40, 1500, { layer: 40 }), at(25));
+		stop(40, { layer: 40 });
+		dismissJob(db, jobs()[0].id, 'org1', 'owner');
+		expect(partStatus('handle-left')).toBe('To print');
+		expect(db.select().from(printRuns).all()).toHaveLength(0);
+		expect(filamentUsed()).toBe(0);
+	});
+
+	it('is conservative: layers past the first, or nothing known, still ask', () => {
+		processStatus(db, printerId, printing(FILE, 0, 20, { layer: 6 }), at(1));
+		stop(0, { layer: 6 }, 3);
+		expect(buildJobs(db, buildId, 'org1')[0].pendingConfirm).toBe(true);
+		dismissJob(db, jobs()[0].id, 'org1', 'owner');
+		// no progress, no layer, no elapsed reported on a long job
+		processStatus(db, printerId, { state: 'printing', progress: null, fileName: FILE }, at(30));
+		processStatus(db, printerId, { state: 'failed', progress: null, fileName: FILE }, at(30 + 120));
+		const last = jobs().find((j) => j.status === 'failed')!;
+		expect(last.runId).toBeNull();
+	});
+
+	it('a multi-run part between runs stays Printing when its next job is cancelled at 0%', () => {
+		const RIM = 'Plate 13 - Wheel Rim.gcode';
+		processStatus(db, printerId, printing(RIM, 5, 300, { layer: 5 }), at(5));
+		processStatus(
+			db,
+			printerId,
+			{ state: 'done', progress: 100, fileName: RIM, elapsedSec: 7200 },
+			at(130)
+		);
+		confirmJob(db, jobs()[0].id, 'org1', 'owner', {});
+		expect(partStatus('rims-1-4')).toBe('Printing'); // run 1 of 2 done
+		processStatus(db, printerId, printing(RIM, 0, 10, { layer: 1 }), at(200));
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 0, fileName: RIM, layer: 1 },
+			at(203)
+		);
+		expect(partStatus('rims-1-4')).toBe('Printing');
+		const st = loadBuildView(db, buildId, 'owner')!.state['rims-1-4'];
+		expect(st.startedAt).toBeNull();
+		expect(db.select().from(printRuns).all()).toHaveLength(1);
+	});
+
+	describe('terminal status that resets progress', () => {
+		const terminal = (extra: Partial<PrinterStatus>, min = 40) =>
+			processStatus(
+				db,
+				printerId,
+				{ state: 'failed', cancelled: true, fileName: FILE, ...extra } as PrinterStatus,
+				at(min)
+			);
+		const expectAsks = (grams: number) => {
+			expect(db.select().from(printRuns).all()).toHaveLength(0);
+			expect(partStatus('handle-left')).toBe('Printing');
+			expect(buildJobs(db, buildId, 'org1')[0].pendingConfirm).toBe(true);
+			expect(jobs()[0].runId).toBeNull();
+			confirmJob(db, jobs()[0].id, 'org1', 'owner', {});
+			expect(db.select().from(printRuns).get()).toMatchObject({ result: 'Failed', grams });
+		};
+		beforeEach(() => updatePlate(db, buildId, 'owner', 1, { slicerGrams: 50 }));
+
+		it('40% then a final progress of 0 still asks, scaled from 40%', () => {
+			processStatus(db, printerId, printing(FILE, 40, 1500, { layer: 40 }), at(25));
+			terminal({ progress: 0, layer: 1 });
+			expect(jobs()[0].progress).toBe(40);
+			expectAsks(20);
+		});
+		it('60% with layer info then a final progress of 0 and no layer still asks', () => {
+			processStatus(db, printerId, printing(FILE, 60, 2500, { layer: 60 }), at(25));
+			terminal({ progress: 0 });
+			expectAsks(30);
+		});
+		it('a final status with no progress at all still asks', () => {
+			processStatus(db, printerId, printing(FILE, 40, 1500), at(25));
+			terminal({ progress: null });
+			expectAsks(20);
+			processStatus(db, printerId, printing(FILE, 40, 1500), at(60));
+			// (second job is a new run of the same file)
+			terminal({ progress: undefined } as Partial<PrinterStatus>, 70);
+			expect(jobs()).toHaveLength(2);
+		});
+		it('the SDCP shape (no layer on the final status) after real progress still asks', () => {
+			processStatus(db, printerId, printing(FILE, 12, 600, { layer: 12 }), at(11));
+			processStatus(db, printerId, { state: 'failed', cancelled: true, progress: 0 }, at(20));
+			// no fileName on the final status: the job is still the active one
+			expect(jobs()[0].status).toBe('cancelled');
+			expectAsks(6);
+		});
+		it('polls and a final status at 0 are genuinely not started', () => {
+			processStatus(db, printerId, printing(FILE, 0, 20, { layer: 1 }), at(1));
+			processStatus(db, printerId, printing(FILE, 0, 40, { layer: 1 }), at(2));
+			terminal({ progress: 0, layer: 1 }, 3);
+			expect(db.select().from(printRuns).all()).toHaveLength(0);
+			expect(partStatus('handle-left')).toBe('To print');
+			expect(jobs()[0].runId).toBe('dismissed');
+		});
+		it('a mid-print poll that dips to 0 does not lower the stored progress', () => {
+			processStatus(db, printerId, printing(FILE, 40, 1500, { layer: 40 }), at(25));
+			processStatus(db, printerId, printing(FILE, 0, 1560, { layer: 0 }), at(26));
+			expect(jobs()[0].progress).toBe(40);
+			processStatus(db, printerId, printing(FILE, 45, 1700, { layer: 45 }), at(28));
+			expect(jobs()[0].progress).toBe(45);
+		});
+	});
+
+	it('a Reprint part is a Reprint again after a job cancelled at 0%, and after "Don\'t log" at 40%', () => {
+		addRun(db, buildId, 'owner', {
+			plateNumber: 1,
+			date: '2026-11-03',
+			result: 'Failed',
+			grams: 5
+		});
+		expect(partStatus('handle-left')).toBe('Reprint');
+		processStatus(db, printerId, printing(FILE, 0, 20, { layer: 1 }), at(1));
+		expect(partStatus('handle-left')).toBe('Printing');
+		stop(0, { layer: 1 }, 3);
+		expect(partStatus('handle-left')).toBe('Reprint');
+		expect(loadBuildView(db, buildId, 'owner')!.state['handle-left'].startedAt).toBeNull();
+
+		processStatus(db, printerId, printing(FILE, 40, 1500, { layer: 40 }), at(30));
+		expect(partStatus('handle-left')).toBe('Printing');
+		stop(40, { layer: 40 }, 50);
+		const j = jobs().find((x) => x.runId === null)!;
+		dismissJob(db, j.id, 'org1', 'owner');
+		expect(partStatus('handle-left')).toBe('Reprint');
+	});
+
+	it('deleting a failed run of a multi-run plate restores statuses and filament', () => {
+		updatePlate(db, buildId, 'owner', 13, { slicerByPart: { 'rims-1-4': 140, 'rims-2-3': 148 } });
+		addRun(db, buildId, 'owner', {
+			plateNumber: 13,
+			partSlug: 'rims-1-4',
+			date: '2026-11-03',
+			result: 'Success',
+			grams: 140
+		});
+		const failed = addRun(db, buildId, 'owner', {
+			plateNumber: 13,
+			partSlug: 'rims-1-4',
+			date: '2026-11-04',
+			result: 'Failed',
+			grams: 60
+		});
+		expect(partStatus('rims-1-4')).toBe('Reprint');
+		expect(filamentUsed()).toBe(200);
+		deleteRun(db, buildId, 'owner', failed);
+		expect(db.select().from(printRuns).all()).toHaveLength(1);
+		expect(partStatus('rims-1-4')).toBe('To print'); // run 1 of 2 won; not Printing now
+		expect(filamentUsed()).toBe(140);
 	});
 });

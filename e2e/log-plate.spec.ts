@@ -79,3 +79,18 @@ test('A part detail offers Log plate printed and logs the run', async ({ page })
 		'true'
 	);
 });
+
+test('Choosing Failed does not prefill the plate grams (empty counts as 0 g)', async ({ page }) => {
+	await ownerWithBuild(page, 'failedgrams');
+	const { button } = await firstPlateLog(page);
+	await button.click();
+	const sheet = page.getByRole('dialog');
+	const grams = sheet.getByLabel('Filament used (g)');
+	await sheet.getByRole('button', { name: 'Failed', exact: true }).click();
+	await expect(grams).toHaveValue('');
+	await expect(grams).toHaveAttribute('placeholder', 'optional');
+	await expect(sheet).toContainText('Left empty it counts as 0 g');
+	await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.locator('.row[data-s="Reprint"]').first()).toBeVisible();
+});

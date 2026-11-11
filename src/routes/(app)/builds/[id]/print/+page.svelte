@@ -9,6 +9,7 @@
 	import PlateStart from '#lib/components/PlateStart.svelte';
 	import PlateTime from '#lib/components/PlateTime.svelte';
 	import LogPlateButton from '#lib/components/LogPlateButton.svelte';
+	import PlateHistory from '#lib/components/PlateHistory.svelte';
 
 	const ctx = getBuildCtx();
 
@@ -99,6 +100,10 @@
 		curRole === 'all' || ctx.view.filaments.some((f) => f.key === curRole) ? curRole : 'all'
 	);
 	const groups = $derived(groupParts(ctx.view, curBy, { role: activeRole, hidePrinted: curHide }));
+	// Plate history: collapsed by default, one toggle per plate group (not part of the toolbar).
+	let histOpen = $state<Record<string, boolean>>({});
+	const histCount = (key: string) =>
+		ctx.view.runs.filter((r) => String(r.plateNumber) === key).length;
 	const pickRole = (k: string) => {
 		role = k;
 		ovRole = null;
@@ -108,6 +113,16 @@
 {#snippet startFor(key: string)}
 	{@const pl = ctx.view.plates.find((p) => String(p.number) === key)}
 	{#if pl}<PlateTime plate={pl} /><PlateStart plate={pl} /><LogPlateButton plate={pl} />{/if}
+	{#if histCount(key)}
+		<button
+			class="btn sm ghost"
+			type="button"
+			aria-expanded={!!histOpen[key]}
+			aria-controls="plate-history-{key}"
+			data-testid="plate-history-toggle"
+			onclick={() => (histOpen[key] = !histOpen[key])}>History ({histCount(key)})</button
+		>
+	{/if}
 {/snippet}
 
 <svelte:head><title>Print · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
@@ -178,6 +193,9 @@
 					{@render startFor(g.key)}
 				{/if}
 			</div>
+			{#if curBy === 'plate' && /^\d+$/.test(g.key) && histOpen[g.key] && histCount(g.key)}
+				<PlateHistory plateNumber={Number(g.key)} />
+			{/if}
 			<div class="rows">
 				{#each g.parts as p (p.slug)}
 					<PartRow part={p} focus={flash === `part-${p.slug}`} />

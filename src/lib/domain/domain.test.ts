@@ -9,6 +9,9 @@ import {
 	fmtH,
 	fmtHM,
 	groupParts,
+	jobNeverStarted,
+	NO_PROGRESS_PCT,
+	releaseUnstarted,
 	nowPrinting,
 	overallProgress,
 	parseDur,
@@ -321,5 +324,47 @@ describe('variants and parts on no plate', () => {
 		// accounting does not blow up and counts only active parts
 		expect(filamentStats(v).every((f) => Number.isFinite(f.need))).toBe(true);
 		expect(overallProgress(v).total).toBe(v.parts.length);
+	});
+});
+
+describe('printer job that never started', () => {
+	it('uses one threshold: under 1% with no layer past the first', () => {
+		expect(NO_PROGRESS_PCT).toBe(1);
+		expect(jobNeverStarted({ progress: 0 })).toBe(true);
+		expect(jobNeverStarted({ progress: 0.4, layer: 1 })).toBe(true);
+		expect(jobNeverStarted({ progress: 1 })).toBe(false);
+		expect(jobNeverStarted({ progress: 40, layer: 40 })).toBe(false);
+		expect(jobNeverStarted({ progress: 0, layer: 2 })).toBe(false);
+	});
+	it('absent progress counts only when the job ended within minutes of its start', () => {
+		expect(jobNeverStarted({ progress: null, elapsedSec: 120 })).toBe(true);
+		expect(jobNeverStarted({ progress: null, elapsedSec: 3600 })).toBe(false);
+		expect(jobNeverStarted({ progress: null })).toBe(false);
+	});
+	it('releases Printing parts to To print, but a multi-run part between runs stays Printing', () => {
+		const v0 = makeView();
+		const plate = v0.plates.find((p) => p.perPartRuns)!;
+		const [a, b] = plate.parts;
+		let v = applyPatches(v0, startPrinting(v0, [a, b], now));
+		v = log(v, { plateNumber: plate.number, partSlug: a, result: 'Success' });
+		expect(v.state[a].status).toBe('Printing');
+		const patches = releaseUnstarted(v, [a, b]);
+		const v2 = applyPatches(v, patches);
+		expect(v2.state[a].status).toBe('Printing');
+		expect(v2.state[a].startedAt).toBeNull();
+		expect(v2.state[b].status).toBe('To print');
+		expect(releaseUnstarted(v0, [a])).toEqual([]); // not Printing: nothing to do
+		// every run done, set back to Printing by hand: Printed again, not stuck on Printing
+		let done = applyPatches(v0, startPrinting(v0, [a], now));
+		for (let i = 0; i < plate.runs; i++)
+			done = log(done, { plateNumber: plate.number, partSlug: a, result: 'Success' });
+		done = applyPatches(done, [{ slug: a, status: 'Printing', startedAt: now.toISOString() }]);
+		expect(applyPatches(done, releaseUnstarted(done, [a])).state[a].status).toBe('Printed');
+		// a failure with no later success: Reprint
+		let failed = applyPatches(v0, startPrinting(v0, [b], now));
+		failed = log(failed, { plateNumber: plate.number, partSlug: b, result: 'Failed' });
+		failed = applyPatches(failed, startPrinting(failed, [b], now));
+		expect(failed.state[b].status).toBe('Printing');
+		expect(applyPatches(failed, releaseUnstarted(failed, [b])).state[b].status).toBe('Reprint');
 	});
 });

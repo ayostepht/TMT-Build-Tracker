@@ -77,3 +77,16 @@ describe('plates with grams per filament (sliced multi-filament prints)', () => 
 		expect(roleShares(v, u)).toEqual({ [u.role]: 1 });
 	});
 });
+
+describe('failed runs and filament used', () => {
+	it('a Failed run with no grams counts as 0 g, never as the estimate', () => {
+		const base = makeView();
+		const u = unit(base, 1);
+		const v = { ...base, runs: [run({ plateNumber: 1, result: 'Failed', grams: null })] };
+		const used = (x: BuildView) => filamentStats(x).reduce((a, f) => a + f.used, 0);
+		expect(estPerRun(base, u)).toBeGreaterThan(0);
+		expect(used(v)).toBe(0);
+		const logged = { ...base, runs: [run({ plateNumber: 1, result: 'Failed', grams: 12 })] };
+		expect(used(logged)).toBe(12);
+	});
+});
