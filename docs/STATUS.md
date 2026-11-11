@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-11 (plate history, cancelled prints, Moonraker security fix; last deploy r39, ee69a3a)._
+_Last updated: 2026-11-11 (filament role fix; last deploy r40, a9bedcb)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
