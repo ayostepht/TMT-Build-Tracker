@@ -28,8 +28,12 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-  # Runs in parallel with `test`. The image job does not wait for it so a flaky
-  # browser run cannot block publishing; PRs still show the result.
+  # Runs in parallel with `test`. `image` needs both, so a failing browser run blocks
+  # publishing from main and tags.
+  # Chromium is installed without `--with-deps`: the runner already carries the shared libraries
+  # (it ships Chrome), and the apt step only adds font packages, which failed whenever the
+  # Ubuntu mirrors were unreachable. The app self-hosts its web fonts and the specs have no
+  # screenshot comparisons. The browser download is cached per Playwright version.
   e2e:
     env:
       KITPACK_DOWNLOAD: 'off'
@@ -42,7 +46,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pwcache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - run: npx playwright install chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -54,7 +66,7 @@ jobs:
           retention-days: 7
 
   image:
-    needs: test
+    needs: [test, e2e]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
