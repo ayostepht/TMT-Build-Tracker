@@ -2,7 +2,7 @@
 
 _Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`. Test copy is
 on r43 = eba0e72 (Stage 4 wave 2). Stage 4 wave 3 (the whole app on the shared `ds-*` styles,
-native dialogs) is on `main` and NOT deployed yet)._
+native dialogs) and the removal of the old global styles from `app.css` are on `main` and NOT deployed yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -11,15 +11,8 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **Delete the deprecated globals from `app.css`** [design-studio-ui]: nothing uses them
-   any more (verifier grep, 2026-11-11). Blocks: `.seg`, `.chip`, `.tile` (+ `.tiles`,
-   `.tile-*`, `.tbar`), `.verdict`, `.tpl` (keep `.tpl-list`, a plain list reset), `.set`,
-   `.phase`, `.plate-card` rules (the class name stays as a spec hook), `.now-card`,
-   `.now-run`, `.placeholder`, `.gbtn`, `.viewer`/`.vbox`/`.vhead`/`.vclose`/`.vtabs`/
-   `.vtab`/`.vnav`/`.vimg`/`.vfoot`, `.crumb`, `.mini`. Re-read line numbers and re-run the
-   grep from the wave 3 design report first; `.spools`/`.clock` are still used by
-   `FilamentTiles`. `client/focus-trap.ts` (`trapFocus`) has no users left: remove it in the
-   same pass (a deletion: maintainer's OK). Then `verifier`, push.
+1. **`client/focus-trap.ts` has no users left**: delete it once the maintainer says so
+   (asked 2026-11-11) [app-shell].
 2. **Deploy wave 3 as r44** (maintainer's OK needed; from the Unraid dev container), then
    look on the test copy at what could not be seen locally: the plate view toggle and the
    "rotated N°" badge (need print geometry), the Now card while printing, printer badges
@@ -239,8 +232,9 @@ package server): re-run before reading it as a code failure.
    dialogs everywhere (browser focus trap, inert background), keyboard paths, one printer
    stream per chapter, every screen on `ds-seg`/`ds-badge`/`ds-modal`/`ds-card`, a damaged
    stored arrangement is treated as stale (no more 500 on export), the false reverse-proxy
-   startup hint fixed. Left: delete the deprecated globals (Pick up here 1);
-   `three`/`pdfjs-dist` to devDependencies (runs alone); legacy redirects; duplicate
+   startup hint fixed, the deprecated globals deleted from `app.css` (373 lines; kept on
+   purpose: `.tiles`, `.sw`, `.mini` via `Swatch`, `.spools`, `.clock`, `.tpl-list`, the
+   other `.now-*`). Left: `three`/`pdfjs-dist` to devDependencies (runs alone); legacy redirects; duplicate
    helpers. Open: squash migrations (needs a journal reset on the test copy; would also fix
    `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision);
    TypeScript 7 (Dependabot PR #11 fails check: a deliberate upgrade).

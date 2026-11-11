@@ -245,14 +245,11 @@ button {
 }
 
 /* ==== Shared primitives (Stage 4) ====
-   The ONE segmented control, card, badge/pill and modal/sheet. New work uses these; the legacy
-   globals below keep working until their components are converted, and are marked DEPRECATED.
-   All names are prefixed `ds-` so they cannot collide with component-local class names.
-   DEPRECATED duplicates:
-     segmented control: .seg (+ .seg button), .vtabs/.vtab, .tabs (as a segmented use), local variants
-     card: .tpl, .tile, .plate-card, .now-card, .placeholder
-     badge/pill: .chip, .set, .phase, .verdict, .now-run, .pill-link/.gbtn (clickable), .banner/.error (notices stay)
-     modal/sheet: .viewer/.vbox (GuideViewer), the share Dialog, AskDialog and LogRunSheet styles */
+   The ONE segmented control, card, badge/pill and modal/sheet. The legacy duplicates (.seg, .chip,
+   .tile, .verdict, .tpl, .set, .phase, .plate-card, .now-card, .now-run, .placeholder, .gbtn,
+   .viewer/.vbox/.vhead/.vtabs/.vtab and friends) were removed once their components moved over:
+   do not reintroduce them. All names are prefixed `ds-` so they cannot collide with
+   component-local class names. */
 
 /* SEGMENTED CONTROL  .ds-seg
    Markup: <div class="ds-seg" role="group" aria-label="Status">
@@ -648,30 +645,11 @@ label.field input {
 	display: grid;
 	gap: var(--sp-5);
 }
-/* DEPRECATED card variant: use .ds-card */
-.tpl {
-	background: var(--card);
-	border: 1px solid var(--line);
-	border-radius: var(--r-lg);
-	padding: var(--sp-7);
-	display: grid;
-	gap: var(--sp-3);
-}
-.tpl h3 {
-	font-size: var(--fs-xl);
-}
+
 .counts {
 	display: flex;
 	gap: var(--sp-4);
 	flex-wrap: wrap;
-}
-/* DEPRECATED badge: use .ds-badge.ds-badge--sm */
-.set {
-	font: 500 var(--fs-xs)/1 var(--f-mono);
-	background: var(--paper);
-	border: 1px solid var(--line);
-	border-radius: var(--r-sm);
-	padding: var(--sp-2) var(--sp-3);
 }
 
 /* ---- build page ---- */
@@ -765,8 +743,7 @@ label.field input {
 .step-aside {
 	justify-self: end;
 }
-.pill-link,
-.gbtn {
+.pill-link {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--sp-3);
@@ -785,8 +762,7 @@ label.field input {
 a.pill-link {
 	color: var(--accent);
 }
-.pill-link:hover,
-.gbtn:hover {
+.pill-link:hover {
 	border-color: var(--accent);
 	background: var(--accent-soft);
 }
@@ -815,14 +791,6 @@ a.pill-link {
 	font-size: var(--fs-md);
 	max-width: 100%;
 }
-.crumb {
-	font-size: var(--fs-md);
-	color: var(--muted);
-	text-decoration: none;
-}
-.crumb:hover {
-	color: var(--accent);
-}
 
 .head {
 	display: grid;
@@ -850,19 +818,7 @@ a.pill-link {
 .sync.off .dot {
 	background: var(--warn);
 }
-/* DEPRECATED badge: use .ds-badge.ds-badge--accent */
-.phase {
-	display: inline-block;
-	font: 600 var(--fs-xs)/1 var(--f-body);
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	padding: var(--sp-2) var(--sp-4);
-	border-radius: var(--r-pill);
-	background: var(--accent-soft);
-	color: var(--accent);
-	vertical-align: middle;
-	margin-left: var(--sp-4);
-}
+
 .overall {
 	grid-column: 1 / -1;
 	display: grid;
@@ -970,21 +926,7 @@ a.pill-link {
 	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 	gap: var(--sp-6);
 }
-/* DEPRECATED card variant: use .ds-card */
-.tile {
-	background: var(--card);
-	border: 1px solid var(--line);
-	border-radius: var(--r-lg);
-	padding: var(--sp-7);
-	display: grid;
-	gap: var(--sp-5);
-	align-content: start;
-}
-.tile-top {
-	display: flex;
-	gap: var(--sp-5);
-	align-items: center;
-}
+
 .sw {
 	width: 30px;
 	height: 30px;
@@ -999,28 +941,7 @@ a.pill-link {
 		transparent 3px 7px
 	) !important;
 }
-.tile-name {
-	font: 600 var(--fs-lg)/1.1 var(--f-display);
-}
-.tile-mat {
-	font-size: var(--fs-xs);
-	color: var(--muted);
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-}
-.tile-stats {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: var(--sp-2) var(--sp-6);
-	font-size: var(--fs-sm);
-	color: var(--muted);
-}
-.tile-stats b {
-	display: block;
-	color: var(--ink);
-	font: 600 var(--fs-lg)/1.2 var(--f-body);
-	font-variant-numeric: tabular-nums;
-}
+
 .spools {
 	display: flex;
 	align-items: center;
@@ -1038,44 +959,7 @@ a.pill-link {
 	text-align: center;
 	font-variant-numeric: tabular-nums;
 }
-/* DEPRECATED badge: use .ds-badge with a tone */
-.verdict {
-	font-size: var(--fs-sm);
-	font-weight: 500;
-	padding: var(--sp-3) var(--sp-4);
-	border-radius: var(--r-md);
-}
-.verdict.ok {
-	background: var(--ok-soft);
-	color: var(--ok);
-}
-.verdict.short {
-	background: var(--bad-soft);
-	color: var(--bad);
-}
-.verdict.info {
-	background: var(--accent-soft);
-	color: var(--accent);
-}
-.tbar {
-	height: 8px;
-	border-radius: var(--r-sm);
-	background: var(--line);
-	position: relative;
-	overflow: hidden;
-}
-.tbar .used {
-	position: absolute;
-	inset: 0 auto 0 0;
-	background: var(--muted);
-}
-.tbar .need {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	background: var(--accent);
-	opacity: 0.45;
-}
+
 .clock {
 	width: 30px;
 	height: 30px;
@@ -1121,26 +1005,7 @@ a.pill-link {
 	flex-wrap: wrap;
 	gap: var(--sp-3);
 }
-/* DEPRECATED: use .ds-badge (button) */
-.chip {
-	border: 1px solid var(--line);
-	background: var(--card);
-	border-radius: var(--r-pill);
-	padding: var(--sp-3) var(--sp-6);
-	font-size: var(--fs-sm);
-	display: inline-flex;
-	align-items: center;
-	gap: var(--sp-3);
-}
-.chip[aria-pressed='true'] {
-	background: var(--ink);
-	color: var(--paper);
-	border-color: var(--ink);
-}
-.chip.static {
-	padding: var(--sp-1) var(--sp-4);
-	font-size: var(--fs-xs);
-}
+
 .mini {
 	width: 10px;
 	height: 10px;
@@ -1252,55 +1117,7 @@ a.pill-link {
 	flex-wrap: wrap;
 	gap: var(--sp-2);
 }
-.set.plate {
-	background: var(--accent-soft);
-	color: var(--accent);
-	border-color: transparent;
-	font-weight: 600;
-}
-.set.hot {
-	background: var(--warn-soft);
-	color: var(--warn);
-	border-color: transparent;
-}
-/* DEPRECATED: use .ds-seg */
-.seg {
-	display: inline-flex;
-	border: 1px solid var(--line);
-	border-radius: var(--r-md);
-	overflow: hidden;
-}
-.seg button {
-	border: 0;
-	background: transparent;
-	padding: var(--sp-3) var(--sp-5);
-	font-size: var(--fs-xs);
-	font-weight: 500;
-	color: var(--muted);
-	border-right: 1px solid var(--line);
-}
-.seg button:last-child {
-	border-right: 0;
-}
-.seg button[aria-pressed='true'][data-v='To print'] {
-	background: var(--line);
-	color: var(--ink);
-}
-.seg button[aria-pressed='true'][data-v='Printing'] {
-	background: var(--run-soft);
-	color: var(--run);
-}
-.seg button[aria-pressed='true'][data-v='Printed'] {
-	background: var(--ok-soft);
-	color: var(--ok);
-}
-.seg button[aria-pressed='true'][data-v='Reprint'] {
-	background: var(--bad-soft);
-	color: var(--bad);
-}
-.seg button:disabled {
-	cursor: default;
-}
+
 .more {
 	border: 1px solid var(--line);
 	background: var(--paper);
@@ -1416,15 +1233,7 @@ a.pill-link {
 .span2 {
 	grid-column: 1 / -1;
 }
-/* DEPRECATED card variant: use .ds-card */
-.plate-card {
-	background: var(--card);
-	border: 1px solid var(--line);
-	border-radius: var(--r-lg);
-	padding: var(--sp-7);
-	display: grid;
-	gap: var(--sp-5);
-}
+
 .plate-log {
 	display: grid;
 	gap: var(--sp-4);
@@ -1495,25 +1304,7 @@ a.pill-link {
 	grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
 	gap: var(--sp-6);
 }
-/* DEPRECATED card variant: use .ds-card (+ a local accent edge) */
-.now-card {
-	background: var(--card);
-	border: 1px solid var(--line);
-	border-left: 6px solid var(--accent);
-	border-radius: var(--r-lg);
-	padding: var(--sp-7);
-	display: grid;
-	gap: var(--sp-5);
-	box-shadow: 0 0 0 3px var(--run-soft);
-	min-width: 0;
-	/* One shrinkable column: a grid's implicit auto column would grow to the min-content of
-	   the widest child (a long <select> option, an iOS datetime-local) and spill past the card. */
-	grid-template-columns: minmax(0, 1fr);
-}
-.now-card > * {
-	min-width: 0;
-	max-width: 100%;
-}
+
 .now-head {
 	display: flex;
 	justify-content: space-between;
@@ -1534,14 +1325,7 @@ a.pill-link {
 	align-items: center;
 	margin-bottom: var(--sp-2);
 }
-.now-run {
-	background: var(--warn-soft);
-	color: var(--warn);
-	padding: var(--sp-2) var(--sp-4);
-	border-radius: var(--r-pill);
-	letter-spacing: 0.02em;
-	text-transform: none;
-}
+
 .now-meta {
 	display: flex;
 	gap: var(--sp-4);
@@ -1723,126 +1507,9 @@ label.field select {
 	min-width: 0;
 	width: 100%;
 }
-/* DEPRECATED card variant: use .ds-card.ds-card--dashed */
-.placeholder {
-	border: 1px dashed var(--line);
-	border-radius: var(--r-lg);
-	padding: var(--sp-9);
-	background: var(--card);
-	display: grid;
-	gap: var(--sp-4);
-}
+
 .danger-zone {
 	border-color: var(--bad);
-}
-
-/* guide viewer */
-/* DEPRECATED modal: use .ds-modal */
-.viewer {
-	position: fixed;
-	inset: 0;
-	z-index: 50;
-	background: var(--scrim-strong);
-	display: grid;
-	place-items: center;
-	padding: var(--sp-8);
-}
-.vbox {
-	background: var(--card);
-	color: var(--ink);
-	border-radius: var(--r-xl);
-	width: min(980px, 100%);
-	max-height: 100%;
-	min-height: 0;
-	display: grid;
-	grid-template-rows: auto auto 1fr auto;
-	overflow: hidden;
-	box-shadow: var(--shadow-3);
-}
-.vhead {
-	display: flex;
-	align-items: center;
-	gap: var(--sp-6);
-	padding: var(--sp-6) var(--sp-7) var(--sp-4);
-}
-.vhead h2 {
-	flex: 1;
-	min-width: 0;
-}
-.vhead .sub {
-	font-size: var(--fs-sm);
-	color: var(--muted);
-	font-family: var(--f-body);
-	font-weight: 400;
-	display: block;
-	letter-spacing: 0;
-}
-.vclose {
-	border: 1px solid var(--line);
-	background: var(--paper);
-	border-radius: var(--r-lg);
-	width: 36px;
-	height: 36px;
-	font-size: var(--fs-lg);
-}
-.vtabs {
-	display: flex;
-	gap: var(--sp-3);
-	overflow-x: auto;
-	overscroll-behavior-x: contain;
-	padding: 0 var(--sp-7) var(--sp-5);
-	border-bottom: 1px solid var(--line);
-}
-.vtab {
-	flex: none;
-	border: 1px solid var(--line);
-	background: var(--paper);
-	border-radius: var(--r-md);
-	padding: var(--sp-3) var(--sp-5);
-	font-size: var(--fs-sm);
-	white-space: nowrap;
-}
-.vtab[aria-selected='true'] {
-	background: var(--accent);
-	border-color: var(--accent);
-	color: var(--on-fill);
-}
-.vimg {
-	overflow: auto;
-	min-height: 160px;
-	padding: var(--sp-8);
-	display: grid;
-	align-content: start;
-	gap: var(--sp-4);
-}
-.vimg img {
-	max-width: 100%;
-	height: auto;
-	cursor: zoom-in;
-}
-.vfoot {
-	display: flex;
-	align-items: center;
-	gap: var(--sp-5);
-	padding: var(--sp-5) var(--sp-7);
-	border-top: 1px solid var(--line);
-	font-size: var(--fs-sm);
-	color: var(--muted);
-}
-.vfoot .cap {
-	flex: 1;
-	min-width: 0;
-	color: var(--ink);
-}
-.vnav {
-	border: 1px solid var(--line);
-	background: var(--paper);
-	border-radius: var(--r-md);
-	padding: var(--sp-3) var(--sp-6);
-}
-.vnav:disabled {
-	opacity: 0.4;
-	cursor: default;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1864,12 +1531,7 @@ label.field select {
 		grid-column: 1 / -1;
 		order: 3;
 	}
-	.seg {
-		grid-column: 1 / -1;
-		order: 4;
-		justify-self: start;
-		max-width: 100%;
-	}
+
 	.detail {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -1891,34 +1553,20 @@ label.field select {
 	.sync {
 		justify-self: start;
 	}
-	.viewer {
-		padding: 0;
-	}
-	.vbox {
-		border-radius: 0;
-		height: 100%;
-	}
+
 	.toolbar {
 		top: 48px;
 	}
 	/* >=40px tap targets on phones */
-	.seg button {
-		min-height: 40px;
-		padding: var(--sp-3) var(--sp-6);
-	}
 	.more {
 		width: 44px;
 		height: 40px;
 	}
-	.chip,
 	button.ds-badge,
 	a.ds-badge,
-	.gbtn,
 	.btn,
 	.btn.sm,
-	.now-part,
-	.vnav,
-	.vtab {
+	.now-part {
 		min-height: 40px;
 	}
 	.log .x {

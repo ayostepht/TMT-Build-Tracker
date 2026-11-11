@@ -313,7 +313,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   sticky `__head`/`__foot`, safe-area padding; never set `display` on it), and the card:
   `.card` and `.ds-card` are one definition (`.card` is the supported name; `--compact`,
   `--flush`, `--dashed` on both). `domain/style-leaks.test.ts` fails when a component
-  `<style>` uses a class name that a global rule in `app.css` would leak into.
+  `<style>` uses a class name that a global rule in `app.css` would leak into. The legacy
+  duplicates (`.seg`, `.chip`, `.tile`, `.verdict`, `.tpl`, `.set`, `.phase`, `.now-card`,
+  the `.viewer` family…) are gone and must not come back: components use their own prefixed
+  classes.
 
 - `DesignWorkspace` shows a dismissible "Plates and export are out of date" notice from the
   same `arrangement.stale` flag Files uses (real builds, with a printer, editors).
