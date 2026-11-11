@@ -94,15 +94,35 @@
 		}
 		ctx.slicedFile = file;
 	}
+	// The layout choice is fetched once, here, and handed to the picker (which used to fetch it on
+	// its own: two identical requests, answered at different times, left heading and select
+	// disagreeing until the slower one landed).
 	let layouts = $state<PlateLayoutInfo[]>([]);
 	let current = $state<string | null>(null);
+	let layoutsLoaded = $state(false);
+	// One object per fetch, so the picker re-applies it only when a new answer arrives.
+	let preload = $state.raw<{ layouts: PlateLayoutInfo[]; current: string | null } | null>(null);
+	/** What the plates themselves say about the layout, so the heading is right before the fetch lands. */
+	const sourceLayout = (source: string | undefined): string | null | undefined =>
+		source === undefined
+			? undefined
+			: source === 'arranged'
+				? 'arranged'
+				: source.startsWith('upload:')
+					? 'upload'
+					: source.startsWith('layout:')
+						? source.slice('layout:'.length)
+						: null; // 'template': the default layout
 	// Reload the layout name whenever the plates come from somewhere else (switch, upload, other tab).
 	$effect(() => {
-		void ctx.view.plates[0]?.source;
+		const seed = sourceLayout(ctx.view.plates[0]?.source);
+		if (seed !== undefined) current = seed;
 		buildPlateLayouts(ctx.id)
 			.then((r) => {
 				layouts = r.layouts;
 				current = r.current;
+				layoutsLoaded = true;
+				preload = r;
 			})
 			.catch(() => {});
 	});
@@ -111,12 +131,15 @@
 		const l = layouts.find((x) => x.key === (key ?? layouts.find((y) => y.isDefault)?.key));
 		return l ? `MakeGood's ${l.name} profile` : null;
 	};
+	// Until the layout is known the heading says nothing rather than a wrong name.
 	const layoutName = $derived(
 		current === 'upload'
 			? 'Your uploaded 3MF'
 			: current === 'arranged'
 				? `Arranged for ${printer?.name ?? 'your printer'}`
-				: (tunedName(current) ?? 'MakeGood profile')
+				: layoutsLoaded
+					? (tunedName(current) ?? 'MakeGood profile')
+					: null
 	);
 	const layoutNote = $derived(
 		current === 'arranged' && printer
@@ -360,7 +383,11 @@
 
 <section class="card layout-card" aria-label="Plate layout">
 	<div class="group-head">
-		<h2>Plate layout: <span data-testid="layout-name">{layoutName}</span></h2>
+		<h2>
+			Plate layout: <span data-testid="layout-name" aria-busy={layoutName === null}
+				>{layoutName ?? 'Loading…'}</span
+			>
+		</h2>
 		<span class="meta num">{ctx.view.plates.length} plates</span>
 	</div>
 	{#if layoutNote && current !== 'upload'}<p class="muted">{layoutNote}</p>{/if}
@@ -414,6 +441,7 @@
 			orgId={ctx.view.build.organizationId}
 			{printer}
 			allowUpload
+			{preload}
 			plateCount={ctx.view.plates.length}
 			onchanged={() => (arrRev++, ctx.refresh())}
 			onupload={openUpload}

@@ -13,7 +13,7 @@ Thanks for helping. TMT Build Tracker is a self-hostable web app for makers 3D-p
 
 ## Setup
 
-Requires **Node 22** (`.nvmrc` has `22`; with nvm run `nvm use`). The Docker image and CI use Node 22, and `better-sqlite3` is built for it.
+Requires **Node 22** (`.nvmrc` has `22`; with nvm run `nvm use`; `engines` in `package.json` asks for `>=22.12.0 <23`). The Docker image and CI use Node 22, and `better-sqlite3` is built for it. Other majors are not tested.
 
 ```bash
 git clone https://github.com/ayostepht/TMT-Build-Tracker.git
@@ -36,7 +36,17 @@ npm run test:e2e     # Playwright, see below
 npm run format       # prettier --write .
 ```
 
-A change is done when `check`, `lint`, `test` and `build` pass, the end-to-end specs that cover what you touched pass, and, if you changed anything that happens at startup (migrations, seeding, the Dockerfile, the kit pack), `docker build -t tmt-build-tracker:dev .` plus a container started on an empty data directory works (`/api/health` answers, sign-up works, the kit pack installs). CI runs check, lint, unit tests, a route-folder guard and the end-to-end suite on every pull request; do not weaken or skip a gate.
+A change is done when `check`, `lint`, `test` and `build` pass, the end-to-end specs that cover what you touched pass, and, if you changed anything that happens at startup (migrations, seeding, the Dockerfile, the kit pack), `docker build -t tmt-build-tracker:dev .` plus a container started on an empty data directory works (`/api/health` answers, sign-up works, the kit pack installs). Do not weaken or skip a CI gate (check, lint, unit tests, route-folder guard, end-to-end suite).
+
+### How CI runs
+
+The workflow is `.github/workflows/docker.yml`. While the repository is private, CI is kept cheap:
+
+- A push to `main` or a pull request runs only the `test` job (check, lint, unit tests, route-folder guard). A push that changes only docs runs nothing.
+- The `e2e` job and the Docker image build run on `v*` tags and on manual runs: Actions, then docker, then Run workflow.
+- After the repository goes public, set the repository variable `CI_FULL=true` (Settings, Secrets and variables, Actions, Variables) so every push and pull request runs the full pipeline, end-to-end suite included.
+
+Run the end-to-end specs you touched locally before you open a pull request.
 
 ### End-to-end tests
 

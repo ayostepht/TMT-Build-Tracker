@@ -308,3 +308,58 @@ test('screenshots: landing with something printing, and the empty state', async 
 	}
 	await ctx.close();
 });
+
+test('tracking card actions: same row, at least 44 px high, not overlapping (phone)', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl } = await ownerWithBuild(page, 'landing-btns');
+	await page.goto(chapterUrl);
+	await settled(page);
+
+	const tol = 1;
+	type Box = { x: number; y: number; width: number; height: number };
+	const boxes = async (locs: import('@playwright/test').Locator[]): Promise<Box[]> => {
+		const out: Box[] = [];
+		for (const l of locs) {
+			await expect(l).toBeVisible();
+			out.push((await l.boundingBox())!);
+		}
+		return out;
+	};
+	const check = (bs: Box[], sameTop: boolean) => {
+		for (const b of bs) expect(b.height).toBeGreaterThanOrEqual(44 - tol);
+		if (sameTop) for (const b of bs) expect(Math.abs(b.y - bs[0].y)).toBeLessThanOrEqual(tol);
+		const sorted = [...bs].sort((a, b) => a.x - b.x);
+		for (let i = 1; i < sorted.length; i++)
+			expect(sorted[i].x).toBeGreaterThanOrEqual(sorted[i - 1].x + sorted[i - 1].width - tol);
+	};
+
+	// Next up: Start printing, and Log a print… beside it.
+	const next = page.getByTestId('next-up-card').first();
+	const nextBtns = [
+		next.getByRole('button', { name: /^Start printing plate/ }),
+		next.getByRole('button', { name: /^Log a print on plate/ })
+	];
+	check(await boxes(nextBtns), true);
+
+	// Start a plate, then the Now card.
+	await nextBtns[0].click();
+	const now = page.getByTestId('landing-now-card').first();
+	const nowBtns = [
+		now.getByRole('button', { name: /^Finish & log plate/ }),
+		now.getByRole('button', { name: /^Take off printer/ }),
+		now.getByTestId('now-details')
+	];
+	check(await boxes(nowBtns), true);
+
+	// The next plate that moved up keeps the same rules.
+	const next2 = page.getByTestId('next-up-card').first();
+	check(
+		await boxes([
+			next2.getByRole('button', { name: /^Start printing plate/ }),
+			next2.getByRole('button', { name: /^Log a print on plate/ })
+		]),
+		true
+	);
+});

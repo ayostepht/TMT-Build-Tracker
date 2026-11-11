@@ -47,7 +47,7 @@ docker compose up -d
 
 `docker-compose.example.yml` maps `./data` to `/data` and publishes port 3000; every optional setting is in it as a commented line. If the pull fails with `unauthorized` or `denied`, see [Image access](#image-access).
 
-Migrations and seeding of the standard kit run automatically at start. The health check is `GET /api/health` (it returns `{"ok":true}`).
+Migrations and seeding of the standard kit run automatically at start. The health check is `GET /api/health` (it returns `{"ok":true,"version":"0.9.0"}` when the database answers, and status 503 otherwise; the version shown is an example).
 
 ### 3. First start
 

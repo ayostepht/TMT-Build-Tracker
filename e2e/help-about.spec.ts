@@ -1,6 +1,10 @@
 import { expect, test } from './fixtures';
 import { openNav, signUp, uniqueEmail } from './helpers';
 import type { Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+const PKG_VERSION = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string })
+	.version;
 
 // The static Help and About pages: reachable from the account menu, anchors, FAQ, links, and
 // no phone overflow. Body sentences are deliberately not asserted (copy changes).
@@ -88,6 +92,12 @@ test('about page: version, feedback link, MakeGood credit, safe external links',
 	await expect(page).toHaveTitle(/About/);
 	await expect(page.getByRole('heading', { level: 1, name: 'TMT Build Tracker' })).toBeVisible();
 	await expect(page.getByTestId('app-version')).toHaveText(/^\d+\.\d+\.\d+([-+][\w.-]+)?$/);
+	await expect(page.getByTestId('app-version')).toHaveText(PKG_VERSION);
+	const health = await page.request.get('/api/health');
+	expect(health.status()).toBe(200);
+	const body = (await health.json()) as { ok: boolean; version: string };
+	expect(body.ok).toBe(true);
+	expect(body.version).toBe(PKG_VERSION);
 
 	await expect(page.getByTestId('feedback-link')).toHaveAttribute('href', /\/issues$/);
 	await expect(page.locator('main a[href*="makerworld.com"]').first()).toBeVisible();

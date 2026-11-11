@@ -10,15 +10,19 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **Stage 5** (see Next steps 1 for done and left). Next slices: README screenshots (the
-   test copy on r44 has real data; the plate arranger shot needs an arranged layout, see
-   Files tab below), `engines` in `package.json` and version in `/api/health` (unblocked:
-   the dependency move landed), user-facing changelog, Unraid Community Apps template.
-2. Fix the Files tab heading race (open items, Files tab) [plates-3mf].
-3. CI is blocked by billing, not code: every job fails in seconds with "recent account
-   payments have failed or your spending limit needs to be increased" (the private repo has
-   used its free Actions minutes; GHCR has no image after 578eb84). The maintainer chose to
-   use fewer minutes while private: see Open items, Release.
+1. **Deploy r45 from Unraid when the maintainer says so** (not asked yet). On `main` since
+   r44: `/privacy` and `/terms`, the build guide link, landing navigation, the Files tab
+   heading fix, tracking card button alignment, version 0.9.0 in About and `/api/health`.
+   No schema or startup change.
+2. **Stage 5** (see Next steps 1 for done and left). Next slices: README screenshots (the
+   test copy has real data; the plate arranger shot needs an arranged layout),
+   user-facing changelog, Unraid Community Apps template.
+3. CI runs in private-repo mode (`.github/workflows/docker.yml`): pushes to `main` and PRs
+   run only `test`, docs-only pushes run nothing, `e2e` and `image` run on `v*` tags and
+   manual runs. Untested on GitHub: the account is out of Actions minutes (every job fails
+   in seconds on billing), so GHCR has no image after 578eb84 and the test copy is built
+   locally. After the repo is public: set the repository variable `CI_FULL=true`, require
+   approval for outside collaborators' workflow runs, then branch protection.
 4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
    (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
    test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
@@ -113,17 +117,15 @@ Route each to the agent named in brackets.
   by role) [build-state]; a local `npm run dev`/built server without release credentials
   logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Files tab** [plates-3mf]: reproduced on r44. After in-app navigation to Files (from
-  Print or Overview) the plate-layout heading reads "MakeGood profile" for about 3 s while
-  the select shows "Your uploaded 3MF", then corrects itself; a fresh load or reload is
-  right. Likely cause: `layoutName` in `components/build/PlatesPanel.svelte` derives from
-  `current`, which is null at first, and the first `plates/layouts` result isn't applied
-  until the later refetch.
+- **Files tab** [plates-3mf]: the heading/select disagreement is fixed on `main` (one
+  `plates/layouts` fetch in `PlatesPanel`, passed to the picker). Why the live copy took
+  ~3 s is unconfirmed (suspected: the request queued behind SSE and printer streams on the
+  same host): after r45, look at the network waterfall if "Loading…" lingers.
 - **r44 live checks, small things**: the plate view toggle and the "rotated N°" badge only
   render with an arranged layout (`/arrangement` returns no plates for an uploaded 3MF), so
-  they are still unseen live (see Pick up here 4); on the phone Now card "Details" and
-  "Log a print…" sit indented, out of line with the buttons in their row [app-shell];
-  nothing shows a toast without changing data, so toast-over-dialog was checked with a
+  they are still unseen live (see Pick up here 4); the tracking card text actions are
+  aligned on `main` (component-level; moving the rule to `.btn.ghost` in `app.css` is an
+  optional follow-up [design-studio-ui]); nothing shows a toast without changing data, so toast-over-dialog was checked with a
   synthetic toast (fine on phone and desktop).
 - **Printers** [printers]: OctoEverywhere shared link for Elegoo works live (status, camera,
   with the reconnect backoff fix; re-checked on r44: 6 fresh loads, first `camera/snapshot`
@@ -266,9 +268,10 @@ also fix `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle; Type
    `docs/dev/`; landing navigation (quick row, build buttons on board cards, whole-card
    Builds list). Specs: `help-about`, `legal`, `landing`. Not verified: the Caddy and
    Traefik sections against real proxies; the quick start run by a stranger (the image is
-   still private); arm64. Left: README screenshots (phone Now card, plate arranger, 3D
-   designer, printer card), `engines`, name and version in `package.json` and
-   `/api/health`, user-facing changelog, `v1.0.0`, e2e gating the image, an e2e run with a
+   still private); arm64. Package is `tmt-build-tracker` 0.9.0 with
+   `engines` (Node >=22.12 <23); `src/lib/version.ts` feeds About and `/api/health`
+   (`{ ok, version }`); the 1.0.0 bump comes with the tag. Left: README screenshots (phone
+   Now card, plate arranger, 3D designer, printer card), user-facing changelog, `v1.0.0`, e2e gating the image, an e2e run with a
    kit pack installed, Unraid template (+ Community Apps), repo public.
 2. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
    plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),

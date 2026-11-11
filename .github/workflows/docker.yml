@@ -1,10 +1,34 @@
 name: docker
 
+# Private-repo mode (Actions minutes are limited): a push to main or a pull request runs only
+# `test` (~4 min). `e2e` and `image` run on `v*` tags and on manual runs (Actions > docker >
+# Run workflow). SWITCH FOR PUBLIC: once the repo is public and minutes are free, set the
+# repository variable CI_FULL=true (Settings > Secrets and variables > Actions > Variables) and
+# e2e runs on every push and PR, image on every push to main. Delete the variable to go back.
 on:
   push:
     branches: [main]
     tags: ['v*']
+    # Not evaluated for tag pushes, so releases always run. Docs-only pushes to main skip the run.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.claude/**'
+      - 'LICENSE'
+      - 'unraid/**'
   pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the image to ghcr.io after test and e2e pass (a run from main tags it sha-<short> only; latest is set by v* tags)'
+        type: boolean
+        default: true
+
+# One run per ref; a newer push or PR update cancels the older one. Tag runs and manual runs
+# are never cancelled (manual runs get their own group so they do not queue behind pushes).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && 'manual-' || '' }}${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   test:
@@ -29,12 +53,13 @@ jobs:
       - run: npm test
 
   # Runs in parallel with `test`. `image` needs both, so a failing browser run blocks
-  # publishing from main and tags.
+  # publishing. Only on tags, manual runs and (CI_FULL=true) every push/PR; see the top.
   # Chromium is installed without `--with-deps`: the runner already carries the shared libraries
   # (it ships Chrome), and the apt step only adds font packages, which failed whenever the
   # Ubuntu mirrors were unreachable. The app self-hosts its web fonts and the specs have no
   # screenshot comparisons. The browser download is cached per Playwright version.
   e2e:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || vars.CI_FULL == 'true' }}
     env:
       KITPACK_DOWNLOAD: 'off'
     runs-on: ubuntu-latest
@@ -66,8 +91,9 @@ jobs:
           retention-days: 7
 
   image:
+    # Skipped whenever e2e is skipped or fails (needs). Never on pull requests.
     needs: [test, e2e]
-    if: github.event_name == 'push'
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -88,7 +114,7 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')) || (github.ref == 'refs/heads/main' && vars.CI_FULL == 'true') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha

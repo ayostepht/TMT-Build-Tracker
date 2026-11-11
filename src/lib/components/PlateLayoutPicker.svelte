@@ -48,7 +48,8 @@
 		label = 'Plate layout',
 		onchanged,
 		onupload,
-		plateCount = 0
+		plateCount = 0,
+		preload
 	}: {
 		templateId?: string;
 		buildId?: string;
@@ -67,6 +68,11 @@
 		onupload?: () => void;
 		/** Plates the build has now (for the replace prompt). */
 		plateCount?: number;
+		/**
+		 * Build mode: the parent fetched the layouts already. `null` = still loading (the select waits),
+		 * an object = use it (re-applied when it changes); leave out to fetch here.
+		 */
+		preload?: { layouts: PlateLayoutInfo[]; current: string | null } | null;
 	} = $props();
 
 	const ARRANGE = '__arrange__';
@@ -94,16 +100,20 @@
 	const defaultKey = $derived(layouts.find((l) => l.isDefault)?.key ?? layouts[0]?.key ?? '');
 	const effective = $derived(current ?? defaultKey);
 
+	const loading = $derived(!!buildId && preload === null);
+	function apply(r: { layouts: PlateLayoutInfo[]; current: string | null }) {
+		layouts = r.layouts;
+		current = r.current;
+		value =
+			r.current === ARRANGED
+				? ARRANGE
+				: (r.current ?? r.layouts.find((l) => l.isDefault)?.key ?? ARRANGE);
+	}
+
 	async function load() {
 		try {
 			if (buildId) {
-				const r = await buildPlateLayouts(buildId);
-				layouts = r.layouts;
-				current = r.current;
-				value =
-					r.current === ARRANGED
-						? ARRANGE
-						: (r.current ?? r.layouts.find((l) => l.isDefault)?.key ?? ARRANGE);
+				apply(await buildPlateLayouts(buildId));
 			} else if (templateId) {
 				layouts = await templatePlateLayouts(templateId);
 			} else layouts = [];
@@ -114,7 +124,11 @@
 	$effect(() => {
 		void templateId;
 		void buildId;
+		if (buildId && preload !== undefined) return; // the parent supplies it (below)
 		load();
+	});
+	$effect(() => {
+		if (buildId && preload) apply(preload);
 	});
 
 	// Bed draft: the New build form starts on 256 × 256; an existing build starts on its printer.
@@ -240,11 +254,13 @@
 		<select
 			bind:this={layoutSelect}
 			bind:value
-			disabled={disabled || busy}
+			disabled={disabled || busy || loading}
 			onchange={buildId ? (e) => change(e.currentTarget.value) : undefined}
 			data-testid="plate-layout"
 		>
-			<option value={ARRANGE}>Arrange for my bed</option>
+			{#if loading}<option value={ARRANGE}>Loading…</option>{:else}<option value={ARRANGE}
+					>Arrange for my bed</option
+				>{/if}
 			{#if layouts.length}
 				<optgroup label="MakeGood's tuned profiles (Bambu)">
 					{#each layouts as l (l.key)}

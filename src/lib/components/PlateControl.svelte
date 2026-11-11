@@ -80,7 +80,7 @@
 				onclick={() => (open = true)}>Finish &amp; log</button
 			>
 			<button
-				class="{cls} ghost"
+				class="{cls} ghost plc-text"
 				type="button"
 				aria-label="Take off printer, plate {plate.number}"
 				onclick={takeOff}>Take off printer</button
@@ -111,7 +111,7 @@
 		{/if}
 		{#if !on.length && canLog}
 			<button
-				class="{cls} {idle.length ? 'ghost' : 'primary'}"
+				class="{cls} {idle.length ? 'ghost plc-text' : 'primary'}"
 				type="button"
 				aria-label="Log a print on plate {plate.number}"
 				onclick={() => (open = true)}>Log a print…</button
@@ -132,7 +132,25 @@
 	.plate-control {
 		display: inline-flex;
 		flex-wrap: wrap;
-		gap: var(--sp-3);
+		gap: var(--sp-4);
 		align-items: center;
+		min-width: 0;
+	}
+	/* One height for every action in the row (filled, outlined and text-style, StartOnPrinter
+	   included); 44px where a thumb taps. */
+	@media (pointer: coarse), (max-width: 760px) {
+		.plate-control :global(.btn) {
+			box-sizing: border-box;
+			min-height: 44px;
+		}
+	}
+	/* Text-style actions carry no inline padding: their label sits on the row's left edge when the
+	   row wraps and the visible gap to the next action is the row gap, not padding + gap. */
+	.plate-control :global(.btn.plc-text) {
+		padding-inline: 0;
+		/* with the row gap: 16px between a text action and whatever follows it */
+		margin-inline-end: var(--sp-4);
+		min-width: 44px;
+		justify-content: flex-start;
 	}
 </style>

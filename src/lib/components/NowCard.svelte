@@ -220,7 +220,7 @@
 				<PlateControl {plate} size="md" />
 				{#if compact}
 					<a
-						class="btn ghost"
+						class="btn ghost nc-text"
 						href={resolve('/(app)/builds/[id]/print', { id: ctx.id })}
 						data-testid="now-details">Details</a
 					>
@@ -261,6 +261,21 @@
 	.now-actions {
 		display: flex;
 		gap: var(--sp-4);
+		align-items: center;
 		flex-wrap: wrap;
+	}
+	@media (pointer: coarse), (max-width: 760px) {
+		.now-actions :global(.btn) {
+			box-sizing: border-box;
+			min-height: 44px;
+		}
+	}
+	/* Text-style link in the action row: no inline padding, so it lines up like the other text actions. */
+	.now-actions :global(.btn.nc-text) {
+		padding-inline: 0;
+		/* with the row gap: 16px between a text action and whatever follows it */
+		margin-inline-end: var(--sp-4);
+		min-width: 44px;
+		justify-content: flex-start;
 	}
 </style>

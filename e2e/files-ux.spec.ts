@@ -48,6 +48,38 @@ test('own sliced file: visible button, select option and drop all open the uploa
 	await expect(page.getByRole('status').filter({ hasText: 'Plates organized' })).toBeVisible();
 	await expect(page.getByTestId('layout-name')).toHaveText('Your uploaded 3MF');
 
+	// Opening the Files tab in-app with a slow layouts answer: the heading comes from the plates at
+	// once (never the default profile), the select waits disabled, and only one request is made.
+	const layoutsUrl = /\/plates\/layouts/;
+	let layoutRequests = 0;
+	const gate = Promise.withResolvers<void>();
+	const slowLayouts = async (route: import('@playwright/test').Route) => {
+		layoutRequests++;
+		await new Promise((r) => setTimeout(r, 2000));
+		await route.continue();
+		gate.resolve();
+	};
+	await page.route(layoutsUrl, slowLayouts);
+	try {
+		await page.goto(`/builds/${id}`);
+		await page.waitForLoadState('networkidle');
+		layoutRequests = 0;
+		await page.getByRole('link', { name: 'Files', exact: true }).first().click();
+		await expect(page).toHaveURL(/\/files$/);
+		await expect(page.getByTestId('layout-name')).toHaveText('Your uploaded 3MF');
+		await expect(page.getByTestId('plate-layout')).toBeDisabled();
+		await expect(page.getByTestId('layout-name')).not.toHaveText('MakeGood profile');
+		await expect(page.getByTestId('plate-layout')).toBeEnabled({ timeout: 10_000 });
+		await gate.promise;
+		await expect(page.getByTestId('layout-name')).toHaveText('Your uploaded 3MF');
+		await expect(page.getByTestId('plate-layout').locator('option:checked')).toHaveText(
+			'Your uploaded 3MF'
+		);
+		expect(layoutRequests).toBe(1);
+	} finally {
+		await page.unroute(layoutsUrl, slowLayouts);
+	}
+
 	// The select option opens the same dialog, in view.
 	await page.getByTestId('plate-layout').selectOption({ label: 'Use my own sliced file…' });
 	await expect(dlg).toBeInViewport();

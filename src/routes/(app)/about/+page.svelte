@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { MAKEGOOD_GUIDE_URL, MAKEGOOD_MODEL_URL } from '#lib/makegood.ts';
-	import { version } from '../../../../package.json';
+	import { APP_VERSION as version } from '#lib/version.ts';
 
 	const REPO_URL = 'https://github.com/ayostepht/TMT-Build-Tracker';
 	const ISSUES_URL = `${REPO_URL}/issues`;

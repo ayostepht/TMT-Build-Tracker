@@ -175,7 +175,9 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   dash and "no time estimate yet".
 - **Files tab:** "Use my own sliced file" card (and drop anywhere) opens `PlateUpload` as a
   modal; the kit drop zone hands sliced projects to it (`BuildCtx.slicedFile`). With a
-  printer set, `PlateLayoutPicker` shows a one-line `printerSummary()`.
+  printer set, `PlateLayoutPicker` shows a one-line `printerSummary()`. In build mode
+  `PlatesPanel` owns the single `plates/layouts` fetch and hands it to the picker through
+  `preload` (`null` = loading: heading seeded from the plates' `source`, select disabled).
 - **Export:** `src/lib/server/threemf-export/` (Orca/Elegoo, Bambu, plain), painted
   supports, `bed_exclude_area`.
 
@@ -455,6 +457,16 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   wizard. Finish folds steps that were done when the page opened.
 
 ## Release and deployment (`release-pwa`)
+
+- Version: `src/lib/version.ts` (`APP_VERSION`, the `version` field of `package.json`, inlined
+  at build time) is the one source, shown on `/about` and returned by `/api/health` as
+  `{ ok: true, version }` (503 stays `{ ok: false }`).
+- CI (`.github/workflows/docker.yml`, jobs `test`, `e2e`, `image`): while the repo is
+  private, pushes to `main` and PRs run `test` only, docs-only pushes run nothing, `e2e`
+  and `image` run on `v*` tags and manual runs (`publish` input); `latest` moves only on a
+  non-prerelease tag. The repository variable `CI_FULL=true` restores e2e on every push
+  and PR and the image (with `latest`) on every push to `main`. One run per ref; tag and
+  manual runs are never cancelled.
 
 - Docs for operators: `README.md` holds only the intro, the Docker quick start and a guide
   list; everything else lives in `docs/guides/*.md` (unraid, reverse-proxy, sso,
