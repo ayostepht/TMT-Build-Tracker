@@ -53,6 +53,9 @@ export function backoff(attempt: number, base = 2000, max = 60000): number {
 	return Math.min(max, base * 2 ** Math.min(attempt, 6)) + Math.floor(Math.random() * 500);
 }
 
+/** Shared-link (third-party relay) reconnects: slower, so a relay that hangs up is not hammered. */
+export const linkBackoff = (attempt: number): number => backoff(attempt, 10_000, 300_000);
+
 export const num = (v: unknown): number | undefined =>
 	typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 

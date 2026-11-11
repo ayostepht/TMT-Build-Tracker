@@ -3,7 +3,8 @@ import type { PrinterStatus } from '#lib/printers/status.ts';
 import { adapters } from './adapters';
 import { safeError } from './types';
 import { testConnection } from './supervisor';
-import { enableSdcpCamera } from './adapters/sdcp';
+import { enableSdcpCamera, normalizeSdcpStatus } from './adapters/sdcp';
+import { backoff, linkBackoff } from './types';
 import { resolveCameraSource, type CameraTarget } from './camera-source';
 import { testEnabler } from './camera-access';
 import { MockSdcp } from './mock-sdcp';
@@ -323,5 +324,180 @@ describe('credential hygiene (review findings)', () => {
 		const m = safeError(new Error(`connect failed wss://${HOST}/websocket`));
 		expect(m).not.toContain('octoeverywhere.com');
 		expect(m).not.toContain('testtoken');
+	});
+});
+
+/** Hand-driven WebSocket: no network, the test decides when it opens, speaks and closes. */
+function fakeSockets() {
+	const socks: FakeWs[] = [];
+	class FakeWs {
+		readyState = 0;
+		sent: string[] = [];
+		onopen: (() => void) | null = null;
+		onmessage: ((ev: { data: unknown }) => void) | null = null;
+		onerror: (() => void) | null = null;
+		onclose: (() => void) | null = null;
+		constructor() {
+			socks.push(this);
+		}
+		send(d: string) {
+			this.sent.push(d);
+		}
+		close() {}
+		open() {
+			this.readyState = 1;
+			this.onopen?.();
+		}
+		push(data: unknown) {
+			this.onmessage?.({ data });
+		}
+		hangUp() {
+			this.readyState = 3;
+			this.onclose?.();
+		}
+	}
+	vi.stubGlobal('WebSocket', FakeWs);
+	return socks;
+}
+const STATUS = JSON.stringify({ Status: { CurrentStatus: [0], PrintInfo: { Status: 0 } } });
+const lanCfg = (): PrinterConfig => ({
+	id: 'p',
+	kind: 'elegoo-sdcp',
+	host: '10.1.2.3',
+	port: 3030,
+	secrets: { mainboardId: 'MB1' }
+});
+
+describe('sdcp reconnect backoff', () => {
+	afterEach(() => vi.useRealTimers());
+
+	it('link backoff is slower than LAN backoff and capped at 5 minutes', () => {
+		for (let a = 0; a < 10; a++) {
+			expect(linkBackoff(a)).toBeGreaterThanOrEqual(10_000);
+			expect(linkBackoff(a)).toBeLessThan(300_500);
+			expect(linkBackoff(a)).toBeGreaterThan(backoff(a) - 500 - 1);
+		}
+		expect(linkBackoff(0)).toBeLessThan(10_500);
+		expect(linkBackoff(9)).toBeGreaterThanOrEqual(300_000);
+		expect(backoff(0)).toBeLessThan(2500); // LAN unchanged
+	});
+
+	it('a relay that accepts and closes at once is not re-dialled at a fixed pace', async () => {
+		vi.useFakeTimers();
+		const socks = fakeSockets();
+		const h = adapters['elegoo-sdcp'](linkCfg());
+		cleanup.push(() => h.close());
+		expect(socks.length).toBe(1);
+		socks[0].open();
+		socks[0].hangUp(); // attempt 0 -> ~10 s
+		await vi.advanceTimersByTimeAsync(9_000);
+		expect(socks.length).toBe(1);
+		await vi.advanceTimersByTimeAsync(2_000);
+		expect(socks.length).toBe(2);
+		socks[1].open(); // onopen alone must not reset the backoff
+		socks[1].hangUp(); // attempt 1 -> ~20 s
+		await vi.advanceTimersByTimeAsync(15_000);
+		expect(socks.length).toBe(2);
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(socks.length).toBe(3);
+	});
+
+	it('resets after the first valid Status frame', async () => {
+		vi.useFakeTimers();
+		const socks = fakeSockets();
+		const h = adapters['elegoo-sdcp'](linkCfg());
+		cleanup.push(() => h.close());
+		socks[0].open();
+		socks[0].hangUp();
+		await vi.advanceTimersByTimeAsync(11_000);
+		socks[1].open();
+		socks[1].push(STATUS);
+		socks[1].hangUp(); // reset by the frame -> base delay again
+		await vi.advanceTimersByTimeAsync(11_000);
+		expect(socks.length).toBe(3);
+	});
+
+	it('LAN keeps the fast schedule but also needs data before resetting', async () => {
+		vi.useFakeTimers();
+		const socks = fakeSockets();
+		const h = adapters['elegoo-sdcp'](lanCfg());
+		cleanup.push(() => h.close());
+		socks[0].open();
+		socks[0].hangUp(); // ~2 s
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(socks.length).toBe(2);
+		socks[1].open();
+		socks[1].hangUp(); // ~4 s
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(socks.length).toBe(2);
+		await vi.advanceTimersByTimeAsync(2_000);
+		expect(socks.length).toBe(3);
+	});
+});
+
+describe('sdcp untrusted frames', () => {
+	afterEach(() => vi.useRealTimers());
+
+	it('drops non-string and oversize frames and survives bad JSON', async () => {
+		vi.useFakeTimers();
+		const socks = fakeSockets();
+		const h = adapters['elegoo-sdcp'](lanCfg());
+		cleanup.push(() => h.close());
+		const seen: PrinterStatus[] = [];
+		h.status$((s) => seen.push(s));
+		socks[0].open();
+		socks[0].push(new ArrayBuffer(8));
+		socks[0].push('x'.repeat(1024 * 1024 + 1));
+		socks[0].push('{not json');
+		expect(seen.length).toBe(0);
+		socks[0].push(STATUS);
+		expect(seen.length).toBe(1);
+		expect(seen[0].state).toBe('idle');
+	});
+
+	it('learns a MainboardID only when it looks like one', () => {
+		return (async () => {
+			vi.useFakeTimers();
+			const socks = fakeSockets();
+			const h = adapters['elegoo-sdcp'](linkCfg());
+			cleanup.push(() => h.close());
+			socks[0].open();
+			socks[0].push(
+				JSON.stringify({ Topic: 'sdcp/status/bad id"}', Status: { PrintInfo: { Status: 0 } } })
+			);
+			expect(socks[0].sent).toEqual([]); // bad id ignored, nothing sent
+			socks[0].push(
+				JSON.stringify({
+					Topic: 'sdcp/status/GOOD-id_1',
+					Status: { PrintInfo: { Status: 0 } }
+				})
+			);
+			expect(socks[0].sent.length).toBe(1);
+			expect(JSON.parse(socks[0].sent[0]).Data.MainboardID).toBe('GOOD-id_1');
+			expect(JSON.parse(socks[0].sent[0]).Data.Cmd).toBe(1);
+		})();
+	});
+
+	it('trims a long, control-character file name', () => {
+		const st = normalizeSdcpStatus({
+			CurrentStatus: [1],
+			PrintInfo: { Status: 13, Filename: `a\u0000b\n${'x'.repeat(500)}` }
+		});
+		expect(st.fileName).toBeDefined();
+		expect(st.fileName!.length).toBeLessThanOrEqual(200);
+		// eslint-disable-next-line no-control-regex
+		expect(st.fileName).not.toMatch(/[\u0000-\u001f]/);
+		expect(st.fileName!.startsWith('abxxx')).toBe(true);
+	});
+
+	it('caps the filament list and its strings', () => {
+		const trays = Array.from({ length: 40 }, () => ({
+			filament_color: `0x${'F'.repeat(100)}`,
+			filament_type: 'T'.repeat(100)
+		}));
+		const st = normalizeSdcpStatus({ PrintInfo: { Status: 0 } }, { CanvasInfo: trays });
+		expect(st.filaments?.length).toBe(16);
+		expect(st.filaments![0].type!.length).toBeLessThanOrEqual(32);
+		expect(st.filaments![0].color!.length).toBeLessThanOrEqual(32);
 	});
 });
