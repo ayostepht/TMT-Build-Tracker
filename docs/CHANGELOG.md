@@ -6,6 +6,10 @@ state in `docs/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, wh
 
 ## 2026-11
 
+- **r38** (6be1868, hotfix): printer jobs auto-link only when the file name names the
+  plate (the "one plate still Printing" fallback kept re-attaching prints to multi-run
+  plates); "Start on <printer>" asks to confirm the plate; "Take off printer" unlinks the
+  live job. No schema change, no rehearsal.
 - **r37** (d1a815c): Palettes tab gets two collapsed disclosures; `/designs/[slug]` "Use
   this design" scrolls/focuses the Use card; design preview hides inactive variants (wheel
   z-fighting fixed).

@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-10 (docs restructure; last deploy r37, d1a815c)._
+_Last updated: 2026-11-10 (hotfix printer-job linking; last deploy r38, 6be1868)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
