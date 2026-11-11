@@ -758,6 +758,7 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 	const plates = stored.map((pl) => ({
 		...pl,
 		items: pl.items.map((it) => {
+			if (typeof it !== 'object' || it === null) return it; // corrupt stored data: pass through
 			const pc = footprints.get(it.slug)?.pieces[it.piece];
 			if (!pc?.sil) return it;
 			const key = `${it.slug}:${it.piece}`;
@@ -779,7 +780,9 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 			: null,
 		stale:
 			// arrangements stored before the 3D re-orientation code was removed carry a legacy `pose`
-			stored.some((pl) => pl.items.some((i) => 'pose' in i)) ||
+			stored.some((pl) =>
+				pl.items.some((i) => typeof i === 'object' && i !== null && 'pose' in i)
+			) ||
 			(row?.plateLayout === ARRANGED_LAYOUT &&
 				!!plan &&
 				signature(plan.result.plates) !== signature(stored)) ||

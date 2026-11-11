@@ -29,6 +29,7 @@
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 	import AskDialog from '#lib/components/AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
+	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 
 	/** Setup wizard: plate pictures only, no print log or slicer grams. */
 	let { wizard = false }: { wizard?: boolean } = $props();
@@ -39,6 +40,24 @@
 	const track = $derived(!wizard && !draft);
 	let uploading = $state(false);
 	let notice = $state<string | null>(null);
+	let upload = $state<PlateUpload>();
+	let sheet = $state<HTMLElement>();
+	// The control that opened the upload sheet. The "Use my own sliced file" card is replaced while
+	// the sheet is open, so focus goes back to the control with the same test id when it closes.
+	let openerId: string | null = null;
+	function openUpload() {
+		const a = document.activeElement;
+		openerId = a instanceof HTMLElement ? (a.dataset.testid ?? null) : null;
+		uploading = true;
+		notice = null;
+	}
+	async function closeUpload() {
+		uploading = false;
+		await tick();
+		const a = document.activeElement;
+		if (openerId && (!a || a === document.body))
+			document.querySelector<HTMLElement>(`[data-testid="${openerId}"]`)?.focus();
+	}
 	// A sliced project dropped in the kit drop zone opens the upload with that file.
 	$effect(() => {
 		if (ctx.slicedFile && ctx.canEdit) {
@@ -261,6 +280,9 @@
 <AskDialog ask={asking} />
 
 <svelte:window
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && uploading && isTopTrap(sheet)) upload?.close();
+	}}
 	onhashchange={() => void openFromHash()}
 	ondragover={onDragOver}
 	ondragleave={(e) => {
@@ -288,11 +310,8 @@
 				on this page.
 			</p>
 		</div>
-		<button
-			class="btn"
-			type="button"
-			data-testid="use-own-sliced"
-			onclick={() => ((uploading = true), (notice = null))}>Choose a sliced file…</button
+		<button class="btn" type="button" data-testid="use-own-sliced" onclick={openUpload}
+			>Choose a sliced file…</button
 		>
 	</section>
 {/if}
@@ -320,11 +339,8 @@
 		</div>
 		{#if ctx.canEdit}
 			<div class="tpl-actions">
-				<button
-					class="btn sm"
-					type="button"
-					data-testid="template-replace"
-					onclick={() => ((uploading = true), (notice = null))}>Replace…</button
+				<button class="btn sm" type="button" data-testid="template-replace" onclick={openUpload}
+					>Replace…</button
 				>
 				<button
 					class="btn sm"
@@ -396,7 +412,7 @@
 			allowUpload
 			plateCount={ctx.view.plates.length}
 			onchanged={() => (arrRev++, ctx.refresh())}
-			onupload={() => ((uploading = true), (notice = null))}
+			onupload={openUpload}
 		/>
 	{/if}
 	<p class="meta">
@@ -407,15 +423,25 @@
 </section>
 
 {#if uploading && ctx.canEdit}
-	<div class="upload-backdrop" role="dialog" aria-modal="true" aria-label="Use my own sliced file">
-		<div class="upload-sheet" data-testid="upload-dialog">
+	<div class="upload-backdrop" role="presentation">
+		<div
+			class="upload-sheet"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Use my own sliced file"
+			tabindex="-1"
+			data-testid="upload-dialog"
+			bind:this={sheet}
+			use:trapFocus
+		>
 			<PlateUpload
+				bind:this={upload}
 				view={ctx.view}
 				initialFile={ctx.slicedFile}
 				oninitial={() => (ctx.slicedFile = null)}
-				onclose={() => (uploading = false)}
+				onclose={closeUpload}
 				ondone={(msg) => {
-					uploading = false;
+					void closeUpload();
 					notice = msg;
 					ctx.refresh();
 				}}
@@ -519,13 +545,13 @@
 					<div class="view-toggle" role="group" aria-label="Plate {pl.number} view">
 						<button
 							type="button"
-							class="seg"
+							class="pl-seg"
 							aria-pressed={!diagramOn[pl.number]}
 							onclick={() => (diagramOn[pl.number] = false)}>Slicer preview</button
 						>
 						<button
 							type="button"
-							class="seg"
+							class="pl-seg"
 							aria-pressed={!!diagramOn[pl.number]}
 							onclick={() => (diagramOn[pl.number] = true)}>Diagram</button
 						>
@@ -651,8 +677,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
-		margin-bottom: 10px;
+		gap: var(--sp-4) var(--sp-8);
+		margin-bottom: var(--sp-5);
 	}
 	.plates-bar:empty {
 		display: none;
@@ -660,30 +686,30 @@
 	.plates-fmt {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--sp-4);
 		min-width: 0;
 	}
 	.plates-fmt select {
 		width: auto;
 		max-width: 100%;
 		min-height: 36px;
-		padding: 4px 8px;
+		padding: var(--sp-2) var(--sp-4);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--card);
 		color: var(--ink);
 		font: inherit;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.plate-row {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 12px;
-		margin-bottom: 8px;
-		padding: 8px 12px;
+		gap: var(--sp-2) var(--sp-6);
+		margin-bottom: var(--sp-4);
+		padding: var(--sp-4) var(--sp-6);
 		border: 1px solid var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		background: var(--card);
 		scroll-margin-top: 56px;
 	}
@@ -702,20 +728,20 @@
 		display: inline-flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.pr-actions :global(.btn),
 	.plate-tools :global(.btn) {
 		min-height: 40px;
 	}
-	@media (max-width: 600px) {
+	@media (max-width: 760px) {
 		.pr-actions {
 			flex: 1 1 100%;
 		}
 	}
 	@media (pointer: coarse) {
 		.plates-fmt select {
-			font-size: 16px;
+			font-size: var(--fs-field);
 			min-height: 40px;
 		}
 	}
@@ -723,39 +749,39 @@
 		scroll-margin-top: 56px;
 	}
 	.layout-card {
-		margin-bottom: 12px;
+		margin-bottom: var(--sp-6);
 	}
 	.layout-card p {
 		margin: 0;
 	}
 	.ok-note {
-		padding: 8px 10px;
-		border-radius: 6px;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
 		background: var(--ok-soft);
 		color: var(--ok);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.plate-thumb {
 		justify-self: start;
 		max-width: 100%;
 		height: auto;
 		border: 1px solid var(--line);
-		border-radius: 8px;
-		background: #fff;
+		border-radius: var(--r-lg);
+		background: #fff; /* slicer thumbnails are drawn for a white page: no token, stays white in dark */
 		object-fit: contain;
 	}
 	.printer-line {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 12px;
+		gap: var(--sp-4) var(--sp-6);
 		align-items: center;
-		margin: 6px 0;
-		font-size: 14px;
+		margin: var(--sp-3) 0;
+		font-size: var(--fs-md);
 	}
 	.tpl-card {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px 16px;
+		gap: var(--sp-5) var(--sp-8);
 		justify-content: space-between;
 		align-items: center;
 	}
@@ -770,24 +796,24 @@
 	}
 	.tpl-actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.stale {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 12px;
+		gap: var(--sp-4) var(--sp-6);
 		align-items: center;
-		margin: 8px 0;
-		padding: 8px 10px;
-		border-radius: 6px;
+		margin: var(--sp-4) 0;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
 		background: var(--warn-soft);
 		color: var(--warn);
-		font-size: 14px;
+		font-size: var(--fs-md);
 		font-weight: 600;
 	}
 	.warns {
-		margin: 8px 0;
-		font-size: 13px;
+		margin: var(--sp-4) 0;
+		font-size: var(--fs-sm);
 	}
 	.warns summary {
 		cursor: pointer;
@@ -795,8 +821,8 @@
 		font-weight: 600;
 	}
 	.warns ul {
-		margin: 6px 0 0;
-		padding-left: 18px;
+		margin: var(--sp-3) 0 0;
+		padding-left: var(--sp-9);
 	}
 	.warns li.oversize {
 		color: var(--bad);
@@ -805,19 +831,21 @@
 		display: inline-flex;
 		justify-self: start;
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		overflow: hidden;
 	}
-	.seg {
+	.pl-seg {
+		display: inline-flex;
 		border: 0;
+		border-radius: var(--r-md);
 		background: transparent;
 		color: var(--muted);
 		font: inherit;
-		font-size: 13px;
-		padding: 5px 12px;
+		font-size: var(--fs-sm);
+		padding: var(--sp-2) var(--sp-6);
 		cursor: pointer;
 	}
-	.seg[aria-pressed='true'] {
+	.pl-seg[aria-pressed='true'] {
 		background: var(--accent-soft);
 		color: var(--accent);
 		font-weight: 600;
@@ -825,15 +853,15 @@
 	.fil-grams {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 12px;
+		gap: var(--sp-2) var(--sp-6);
 	}
 	.sliced-card {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px 16px;
-		margin-bottom: 14px;
+		gap: var(--sp-5) var(--sp-8);
+		margin-bottom: var(--sp-7);
 		border-style: dashed;
 	}
 	.sliced-text {
@@ -841,12 +869,12 @@
 		min-width: 0;
 	}
 	.sliced-text h2 {
-		margin: 0 0 2px;
-		font-size: 17px;
+		margin: 0 0 var(--sp-1);
+		font-size: var(--fs-lg);
 	}
 	.sliced-text p {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.drop-overlay {
 		position: fixed;
@@ -854,7 +882,7 @@
 		z-index: 100;
 		display: grid;
 		place-items: center;
-		padding: 16px;
+		padding: var(--sp-8);
 		text-align: center;
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
 		border: 3px dashed var(--accent);
@@ -862,15 +890,15 @@
 	}
 	.drop-overlay > div {
 		display: grid;
-		gap: 4px;
-		padding: 18px 22px;
-		border-radius: 12px;
+		gap: var(--sp-2);
+		padding: var(--sp-9) 22px;
+		border-radius: var(--r-xl);
 		background: var(--card);
 		color: var(--ink);
-		box-shadow: 0 4px 24px rgb(0 0 0 / 0.25);
+		box-shadow: var(--shadow-2);
 	}
 	.drop-overlay span {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	.upload-backdrop {
@@ -880,9 +908,9 @@
 		display: grid;
 		align-items: start;
 		justify-items: center;
-		padding: 12px;
+		padding: var(--sp-6);
 		overflow-y: auto;
-		background: rgb(0 0 0 / 0.5);
+		background: var(--scrim);
 	}
 	.upload-sheet {
 		width: min(760px, 100%);

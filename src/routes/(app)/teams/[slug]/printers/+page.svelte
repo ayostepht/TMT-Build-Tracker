@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { jobAction, removePrinter, updatePrinter } from '#lib/client/api.ts';
+	import { focusIn } from '#lib/client/focus-trap.ts';
 	import { PrinterStore } from '#lib/client/printer-store.svelte.ts';
 	import PrinterCard from '#lib/components/PrinterCard.svelte';
 	import PrinterJobLink from '#lib/components/PrinterJobLink.svelte';
@@ -35,6 +36,17 @@
 			error = e instanceof Error ? e.message : 'Failed';
 		}
 	}
+	/** Cancel the inline "Remove for good" confirm and put focus back on the button that opened it. */
+	async function cancelRemove(id: string) {
+		confirmRemove = null;
+		await tick();
+		document.querySelector<HTMLElement>(`[data-remove-printer="${id}"]`)?.focus();
+	}
+	function escCancel(e: KeyboardEvent, id: string) {
+		if (e.key !== 'Escape') return;
+		e.stopPropagation();
+		void cancelRemove(id);
+	}
 	async function unlink(id: string) {
 		await jobAction(id, { action: 'unlink' }).catch(() => {});
 		await store.load();
@@ -49,7 +61,7 @@
 
 <svelte:head><title>Printers · {data.team.name}</title></svelte:head>
 
-<section class="stack">
+<section class="pr-page">
 	<h2>Printers</h2>
 	{#if data.printersAvailable}
 		<p class="muted">
@@ -91,15 +103,31 @@
 								>
 							{/if}
 							{#if confirmRemove === p.id}
-								<button class="btn sm danger solid" type="button" onclick={() => remove(p)}
-									>Remove for good</button
+								<span
+									class="pr-confirm"
+									role="group"
+									aria-label="Remove {p.name}?"
+									use:focusIn={'button'}
 								>
-								<button class="btn sm" type="button" onclick={() => (confirmRemove = null)}
-									>Keep</button
-								>
+									<button
+										class="btn sm"
+										type="button"
+										onkeydown={(e) => escCancel(e, p.id)}
+										onclick={() => cancelRemove(p.id)}>Cancel</button
+									>
+									<button
+										class="btn sm danger solid"
+										type="button"
+										onkeydown={(e) => escCancel(e, p.id)}
+										onclick={() => remove(p)}>Remove for good</button
+									>
+								</span>
 							{:else}
-								<button class="btn sm danger" type="button" onclick={() => (confirmRemove = p.id)}
-									>Remove…</button
+								<button
+									class="btn sm danger"
+									type="button"
+									data-remove-printer={p.id}
+									onclick={() => (confirmRemove = p.id)}>Remove…</button
 								>
 							{/if}
 						{/if}
@@ -177,19 +205,36 @@
 </section>
 
 <style>
+	/* The page's vertical rhythm: sections and the printer list never touch. */
+	.pr-page {
+		display: grid;
+		gap: var(--sp-8);
+		align-content: start;
+	}
+	.pr-page > h2:not(:first-child) {
+		margin-top: var(--sp-6);
+	}
+	.pr-page > p {
+		margin: 0;
+	}
+	.pr-confirm {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-4);
+	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
-		gap: 12px;
+		gap: var(--sp-6);
 	}
 	.small {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.error {
 		white-space: normal;
 	}
 	.pr-unavailable p {
-		margin: 0 0 6px;
+		margin: 0 0 var(--sp-3);
 	}
 	.pr-unavailable p:last-child {
 		margin-bottom: 0;

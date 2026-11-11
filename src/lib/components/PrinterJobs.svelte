@@ -49,16 +49,16 @@
 		border: 1px solid var(--line);
 		border-left: 4px solid var(--accent);
 		background: var(--card);
-		border-radius: 8px;
-		padding: 12px 14px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-6) var(--sp-7);
 		display: grid;
-		gap: 10px;
-		font-size: 14px;
-		margin-bottom: 10px;
+		gap: var(--sp-5);
+		font-size: var(--fs-md);
+		margin-bottom: var(--sp-5);
 	}
 	.file {
 		font-family: var(--f-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		overflow-wrap: anywhere;
 	}
 </style>

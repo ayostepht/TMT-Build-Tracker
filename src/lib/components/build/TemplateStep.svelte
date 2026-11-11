@@ -88,7 +88,7 @@
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 	<div class="opt" class:sel={!owned}>
-		<label class="head">
+		<label class="tpl-head">
 			<input
 				type="radio"
 				name="template"
@@ -103,7 +103,7 @@
 				<span class="sub">The standard kit, built in</span>
 			</span>
 			{#if baseState}
-				<span class="chip {baseState}" data-testid="makegood-status" data-state={baseState}
+				<span class="tpl-chip {baseState}" data-testid="makegood-status" data-state={baseState}
 					>{label[baseState]}</span
 				>
 			{/if}
@@ -139,7 +139,7 @@
 	</div>
 
 	<div class="opt" class:sel={owned}>
-		<label class="head">
+		<label class="tpl-head">
 			<input
 				type="radio"
 				name="template"
@@ -185,7 +185,7 @@
 <style>
 	.opt {
 		border: 1px solid var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		padding: 12px;
 		display: grid;
 		gap: 10px;
@@ -196,14 +196,14 @@
 		background: var(--card);
 		box-shadow: 0 0 0 1px var(--accent);
 	}
-	.head {
+	.tpl-head {
 		display: flex;
 		align-items: center;
 		gap: 10px;
 		cursor: pointer;
 		min-height: 44px;
 	}
-	.head input {
+	.tpl-head input {
 		width: 20px;
 		height: 20px;
 		flex: none;
@@ -214,29 +214,33 @@
 		min-width: 0;
 	}
 	.sub {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
-	.chip {
+	.tpl-chip {
 		margin-left: auto;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		padding: 4px 10px;
-		border-radius: 999px;
+		border-radius: var(--r-pill);
 		background: var(--line);
 		color: var(--muted);
 		white-space: nowrap;
+		/* the look the leaked global .chip gave this label */
+		border: 1px solid var(--line);
+		display: inline-flex;
+		align-items: center;
 	}
-	.chip.ready {
+	.tpl-chip.ready {
 		background: var(--ok-soft);
 		color: var(--ok);
 	}
-	.chip.installing,
-	.chip.partial {
+	.tpl-chip.installing,
+	.tpl-chip.partial {
 		background: var(--warn-soft);
 		color: var(--warn);
 	}
-	.chip.missing {
+	.tpl-chip.missing {
 		background: var(--bad-soft);
 		color: var(--bad);
 	}
@@ -253,19 +257,19 @@
 		padding-left: 50px;
 		display: grid;
 		gap: 4px;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
-	@media (max-width: 520px) {
+	@media (max-width: 760px) {
 		.body {
 			padding-left: 0;
 		}
 		.files {
 			padding-left: 30px;
 		}
-		.head {
+		.tpl-head {
 			flex-wrap: wrap;
 		}
-		.chip {
+		.tpl-chip {
 			margin-left: 30px;
 		}
 	}

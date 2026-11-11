@@ -157,10 +157,31 @@ for (const [width, height] of [
 				await page.keyboard.press('Shift+Tab');
 				expect(await dlg.evaluate((d) => d.contains(document.activeElement))).toBe(true);
 			}
+			// The page behind the modal is inert (top bar and the rest of the page), the dialog and
+			// the toasts are not; closing the dialog lifts it again.
+			await expect(page.locator('header.topbar')).toHaveJSProperty('inert', true);
+			// (the dialog sits inside <main>, so it is main's other content that is inert)
+			expect(await page.locator('main h1').evaluate((h) => !!h.closest('[inert]'))).toBe(true);
+			await expect(dlg).toHaveJSProperty('inert', false);
+			expect(await dlg.evaluate((d) => !!d.closest('[inert]'))).toBe(false);
+			expect(await page.locator('.toasts').evaluate((d) => !!d.closest('[inert]'))).toBe(false);
 			await page.screenshot({ path: `${SHOTS}/dialog-${width}.png` });
 			await page.keyboard.press('Escape');
 			await expect(dlg).toHaveCount(0);
 			await expect(open).toBeFocused();
+			await expect(page.locator('[inert]')).toHaveCount(0);
+
+			// Inline confirm (build Settings, delete): Escape cancels and focus returns to the trigger.
+			await page.goto(`/builds/${buildId}/settings`);
+			await page.waitForLoadState('networkidle');
+			const del = page.getByRole('button', { name: 'Delete this build…' });
+			await del.click();
+			const confirm = page.getByRole('alertdialog');
+			await expect(confirm).toBeVisible();
+			await expect(confirm.getByLabel('Build name')).toBeFocused();
+			await page.keyboard.press('Escape');
+			await expect(confirm).toHaveCount(0);
+			await expect(del).toBeFocused();
 		});
 	});
 }

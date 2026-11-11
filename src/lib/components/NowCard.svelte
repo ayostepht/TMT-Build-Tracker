@@ -232,7 +232,7 @@
 <style>
 	.now-actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 </style>

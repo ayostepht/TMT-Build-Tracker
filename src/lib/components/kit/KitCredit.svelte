@@ -8,7 +8,7 @@
 <style>
 	.kit-credit {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--fs-xs);
 		line-height: 1.3;
 		color: var(--muted, currentColor);
 		opacity: 0.8;

@@ -63,7 +63,7 @@
 
 <style>
 	.spoolman {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 	}
 	.warn {

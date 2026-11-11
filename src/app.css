@@ -582,7 +582,7 @@ label.field input {
 	padding: var(--sp-2) var(--sp-3);
 }
 
-/* ---- build page (ported from the single-page prototype) ---- */
+/* ---- build page ---- */
 .sr-only {
 	position: absolute;
 	width: 1px;

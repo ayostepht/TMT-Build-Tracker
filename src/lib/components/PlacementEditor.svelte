@@ -346,7 +346,7 @@
 		height: min(70vh, 640px);
 		min-height: 320px;
 		border: 1px solid var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		background: var(--card);
 		overflow: hidden;
 	}
@@ -379,10 +379,10 @@
 		text-align: left;
 		padding: 6px 8px;
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--card);
 		color: var(--ink);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		cursor: pointer;
 	}
 	.pe-part.on {
@@ -405,7 +405,7 @@
 	}
 	fieldset {
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		display: grid;
 		gap: 6px;
 	}
@@ -419,10 +419,10 @@
 		min-width: 0;
 		padding: 6px 8px;
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
-		font: 14px var(--f-mono);
+		font: var(--fs-md) var(--f-mono);
 	}
 	.field.inline {
 		display: inline-flex;

@@ -388,18 +388,18 @@
 	}
 	.pf small {
 		color: var(--muted);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.cam {
 		border: 1px solid var(--line);
-		border-radius: 8px;
-		padding: 10px 12px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-5) var(--sp-6);
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.cam legend {
-		font-size: 13px;
-		padding: 0 4px;
+		font-size: var(--fs-sm);
+		padding: 0 var(--sp-2);
 	}
 	.camprev {
 		display: block;
@@ -407,50 +407,50 @@
 		max-width: 480px;
 		aspect-ratio: 16 / 9;
 		object-fit: contain;
-		background: #0c0e16;
-		border-radius: 6px;
+		background: #0c0e16; /* camera stage: dark in both themes */
+		border-radius: var(--r-md);
 	}
 	.linkrm {
 		justify-self: start;
 	}
 	.hint {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.disc {
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.found {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.found li {
 		display: flex;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
 		border: 1px solid var(--line);
-		border-radius: 6px;
-		padding: 6px 10px;
+		border-radius: var(--r-md);
+		padding: var(--sp-3) var(--sp-5);
 	}
 	.chk {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 	.testbox {
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.ok {
 		color: var(--ok);

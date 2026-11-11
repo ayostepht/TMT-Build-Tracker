@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-11 (audit Stage 1 pushed as 5a6c6da; Stages 2 and 3 done on local
-`main`, not pushed. Test copy is on r41, 7e05586; nothing from the audit is deployed yet)._
+_Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`. Test copy is
+still on r41, 7e05586: nothing from the audit is deployed yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -82,13 +82,13 @@ Route each to the agent named in brackets.
   this design"; draft cards have no 3D snapshot. Not yet raised with the maintainer: a
   selected part's chip covers the lower third of the phone stage; phone toasts cover the
   stage top for ~8 s.
-- **Stage 2 and 3 leftovers**: landing shows 3 builds because each build's controls open a
-  printer stream: share one stream per chapter in `printer-store.svelte.ts`, then raise the
-  cap [printers]; SDCP `PrintInfo.Status` 20 mid-print is unlabelled, needs the real
+- **Leftovers**: SDCP `PrintInfo.Status` 20 mid-print is unlabelled, needs the real
   printer [printers]; a one-off `ECONNRESET` on a PATCH in `printers.spec.ts` (suspected
   keep-alive reuse; retry in the spec if it recurs) [e2e-playwright]; the update prompt's
-  worker hand-over is unit-tested only [release-pwa]; first install precaches about 3.6 MB,
-  a third of it the PDF worker [release-pwa].
+  worker hand-over is unit-tested only [release-pwa]; each landing build polls its view
+  every 20 s and its printer jobs every 30 s (a shared chapter-level jobs fetch would cut
+  the bursts) [printers, app-shell]; `KitFilesImport` and `GuideMapper` were restyled
+  without screenshots (need installed kit files) [app-shell].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
 - **Printers** [printers]: OctoEverywhere shared link for Elegoo (merged; r41 has it without
   the reconnect/backoff fix 9c44a33): the maintainer enters the link in the printer form
@@ -201,18 +201,22 @@ its own `E2E_PORT`; the local `docker build` needs kit-pack download credentials
 job failed twice on 2026-11-11 installing the browser (runner could not reach Ubuntu's
 package server): re-run before reading it as a code failure.
 
-1. **Stage 4, cleanup and design system** (in progress). Done: prototype import and 3D
+1. **Stage 4, cleanup and design system** (nearly done). Done: prototype import and 3D
    re-orientation code removed, kit pack 1.0.0 dropped from the image, unused components
-   removed, scales and primitives in `app.css`, contrast guard, shell accessibility.
-   Left: per-owner sweep of hard-coded sizes and leaked global class names (inventory in
-   the 2026-11-11 design-system report: 52 files, worst `PlatesPanel`, `PlateUpload`,
-   `PlateDiagram`, `LogRunSheet`), `PartList` `.row` rename with its eight specs, retire the
-   deprecated globals, focus trapping in `BedPicker`, the upload sheet, the studio delete
-   overlay and two inline confirms, keyboard access to plate diagram parts, dark-mode
-   contrast of the skip link and the assembly step number, `three`/`pdfjs-dist` to
-   devDependencies (a dependency change: runs alone), legacy redirects, duplicate helpers.
+   removed, scales and primitives in `app.css`, component styles on the tokens (shell,
+   build, plates, printers, design), leaked class names renamed, contrast guard, focus
+   trapping with an inert background, keyboard paths, one printer stream per chapter
+   (landing shows up to 6 builds). Left: retire the deprecated globals in `app.css`
+   (`.seg`, `.chip`, `.tile`, `.tpl`, `.set`, `.card`…; usage table in the 2026-11-11
+   design report: `.card` alone is in about 26 files) and move the status control and the
+   log/filter sheets to `ds-seg`/`ds-modal` (changes their look: needs the maintainer's eye);
+   two leaked selectors (`.row` in `share/ApplyDesign`, `.group` in `VariantChooser`);
+   `.crumb`/`.mini` in the `(app)` layout; `three`/`pdfjs-dist` to devDependencies (a
+   dependency change: runs alone); legacy redirects; duplicate helpers; a null item in a
+   stored arrangement fails an export with a 500 (treat as stale and re-arrange).
    Open: squash migrations (needs a journal reset on the test copy; would also fix
-   `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision).
+   `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision);
+   TypeScript 7 (Dependabot PR #11 fails check: a deliberate upgrade).
 2. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
    CONTRIBUTING/SECURITY, `v1.0.0`, e2e gating the image, Unraid template (+ Community
    Apps), repo public.

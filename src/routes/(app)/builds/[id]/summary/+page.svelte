@@ -180,7 +180,7 @@
 		margin: 10px 0 0;
 	}
 	.facts dt {
-		font: 600 11px var(--f-body);
+		font: 600 var(--fs-xs) var(--f-body);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--muted);
@@ -197,7 +197,7 @@
 	.tbl {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.tbl th,
 	.tbl td {
@@ -241,7 +241,7 @@
 		width: 100%;
 		aspect-ratio: 4 / 3;
 		object-fit: cover;
-		border-radius: 6px;
+		border-radius: var(--r-md);
 	}
 	@media print {
 		:global(body:has(.summary)) :global(.topbar),

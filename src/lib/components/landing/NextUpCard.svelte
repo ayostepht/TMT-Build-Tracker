@@ -43,14 +43,14 @@
 	.nu-card {
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		padding: 14px;
 		display: grid;
 		gap: 10px;
 		min-width: 0;
 	}
 	.nu-build {
-		font: 600 12px/1 var(--f-body);
+		font: 600 var(--fs-xs)/1 var(--f-body);
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		margin-bottom: 6px;

@@ -174,7 +174,7 @@
 			{name}
 			value={parsed.printer ? JSON.stringify(parsed.printer) : ''}
 		/>{/if}
-	<div class="row">
+	<div class="pp-row">
 		<label class="field">
 			Brand
 			<select
@@ -226,7 +226,7 @@
 				<input bind:value={pName} {disabled} maxlength="80" onchange={emit} />
 			</label>
 		{/if}
-		<div class="row">
+		<div class="pp-row">
 			<label class="field num-field">
 				Bed X (mm)
 				<input
@@ -298,7 +298,7 @@
 		{/if}
 		<details class="adv">
 			<summary>Spacing and nozzle</summary>
-			<div class="row">
+			<div class="pp-row">
 				<label class="field num-field">
 					Edge margin (mm)
 					<input
@@ -354,23 +354,23 @@
 	.printer-picker {
 		grid-template-columns: minmax(0, 1fr);
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
-	.row {
+	.pp-row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: end;
 	}
-	.row > .field {
+	.pp-row > .field {
 		flex: 1 1 140px;
 		min-width: 0;
 	}
-	.row > .grow {
+	.pp-row > .grow {
 		flex: 2 1 220px;
 	}
-	.row input,
-	.row select {
+	.pp-row input,
+	.pp-row select {
 		min-width: 0;
 		max-width: 100%;
 		box-sizing: border-box;
@@ -381,14 +381,14 @@
 	.adv summary {
 		cursor: pointer;
 		color: var(--muted);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.warn {
 		color: var(--warn);
 	}
 	.err {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--bad);
 	}
 	.meta {

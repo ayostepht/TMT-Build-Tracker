@@ -42,3 +42,31 @@ test('Setup Files step and Files tab picker: bed presets, light and dark, phone 
 	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu X1 / P1 / A1 (24 plates)' });
 	await expect(page.getByTestId('arrange-bed-panel')).toHaveCount(0);
 });
+
+test('New printer dialog is a real modal: focus in, Tab trapped, Escape closes, focus restored', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const { buildId } = await ownerWithBuild(page, 'newprinter');
+	await page.goto(`/builds/${buildId}/files`);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
+	const sel = page.getByTestId('team-printer');
+	await sel.focus();
+	await sel.selectOption({ label: 'New printer…' });
+	const dlg = page.getByRole('dialog', { name: 'New printer' });
+	await expect(dlg).toBeVisible();
+	await expect(dlg.locator(':focus')).toHaveCount(1);
+	for (let i = 0; i < 8; i++) {
+		await page.keyboard.press('Tab');
+		await expect(dlg.locator(':focus')).toHaveCount(1);
+	}
+	for (let i = 0; i < 8; i++) {
+		await page.keyboard.press('Shift+Tab');
+		await expect(dlg.locator(':focus')).toHaveCount(1);
+	}
+	await page.keyboard.press('Escape');
+	await expect(dlg).toBeHidden();
+	await expect(sel).toBeFocused();
+});

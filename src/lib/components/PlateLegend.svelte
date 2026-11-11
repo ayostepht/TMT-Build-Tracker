@@ -29,7 +29,7 @@
 		<li>
 			<button
 				type="button"
-				class="row"
+				class="lg-row"
 				class:on={active === r.slug}
 				aria-pressed={pinned === r.slug}
 				data-legend={r.slug}
@@ -80,31 +80,31 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 2px;
+		gap: var(--sp-1);
 		grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
 	}
-	.row {
+	.lg-row {
 		display: flex;
 		align-items: flex-start;
-		gap: 9px;
+		gap: var(--sp-4);
 		width: 100%;
 		text-align: left;
-		padding: 6px 8px;
+		padding: var(--sp-3) var(--sp-4);
 		border: 1px solid transparent;
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: transparent;
 		color: var(--ink);
 		font: inherit;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		cursor: pointer;
 		min-height: 36px;
 	}
-	.row:hover,
-	.row.on {
+	.lg-row:hover,
+	.lg-row.on {
 		background: var(--accent-soft);
 		border-color: var(--accent);
 	}
-	.row[aria-pressed='true'] {
+	.lg-row[aria-pressed='true'] {
 		border-color: var(--accent);
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
@@ -118,7 +118,7 @@
 		background: #fff;
 		border: 1.5px solid #1b2033;
 		color: #1b2033;
-		font: 700 12px/1 var(--f-body);
+		font: 700 var(--fs-xs) / 1 var(--f-body);
 		margin-top: 1px;
 	}
 	.sw {
@@ -127,11 +127,11 @@
 		height: 14px;
 		border-radius: 50%;
 		border: 1px solid;
-		margin-top: 4px;
+		margin-top: var(--sp-2);
 	}
 	.txt {
 		display: grid;
-		gap: 2px;
+		gap: var(--sp-1);
 		min-width: 0;
 	}
 	.name {
@@ -140,18 +140,18 @@
 	}
 	.note {
 		justify-self: start;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 		line-height: 1.35;
 	}
 	.tag {
 		display: inline-block;
-		padding: 0 6px;
-		border-radius: 999px;
+		padding: 0 var(--sp-3);
+		border-radius: var(--r-pill);
 		background: var(--warn-soft);
 		color: var(--warn);
 		font-weight: 600;
-		font-size: 11px;
+		font-size: var(--fs-xs);
 		line-height: 17px;
 	}
 	.glyph {

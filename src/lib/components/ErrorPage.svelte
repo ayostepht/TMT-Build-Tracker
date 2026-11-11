@@ -72,7 +72,7 @@
 		justify-items: start;
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 14px;
+		border-radius: var(--r-xl);
 	}
 	.err-code {
 		font: 700 56px/1 var(--f-display);

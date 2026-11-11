@@ -39,7 +39,7 @@
 		gap: 12px;
 		border-color: var(--accent);
 	}
-	@media (max-width: 600px) {
+	@media (max-width: 760px) {
 		.cont {
 			grid-auto-flow: row;
 		}

@@ -14,7 +14,7 @@
 	}
 </script>
 
-<div class="toasts" role="status" aria-live="polite">
+<div class="toasts" role="status" aria-live="polite" data-keep-active>
 	{#each toasts.items as t (t.id)}
 		<div class="toast">
 			<span>{t.text}</span>
@@ -78,13 +78,13 @@
 		background: var(--ink);
 		color: var(--paper);
 		padding: 10px 12px 10px 16px;
-		border-radius: 10px;
-		font-size: 14px;
-		box-shadow: 0 6px 24px rgb(0 0 0 / 0.3);
+		border-radius: var(--r-lg);
+		font-size: var(--fs-md);
+		box-shadow: var(--shadow-2);
 	}
 	.toast-act {
 		border: 1px solid currentColor;
-		border-radius: 999px;
+		border-radius: var(--r-pill);
 		background: transparent;
 		color: inherit;
 		font: inherit;
@@ -101,7 +101,7 @@
 		background: transparent;
 		color: inherit;
 		opacity: 0.7;
-		font-size: 18px;
+		font-size: var(--fs-lg);
 		line-height: 1;
 		cursor: pointer;
 		padding: 2px 6px;

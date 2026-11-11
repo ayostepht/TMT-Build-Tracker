@@ -78,7 +78,7 @@
 <style>
 	.exp-confirm {
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-basis: 100%;
 		width: 100%;
 	}
@@ -89,6 +89,6 @@
 	.exp-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 </style>

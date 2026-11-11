@@ -132,7 +132,7 @@
 	.plate-control {
 		display: inline-flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--sp-3);
 		align-items: center;
 	}
 </style>

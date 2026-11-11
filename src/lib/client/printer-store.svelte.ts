@@ -21,7 +21,7 @@ export class PrinterStore {
 	autoLogPrints = $state(false);
 	/** Team page, editors: builds a job can be linked to. */
 	builds = $state<{ id: string; name: string }[]>([]);
-	private es: EventSource | null = null;
+	private leave: (() => void) | null = null;
 	private refs = 0;
 	private reloadTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -31,8 +31,6 @@ export class PrinterStore {
 	) {}
 
 	private seq = 0;
-	private pollTimer: ReturnType<typeof setInterval> | undefined;
-	private wired = false;
 
 	async load() {
 		// Overlapping loads (first load + an SSE-triggered reload) can finish out of order: only the newest counts.
@@ -62,7 +60,8 @@ export class PrinterStore {
 		this.loaded = true;
 	}
 
-	private resync = () => {
+	/** Refetch (skipped while the tab is hidden); called by the shared org stream. */
+	resync = () => {
 		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
 		void this.load();
 	};
@@ -76,49 +75,92 @@ export class PrinterStore {
 		this.refs++;
 		if (this.refs === 1) {
 			void this.load();
-			this.open();
-			// A phone suspends the stream in the background and misses events: refetch when it is back.
-			if (typeof document !== 'undefined' && !this.wired) {
-				this.wired = true;
-				document.addEventListener('visibilitychange', this.resync);
-				window.addEventListener('online', this.resync);
-				window.addEventListener('focus', this.resync);
-				this.pollTimer = setInterval(this.resync, 30_000);
-			}
+			this.leave = joinOrgStream(this.org, this);
 		}
 		return () => {
 			this.refs--;
-			if (this.refs === 0) this.close();
+			if (this.refs === 0) {
+				clearTimeout(this.reloadTimer);
+				this.leave?.();
+				this.leave = null;
+			}
+		};
+	}
+
+	/** One event from the org's stream. */
+	handle(e: StreamEvent) {
+		if (e.type === 'status' && e.status) {
+			const p = this.printers.find((x) => x.id === e.printerId);
+			if (p) {
+				p.status = e.status;
+				if (e.lastSeenAt) p.lastSeenAt = e.lastSeenAt;
+			}
+		} else {
+			clearTimeout(this.reloadTimer);
+			this.reloadTimer = setTimeout(() => void this.load(), 300);
+		}
+	}
+}
+
+type StreamEvent = {
+	type: string;
+	printerId: string;
+	status?: PrinterStatus;
+	lastSeenAt?: string;
+};
+
+/**
+ * ONE EventSource per organization, shared by every store that listens to it (a landing page
+ * has one store per build plus the nav's): browsers allow about 6 connections per host on
+ * HTTP/1.1 and the server caps streams per user. Closed when the last store leaves. Window
+ * listeners and the 30 s poll live here too, so N stores do not each add their own.
+ */
+class OrgStream {
+	private es: EventSource | null = null;
+	private subs = new Set<PrinterStore>();
+	private pollTimer: ReturnType<typeof setInterval> | undefined;
+	private wired = false;
+
+	constructor(readonly org: string) {}
+
+	get size() {
+		return this.subs.size;
+	}
+
+	private resyncAll = () => {
+		for (const s of [...this.subs]) s.resync();
+	};
+
+	join(store: PrinterStore): () => void {
+		this.subs.add(store);
+		if (this.subs.size === 1) this.open();
+		return () => {
+			this.subs.delete(store);
+			if (this.subs.size === 0) this.close();
 		};
 	}
 
 	private open() {
+		// A phone suspends the stream in the background and misses events: refetch when it is back.
+		if (typeof document !== 'undefined' && !this.wired) {
+			this.wired = true;
+			document.addEventListener('visibilitychange', this.resyncAll);
+			window.addEventListener('online', this.resyncAll);
+			window.addEventListener('focus', this.resyncAll);
+			this.pollTimer = setInterval(this.resyncAll, 30_000);
+		}
 		if (typeof EventSource === 'undefined') return;
 		const es = new EventSource(`/api/printers/events?org=${encodeURIComponent(this.org)}`);
 		this.es = es;
 		es.onopen = () => {
 			// Events sent before the stream was open (the page's first load races it) and on a
-			// reconnect are missed: fetch again once it is open.
-			this.resync();
+			// reconnect are missed: every store fetches again once it is open.
+			this.resyncAll();
 		};
 		es.onmessage = (m) => {
 			try {
-				const e = JSON.parse(m.data) as {
-					type: string;
-					printerId: string;
-					status?: PrinterStatus;
-					lastSeenAt?: string;
-				};
-				if (e.type === 'status' && e.status) {
-					const p = this.printers.find((x) => x.id === e.printerId);
-					if (p) {
-						p.status = e.status;
-						if (e.lastSeenAt) p.lastSeenAt = e.lastSeenAt;
-					}
-				} else {
-					clearTimeout(this.reloadTimer);
-					this.reloadTimer = setTimeout(() => void this.load(), 300);
-				}
+				const e = JSON.parse(m.data) as StreamEvent;
+				for (const s of [...this.subs]) s.handle(e);
 			} catch {
 				/* ignore */
 			}
@@ -126,17 +168,30 @@ export class PrinterStore {
 	}
 
 	private close() {
-		clearTimeout(this.reloadTimer);
 		clearInterval(this.pollTimer);
 		if (this.wired && typeof document !== 'undefined') {
-			document.removeEventListener('visibilitychange', this.resync);
-			window.removeEventListener('online', this.resync);
-			window.removeEventListener('focus', this.resync);
+			document.removeEventListener('visibilitychange', this.resyncAll);
+			window.removeEventListener('online', this.resyncAll);
+			window.removeEventListener('focus', this.resyncAll);
 		}
 		this.wired = false;
 		this.es?.close();
 		this.es = null;
+		if (streams.get(this.org) === this) streams.delete(this.org);
 	}
+}
+
+// A plain registry of connections, never read reactively.
+// eslint-disable-next-line svelte/prefer-svelte-reactivity
+const streams = new Map<string, OrgStream>();
+
+function joinOrgStream(org: string, store: PrinterStore): () => void {
+	let st = streams.get(org);
+	if (!st) {
+		st = new OrgStream(org);
+		streams.set(org, st);
+	}
+	return st.join(store);
 }
 
 const stores = new WeakMap<object, PrinterStore>();

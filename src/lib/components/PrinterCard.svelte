@@ -62,7 +62,7 @@
 	{:else if s && (s.state === 'printing' || s.state === 'paused' || s.state === 'done')}
 		<div class="prog" data-testid="printer-progress">
 			<div
-				class="bar"
+				class="pc-bar"
 				role="progressbar"
 				aria-valuenow={s.progress ?? 0}
 				aria-valuemin="0"
@@ -119,10 +119,10 @@
 		background: var(--card);
 		border: 1px solid var(--line);
 		border-left: 4px solid var(--line);
-		border-radius: 10px;
-		padding: 14px 16px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-7) var(--sp-8);
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 		min-width: 0;
 	}
 	.pc[data-state='printing'] {
@@ -141,23 +141,23 @@
 	header {
 		display: flex;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: flex-start;
 	}
 	h3 {
 		margin: 0;
-		font-size: 20px;
+		font-size: var(--fs-lg);
 		overflow-wrap: anywhere;
 	}
 	.kind {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 	}
 	.st {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
-		padding: 3px 9px;
-		border-radius: 999px;
+		padding: var(--sp-3) 9px;
+		border-radius: var(--r-pill);
 		background: var(--line);
 		color: var(--ink);
 		white-space: nowrap;
@@ -183,14 +183,29 @@
 	.prog {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
-	.prog .bar {
+	.pc-bar {
 		flex: 1;
+		height: 10px;
+		border-radius: var(--r-md);
+		background: var(--line);
+		overflow: hidden;
+		display: flex;
+	}
+	.pc-bar span {
+		display: block;
+		height: 100%;
+		transition: width 0.3s;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.pc-bar span {
+			transition: none;
+		}
 	}
 	.file {
 		font-family: var(--f-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -201,8 +216,8 @@
 	.slots {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 14px;
-		font-size: 13px;
+		gap: var(--sp-2) var(--sp-7);
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	.slot {
@@ -219,12 +234,12 @@
 	}
 	.msg {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	footer {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 </style>

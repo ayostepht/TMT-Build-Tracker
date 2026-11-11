@@ -40,7 +40,7 @@ test('design tab: plates-out-of-date notice links to Files and dismisses per cha
 
 	// A new change brings it back.
 	await page.getByRole('tab', { name: 'Parts' }).click();
-	await page.locator('button.row[data-slug="wing-left"]').click();
+	await page.locator('[data-testid="part-row"][data-slug="wing-left"]').click();
 	await page.getByTestId('part-sheet').locator('button[data-role="primary"]').click();
 	await expect(page.getByTestId('design-stale')).toBeVisible();
 

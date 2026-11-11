@@ -53,7 +53,9 @@ export function estimateArrangedPlates(
 		plates.map((p) => ({
 			number: p.number,
 			runs: p.runs,
-			items: p.arrangement?.items.length ? p.arrangement.items.map((i) => i.slug) : p.parts
+			items: p.arrangement?.items.length
+				? p.arrangement.items.flatMap((i) => (i ? [i.slug] : []))
+				: p.parts
 		}))
 	);
 }

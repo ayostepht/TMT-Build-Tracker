@@ -50,6 +50,15 @@ test('a past print log can be edited or deleted and part statuses follow', async
 	);
 	await editSheet.getByRole('button', { name: 'Delete', exact: true }).click();
 	await expect(editSheet).toContainText(`Delete this log? ${nameA} goes back to To print.`);
+	// The inline confirmation takes focus (on the safe button); Escape cancels it, not the sheet.
+	const confirm = editSheet.getByRole('alertdialog', { name: 'Confirm delete' });
+	await expect(confirm.getByRole('button', { name: 'Keep it' })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(editSheet).toBeVisible();
+	await expect(confirm).toBeHidden();
+	await expect(editSheet.getByRole('button', { name: 'Delete', exact: true })).toBeFocused();
+	await editSheet.getByRole('button', { name: 'Delete', exact: true }).click();
+	await expect(confirm.getByRole('button', { name: 'Keep it' })).toBeFocused();
 	await editSheet.getByRole('button', { name: 'Delete log' }).click();
 	await expect(editSheet).toBeHidden();
 	await expect(row(page, slugA)).toHaveAttribute('data-s', 'To print');
@@ -155,4 +164,48 @@ test('plate History on the Print tab shows the runs and deletes one after an in-
 		await expect(page.getByRole('alertdialog')).toBeVisible();
 		await page.screenshot({ path: `${SHOTS}/delete-confirm-1440-light.png` });
 	}
+});
+
+test('sheets are labelled and give focus back; the status control is a keyboard group', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'sheetfocus');
+	await keepPrintedVisible(page, buildId);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await expect(page).toHaveURL(/\/print$/);
+
+	// Filter sheet (phone): labelled, Escape returns focus to the Filter button.
+	const filterBtn = page.getByTestId('print-filter-open');
+	await filterBtn.click();
+	await expect(page.getByRole('dialog', { name: 'Filter parts' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('dialog', { name: 'Filter parts' })).toBeHidden();
+	await expect(filterBtn).toBeFocused();
+
+	// Status control: a labelled group, the current value exposed, operable with the keyboard,
+	// and the current value is marked by more than colour (an underline).
+	const first = page.locator('.row').first();
+	const group = first.getByRole('group', { name: /^Status for / });
+	await expect(group.getByRole('button', { pressed: true })).toHaveCount(1);
+	await expect(group.getByRole('button', { name: 'To print', pressed: true })).toBeVisible();
+	const shadow = (name: string) =>
+		group
+			.getByRole('button', { name, exact: true })
+			.evaluate((el) => getComputedStyle(el).boxShadow);
+	expect(await shadow('To print')).not.toBe('none');
+	expect(await shadow('Printed')).toBe('none');
+	await group.getByRole('button', { name: 'Printing', exact: true }).focus();
+	await page.keyboard.press('Enter');
+	await expect(group.getByRole('button', { name: 'Printing', pressed: true })).toBeVisible();
+
+	// Log sheet: labelled, Escape returns focus to the button that opened it.
+	await first.getByRole('button', { name: /^Details for / }).click();
+	const opener = first.getByRole('button', { name: 'Log a print…' });
+	await opener.focus();
+	await page.keyboard.press('Enter');
+	const sheet = page.getByRole('dialog', { name: /^Log print/ });
+	await expect(sheet).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(sheet).toBeHidden();
+	await expect(opener).toBeFocused();
 });

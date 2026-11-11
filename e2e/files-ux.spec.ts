@@ -70,6 +70,36 @@ test('own sliced file: visible button, select option and drop all open the uploa
 	await expect(page.getByRole('dialog', { name: 'Use my own sliced file' })).toBeVisible();
 });
 
+test('upload sheet is a real modal: focus in, Tab trapped, Escape closes, focus restored', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await signUp(page, 'Mona Modal', uniqueEmail('modal'));
+	const id = await createBuild(page, 'Modal chair');
+	await page.goto(`/builds/${id}/files`);
+	await page.waitForLoadState('networkidle');
+
+	const opener = page.getByTestId('use-own-sliced');
+	await opener.click();
+	const dlg = page.getByRole('dialog', { name: 'Use my own sliced file' });
+	await expect(dlg).toBeVisible();
+	// focus moved into the dialog
+	await expect(dlg.locator(':focus')).toHaveCount(1);
+	// Tab and Shift+Tab never leave it
+	for (let i = 0; i < 6; i++) {
+		await page.keyboard.press('Tab');
+		await expect(dlg.locator(':focus')).toHaveCount(1);
+	}
+	for (let i = 0; i < 6; i++) {
+		await page.keyboard.press('Shift+Tab');
+		await expect(dlg.locator(':focus')).toHaveCount(1);
+	}
+	await page.keyboard.press('Escape');
+	await expect(dlg).toBeHidden();
+	await expect(page.getByTestId('use-own-sliced')).toBeFocused();
+});
+
 test('compact printer summary, switching layouts asks first, printers from other workspaces', async ({
 	page
 }) => {
@@ -130,8 +160,11 @@ test('compact printer summary, switching layouts asks first, printers from other
 	// Switching to a MakeGood profile asks first; Cancel keeps the arrangement.
 	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (21 plates)' });
 	await expect(page.getByTestId('layout-confirm')).toContainText('Replace your');
+	// the safe choice (Cancel) has focus, not the destructive one
+	await expect(page.getByTestId('layout-confirm-cancel')).toBeFocused();
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for CC1');
 	await page.getByTestId('layout-confirm-cancel').click();
+	await expect(page.getByTestId('plate-layout')).toBeFocused();
 	await expect(page.getByTestId('layout-confirm')).toHaveCount(0);
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for CC1');
 	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (21 plates)' });

@@ -280,13 +280,13 @@
 		box-sizing: border-box;
 		padding: 9px 10px;
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
 		font: inherit;
 		resize: vertical;
 	}
-	@media (max-width: 520px) {
+	@media (max-width: 760px) {
 		.row2 .btn.primary {
 			flex: 1;
 		}

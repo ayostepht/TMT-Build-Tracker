@@ -13,7 +13,7 @@
 
 <svelte:head><title>{data.template.name} · Kit admin · TMT Build Tracker</title></svelte:head>
 
-<section class="stack">
+<section class="kit-page">
 	<div class="kicker">Kit admin</div>
 	{#if back}
 		<p>
@@ -32,7 +32,7 @@
 	</p>
 	<h1>{data.template.name}</h1>
 
-	<div class="card stack">
+	<div class="card">
 		<KitStatus templateId={data.template.id} />
 		<KitCredit />
 		<p class="muted">
@@ -74,11 +74,11 @@
 </section>
 
 <style>
-	section.stack {
+	section.kit-page {
 		display: grid;
 		gap: 14px;
 	}
-	section.stack > p {
+	section.kit-page > p {
 		margin: 0;
 	}
 	.adv summary {

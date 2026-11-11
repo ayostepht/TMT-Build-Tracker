@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { focusIn } from '#lib/client/focus-trap.ts';
 	import { applyDesign, listDesigns, type DesignListItem } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
@@ -68,7 +69,19 @@
 			>Apply this design…</button
 		>
 	{:else}
-		<div class="confirm" role="alertdialog" aria-label="Confirm applying the design">
+		<div
+			class="confirm"
+			role="alertdialog"
+			aria-label="Confirm applying the design"
+			tabindex="-1"
+			use:focusIn={'button:not(.primary)'}
+			onkeydown={(e) => {
+				if (e.key === 'Escape' && !busy) {
+					e.stopPropagation();
+					confirming = false;
+				}
+			}}
+		>
 			<p>
 				<b>Apply "{design?.name}" to this build?</b>
 			</p>

@@ -241,14 +241,14 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.offset,
 	.pdfp {
 		width: 64px;
 		padding: 6px 8px;
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
 		font: inherit;
@@ -259,7 +259,7 @@
 		max-height: 420px;
 		overflow: auto;
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		padding: 4px;
 	}
 	.mrow {
@@ -268,7 +268,7 @@
 		gap: 8px;
 		align-items: center;
 		padding: 4px 6px;
-		border-radius: 6px;
+		border-radius: var(--r-md);
 	}
 	.mrow.sel {
 		background: var(--accent-soft);
@@ -291,13 +291,17 @@
 		height: 40px;
 		padding: 0;
 		border: 1px solid var(--line);
-		border-radius: 4px;
+		border-radius: var(--r-sm);
 		overflow: hidden;
 		background: #fff;
 		display: grid;
 		place-items: center;
-		font-size: 10px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
+	}
+	/* Text on a thumbnail slot: --paper keeps --muted at 4.5:1+ in both themes (it was white). */
+	.tb.none {
+		background: var(--paper);
 	}
 	.tb img {
 		width: 100%;
@@ -326,7 +330,7 @@
 		object-fit: contain;
 		background: #fff;
 		border: 1px solid var(--line);
-		border-radius: 4px;
+		border-radius: var(--r-sm);
 	}
 	.blank {
 		display: grid;
@@ -335,9 +339,9 @@
 		background: var(--paper);
 	}
 	figcaption {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
-	@media (max-width: 560px) {
+	@media (max-width: 760px) {
 		.compare {
 			grid-template-columns: 1fr;
 		}

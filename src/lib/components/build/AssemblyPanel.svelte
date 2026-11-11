@@ -288,7 +288,7 @@
 		margin: 6px 0 10px;
 		padding-left: 18px;
 		color: var(--warn);
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.prog {
 		display: grid;
@@ -305,7 +305,7 @@
 	.astep {
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		padding: 12px 14px;
 		display: grid;
 		gap: 10px;
@@ -333,11 +333,11 @@
 		place-items: center;
 		background: var(--accent-soft);
 		color: var(--accent);
-		font: 600 14px var(--f-mono);
+		font: 600 var(--fs-md) var(--f-mono);
 	}
 	.done .no {
 		background: var(--ok);
-		color: #fff;
+		color: var(--on-fill);
 	}
 	.desc {
 		margin: 0;
@@ -356,11 +356,11 @@
 		object-fit: cover;
 		object-position: top;
 		border: 1px solid var(--line);
-		border-radius: 4px;
+		border-radius: var(--r-sm);
 		background: #fff;
 	}
 	.lab {
-		font: 600 12px var(--f-body);
+		font: 600 var(--fs-xs) var(--f-body);
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 		color: var(--muted);
@@ -382,12 +382,12 @@
 	}
 	.warntext {
 		color: var(--warn);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.pst {
-		font: 600 11px var(--f-body);
+		font: 600 var(--fs-xs) var(--f-body);
 		padding: 2px 8px;
-		border-radius: 999px;
+		border-radius: var(--r-pill);
 		line-height: 1.5;
 	}
 	.pst.ok {
@@ -420,7 +420,7 @@
 		justify-content: space-between;
 	}
 	.who {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 		white-space: nowrap;
 	}
@@ -433,7 +433,7 @@
 		box-sizing: border-box;
 		padding: 8px 10px;
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
 		font: inherit;
@@ -449,9 +449,9 @@
 	.doneby {
 		margin-right: auto;
 		color: var(--ok);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
-	@media (max-width: 520px) {
+	@media (max-width: 760px) {
 		footer .btn.primary {
 			flex: 1;
 			padding: 12px 14px;

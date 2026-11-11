@@ -11,7 +11,7 @@ test('Design: selecting a part floats a chip on the stage without growing the pa
 	await page.getByRole('tab', { name: 'Parts' }).click();
 	const height = () => page.evaluate(() => document.documentElement.scrollHeight);
 	const before = await height();
-	await page.locator('button.row[data-slug="wing-left"]').click();
+	await page.locator('[data-testid="part-row"][data-slug="wing-left"]').click();
 	const sheet = page.getByTestId('part-sheet');
 	await expect(sheet).toBeVisible();
 	expect(await height()).toBe(before);
@@ -117,7 +117,7 @@ for (const width of [360, 390]) {
 
 		await page.getByRole('tab', { name: 'Parts' }).click();
 		await check('parts');
-		await page.locator('button.row[data-slug="wing-left"]').click();
+		await page.locator('[data-testid="part-row"][data-slug="wing-left"]').click();
 		await expect(page.getByTestId('part-sheet')).toBeVisible();
 		await check('parts with a part selected');
 		await page.keyboard.press('Escape');

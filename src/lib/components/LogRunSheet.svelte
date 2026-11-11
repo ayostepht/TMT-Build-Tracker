@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import {
 		RUN_RESULTS,
 		type PrintRun,
@@ -21,6 +21,7 @@
 		today
 	} from '#lib/domain/index.ts';
 	import { deleteRun, logRun, undoRun, updateRun } from '#lib/client/api.ts';
+	import { focusIn } from '#lib/client/focus-trap.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { toasts } from './toast.svelte.ts';
 
@@ -266,6 +267,19 @@
 		trigger = null;
 		if (t?.isConnected) t.focus();
 	}
+	// Escape while the delete confirmation is up cancels only the confirmation, not the sheet.
+	function oncancel(e: Event) {
+		if (confirmDelete && editRun) {
+			e.preventDefault();
+			keepLog();
+		}
+	}
+	let delBtn = $state<HTMLButtonElement>();
+	async function keepLog() {
+		confirmDelete = false;
+		await tick();
+		delBtn?.focus();
+	}
 	function onbackdrop(e: MouseEvent) {
 		if (e.target === dlg) open = false;
 	}
@@ -342,7 +356,14 @@
 	}
 </script>
 
-<dialog bind:this={dlg} class="sheet" aria-labelledby="{uid}-t" {onclose} onclick={onbackdrop}>
+<dialog
+	bind:this={dlg}
+	class="sheet"
+	aria-labelledby="{uid}-t"
+	{onclose}
+	{oncancel}
+	onclick={onbackdrop}
+>
 	{#if open}
 		<form onsubmit={save}>
 			<header>
@@ -464,7 +485,12 @@
 			{#if error}<p class="err" role="alert">{error}</p>{/if}
 
 			{#if editRun && confirmDelete}
-				<div class="confirm" role="alertdialog" aria-label="Confirm delete">
+				<div
+					class="confirm"
+					role="alertdialog"
+					aria-label="Confirm delete"
+					use:focusIn={'[data-keep]'}
+				>
 					<p>
 						Delete this log?
 						{#if deleteChanges.length && !keepStatuses}{sentence(deleteChanges)}.{:else}Part
@@ -476,9 +502,7 @@
 						>
 					{/if}
 					<div class="confirm-acts">
-						<button class="btn" type="button" onclick={() => (confirmDelete = false)}
-							>Keep it</button
-						>
+						<button class="btn" type="button" data-keep onclick={keepLog}>Keep it</button>
 						<button class="btn danger" type="button" disabled={busy} onclick={remove}
 							>Delete log</button
 						>
@@ -488,8 +512,11 @@
 
 			<footer>
 				{#if editRun && !confirmDelete}
-					<button class="btn danger del" type="button" onclick={() => (confirmDelete = true)}
-						>Delete</button
+					<button
+						bind:this={delBtn}
+						class="btn danger del"
+						type="button"
+						onclick={() => (confirmDelete = true)}>Delete</button
 					>
 				{/if}
 				<button class="btn" type="button" onclick={() => (open = false)}>Cancel</button>
@@ -502,7 +529,7 @@
 <style>
 	.sheet {
 		border: 1px solid var(--line);
-		border-radius: 14px;
+		border-radius: var(--r-xl);
 		background: var(--card);
 		color: var(--ink);
 		padding: 0;
@@ -511,12 +538,12 @@
 		overflow: auto;
 	}
 	.sheet::backdrop {
-		background: rgb(10 12 24 / 0.55);
+		background: var(--scrim);
 	}
 	form {
 		display: grid;
-		gap: 14px;
-		padding: 16px;
+		gap: var(--sp-7);
+		padding: var(--sp-8);
 		min-width: 0;
 	}
 	header {
@@ -527,15 +554,15 @@
 	h2 {
 		margin: 0;
 		font-family: var(--f-display);
-		font-size: 24px;
+		font-size: var(--fs-xl);
 	}
 	.x {
 		border: 0;
 		background: transparent;
 		color: var(--muted);
-		font-size: 24px;
+		font-size: var(--fs-xl);
 		line-height: 1;
-		padding: 4px 10px;
+		padding: var(--sp-2) var(--sp-5);
 		cursor: pointer;
 	}
 	fieldset {
@@ -546,44 +573,44 @@
 	}
 	legend,
 	.f {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 		padding: 0;
 	}
 	.f {
 		display: grid;
-		gap: 4px;
+		gap: var(--sp-2);
 		min-width: 0;
 	}
 	legend {
-		margin-bottom: 4px;
+		margin-bottom: var(--sp-2);
 	}
 	input,
 	select,
 	textarea {
 		width: 100%;
 		min-width: 0;
-		padding: 9px 10px;
+		padding: var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--paper);
 		color: var(--ink);
 		font: inherit;
-		font-size: 16px;
+		font-size: var(--fs-field);
 	}
 	textarea {
 		resize: vertical;
 	}
 	.inline {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
 	}
 	.segbtns {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		overflow: hidden;
 	}
 	.segbtns button {
@@ -591,7 +618,7 @@
 		border-right: 1px solid var(--line);
 		background: var(--paper);
 		color: var(--ink);
-		padding: 11px 6px;
+		padding: var(--sp-6) var(--sp-3);
 		font: inherit;
 		font-weight: 600;
 		cursor: pointer;
@@ -611,52 +638,56 @@
 		background: var(--warn-soft);
 		color: var(--warn);
 	}
+	/* Colour is not the only cue for the chosen result: an underline in the text colour too. */
+	.segbtns button[aria-pressed='true'] {
+		box-shadow: inset 0 -3px 0 currentColor;
+	}
 	small {
 		color: var(--muted);
 	}
 	.err {
 		color: var(--bad);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		margin: 0;
 	}
 	.summary {
 		margin: 0;
-		padding: 8px 10px;
-		border-radius: 8px;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-lg);
 		background: var(--accent-soft);
 		color: var(--ink);
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	footer {
 		display: flex;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.del {
 		margin-right: auto;
 	}
 	.confirm {
 		display: grid;
-		gap: 8px;
-		padding: 10px;
-		border-radius: 8px;
+		gap: var(--sp-4);
+		padding: var(--sp-5);
+		border-radius: var(--r-lg);
 		background: var(--bad-soft);
 		color: var(--ink);
 	}
 	.confirm p {
 		margin: 0;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.confirm .confirm-acts {
 		display: flex;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.chk {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.chk input {
 		width: auto;
@@ -666,12 +697,12 @@
 			width: 100%;
 			max-width: 100%;
 			margin: auto 0 0;
-			border-radius: 16px 16px 0 0;
+			border-radius: var(--r-xl) var(--r-xl) 0 0;
 			max-height: 92dvh;
 		}
 		footer .btn {
 			flex: 1;
-			padding: 12px 14px;
+			padding: var(--sp-6) var(--sp-7);
 		}
 	}
 </style>

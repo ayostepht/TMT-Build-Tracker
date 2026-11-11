@@ -30,11 +30,13 @@ test('studio: draft, recolor, plates, hidden from builds, make it a build', asyn
 
 	// Recolor: move the wings to the first slot.
 	await page.getByRole('tab', { name: 'Parts' }).click();
-	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const wing = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	const before = await wing.innerText();
 	await wing.click();
 	await page.getByTestId('part-sheet').locator('button[data-role="primary"]').click();
-	await expect(page.locator('button.row[data-slug="wing-left"]')).not.toHaveText(before);
+	await expect(page.locator('[data-testid="part-row"][data-slug="wing-left"]')).not.toHaveText(
+		before
+	);
 
 	// Tracking pages bounce back to the draft; the API refuses tracking changes.
 	await page.goto(`/builds/${id}/print`);

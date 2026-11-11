@@ -18,7 +18,7 @@ import { updateBuildDesign } from '../designs/mutate';
 import { arrangeForPrinter, buildArrangement, setPlateLayout } from './plates';
 import { onBuildEvents } from './test-helpers';
 import { loadBuildView } from './view';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 let db: Db;
 let templateId: string;
@@ -223,6 +223,18 @@ describe('arrangeForPrinter', () => {
 		expect(res.convertedRuns).toBe(1);
 		expect(view(id).runs.every((r) => r.plateNumber === null)).toBe(true);
 		expect(buildArrangement(db, id, 'owner').stale).toBe(false);
+	});
+
+	it('a null item in a stored arrangement does not throw and marks it stale only by content', () => {
+		const id = mk(bed(256, 256, 1));
+		const row = db.select().from(buildPlates).where(eq(buildPlates.buildId, id)).all()[0];
+		expect(row.arrangement).toBeTruthy();
+		const bad = { ...row.arrangement!, items: [null, ...row.arrangement!.items] } as never;
+		db.update(buildPlates)
+			.set({ arrangement: bad })
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, row.number)))
+			.run();
+		expect(() => buildArrangement(db, id, 'owner')).not.toThrow();
 	});
 
 	it('leaves other layouts alone when the printer changes', () => {

@@ -13,8 +13,9 @@
 	/**
 	 * The landing's "Now printing" and "Next up" across the builds it was given. One `BuildCtx` per
 	 * build (the same class the build layout uses) is shared by both sections. The server caps how
-	 * many builds it hands us (LANDING_BUILD_CAP) because each build's controls open one printer
-	 * stream; build state itself is polled, not streamed (see below).
+	 * many builds it hands us (LANDING_BUILD_CAP) because each build is polled and fetches its
+	 * printer jobs; all builds of a chapter share one printer stream. Build state itself is polled,
+	 * not streamed (see below).
 	 */
 	let { views, more = 0 }: { views: BuildView[]; more?: number } = $props();
 
@@ -43,8 +44,8 @@
 	});
 
 	// No build streams here: a browser keeps at most 6 connections per host over HTTP/1.1, and every
-	// open stream takes one (the nav's printer stream and each card's printer stream already do), so
-	// more would starve page loads. Instead each build is re-fetched every 20 s while the page is
+	// open stream takes one (the printer stream is shared by the nav and all cards), so more
+	// would crowd page loads. Instead each build is re-fetched every 20 s while the page is
 	// visible, and when the phone wakes or the tab regains focus. Your own actions refresh at once.
 	$effect(() => {
 		let last = 0;

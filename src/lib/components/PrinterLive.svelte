@@ -48,7 +48,7 @@
 <div class="live" data-testid="printer-live">
 	<div class="live-head">
 		<span class="live-name">{job.printerName}</span>
-		<span class="live-state"
+		<span class="live-state" role="status" aria-live="polite"
 			>{job.status === 'paused'
 				? 'Paused'
 				: live?.state === 'offline'
@@ -58,7 +58,7 @@
 	</div>
 	<div class="prog">
 		<div
-			class="bar"
+			class="pl-bar"
 			role="progressbar"
 			aria-valuenow={pct ?? 0}
 			aria-valuemin="0"
@@ -103,25 +103,25 @@
 				>Not this plate</button
 			>{/if}
 	</div>
-	<CameraTile printerId={job.printerId} />
+	<CameraTile printerId={job.printerId} name={job.printerName} />
 </div>
 
 <style>
 	.live {
 		border: 1px solid var(--line);
 		background: var(--accent-soft);
-		border-radius: 8px;
-		padding: 10px 12px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-5) var(--sp-6);
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		min-width: 0;
 		box-sizing: border-box;
 	}
 	.live-head {
 		display: flex;
 		justify-content: space-between;
-		gap: 8px;
-		font-size: 13px;
+		gap: var(--sp-4);
+		font-size: var(--fs-sm);
 	}
 	.live-name {
 		font-weight: 600;
@@ -132,17 +132,32 @@
 	.prog {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
-	.prog .bar {
+	.pl-bar {
 		flex: 1;
+		height: 10px;
+		border-radius: var(--r-md);
+		background: var(--line);
+		overflow: hidden;
+		display: flex;
+	}
+	.pl-bar span {
+		display: block;
+		height: 100%;
+		transition: width 0.3s;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.pl-bar span {
+			transition: none;
+		}
 	}
 	.which {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 10px;
+		gap: var(--sp-2) var(--sp-5);
 		align-items: center;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.chg {
@@ -155,10 +170,10 @@
 		min-width: 0;
 		text-overflow: ellipsis;
 		box-sizing: border-box;
-		padding: 4px 6px;
-		font-size: 13px;
+		padding: var(--sp-2) var(--sp-3);
+		font-size: var(--fs-sm);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		max-width: 100%;
 	}
@@ -169,8 +184,8 @@
 	.facts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 2px 14px;
-		font-size: 13px;
+		gap: var(--sp-1) var(--sp-7);
+		font-size: var(--fs-sm);
 		color: var(--muted);
 		align-items: center;
 	}

@@ -216,10 +216,10 @@
 	.zlevel {
 		min-width: 3.2em;
 		text-align: center;
-		font: 500 13px var(--f-mono);
+		font: 500 var(--fs-sm) var(--f-mono);
 	}
 	.zhint {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 		margin-left: auto;
 	}
@@ -237,7 +237,7 @@
 		height: auto;
 		user-select: none;
 	}
-	@media (max-width: 600px) {
+	@media (max-width: 760px) {
 		.zhint {
 			display: none;
 		}

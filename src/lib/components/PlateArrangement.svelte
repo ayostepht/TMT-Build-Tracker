@@ -75,7 +75,7 @@
 				<div class="util">
 					<span class="meta num">{pct}% of the bed used</span>
 					<span
-						class="bar"
+						class="pa-bar"
 						role="meter"
 						aria-label="Bed used"
 						aria-valuemin="0"
@@ -88,7 +88,7 @@
 				<div class="grams">
 					{#each Object.entries(plate.estGrams) as [role, g] (role)}
 						<span class="meta num g" data-testid="plate-grams"
-							><span class="dot" style="background:{colorOf(role)}" aria-hidden="true"
+							><span class="pa-dot" style="background:{colorOf(role)}" aria-hidden="true"
 							></span>{filamentLabel(role)} ~{fmt(g)} g{perRun ? ' per run' : ''}</span
 						>
 					{/each}
@@ -101,7 +101,7 @@
 <style>
 	.arranged {
 		display: grid;
-		gap: 12px 22px;
+		gap: var(--sp-6) 22px;
 		align-items: start;
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -112,59 +112,60 @@
 	}
 	.side {
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 		min-width: 0;
 	}
-	@media (min-width: 860px) {
+	@media (min-width: 901px) {
 		.arranged {
 			grid-template-columns: minmax(300px, 460px) minmax(0, 1fr);
 		}
 	}
 	.approx-note {
 		margin: 0;
-		font-size: 12.5px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 	}
 	.stats {
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.util {
 		display: grid;
-		gap: 4px;
+		gap: var(--sp-2);
 	}
-	.bar {
+	.pa-bar {
 		display: block;
 		height: 5px;
-		border-radius: 3px;
+		border-radius: var(--r-sm);
 		background: var(--line);
 		overflow: hidden;
 	}
-	.bar > span {
+	.pa-bar > span {
 		display: block;
 		height: 100%;
-		border-radius: 3px;
+		border-radius: var(--r-sm);
 		background: var(--accent);
+		transition: width 0.3s;
 	}
 	.grams {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 14px;
+		gap: var(--sp-2) var(--sp-7);
 	}
 	.g {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
-	.dot {
+	.pa-dot {
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
-		box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.55);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 55%, transparent);
 	}
 	.over-note {
 		color: var(--bad);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 </style>

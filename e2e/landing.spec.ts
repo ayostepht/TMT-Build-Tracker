@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
 
 const settled = (page: Page) => page.waitForLoadState('networkidle');
 const SHOTS = '.playwright-mcp/stage2b-app-shell';
+const SHOTS_4B = '.playwright-mcp/stage4b-app-shell';
 
 test('a new user sees what the app is for and one New build button', async ({ page }) => {
 	await signUp(page, 'Nina New', uniqueEmail('landing-empty'));
@@ -105,12 +106,27 @@ test('the landing opens few live streams and stays navigable', async ({ page }) 
 		() => (window as unknown as { __streams: string[] }).__streams
 	);
 	console.log('STREAMS', JSON.stringify(streams));
-	// No build streams (polled instead); one printer stream per shown build plus the nav's own stay
-	// well under the browser's 6 connections per host over HTTP/1.1 and the server's 12 per user.
+	// No build streams (polled instead); every build of the chapter shares one printer stream with
+	// the nav (same org URL), so the page holds exactly 1 however many builds it shows.
 	expect(streams.filter((u) => /\/api\/builds\//.test(u))).toHaveLength(0);
-	expect(streams.length).toBeLessThanOrEqual(4);
-	await expect(page.getByTestId('next-up-card')).toHaveCount(3);
+	expect(streams).toHaveLength(1);
+	// Up to 6 builds appear (the owner's first plus 6 more were made: the 7th is left to "All builds").
+	await expect(page.getByTestId('next-up-card')).toHaveCount(6);
 	await expect(page.getByTestId('landing-more')).toContainText('All builds');
+	// Layout check with 6 builds, one of them printing (a compact Now card).
+	await page
+		.getByTestId('next-up-card')
+		.first()
+		.getByRole('button', { name: /^Start printing plate/ })
+		.click();
+	await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
+	for (const [w, h] of [
+		[390, 844],
+		[1440, 900]
+	] as const) {
+		await page.setViewportSize({ width: w, height: h });
+		await page.screenshot({ path: `${SHOTS_4B}/landing-6-${w}.png`, fullPage: true });
+	}
 	// Still navigable: the page's own requests are not starved by streams.
 	await page.getByTestId('new-build').click();
 	await expect(page).toHaveURL(/\/builds\/new/);

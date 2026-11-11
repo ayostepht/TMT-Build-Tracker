@@ -160,11 +160,19 @@ test('camera tile on Now printing: appears while printing, refreshes, goes live,
 	}
 
 	// Enlarge: tap the image.
+	await expect(img).toHaveAttribute('alt', 'Live camera: Cam Centauri');
 	await img.click();
 	await expect(page.getByTestId('camera-lightbox-img')).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Live camera: Cam Centauri' })).toBeVisible();
+	await expect(page.getByTestId('camera-lightbox-img')).toHaveAttribute(
+		'alt',
+		'Live camera: Cam Centauri, enlarged'
+	);
 	await page.screenshot({ path: `${SHOTS}/e2e-lightbox-390.png` });
 	await page.keyboard.press('Escape');
 	await expect(page.getByTestId('camera-lightbox-img')).toBeHidden();
+	// Focus is back on the button that opened it.
+	await expect(tile.getByRole('button', { name: /^Enlarge camera view/ })).toBeFocused();
 
 	// Back to snapshots: the stream is dropped from the page.
 	await tile.getByTestId('camera-live').click();

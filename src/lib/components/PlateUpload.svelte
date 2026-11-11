@@ -219,11 +219,15 @@
 		}
 		onclose();
 	}
+	/** Escape in the sheet: the same as Cancel, except while the plates are being applied. */
+	export function close() {
+		if (phase !== 'applying') void cancel();
+	}
 </script>
 
 <AskDialog ask={asking} />
 <section class="card upload" aria-label="Upload a 3MF">
-	<div class="head">
+	<div class="up-head">
 		<h2>Upload my sliced 3MF</h2>
 		<button class="btn sm" type="button" onclick={cancel} disabled={phase === 'applying'}
 			>Cancel</button
@@ -264,7 +268,7 @@
 			</label>
 		{:else}
 			<div class="progress" role="status">
-				<div class="bar"><span style="width:{Math.round(progress * 100)}%"></span></div>
+				<div class="up-bar"><span style="width:{Math.round(progress * 100)}%"></span></div>
 				<span class="meta"
 					>{progress < 1
 						? `Uploading ${fileName}… ${Math.round(progress * 100)}%`
@@ -409,7 +413,7 @@
 							<li class:unmatched={!mapping[key]}>
 								<div class="oname" title={up.suggestions.matches[key]?.reason}>
 									{o.name}{#if o.count > 1}<b> ×{o.count}</b>{/if}
-									<span class="badge {b.cls}">{b.text}</span>
+									<span class="up-badge {b.cls}">{b.text}</span>
 								</div>
 								<select bind:value={mapping[key]} aria-label="Part for {o.name}">
 									<option value={null}>No match (skip)</option>
@@ -487,13 +491,13 @@
 
 <style>
 	.upload {
-		gap: 14px;
+		gap: var(--sp-7);
 	}
-	.head {
+	.up-head {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 	h2,
 	h3,
@@ -501,17 +505,17 @@
 		margin: 0;
 	}
 	h3 {
-		font-size: 15px;
+		font-size: var(--fs-base);
 	}
 	h4 {
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.drop {
 		display: grid;
 		place-items: center;
-		padding: 28px 12px;
+		padding: 28px var(--sp-6);
 		border: 2px dashed var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		color: var(--muted);
 		cursor: pointer;
 		text-align: center;
@@ -522,15 +526,16 @@
 	}
 	.progress {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
-	.bar {
+	.up-bar {
+		display: flex;
 		height: 8px;
 		background: var(--line);
-		border-radius: 4px;
+		border-radius: var(--r-sm);
 		overflow: hidden;
 	}
-	.bar span {
+	.up-bar span {
 		display: block;
 		height: 100%;
 		background: var(--accent);
@@ -538,27 +543,27 @@
 	}
 	.note {
 		margin: 0;
-		padding: 8px 10px;
-		border-radius: 6px;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
 		background: var(--warn-soft);
 		color: var(--ink);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.sum {
 		overflow-wrap: anywhere;
 	}
 	.outcome {
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.opt {
 		display: grid;
 		grid-template-columns: auto 1fr;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: start;
-		padding: 10px 12px;
+		padding: var(--sp-5) var(--sp-6);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--paper);
 		cursor: pointer;
 	}
@@ -572,18 +577,18 @@
 	}
 	.opt > span {
 		display: grid;
-		gap: 2px;
+		gap: var(--sp-1);
 	}
 	.fil-map,
 	.variants,
 	.plates {
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.fil {
 		display: grid;
 		grid-template-columns: 16px 1fr;
-		gap: 4px 8px;
+		gap: var(--sp-2) var(--sp-4);
 		align-items: center;
 	}
 	.fil select {
@@ -597,27 +602,27 @@
 	}
 	.chk {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: baseline;
 		flex-wrap: wrap;
 	}
 	.rp {
 		border: 1px solid var(--line);
-		border-radius: 8px;
-		padding: 10px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-5);
 		display: grid;
-		gap: 8px;
+		gap: var(--sp-4);
 		background: var(--paper);
 	}
 	.rp-head {
 		display: flex;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: center;
 	}
 	.rp-head img {
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		border: 1px solid var(--line);
-		background: #fff;
+		background: #fff; /* slicer thumbnails are drawn for a white page: no token */
 		object-fit: contain;
 		flex: none;
 	}
@@ -626,11 +631,11 @@
 	}
 	.twin {
 		display: grid;
-		gap: 6px;
-		padding: 8px 10px;
-		border-radius: 6px;
+		gap: var(--sp-3);
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
 		background: var(--accent-soft);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.twin-line {
 		overflow-wrap: anywhere;
@@ -640,13 +645,13 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.objs li {
 		display: grid;
-		gap: 4px;
-		padding: 6px 8px;
-		border-radius: 6px;
+		gap: var(--sp-2);
+		padding: var(--sp-3) var(--sp-4);
+		border-radius: var(--r-md);
 		border: 1px solid transparent;
 	}
 	.objs li.unmatched {
@@ -654,51 +659,51 @@
 		border-color: var(--warn);
 	}
 	.oname {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		overflow-wrap: anywhere;
 	}
 	select {
 		width: 100%;
 		min-width: 0;
-		padding: 7px 8px;
+		padding: 7px var(--sp-4);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--card);
 		color: var(--ink);
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
-	.badge {
+	.up-badge {
 		display: inline-block;
-		font-size: 11px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
-		padding: 1px 6px;
-		border-radius: 8px;
-		margin-left: 4px;
+		padding: 1px var(--sp-3);
+		border-radius: var(--r-lg);
+		margin-left: var(--sp-2);
 		vertical-align: 1px;
 	}
-	.badge.high {
+	.up-badge.high {
 		background: var(--ok-soft);
 		color: var(--ok);
 	}
-	.badge.check,
-	.badge.none {
+	.up-badge.check,
+	.up-badge.none {
 		background: var(--warn-soft);
 		color: var(--warn);
 	}
-	.badge.manual {
+	.up-badge.manual {
 		background: var(--accent-soft);
 		color: var(--accent);
 	}
 	.actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--sp-4);
 		position: sticky;
 		bottom: 0;
-		padding: 8px 0;
+		padding: var(--sp-4) 0;
 		background: var(--card);
 	}
-	@media (min-width: 640px) {
+	@media (min-width: 761px) {
 		.fil {
 			grid-template-columns: 16px 1fr minmax(180px, 1fr);
 		}

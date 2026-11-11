@@ -429,7 +429,7 @@
 							{#each steps as s (s.id)}<li>{s.title}</li>{/each}
 						</ol>
 					{/if}
-					<div class="row">
+					<div class="kfi-actions">
 						<button
 							type="button"
 							class="btn primary"
@@ -480,7 +480,7 @@
 					{/each}
 				</ol>
 				{#if phase === 'done'}
-					<div class="row">
+					<div class="kfi-actions">
 						<button type="button" class="btn" onclick={reset}>Add more files</button>
 					</div>
 				{/if}
@@ -513,7 +513,7 @@
 		justify-items: start;
 		padding: 16px;
 		border: 2px dashed var(--line);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		background: var(--paper);
 	}
 	.drop.over {
@@ -535,14 +535,14 @@
 	ol.order {
 		list-style: decimal inside;
 		gap: 2px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 		margin: 8px 0;
 	}
 	ul.plan > li,
 	ol.run > li {
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		padding: 8px 10px;
 		display: grid;
 		gap: 4px;
@@ -559,14 +559,14 @@
 		display: flex;
 		gap: 8px;
 		align-items: flex-start;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.feed.off span {
 		text-decoration: line-through;
 		color: var(--muted);
 	}
 	.sub {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding-left: 26px;
 	}
 	.sliced {
@@ -574,35 +574,40 @@
 		gap: 6px;
 		justify-items: start;
 		padding: 8px;
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--accent-soft);
 	}
 	.sliced p {
 		margin: 0;
 	}
 	.sub0 {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		align-self: center;
 	}
 	.warn {
 		color: var(--warn);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
-	.row {
+	/* Keeps the card look the leaked global .row gave these action rows. */
+	.kfi-actions {
 		display: flex;
 		gap: 8px;
 		flex-wrap: wrap;
 		margin-top: 8px;
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-left: 5px solid var(--line);
+		border-radius: var(--r-lg);
 	}
 	.btn.tiny {
 		padding: 2px 8px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		margin-left: auto;
 	}
 	.st {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 1px 8px;
-		border-radius: 10px;
+		border-radius: var(--r-lg);
 		background: var(--accent-soft);
 	}
 	li.done .st {

@@ -65,7 +65,7 @@
 					{#if f.spoolmanSpoolId == null}
 						<span class="muted">No spool linked</span>
 					{:else if cur}
-						<span class="dot" style="background:{cur.colorHex ?? 'var(--line)'}"></span>
+						<span class="sp-dot" style="background:{cur.colorHex ?? 'var(--line)'}"></span>
 						<span>{cur.vendor ? `${cur.vendor} ` : ''}{cur.name}</span>
 						<span class="muted num"
 							>{cur.remainingG != null ? `${fmt(cur.remainingG)} g left` : ''}</span
@@ -110,7 +110,7 @@
 										data-testid="spool-option"
 										onclick={() => choose(f.key, s)}
 									>
-										<span class="dot" style="background:{s.colorHex ?? 'var(--line)'}"></span>
+										<span class="sp-dot" style="background:{s.colorHex ?? 'var(--line)'}"></span>
 										<span class="nm"
 											>{s.vendor ? `${s.vendor} ` : ''}{s.name}{s.material
 												? ` · ${s.material}`
@@ -135,35 +135,35 @@
 <style>
 	.spools {
 		display: grid;
-		gap: 4px;
+		gap: var(--sp-2);
 		border-top: 1px solid var(--line);
-		padding-top: 12px;
+		padding-top: var(--sp-6);
 	}
 	h3 {
-		margin: 0 0 4px;
+		margin: 0 0 var(--sp-2);
 	}
 	.srow {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
-		gap: 8px 12px;
+		gap: var(--sp-4) var(--sp-6);
 		align-items: center;
-		padding: 8px 0;
+		padding: var(--sp-4) 0;
 		border-top: 1px solid var(--line);
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.who,
 	.cur {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--sp-4);
 		min-width: 0;
 		flex-wrap: wrap;
 	}
 	.acts {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
-	.dot {
+	.sp-dot {
 		width: 14px;
 		height: 14px;
 		border-radius: 50%;
@@ -174,14 +174,14 @@
 	.picker {
 		grid-column: 1 / -1;
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.picker input {
-		padding: 9px 10px;
+		padding: 9px var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
-		font-size: 15px;
+		font-size: var(--fs-base);
 	}
 	.picker ul {
 		list-style: none;
@@ -190,20 +190,20 @@
 		max-height: 260px;
 		overflow: auto;
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 	}
 	.opt {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--sp-4);
 		width: 100%;
 		text-align: left;
 		background: var(--card);
 		color: var(--ink);
 		border: 0;
 		border-bottom: 1px solid var(--line);
-		padding: 9px 10px;
-		font-size: 14px;
+		padding: 9px var(--sp-5);
+		font-size: var(--fs-md);
 	}
 	.opt:hover {
 		background: var(--accent-soft);
@@ -214,9 +214,9 @@
 		overflow-wrap: anywhere;
 	}
 	.pad {
-		padding: 10px;
+		padding: var(--sp-5);
 	}
-	@media (max-width: 640px) {
+	@media (max-width: 760px) {
 		.srow {
 			grid-template-columns: 1fr;
 		}

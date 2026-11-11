@@ -75,14 +75,14 @@
 <style>
 	.pjl {
 		display: grid;
-		gap: 8px;
-		margin-top: 6px;
+		gap: var(--sp-4);
+		margin-top: var(--sp-3);
 		justify-items: start;
 	}
 	.sel select {
-		padding: 8px;
+		padding: var(--sp-4);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		max-width: 100%;
 	}

@@ -136,15 +136,15 @@
 	.ptb {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 16px;
+		gap: var(--sp-4) var(--sp-8);
 		align-items: center;
-		padding: 8px 0;
+		padding: var(--sp-4) 0;
 		border-bottom: 1px solid var(--line);
 	}
 	.ptb-inline {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 16px;
+		gap: var(--sp-4) var(--sp-8);
 		align-items: center;
 		min-width: 0;
 		flex: 1 1 auto;
@@ -152,18 +152,18 @@
 	.ptb-chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.ptb-tog {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		font-size: 13px;
+		gap: var(--sp-3);
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	.ptb-tog select {
-		padding: 4px 6px;
-		border-radius: 6px;
+		padding: var(--sp-2) var(--sp-3);
+		border-radius: var(--r-md);
 		border: 1px solid var(--line);
 		background: var(--card);
 		color: var(--ink);
@@ -171,7 +171,7 @@
 	.ptb-phone {
 		display: none;
 		align-items: center;
-		gap: 10px;
+		gap: var(--sp-5);
 		min-width: 0;
 		flex: 1 1 0;
 	}
@@ -180,7 +180,7 @@
 		white-space: nowrap;
 	}
 	.ptb-sum {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 		white-space: nowrap;
 		overflow: hidden;
@@ -189,7 +189,7 @@
 	}
 	.ptb-sheet {
 		border: 1px solid var(--line);
-		border-radius: 14px;
+		border-radius: var(--r-xl);
 		background: var(--card);
 		color: var(--ink);
 		padding: 0;
@@ -198,12 +198,12 @@
 		overflow: auto;
 	}
 	.ptb-sheet::backdrop {
-		background: rgb(10 12 24 / 0.55);
+		background: var(--scrim);
 	}
 	.ptb-body {
 		display: grid;
-		gap: 14px;
-		padding: 16px;
+		gap: var(--sp-7);
+		padding: var(--sp-8);
 	}
 	.ptb-body header {
 		display: flex;
@@ -213,25 +213,25 @@
 	.ptb-body h2 {
 		margin: 0;
 		font-family: var(--f-display);
-		font-size: 24px;
+		font-size: var(--fs-xl);
 	}
 	.ptb-x {
 		border: 0;
 		background: transparent;
 		color: var(--muted);
-		font-size: 24px;
+		font-size: var(--fs-xl);
 		line-height: 1;
-		padding: 4px 10px;
+		padding: var(--sp-2) var(--sp-5);
 		cursor: pointer;
 	}
 	.ptb-body .ptb-tog {
 		min-height: 40px;
-		font-size: 15px;
+		font-size: var(--fs-base);
 		color: var(--ink);
 	}
 	.ptb-body .ptb-tog select {
 		min-height: 40px;
-		font-size: 16px;
+		font-size: var(--fs-field);
 	}
 	.ptb-body .ptb-tog input {
 		width: 20px;
@@ -252,7 +252,7 @@
 			width: 100%;
 			max-width: 100%;
 			margin: auto 0 0;
-			border-radius: 16px 16px 0 0;
+			border-radius: var(--r-xl) var(--r-xl) 0 0;
 			max-height: 92dvh;
 		}
 	}

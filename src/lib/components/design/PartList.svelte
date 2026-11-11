@@ -60,7 +60,9 @@
 		const slug = selected;
 		if (!slug || !visible || !root) return;
 		queueMicrotask(() => {
-			const row = root?.querySelector<HTMLElement>(`button.row[data-slug="${CSS.escape(slug)}"]`);
+			const row = root?.querySelector<HTMLElement>(
+				`[data-testid="part-row"][data-slug="${CSS.escape(slug)}"]`
+			);
 			if (row && row.offsetParent) row.scrollIntoView({ block: 'nearest' });
 		});
 	});
@@ -110,7 +112,8 @@
 					<li>
 						<button
 							type="button"
-							class="row"
+							class="prow"
+							data-testid="part-row"
 							class:on={selected === p.slug}
 							data-slug={p.slug}
 							aria-pressed={selected === p.slug}
@@ -210,7 +213,7 @@
 		display: grid;
 		gap: var(--sp-1);
 	}
-	.row {
+	.prow {
 		all: unset;
 		box-sizing: border-box;
 		width: 100%;
@@ -227,14 +230,14 @@
 		scroll-margin-top: calc(var(--pt, 0px) + 34px);
 		scroll-margin-bottom: var(--sp-4);
 	}
-	.row:hover {
+	.prow:hover {
 		border-color: var(--accent);
 	}
-	.row:focus-visible {
+	.prow:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
-	.row.on {
+	.prow.on {
 		border-color: var(--accent);
 		background: var(--accent-soft);
 	}
@@ -275,7 +278,7 @@
 		h3 {
 			top: calc(var(--pt, 0px) + var(--headh, 0px));
 		}
-		.row {
+		.prow {
 			scroll-margin-top: calc(var(--pt, 0px) + var(--headh, 0px) + 34px);
 		}
 	}

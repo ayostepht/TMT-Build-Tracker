@@ -14,6 +14,7 @@
 	} from '#lib/printers/printer.ts';
 	import PrinterPicker from './PrinterPicker.svelte';
 	import PrinterForm from './PrinterForm.svelte';
+	import { isTopTrap, trapFocus } from '#lib/client/focus-trap.ts';
 
 	/**
 	 * Pick the bed a build is planned for: a standard size in one tap, a custom size, or a
@@ -212,6 +213,7 @@
 		const ok = list.filter((t) => t.organizationId === orgId && catalogPrinter(t.catalogId));
 		if (preselectSingle && !touched && ok.length === 1 && !current?.catalogId) pickTeam(ok[0].id);
 	});
+	let npBox = $state<HTMLElement>();
 	function portal(node: HTMLElement) {
 		document.body.appendChild(node);
 		return { destroy: () => node.remove() };
@@ -421,14 +423,24 @@
 	{/if}
 </div>
 
+<svelte:window
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && adding && isTopTrap(npBox)) adding = false;
+	}}
+/>
+
 {#if adding}
+	<!-- portal first, then the focus trap: moving the node in the DOM would drop focus set before -->
 	<div
 		use:portal
+		use:trapFocus
 		class="np-backdrop"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New printer"
+		tabindex="-1"
 		data-testid="new-printer-dialog"
+		bind:this={npBox}
 	>
 		<div class="np-box">
 			<PrinterForm org={orgId} ondone={added} oncancel={() => (adding = false)} />
@@ -438,19 +450,19 @@
 
 <style>
 	.adv {
-		margin-top: 0.5rem;
+		margin-top: var(--sp-4);
 	}
 	.adv summary {
 		cursor: pointer;
-		font-size: 0.85rem;
+		font-size: var(--fs-sm);
 		color: var(--muted, inherit);
 	}
 	.ko-row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
+		gap: var(--sp-3);
 		align-items: end;
-		margin: 0.4rem 0;
+		margin: var(--sp-3) 0;
 	}
 	.ko-row > input {
 		flex: 1 1 8rem;
@@ -459,39 +471,39 @@
 	.ko-num {
 		display: flex;
 		flex-direction: column;
-		font-size: 0.7rem;
+		font-size: var(--fs-xs);
 		width: 4.2rem;
 	}
 	.bed-picker {
 		grid-template-columns: minmax(0, 1fr);
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 		min-width: 0;
 	}
 	.presets {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.preset {
 		display: grid;
-		gap: 2px;
+		gap: var(--sp-1);
 		align-content: start;
 		text-align: left;
-		padding: 8px 10px;
+		padding: var(--sp-4) var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--card);
 		color: var(--ink);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		min-width: 0;
 		min-height: 44px;
 	}
 	.preset b {
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.preset span {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 		overflow-wrap: anywhere;
 	}
@@ -510,7 +522,7 @@
 	.bp-row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--sp-5);
 		align-items: end;
 	}
 	.bp-row > .field {
@@ -527,24 +539,24 @@
 		position: fixed;
 		inset: 0 0 var(--bottom-bar-h, 0px) 0;
 		z-index: 100;
-		background: rgb(0 0 0 / 0.5);
+		background: var(--scrim);
 		overflow-y: auto;
 		display: grid;
 		align-items: start;
 		justify-items: center;
-		padding: 16px;
+		padding: var(--sp-8);
 	}
 	.np-box {
 		width: min(640px, 100%);
 	}
 	.hint {
 		margin: 0;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 	}
 	.err {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--bad);
 	}
 </style>

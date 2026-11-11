@@ -7,7 +7,10 @@
  *  - keeps Tab / Shift+Tab inside it (and pulls stray focus back),
  *  - on close, restores focus to the element that had it before.
  * Traps stack: with a confirmation open on top of a viewer, only the top one is active.
- * Escape stays with the component (it knows what "close" means).
+ * While a trap is open everything outside it is `inert` (the siblings of the trap and of each of
+ * its ancestors), so the page behind a modal is out of the tab order and the accessibility tree.
+ * An element marked `data-keep-active` (the toasts) stays live. Escape stays with the component
+ * (it knows what "close" means).
  */
 
 export const FOCUSABLE =
@@ -23,6 +26,33 @@ export function wrapTarget(count: number, current: number, shift: boolean): numb
 }
 
 const stack: HTMLElement[] = [];
+
+/** Elements this module made inert (never ones that were inert already). */
+const inerted = new Set<HTMLElement>();
+const NEVER_INERT = new Set(['HEAD', 'SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE']);
+
+/** Makes everything outside the innermost trap inert; undoes it for what no longer needs it. */
+function syncInert() {
+	const want = new Set<HTMLElement>();
+	const top = stack[stack.length - 1];
+	for (let el: HTMLElement | null = top ?? null; el?.parentElement; el = el.parentElement) {
+		for (const sib of el.parentElement.children) {
+			if (sib === el || !(sib instanceof HTMLElement)) continue;
+			if (NEVER_INERT.has(sib.tagName) || sib.hasAttribute('data-keep-active')) continue;
+			want.add(sib);
+		}
+	}
+	for (const el of [...inerted]) {
+		if (want.has(el)) continue;
+		el.inert = false;
+		inerted.delete(el);
+	}
+	for (const el of want) {
+		if (el.inert) continue;
+		el.inert = true;
+		inerted.add(el);
+	}
+}
 
 /** True when `node` is the innermost open trap (or no trap is registered for it at all). */
 export function isTopTrap(node: HTMLElement | undefined): boolean {
@@ -51,6 +81,7 @@ export function trapFocus(node: HTMLElement, options: TrapOptions = {}) {
 		focusables(node)[0] ??
 		node;
 	target.focus({ preventScroll: true });
+	syncInert();
 
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key !== 'Tab' || stack[stack.length - 1] !== node) return;
@@ -83,6 +114,7 @@ export function trapFocus(node: HTMLElement, options: TrapOptions = {}) {
 			document.removeEventListener('focusin', onfocusin);
 			const i = stack.lastIndexOf(node);
 			if (i >= 0) stack.splice(i, 1);
+			syncInert();
 			if (options.restore !== false && opener && opener.isConnected) opener.focus();
 		}
 	};
@@ -96,4 +128,48 @@ export function focusIn(node: HTMLElement, initial?: string) {
 	const target =
 		(initial ? node.querySelector<HTMLElement>(initial) : null) ?? focusables(node)[0] ?? node;
 	target.focus({ preventScroll: true });
+}
+
+export type InlineConfirmOptions = {
+	/** CSS selector of the element to focus first (default: the first focusable). */
+	initial?: string;
+	/** Called on Escape (and only then): close the panel. */
+	oncancel: () => void;
+	/**
+	 * The button that opens the panel. When the panel goes away while focus is lost (the page
+	 * body has it), focus goes back there once it is rendered again.
+	 */
+	returnTo?: () => HTMLElement | null | undefined;
+};
+
+/**
+ * Inline confirmation panel that replaces its trigger: focuses into the panel, closes on Escape
+ * and, when the panel is removed and focus fell to the page, hands focus back to the trigger.
+ */
+export function inlineConfirm(node: HTMLElement, options: InlineConfirmOptions) {
+	let opts = options;
+	focusIn(node, opts.initial);
+
+	function onkeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || e.defaultPrevented) return;
+		e.preventDefault();
+		e.stopPropagation();
+		opts.oncancel();
+	}
+	node.addEventListener('keydown', onkeydown);
+
+	return {
+		update(next: InlineConfirmOptions) {
+			opts = next;
+		},
+		destroy() {
+			node.removeEventListener('keydown', onkeydown);
+			// The trigger is rendered again after this panel is gone: wait for it.
+			setTimeout(() => {
+				const active = document.activeElement;
+				if (active && active !== document.body) return;
+				opts.returnTo?.()?.focus({ preventScroll: true });
+			}, 0);
+		}
+	};
 }

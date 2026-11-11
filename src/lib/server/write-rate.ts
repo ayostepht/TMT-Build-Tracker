@@ -68,6 +68,29 @@ export function resetWriteRate(): void {
 
 const READ = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+const esc = (v: string) =>
+	v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Where "Go back" points on the plain-form refusal page: the Referer's path when it is on this
+ * same host and a plain relative path, else the home page. A real link, not `javascript:`
+ * (the page CSP blocks that and it needs no inline script).
+ */
+export function backPath(headers?: Headers): string {
+	const ref = headers?.get('referer');
+	const host = headers?.get('x-forwarded-host') ?? headers?.get('host');
+	if (!ref || !host) return '/';
+	try {
+		const u = new URL(ref);
+		const path = u.pathname + u.search;
+		if (u.host !== host || !path.startsWith('/') || path.startsWith('//') || path.includes('\\'))
+			return '/';
+		return path;
+	} catch {
+		return '/';
+	}
+}
+
 /**
  * The 429 response when this request must be refused, else null. Call once the user is known.
  * `isAdmin` defaults to the database lookup; tests pass their own.
@@ -107,7 +130,7 @@ export function writeRateResponse(
 			headers: { 'content-type': 'application/json', 'retry-after': retry }
 		});
 	return new Response(
-		`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Too many changes</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Too many changes</h1><p>${error}</p><p><a href="javascript:history.back()">Go back</a></p></body>`,
+		`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Too many changes</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>Too many changes</h1><p>${error}</p><p><a href="${esc(backPath(headers))}">Go back</a></p></body>`,
 		{ status: 429, headers: { 'content-type': 'text/html; charset=utf-8', 'retry-after': retry } }
 	);
 }

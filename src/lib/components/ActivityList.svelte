@@ -9,7 +9,7 @@
 	const printUrl = $derived(resolve('/(app)/builds/[id]/print', { id: ctx.id }));
 </script>
 
-<section aria-labelledby="actTitle" style="display:grid;gap:10px">
+<section aria-labelledby="actTitle" style="display:grid;gap:var(--sp-5)">
 	<h2 id="actTitle">Recent activity</h2>
 	{#if ctx.view.activity.length}
 		<ul class="activity">

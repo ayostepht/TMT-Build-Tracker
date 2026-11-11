@@ -231,7 +231,7 @@
 		padding-left: 18px;
 		display: grid;
 		gap: 6px;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.admins {
 		list-style: none;
@@ -250,6 +250,6 @@
 		flex-wrap: wrap;
 	}
 	.acct-form input {
-		font-size: 16px;
+		font-size: var(--fs-field);
 	}
 </style>

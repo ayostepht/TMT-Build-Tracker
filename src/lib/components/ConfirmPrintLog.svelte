@@ -119,39 +119,39 @@
 		border: 1px solid var(--line);
 		border-left: 4px solid var(--ok);
 		background: var(--card);
-		border-radius: 8px;
-		padding: 12px 14px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-6) var(--sp-7);
 		display: grid;
-		gap: 10px;
-		font-size: 14px;
-		margin-bottom: 10px;
+		gap: var(--sp-5);
+		font-size: var(--fs-md);
+		margin-bottom: var(--sp-5);
 	}
 	.file {
 		font-family: var(--f-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		overflow-wrap: anywhere;
 	}
 	.cf {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 10px;
+		gap: var(--sp-5);
 	}
 	.cf select,
 	.cf input {
-		padding: 8px;
+		padding: var(--sp-4);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		min-width: 0;
-		font-size: 15px;
+		font-size: var(--fs-base);
 	}
 	.hint {
 		color: var(--muted);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.acts {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 </style>

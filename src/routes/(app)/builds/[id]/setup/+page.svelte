@@ -296,10 +296,10 @@
 		min-height: 56px;
 		border: 0;
 		border-top: 4px solid var(--line);
-		border-radius: 0 0 8px 8px;
+		border-radius: 0 0 var(--r-lg) var(--r-lg);
 		background: var(--card);
 		color: var(--muted);
-		font: 600 14px/1.1 var(--f-body);
+		font: 600 var(--fs-md)/1.1 var(--f-body);
 	}
 	.st:disabled {
 		cursor: default;
@@ -322,7 +322,7 @@
 		border-radius: 50%;
 		background: var(--line);
 		color: var(--ink);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.st.done .no {
 		background: var(--ok-soft);
@@ -340,7 +340,7 @@
 		flex-wrap: wrap;
 	}
 	.colorbar h2 {
-		font-size: 20px;
+		font-size: var(--fs-xl);
 	}
 	.designs {
 		display: flex;

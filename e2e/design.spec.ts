@@ -17,7 +17,7 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await expect(page.getByTestId('no-model')).toContainText('No 3D model yet');
 	await page.getByRole('tab', { name: 'Parts' }).click();
 
-	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const wing = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	const wingBefore = await wing.innerText();
 	await wing.click();
 	const sheet = page.getByTestId('part-sheet');
@@ -28,8 +28,10 @@ test('design tab: move parts between slots, add a color, share a design and star
 
 	// "Apply to both sides" is on by default.
 	await sheet.locator('button[data-role="primary"]').click();
-	await expect(page.locator('button.row[data-slug="wing-left"]')).not.toHaveText(wingBefore);
-	const right = page.locator('button.row[data-slug="wing-right"]');
+	await expect(page.locator('[data-testid="part-row"][data-slug="wing-left"]')).not.toHaveText(
+		wingBefore
+	);
+	const right = page.locator('[data-testid="part-row"][data-slug="wing-right"]');
 	await expect(right).toContainText('Primary PETG');
 
 	// The Overview filament tile changed (the wings moved onto the first slot).
@@ -50,11 +52,15 @@ test('design tab: move parts between slots, add a color, share a design and star
 
 	await page.getByRole('tab', { name: 'Parts' }).click();
 	// Move a handle to it (one side only).
-	await page.locator('button.row[data-slug="handle-left"]').click();
+	await page.locator('[data-testid="part-row"][data-slug="handle-left"]').click();
 	await page.getByLabel(/Apply to both sides/).uncheck();
 	await page.getByTestId('part-sheet').locator('button[data-role="e2e-red"]').click();
-	await expect(page.locator('button.row[data-slug="handle-left"]')).toContainText('E2E Red');
-	await expect(page.locator('button.row[data-slug="handle-right"]')).not.toContainText('E2E Red');
+	await expect(page.locator('[data-testid="part-row"][data-slug="handle-left"]')).toContainText(
+		'E2E Red'
+	);
+	await expect(
+		page.locator('[data-testid="part-row"][data-slug="handle-right"]')
+	).not.toContainText('E2E Red');
 	await expect(slot).toContainText('1 parts');
 
 	// Save as a public design.
@@ -97,8 +103,12 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
 	await page.getByRole('tab', { name: 'Parts' }).click();
 	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
-	await expect(page.locator('button.row[data-slug="handle-left"]')).toContainText('E2E Red');
-	await expect(page.locator('button.row[data-slug="wing-right"]')).toContainText('Primary PETG');
+	await expect(page.locator('[data-testid="part-row"][data-slug="handle-left"]')).toContainText(
+		'E2E Red'
+	);
+	await expect(page.locator('[data-testid="part-row"][data-slug="wing-right"]')).toContainText(
+		'Primary PETG'
+	);
 });
 
 test('design tab: Esc, the close button and picking the same part again deselect', async ({
@@ -107,7 +117,7 @@ test('design tab: Esc, the close button and picking the same part again deselect
 	const { buildId } = await ownerWithBuild(page, 'deselect');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.getByRole('tab', { name: 'Parts' }).click();
-	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const wing = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	const sheet = page.getByTestId('part-sheet');
 	await wing.click();
 	await expect(sheet).toBeVisible();
@@ -129,7 +139,7 @@ test('design tab: role filter chips narrow the parts list; Esc returns focus to 
 	const { buildId } = await ownerWithBuild(page, 'partfilter');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.getByRole('tab', { name: 'Parts' }).click();
-	const rows = page.locator('button.row[data-slug]');
+	const rows = page.locator('[data-testid="part-row"]');
 	const all = await rows.count();
 	await page.locator('[data-filter="accent"]').click();
 	const some = await rows.count();
@@ -138,7 +148,7 @@ test('design tab: role filter chips narrow the parts list; Esc returns focus to 
 	await page.locator('[data-filter="all"]').click();
 	await expect(rows).toHaveCount(all);
 
-	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const wing = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	await wing.click();
 	await expect(page.getByTestId('part-sheet')).toBeVisible();
 	await page.keyboard.press('Escape');

@@ -6,7 +6,8 @@
 	 * behind the Live toggle. Shows nothing when the printer has no camera, and a quiet
 	 * "Camera unavailable" with Retry when it fails. Pauses while the tab is hidden.
 	 */
-	let { printerId }: { printerId: string } = $props();
+	let { printerId, name = '' }: { printerId: string; name?: string } = $props();
+	const label = $derived(name ? `Live camera: ${name}` : 'Live camera');
 
 	const REFRESH_MS = 5000;
 	let available = $state(false);
@@ -17,6 +18,7 @@
 	let frame = $state<string | null>(null);
 	let streamKey = $state(0);
 	let dlg = $state<HTMLDialogElement>();
+	let opener: HTMLElement | null = null;
 	let zoomed = $state(false);
 	let attempt = $state(0); // bumped by Retry
 	let collapsed = $state(false);
@@ -133,8 +135,15 @@
 		else attempt++;
 	}
 	function open() {
+		opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		zoomed = true;
 		dlg?.showModal();
+	}
+	/** Native dialogs restore focus themselves; make sure of it (the opener may have re-rendered). */
+	function onclosed() {
+		zoomed = false;
+		if (opener?.isConnected) opener.focus();
+		opener = null;
 	}
 	function onbackdrop(e: MouseEvent) {
 		if (e.target === dlg) dlg?.close();
@@ -181,10 +190,15 @@
 							>
 						</div>
 					{:else if shown}
-						<button class="zoom" type="button" onclick={open} aria-label="Enlarge camera view">
+						<button
+							class="zoom"
+							type="button"
+							onclick={open}
+							aria-label="Enlarge camera view: {name || 'printer'}"
+						>
 							<img
 								src={shown}
-								alt="Live view from the printer camera"
+								alt={label}
 								data-testid="camera-img"
 								onload={() => (loaded = true)}
 								onerror={() => (failed = true)}
@@ -210,12 +224,12 @@
 	<dialog
 		bind:this={dlg}
 		class="lightbox"
-		aria-label="Printer camera"
+		aria-label={label}
 		onclick={onbackdrop}
-		onclose={() => (zoomed = false)}
+		onclose={onclosed}
 	>
 		{#if zoomed && shown}
-			<img src={shown} alt="Printer camera, enlarged" data-testid="camera-lightbox-img" />
+			<img src={shown} alt="{label}, enlarged" data-testid="camera-lightbox-img" />
 		{/if}
 		<button class="btn sm close" type="button" onclick={() => dlg?.close()}>Close</button>
 	</dialog>
@@ -224,13 +238,13 @@
 <style>
 	.cam {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		max-width: 640px;
 	}
 	.camhead {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--sp-3);
 		min-height: 40px;
 		width: 100%;
 		padding: 0 2px;
@@ -238,7 +252,7 @@
 		background: none;
 		color: inherit;
 		font: inherit;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		text-align: left;
 		cursor: pointer;
@@ -252,7 +266,7 @@
 	}
 	.cambody {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 	}
 	.cambody[hidden] {
 		display: none;
@@ -260,8 +274,8 @@
 	.viewport {
 		position: relative;
 		aspect-ratio: 16 / 9;
-		background: #0c0e16;
-		border-radius: 6px;
+		background: #0c0e16; /* camera stage: dark in both themes */
+		border-radius: var(--r-md);
 		overflow: hidden;
 		border: 1px solid var(--line);
 	}
@@ -287,9 +301,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 10px;
-		color: #aab0c4;
-		font-size: 13px;
+		gap: var(--sp-5);
+		color: #aab0c4; /* on the dark stage */
+		font-size: var(--fs-sm);
 		pointer-events: none;
 	}
 	.unavail {
@@ -298,8 +312,8 @@
 	.cambar {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		font-size: 12px;
+		gap: var(--sp-5);
+		font-size: var(--fs-xs);
 	}
 	.muted {
 		color: var(--muted);
@@ -312,15 +326,21 @@
 		max-height: 96vh;
 	}
 	.lightbox::backdrop {
-		background: rgba(8, 10, 18, 0.8);
+		background: var(--scrim-strong);
 	}
 	.lightbox img {
 		display: block;
 		max-width: 96vw;
 		max-height: 88vh;
-		border-radius: 6px;
+		border-radius: var(--r-md);
 	}
 	.close {
-		margin-top: 8px;
+		margin-top: var(--sp-4);
+	}
+	@media (pointer: coarse) {
+		.close {
+			min-height: 44px;
+			min-width: 44px;
+		}
 	}
 </style>

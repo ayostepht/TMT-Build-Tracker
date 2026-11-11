@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { focusIn } from '#lib/client/focus-trap.ts';
+	import { inlineConfirm } from '#lib/client/focus-trap.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { deleteBuild, updateBuild } from '#lib/client/api.ts';
@@ -10,6 +10,7 @@
 	let name = $derived(b.name);
 	let saved = $state('');
 	let confirming = $state(false);
+	let trigger = $state<HTMLButtonElement>();
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
@@ -65,6 +66,7 @@
 					class="btn danger"
 					type="button"
 					data-testid="delete-draft-settings"
+					bind:this={trigger}
 					onclick={() => (confirming = true)}>Delete this draft…</button
 				>
 			</div>
@@ -73,7 +75,11 @@
 				role="alertdialog"
 				aria-labelledby="delTitle"
 				tabindex="-1"
-				use:focusIn={'button:not(.danger)'}
+				use:inlineConfirm={{
+					initial: 'button:not(.danger)',
+					oncancel: () => (confirming = false),
+					returnTo: () => trigger
+				}}
 				style="display:grid;gap:10px"
 			>
 				<strong id="delTitle">Delete "{b.name}" for good?</strong>

@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { suggestName } from '#lib/filament-catalog.ts';
 	import type { SwatchTuple } from '#lib/domain/palettes.ts';
 	import {
@@ -80,6 +80,9 @@
 	let sheetEl = $state<HTMLDivElement>();
 
 	onMount(() => {
+		// Non-modal panel: on close, focus goes back to the control that opened it (the panel it
+		// hid reappears in the same update, so wait for it).
+		const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		recent = loadRecent();
 		preferred = loadPreferredBrands();
 		if (organizationId)
@@ -90,6 +93,11 @@
 		// Phones: don't pop the keyboard over the 3D view. Desktop: ready to type.
 		if (window.matchMedia('(min-width: 900px)').matches) searchEl?.focus();
 		else sheetEl?.focus();
+		return () => {
+			void tick().then(() => {
+				if (opener?.isConnected && opener.offsetParent) opener.focus({ preventScroll: true });
+			});
+		};
 	});
 
 	$effect(() => {

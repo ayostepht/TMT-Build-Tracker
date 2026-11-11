@@ -102,12 +102,116 @@ test('design tab: the part colour is never the only indicator', async ({ page })
 	await page.waitForLoadState('networkidle');
 	await page.getByRole('tab', { name: 'Parts' }).click();
 	// each part row names its slot in words next to the swatch
-	const row = page.locator('button.row[data-slug="wing-left"]');
+	const row = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	await expect(row.locator('.slotname')).toHaveText(/\S/);
 	// the selected part is announced, not just highlighted
 	await row.click();
-	await expect(page.locator('button.row[data-slug="wing-left"]')).toHaveAttribute(
+	await expect(page.locator('[data-testid="part-row"][data-slug="wing-left"]')).toHaveAttribute(
 		'aria-pressed',
 		'true'
 	);
+});
+
+test('part chip: non-modal, labelled, Escape closes it and focus returns to the list row', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11yc');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	const row = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
+	await row.focus();
+	await page.keyboard.press('Enter');
+	// Non-modal on purpose: the list stays usable, so focus stays on the row that opened it.
+	const sheet = page.getByRole('region', { name: /^Part: / });
+	await expect(sheet).toBeVisible();
+	await expect(sheet).not.toHaveAttribute('aria-modal', 'true');
+	await expect(sheet.getByRole('button', { name: 'Close part details' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(sheet).toHaveCount(0);
+	await expect(row).toBeFocused();
+});
+
+test('3D stage: the part list is a short Tab away (picking in the canvas is mouse/touch only)', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11yd');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await page.getByTestId('design-workspace').locator('.stage').focus();
+	let presses = 0;
+	for (; presses < 20; presses++) {
+		await page.keyboard.press('Tab');
+		const hit = await page.evaluate(
+			() => document.activeElement?.getAttribute('data-testid') === 'part-row'
+		);
+		if (hit) break;
+	}
+	expect(presses, 'Tab presses from the stage to the first part row').toBeLessThan(15);
+});
+
+test('swatch picker: focus moves in, Escape closes it and focus returns to its opener', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11ye');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	const opener = page
+		.locator('li.slot[data-role="primary"]')
+		.getByRole('button', { name: /^Change filament for/ })
+		.first();
+	await opener.focus();
+	await page.keyboard.press('Enter');
+	const picker = page.getByTestId('swatch-picker');
+	await expect(picker).toBeVisible();
+	await expect(picker).toHaveAttribute('aria-label', /\S/);
+	// desktop: ready to type, so focus is already inside the picker
+	await expect(picker.getByLabel('Search colors')).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(picker).toHaveCount(0);
+	await expect(opener).toBeFocused();
+});
+
+test('apply-design confirmation: Back is focused first and Escape cancels the confirmation only', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11yf');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByTestId('autosave-status')).toContainText('Saved automatically');
+	await page.getByTestId('open-share').click();
+	const dlg = page.getByTestId('share-dialog');
+	await dlg.getByLabel('Design name').fill('A11y Apply');
+	await dlg.getByRole('button', { name: 'Save design' }).click();
+	await expect(page.getByTestId('design-saved')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(dlg).toHaveCount(0);
+
+	await page.getByTestId('open-apply').click();
+	await page.getByTestId('apply-design-select').selectOption({ label: 'A11y Apply (mine)' });
+	await page.getByRole('button', { name: 'Apply this design…' }).click();
+	const confirm = page.getByRole('alertdialog', { name: 'Confirm applying the design' });
+	await expect(confirm.getByRole('button', { name: 'Back' })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(confirm).toHaveCount(0);
+	// the dialog around it is still open
+	await expect(page.getByTestId('apply-dialog')).toBeVisible();
+});
+
+test('shared dialog: close button is at least 40px and named', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'a11yg');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('open-share').click();
+	const x = page.getByTestId('share-dialog').getByRole('button', { name: 'Close' });
+	const box = await x.boundingBox();
+	expect(box!.width).toBeGreaterThanOrEqual(40);
+	expect(box!.height).toBeGreaterThanOrEqual(40);
 });

@@ -37,10 +37,10 @@
 		min-height: 44px;
 		display: inline-flex;
 		align-items: center;
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--accent);
-		color: #fff;
-		font: 600 15px/1 var(--f-body);
+		color: var(--on-fill);
+		font: 600 var(--fs-base)/1 var(--f-body);
 		text-decoration: none;
 		transform: translateY(-200%);
 	}

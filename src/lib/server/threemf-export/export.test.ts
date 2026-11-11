@@ -15,7 +15,8 @@ import { createBuild } from '../builds/create';
 import { setPrinter } from '../builds/actions';
 import { loadBuildView } from '../builds/view';
 import { openDb, runMigrations, type Db } from '../db';
-import { member, organization, templates, user } from '../db/schema';
+import { buildPlates, member, organization, templates, user } from '../db/schema';
+import { and, eq } from 'drizzle-orm';
 import type { ExtractedPart } from '../print-geometry/extract';
 import type { PrintMesh } from '../print-geometry/mesh-format';
 import { storeExtractedParts } from '../print-geometry/store';
@@ -676,6 +677,21 @@ describe('exportBuild3mf with a database', () => {
 		);
 		const v = loadBuildView(db, id, 'owner')!;
 		expect(v.printer?.name).toBe('Elegoo Centauri Carbon');
+	});
+
+	it('a null item in a stored arrangement does not throw (re-arranges instead)', () => {
+		const id = mk();
+		setPrinter(db, id, 'owner', { printer: cc });
+		importSynthetic();
+		const row = db.select().from(buildPlates).where(eq(buildPlates.buildId, id)).all()[0];
+		if (row?.arrangement) {
+			const bad = { ...row.arrangement, items: [null, ...row.arrangement.items] } as never;
+			db.update(buildPlates)
+				.set({ arrangement: bad })
+				.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, row.number)))
+				.run();
+		}
+		expect(() => prepareExport(db, id, 'owner', { flavor: 'orca' })).not.toThrow();
 	});
 });
 

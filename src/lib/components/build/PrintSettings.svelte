@@ -64,6 +64,6 @@
 		font-weight: 600;
 	}
 	.imp {
-		margin-top: 10px;
+		margin-top: var(--sp-5);
 	}
 </style>

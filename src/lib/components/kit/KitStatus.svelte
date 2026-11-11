@@ -48,10 +48,10 @@
 	<ul>
 		{#each rows as r (r.id)}
 			<li class={r.state} data-testid="kit-row-{r.id}" data-state={r.state}>
-				<div class="head">
-					<span class="dot" aria-hidden="true"></span>
+				<div class="ks-head">
+					<span class="ks-dot" aria-hidden="true"></span>
 					<strong>{r.title}</strong>
-					<span class="chip">{mark[r.state]}</span>
+					<span class="ks-chip">{mark[r.state]}</span>
 				</div>
 				{#if !compact}
 					{#each r.lines as l (l)}<div class="meta">{l}</div>{/each}
@@ -93,7 +93,7 @@
 	}
 	li {
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		padding: 10px 12px;
 		display: grid;
 		gap: 2px;
@@ -101,52 +101,60 @@
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
-	.head {
+	.ks-head {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		flex-wrap: wrap;
 	}
-	.dot {
+	.ks-dot {
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
 		background: var(--muted);
 	}
-	li.ok .dot {
+	li.ok .ks-dot {
 		background: var(--ok);
 	}
-	li.partial .dot {
-		background: var(--warn, #c98a00);
+	li.partial .ks-dot {
+		background: var(--warn);
 	}
-	li.missing .dot {
+	li.missing .ks-dot {
 		background: var(--bad);
 	}
-	.chip {
+	.ks-chip {
 		margin-left: auto;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
+		/* the look the leaked global .chip gave this label */
+		border: 1px solid var(--line);
+		background: var(--card);
+		border-radius: var(--r-pill);
+		padding: var(--sp-3) var(--sp-6);
+		display: inline-flex;
+		align-items: center;
+		gap: var(--sp-3);
 	}
-	li.ok .chip {
+	li.ok .ks-chip {
 		color: var(--ok);
 	}
-	li.info .dot {
+	li.info .ks-dot {
 		background: var(--line);
 	}
 	.meta-link {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
-	li.missing .chip {
+	li.missing .ks-chip {
 		color: var(--bad);
 	}
 	.meta {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	.hint {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--ink);
-		border-left: 3px solid var(--warn, #c98a00);
+		border-left: 3px solid var(--warn);
 		padding-left: 8px;
 		margin-top: 4px;
 	}

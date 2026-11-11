@@ -23,12 +23,12 @@
 	.jump {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
-		margin-bottom: 12px;
+		margin-bottom: var(--sp-6);
 	}
 	.anchor {
 		scroll-margin-top: 56px;
-		margin-bottom: 18px;
+		margin-bottom: var(--sp-9);
 	}
 </style>

@@ -13,6 +13,7 @@
 	import BedPicker from './BedPicker.svelte';
 	import AskDialog from './AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
+	import { focusIn } from '#lib/client/focus-trap.ts';
 
 	const asking = createAsk();
 
@@ -82,6 +83,13 @@
 	let editBed = $state(false); // build mode: the bed picker is open although the build has a printer
 	let pending = $state<{ key: string; name: string; plates: number } | null>(null);
 	let error = $state<string | null>(null);
+	let layoutSelect = $state<HTMLSelectElement>();
+	const uid = $props.id();
+	/** Close the replace confirmation; focus goes back to the layout select (the confirm panel disappears). */
+	function dismissPending() {
+		pending = null;
+		layoutSelect?.focus();
+	}
 
 	const defaultKey = $derived(layouts.find((l) => l.isDefault)?.key ?? layouts[0]?.key ?? '');
 	const effective = $derived(current ?? defaultKey);
@@ -230,6 +238,7 @@
 	<label class="field plate-layout">
 		{label}
 		<select
+			bind:this={layoutSelect}
 			bind:value
 			disabled={disabled || busy}
 			onchange={buildId ? (e) => change(e.currentTarget.value) : undefined}
@@ -318,10 +327,20 @@
 		<div
 			class="confirm"
 			role="alertdialog"
-			aria-label="Replace plates"
+			aria-labelledby="{uid}-confirm-title"
+			aria-describedby="{uid}-confirm-text"
+			tabindex="-1"
 			data-testid="layout-confirm"
+			use:focusIn={'[data-testid="layout-confirm-cancel"]'}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') {
+					e.stopPropagation();
+					dismissPending();
+				}
+			}}
 		>
-			<span
+			<b id="{uid}-confirm-title" class="sr-only">Replace plates</b>
+			<span id="{uid}-confirm-text"
 				>Replace your {plateCount}
 				{current === 'upload' ? 'uploaded' : 'arranged'} plates with MakeGood's
 				{pending.name} layout ({pending.plates} plates)? Print logs are kept.</span
@@ -337,7 +356,7 @@
 					class="btn sm"
 					type="button"
 					data-testid="layout-confirm-cancel"
-					onclick={() => (pending = null)}>Cancel</button
+					onclick={dismissPending}>Cancel</button
 				>
 			</div>
 		</div>
@@ -349,49 +368,49 @@
 	.plate-layout-picker {
 		grid-template-columns: minmax(0, 1fr);
 		display: grid;
-		gap: 10px;
+		gap: var(--sp-5);
 		min-width: 0;
 	}
 	.bed {
 		grid-template-columns: minmax(0, 1fr);
 		display: grid;
-		gap: 8px;
-		padding: 10px;
+		gap: var(--sp-4);
+		padding: var(--sp-5);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--card);
 	}
 	.summary {
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.confirm {
 		display: grid;
-		gap: 8px;
-		padding: 10px;
+		gap: var(--sp-4);
+		padding: var(--sp-5);
 		border: 1px solid var(--warn);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		background: var(--warn-soft);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.sum-text {
-		font-size: 14px;
+		font-size: var(--fs-md);
 		overflow-wrap: anywhere;
 	}
 	.sum-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--sp-4);
 	}
 	.sub {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 	}
 	.hint {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
 	}
 	.err {
-		font-size: 12px;
-		color: var(--bad, #b3261e);
+		font-size: var(--fs-xs);
+		color: var(--bad);
 	}
 </style>

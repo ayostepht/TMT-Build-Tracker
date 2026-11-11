@@ -172,7 +172,7 @@
 			class="group"
 			class:flash={flash !== null && flash === `plate-${g.key}`}
 			id={curBy === 'plate' && /^\d+$/.test(g.key) ? `plate-${g.key}` : undefined}
-			style="margin-bottom:14px"
+			style="margin-bottom:var(--sp-7)"
 		>
 			<div class="group-head">
 				<h2>{g.title}</h2>

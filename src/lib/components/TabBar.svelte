@@ -77,7 +77,7 @@
 	`nav.tabs` for a top offset gets 0) and the inner row is fixed to the bottom of the screen.
 -->
 <nav
-	class="tabs"
+	class="tabs tb-nav"
 	class:fade-start={fadeStart}
 	class:fade-end={fadeEnd}
 	data-bottom
@@ -106,7 +106,7 @@
 		display: none;
 	}
 	@media (max-width: 760px) {
-		nav.tabs {
+		nav.tb-nav {
 			display: contents;
 		}
 		.tb-in {
@@ -128,7 +128,7 @@
 			gap: 3px;
 			min-height: 56px;
 			padding: 6px 2px;
-			font: 600 13px/1.1 var(--f-display);
+			font: 600 var(--fs-sm)/1.1 var(--f-display);
 			letter-spacing: 0.01em;
 			border-bottom: 0;
 			border-top: 3px solid transparent;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { focusIn } from '#lib/client/focus-trap.ts';
+	import { inlineConfirm } from '#lib/client/focus-trap.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -16,6 +16,7 @@
 	);
 	let choice = $state('');
 	let confirming = $state(false);
+	let trigger = $state<HTMLButtonElement>();
 	const target = $derived(targets.find((t) => t.id === (choice || targets[0]?.id)));
 
 	async function move() {
@@ -42,7 +43,7 @@
 					</label>
 				</div>
 				<div>
-					<button class="btn" type="button" onclick={() => (confirming = true)}
+					<button class="btn" type="button" bind:this={trigger} onclick={() => (confirming = true)}
 						>Move to chapter…</button
 					>
 				</div>
@@ -51,7 +52,11 @@
 					role="alertdialog"
 					aria-label="Confirm move"
 					tabindex="-1"
-					use:focusIn={'button:not(.primary)'}
+					use:inlineConfirm={{
+						initial: 'button:not(.primary)',
+						oncancel: () => (confirming = false),
+						returnTo: () => trigger
+					}}
 					style="display:grid;gap:10px"
 				>
 					<strong>Move "{ctx.view.build.name}" to {target?.name}?</strong>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { focusIn } from '#lib/client/focus-trap.ts';
+	import { inlineConfirm } from '#lib/client/focus-trap.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { BUILD_PHASES, type BuildPhase, type FilamentRole } from '#lib/domain/types.ts';
@@ -46,6 +46,7 @@
 
 	let confirming = $state(false);
 	let confirmText = $state('');
+	let trigger = $state<HTMLButtonElement>();
 	async function remove() {
 		if (confirmText !== b.name) return;
 		if (await ctx.act(() => deleteBuild(ctx.id))) await goto(resolve('/(app)'));
@@ -152,8 +153,11 @@
 			</p>
 			{#if !confirming}
 				<div>
-					<button class="btn danger" type="button" onclick={() => (confirming = true)}
-						>Delete this build…</button
+					<button
+						class="btn danger"
+						type="button"
+						bind:this={trigger}
+						onclick={() => (confirming = true)}>Delete this build…</button
 					>
 				</div>
 			{:else}
@@ -161,7 +165,11 @@
 					role="alertdialog"
 					aria-labelledby="delTitle"
 					tabindex="-1"
-					use:focusIn={'input'}
+					use:inlineConfirm={{
+						initial: 'input',
+						oncancel: () => ((confirming = false), (confirmText = '')),
+						returnTo: () => trigger
+					}}
 					class="stack"
 					style="display:grid;gap:10px"
 				>
@@ -170,7 +178,7 @@
 						aria-label="Build name"
 						bind:value={confirmText}
 						autocomplete="off"
-						style="padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper)"
+						style="padding:9px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--paper)"
 					/>
 					<div>
 						<button
@@ -217,7 +225,7 @@
 		overflow-wrap: anywhere;
 		font-weight: 600;
 	}
-	@media (max-width: 640px) {
+	@media (max-width: 760px) {
 		.fil-role {
 			grid-template-columns: 1fr;
 		}

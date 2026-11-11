@@ -163,6 +163,12 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	// Remove the printer again (team-level cleanup).
 	await page.goto(`${chapterUrl}/printers`);
 	await page.getByRole('button', { name: 'Remove…' }).click();
+	// The inline confirm takes focus (Cancel first); Escape cancels and focus returns to Remove….
+	await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('button', { name: 'Remove for good' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Remove…' })).toBeFocused();
+	await page.getByRole('button', { name: 'Remove…' }).click();
 	await page.getByRole('button', { name: 'Remove for good' }).click();
 	await expect(page.getByTestId('printer-card')).toHaveCount(0);
 });

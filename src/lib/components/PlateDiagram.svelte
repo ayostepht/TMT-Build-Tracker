@@ -19,6 +19,11 @@
 	 * get it beside them on a thin leader (copies close together share one), see `badge-layout`.
 	 * A small arrow arc around a badge marks a part rotated flat on the bed. Pieces without a known mesh are drawn as dashed
 	 * rounded boxes ("approximate"). Presentational; bed y points up, so the SVG flips it.
+	 *
+	 * Accessibility: the diagram is illustrative. Every part is also a button in the legend next to
+	 * it (`PlateLegend`), which offers the same actions (focus highlights the part, Enter pins it),
+	 * so the shapes are hidden from assistive tech and the keyboard instead of duplicating them as
+	 * focusable `<use>` elements; the pointer handlers are a mouse convenience only.
 	 */
 	let {
 		plate,
@@ -163,7 +168,7 @@
 	class:has-active={active != null}
 	viewBox="{-pad} {-pad} {bed.x + pad * 2} {bed.y + pad * 2 + footer}"
 	role="img"
-	aria-label="Top view of plate {plate.number}: {plate.name}"
+	aria-label="Top view of plate {plate.number}: {plate.name}. The parts are listed in the legend."
 	data-testid="plate-diagram"
 >
 	<defs>
@@ -254,7 +259,7 @@
 	</g>
 
 	<!-- parts -->
-	<g filter="url(#{uid}-shadow)">
+	<g filter="url(#{uid}-shadow)" aria-hidden="true">
 		{#each shapes as s (s.i)}
 			<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 			<use
@@ -419,10 +424,10 @@
 		vector-effect: non-scaling-stroke;
 	}
 	.ax-x {
-		stroke: #e0483c;
+		stroke: var(--bad);
 	}
 	.ax-y {
-		stroke: #3aa655;
+		stroke: var(--ok);
 	}
 	.ax-o {
 		fill: var(--bed-text);
@@ -529,7 +534,7 @@
 		stroke-width: 4.2px;
 	}
 	.ring-rotated {
-		stroke: #d98200;
+		stroke: var(--warn);
 		stroke-width: 2.2px;
 	}
 </style>

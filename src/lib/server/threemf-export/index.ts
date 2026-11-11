@@ -75,7 +75,9 @@ export function prepareExport(
 	let plates: ArrangedPlate[] = info.plates;
 	// Arrangements stored before the 3D re-orientation code was removed may still carry a
 	// legacy `pose` on items (tipped/tilted parts): never export those, re-arrange flat instead.
-	const hasPose = plates.some((pl) => pl.items.some((i) => 'pose' in i));
+	const hasPose = plates.some((pl) =>
+		pl.items.some((i) => typeof i === 'object' && i !== null && 'pose' in i)
+	);
 	if (info.layout !== 'arranged' || !plates.length || info.stale || hasPose) {
 		const plan = planArrangement(view, footprints, null);
 		if (!plan) throw new ApiError(400, 'Choose a printer first.');

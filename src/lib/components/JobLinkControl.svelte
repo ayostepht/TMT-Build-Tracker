@@ -105,19 +105,19 @@
 	.runpick {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: flex-end;
 	}
 	.lbl {
 		display: block;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--muted);
-		margin-bottom: 2px;
+		margin-bottom: var(--sp-1);
 	}
 	.sel select {
-		padding: 8px;
+		padding: var(--sp-4);
 		border: 1px solid var(--line);
-		border-radius: 6px;
+		border-radius: var(--r-md);
 		background: var(--paper);
 		max-width: 100%;
 	}

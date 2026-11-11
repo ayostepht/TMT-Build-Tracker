@@ -192,6 +192,8 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   count, per-entry, cumulative and declared-versus-actual caps; scratch folder removed in
   `finally`).
 
+- The plate diagram is illustrative (`aria-hidden`); the legend's buttons are the
+  accessible way to highlight and pin parts.
 - **Files tab**: printed plates fold behind a toggle (`tmt-files-printed:<buildId>`), rows
   and cards carry `id="plate-N"` (hash opens a folded plate). One "Export format" select
   for the list (`client/export-flavor.svelte.ts`, per device) and a one-tap export per
@@ -259,6 +261,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   to the address (host and port) or link they were saved for; changing the destination
   needs its own secret re-entered.
 
+- **Client store** (`client/printer-store.svelte.ts`): one `OrgStream` (a single
+  `EventSource`, the window listeners and the 30 s poll) per organization, reference
+  counted and shared by every `PrinterStore` on the page; stores still load their own
+  data. `CameraTile` takes a `name` for its labels.
 - **Job linking UI**: `JobLinkControl` (core; never guesses a plate), used by `PrinterJobs`
   (build page) and `PrinterJobLink` (Printers page, build picker first). `GET
 /api/printers?org=` returns `builds` and `expected` for editors only;
@@ -388,7 +394,9 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `<main id="main" tabindex="-1">` (signed-out pages and the standalone error page carry
   their own); one `<h1>` and a distinct `<title>` per route. Top-bar menus are disclosures
   (`aria-expanded`, `aria-controls`; no `role=menu`). Modals use `trapFocus` from
-  `client/focus-trap.ts` (traps stack; inline confirms use `focusIn`). Guard:
+  `client/focus-trap.ts` (traps stack; everything outside the top trap is `inert` except
+  elements marked `data-keep-active`, i.e. the toast host; a portalled dialog applies
+  `use:portal` before `use:trapFocus`; inline confirms use `inlineConfirm` or `focusIn`). Guard:
   `e2e/a11y.spec.ts`.
 - **Shell**: `(app)/+layout.svelte` has a one-row phone top bar (`.navpanel` is a panel
   behind `nav-toggle` on phones; phone specs call `openNav(page)`), the `<Toast />` host
@@ -401,7 +409,7 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `clearPrivateCaches()` (`client/pwa.ts`).
 - **Landing**: `/` redirects to the chapter page (`teams/[slug]`), which shows
   `landing/LandingBoard` (Now printing and Next up for up to 3 builds; one `BuildCtx` per
-  build via `CtxScope`; polls every 20 s, no per-build SSE; `nextUpPlate` in
+  build via `CtxScope`; polls every 20 s, no per-build SSE; cap `LANDING_BUILD_CAP` = 6; `nextUpPlate` in
   `landing/next-up.ts`). `/builds` is "All builds" grouped by chapter.
 - Wizard blocks Files without a printer; `POST /api/builds` with a `designId` starts the
   wizard. Finish folds steps that were done when the page opened.

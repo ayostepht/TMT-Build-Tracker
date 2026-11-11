@@ -17,7 +17,7 @@
 		flex: none;
 		width: var(--mark, 28px);
 		height: var(--mark, 28px);
-		border-radius: 7px;
+		border-radius: var(--r-md);
 	}
 	@media (min-width: 1440px) {
 		.app-mark {

@@ -214,7 +214,9 @@
 		queueMicrotask(() => {
 			const row =
 				origin === 'row' && slug
-					? document.querySelector<HTMLElement>(`button.row[data-slug="${CSS.escape(slug)}"]`)
+					? document.querySelector<HTMLElement>(
+							`[data-testid="part-row"][data-slug="${CSS.escape(slug)}"]`
+						)
 					: null;
 			if (row && row.offsetParent) row.focus();
 			else stage?.focusStage();
@@ -358,8 +360,9 @@
 				{#if part}
 					Pick a slot in the part card to move {part.name}.
 				{:else}
-					{ctx.view.model ? 'Tap a part in the 3D view' : 'Pick a part from the list'} to move it to another
-					color slot.
+					{ctx.view.model
+						? 'Tap a part in the 3D view, or pick one in the Parts tab,'
+						: 'Pick a part from the list'} to move it to another color slot.
 				{/if}
 			</p>
 		{/if}

@@ -7,11 +7,12 @@ import type { BuildView } from '#lib/domain/types.ts';
 import type { PageServerLoad } from './$types';
 
 /**
- * Most builds the landing shows controls for. Each one's start/log control opens a printer stream
- * (the nav opens one more), and a browser allows 6 connections per host over HTTP/1.1, so 3 builds
- * leave room for page loads. The landing polls build state instead of streaming it. "All builds" has the rest.
+ * Most builds the landing shows controls for. All of a chapter's builds share one printer stream
+ * (the nav uses the same one), so streams do not grow with this number. What does: each build is
+ * re-fetched every 20 s and fetches its printer jobs every 30 s, so the cap stays modest. "All
+ * builds" has the rest.
  */
-const LANDING_BUILD_CAP = 3;
+const LANDING_BUILD_CAP = 6;
 
 export const load: PageServerLoad = async ({ parent, locals }) => {
 	const { team } = await parent();

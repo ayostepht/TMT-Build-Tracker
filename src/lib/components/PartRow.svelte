@@ -120,7 +120,7 @@
 				>
 			{/if}
 		</div>
-		<div class="seg" role="group" aria-label="Status for {part.name}">
+		<div class="seg part-seg" role="group" aria-label="Status for {part.name}">
 			{#each PART_STATUSES as s (s)}
 				<button
 					type="button"
@@ -150,13 +150,13 @@
 					{/if}
 				</div>
 				{#if part.notes.length}
-					<h3 style="margin-top:12px">Notes</h3>
+					<h3 style="margin-top:var(--sp-6)">Notes</h3>
 					<ul class="notes">
 						{#each part.notes as n (n)}<li>{n}</li>{/each}
 					</ul>
 				{/if}
 				{#if part.components.length}
-					<h3 style="margin-top:12px">Pieces</h3>
+					<h3 style="margin-top:var(--sp-6)">Pieces</h3>
 					<div class="comps">
 						{#each part.components as c, i (i)}
 							<label>
@@ -180,7 +180,7 @@
 					</div>
 				{/if}
 				{#if pages.length}
-					<h3 style="margin-top:12px">Guide</h3>
+					<h3 style="margin-top:var(--sp-6)">Guide</h3>
 					<div class="chips">
 						{#each pages as g (g.page)}
 							<button
@@ -194,13 +194,13 @@
 					</div>
 				{/if}
 				{#if plate && ctx.canEdit}
-					<h3 style="margin-top:12px">Plate {plate.number}</h3>
-					<div class="meta" style="margin-bottom:6px">
+					<h3 style="margin-top:var(--sp-6)">Plate {plate.number}</h3>
+					<div class="meta" style="margin-bottom:var(--sp-3)">
 						{plate.parts.map((s) => ctx.view.parts.find((x) => x.slug === s)?.name ?? s).join(', ')}
 					</div>
 					<PlateControl {plate} only={plate.perPartRuns ? part.slug : null} />
 				{/if}
-				<h3 style="margin-top:12px">Assigned to</h3>
+				<h3 style="margin-top:var(--sp-6)">Assigned to</h3>
 				<select
 					aria-label="Assigned to"
 					disabled={!ctx.canEdit}
@@ -247,6 +247,10 @@
 </div>
 
 <style>
+	/* The current status is not shown by colour alone: an underline in the text colour marks it. */
+	.part-seg button[aria-pressed='true'] {
+		box-shadow: inset 0 -2px 0 currentColor;
+	}
 	.just-now {
 		font-weight: 600;
 		color: var(--ink);

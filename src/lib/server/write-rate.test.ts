@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetWriteRate, takeWriteToken, writeRateConfig, writeRateResponse } from './write-rate';
+import {
+	backPath,
+	resetWriteRate,
+	takeWriteToken,
+	writeRateConfig,
+	writeRateResponse
+} from './write-rate';
 
 const u = { id: 'u1', email: 'u1@example.test', emailVerified: false };
 
@@ -63,7 +69,10 @@ describe('write rate limit', () => {
 		);
 		expect(plain?.status).toBe(429);
 		expect(plain!.headers.get('content-type')).toContain('text/html');
-		expect(await plain!.text()).toContain('Too many changes');
+		const html = await plain!.text();
+		expect(html).toContain('Too many changes');
+		expect(html).not.toContain('javascript:');
+		expect(html).toContain('<a href="/">Go back</a>');
 		const enh = writeRateResponse(
 			u,
 			'POST',
@@ -83,5 +92,17 @@ describe('write rate limit', () => {
 		vi.stubEnv('WRITE_RATE_BURST', '1');
 		for (let i = 0; i < 10; i++)
 			expect(writeRateResponse(u, 'POST', '/api/builds', () => true, 0)).toBeNull();
+	});
+
+	it('points Go back at a same-host Referer path, else home', () => {
+		const h = (o: Record<string, string>) => new Headers(o);
+		expect(backPath(h({ host: 'a.test', referer: 'http://a.test/teams/x?y=1' }))).toBe(
+			'/teams/x?y=1'
+		);
+		expect(backPath(h({ host: 'a.test', referer: 'http://evil.test/x' }))).toBe('/');
+		expect(backPath(h({ host: 'a.test', referer: 'javascript:alert(1)' }))).toBe('/');
+		expect(backPath(h({ host: 'a.test', referer: 'http://a.test//evil.test' }))).toBe('/');
+		expect(backPath(h({ host: 'a.test' }))).toBe('/');
+		expect(backPath(undefined)).toBe('/');
 	});
 });

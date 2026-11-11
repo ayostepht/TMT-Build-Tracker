@@ -58,8 +58,8 @@
 	.plate-hist {
 		background: var(--card);
 		border: 1px solid var(--line);
-		border-radius: 10px;
-		padding: 8px 10px;
+		border-radius: var(--r-lg);
+		padding: var(--sp-4) var(--sp-5);
 		min-width: 0;
 	}
 </style>

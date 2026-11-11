@@ -83,7 +83,7 @@
 		gap: 10px;
 	}
 	.pick input {
-		font-size: 16px;
+		font-size: var(--fs-field);
 	}
 	.pick-list {
 		list-style: none;
@@ -102,7 +102,7 @@
 		flex-wrap: wrap;
 		padding: 6px 0;
 		border-bottom: 1px solid var(--line);
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.pick-who {
 		min-width: 0;

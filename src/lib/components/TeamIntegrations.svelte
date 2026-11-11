@@ -104,7 +104,7 @@
 			Deduct logged grams from spools
 		</label>
 		{#if canEdit}
-			<div class="row">
+			<div class="ti-row">
 				<button
 					class="btn primary"
 					type="button"
@@ -139,17 +139,17 @@
 <style>
 	.chk {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
-	.row {
+	.ti-row {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		flex-wrap: wrap;
 	}
 	.msg {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--ok);
 		min-height: 1em;
 	}

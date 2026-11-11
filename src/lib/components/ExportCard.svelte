@@ -210,7 +210,7 @@
 
 <style>
 	.export-card {
-		margin-bottom: 12px;
+		margin-bottom: var(--sp-6);
 	}
 	.export-card p {
 		margin: 0;
@@ -218,7 +218,7 @@
 	.controls {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px 24px;
+		gap: var(--sp-6) 24px;
 		align-items: flex-end;
 	}
 	.scope {
@@ -227,29 +227,29 @@
 		padding: 0;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 16px;
-		font-size: 14px;
+		gap: var(--sp-2) var(--sp-8);
+		font-size: var(--fs-md);
 	}
 	.scope legend {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--muted);
 		padding: 0;
-		margin-bottom: 4px;
+		margin-bottom: var(--sp-2);
 	}
 	.picks {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-		gap: 4px 12px;
-		font-size: 14px;
+		gap: var(--sp-2) var(--sp-6);
+		font-size: var(--fs-md);
 	}
 	.pick {
 		display: flex;
-		gap: 6px;
+		gap: var(--sp-3);
 		align-items: flex-start;
 	}
 	.slots h3 {
-		font-size: 14px;
-		margin: 0 0 6px;
+		font-size: var(--fs-md);
+		margin: 0 0 var(--sp-3);
 	}
 	.slots ul,
 	.warns ul {
@@ -257,13 +257,13 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 4px;
+		gap: var(--sp-2);
 	}
 	.slots li {
 		display: flex;
-		gap: 8px;
+		gap: var(--sp-4);
 		align-items: center;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.slots li.over {
 		color: var(--bad);
@@ -273,7 +273,7 @@
 		font-weight: 700;
 	}
 	.warns {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.warns summary {
 		cursor: pointer;
@@ -281,8 +281,8 @@
 		font-weight: 600;
 	}
 	.warns ul {
-		margin-top: 6px;
-		padding-left: 18px;
+		margin-top: var(--sp-3);
+		padding-left: var(--sp-9);
 		list-style: disc;
 	}
 	.warns li.error {
@@ -294,16 +294,16 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 12px;
+		gap: var(--sp-4) var(--sp-6);
 		align-items: center;
 	}
 	.err {
 		color: var(--bad);
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.empty {
 		display: grid;
-		gap: 6px;
+		gap: var(--sp-3);
 		justify-items: start;
 	}
 </style>

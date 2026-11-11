@@ -191,7 +191,7 @@
 		width: 100%;
 		padding: 0;
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		overflow: hidden;
 		background: var(--paper);
 		aspect-ratio: 1;
@@ -207,7 +207,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 60;
-		background: rgba(10, 12, 24, 0.82);
+		background: var(--scrim-strong);
 		display: grid;
 		place-items: center;
 		padding: 12px;
@@ -215,7 +215,7 @@
 	.lbox {
 		background: var(--card);
 		color: var(--ink);
-		border-radius: 12px;
+		border-radius: var(--r-xl);
 		width: min(1100px, 100%);
 		max-height: 100%;
 		display: grid;
@@ -235,15 +235,15 @@
 	.lfoot .cap {
 		flex: 1;
 		min-width: 0;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.x {
 		border: 1px solid var(--line);
 		background: var(--paper);
-		border-radius: 8px;
+		border-radius: var(--r-lg);
 		width: 36px;
 		height: 36px;
-		font-size: 18px;
+		font-size: var(--fs-lg);
 	}
 	.limg {
 		min-height: 0;

@@ -65,13 +65,15 @@ test('new build walks the setup wizard: template, options, colors, files, export
 	await expect(page.getByText('Applied Fire Truck')).toBeVisible();
 	// Move a part between slots right here, then save-as-design is on offer too.
 	await page.getByRole('tab', { name: 'Parts' }).click();
-	const wing = page.locator('button.row[data-slug="wing-left"]');
+	const wing = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	const wingBefore = await wing.innerText();
 	await wing.click();
 	const sheet = page.getByTestId('part-sheet');
 	await expect(sheet).toContainText('Wing Left');
 	await sheet.locator('button[data-role="primary"]:not([aria-pressed="true"])').click();
-	await expect(page.locator('button.row[data-slug="wing-left"]')).not.toHaveText(wingBefore);
+	await expect(page.locator('[data-testid="part-row"][data-slug="wing-left"]')).not.toHaveText(
+		wingBefore
+	);
 	await expect(page.getByTestId('wizard-next')).toBeVisible();
 	await page.getByTestId('wizard-next').click();
 
