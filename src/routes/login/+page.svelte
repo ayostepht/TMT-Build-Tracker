@@ -117,10 +117,21 @@
 				<p class="muted">Sign-up is closed on this server.</p>
 			{/if}
 		{/if}
+		<p class="muted auth-legal">
+			By signing in or creating an account you agree to the <a
+				href={resolve('/terms')}
+				data-testid="terms-link">Terms</a
+			>
+			and
+			<a href={resolve('/privacy')} data-testid="privacy-link">Privacy</a> notes.
+		</p>
 	</div>
 </main>
 
 <style>
+	.auth-legal {
+		font-size: var(--fs-sm);
+	}
 	.auth-brand {
 		display: flex;
 		align-items: center;

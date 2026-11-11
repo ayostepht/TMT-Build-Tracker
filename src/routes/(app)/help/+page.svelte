@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { MAKEGOOD_GUIDE_URL } from '#lib/makegood.ts';
+	import { MAKEGOOD_GUIDE_URL, MAKEGOOD_MODEL_URL } from '#lib/makegood.ts';
 
 	const SECTIONS = [
 		{ id: 'getting-started', label: 'Getting started' },
@@ -249,8 +249,12 @@
 				<summary>Where is the assembly guide?</summary>
 				<p>
 					The Finish tab's checklist names the pages of MakeGood's maker guide. The guide is not
-					part of the app: get it from the
+					part of the app: open it from
 					<a href={MAKEGOOD_GUIDE_URL} target="_blank" rel="noopener noreferrer"
+						>MakeGood's build guide</a
+					>
+					(a PDF on Google Drive) or find the design on the
+					<a href={MAKEGOOD_MODEL_URL} target="_blank" rel="noopener noreferrer"
 						>MakeGood model page</a
 					>.
 				</p>
@@ -259,8 +263,10 @@
 	</section>
 
 	<p class="muted help-foot">
-		Something missing? See <a href={resolve('/(app)/about')}>About</a> for the version and where to send
-		feedback.
+		Something missing? See <a href={resolve('/(app)/about')}>About</a> for the version and where to
+		send feedback. How your data is handled and the rules of use:
+		<a href={resolve('/privacy')} data-testid="privacy-link">Privacy</a> and
+		<a href={resolve('/terms')} data-testid="terms-link">Terms</a>.
 	</p>
 </article>
 

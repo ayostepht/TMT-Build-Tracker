@@ -90,8 +90,13 @@
 					<CtxScope ctx={c}>
 						{#each nowPrinting(c.view) as item (item.plate)}
 							<div class="lb-one" data-testid="landing-now-card">
-								<a class="lb-build" href={resolve('/(app)/builds/[id]', { id: c.id })}
-									>{c.view.build.name}</a
+								<a
+									class="pill-link lb-open"
+									href={resolve('/(app)/builds/[id]', { id: c.id })}
+									data-testid="landing-open-build"
+									title={c.view.build.name}
+									><span class="lb-open-name">{c.view.build.name}</span>
+									<span class="btn-arrow" aria-hidden="true">→</span></a
 								>
 								<NowCard {item} compact />
 							</div>
@@ -134,6 +139,7 @@
 	}
 	.lb {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 10px;
 	}
 	.lb h2 {
@@ -141,24 +147,29 @@
 	}
 	.lb-cards {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
 		gap: 12px;
 		align-items: start;
 	}
 	.lb-one {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 6px;
 		min-width: 0;
 	}
-	.lb-build {
-		font: 600 12px/1 var(--f-body);
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--muted);
-		text-decoration: none;
+	.lb-open {
+		justify-self: start;
+		max-width: 100%;
+		min-height: 44px;
+		padding-inline: 16px;
+		font-weight: 600;
 	}
-	.lb-build:hover {
-		color: var(--accent);
+	.lb-open-name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.lb-empty {
 		margin: 0;

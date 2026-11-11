@@ -26,9 +26,14 @@
 
 <article class="ds-card ds-card--compact" data-testid="next-up-card" data-plate={plate.number}>
 	<div class="nu-head">
-		<div class="nu-build">
-			<a href={resolve('/(app)/builds/[id]', { id: ctx.id })}>{ctx.view.build.name}</a>
-		</div>
+		<a
+			class="pill-link nu-open"
+			href={resolve('/(app)/builds/[id]', { id: ctx.id })}
+			data-testid="landing-open-build"
+			title={ctx.view.build.name}
+			><span class="nu-open-name">{ctx.view.build.name}</span>
+			<span class="btn-arrow" aria-hidden="true">→</span></a
+		>
 		<div class="nu-plate">Plate {plate.number}{plate.name ? ` · ${plate.name}` : ''}</div>
 	</div>
 	<div class="nu-meta">
@@ -40,18 +45,23 @@
 </article>
 
 <style>
-	.nu-build {
-		font: 600 var(--fs-xs)/1 var(--f-body);
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		margin-bottom: 6px;
+	.nu-open {
+		max-width: 100%;
+		min-height: 44px;
+		padding-inline: 16px;
+		font-weight: 600;
+		margin-bottom: 8px;
 	}
-	.nu-build a {
-		color: var(--muted);
-		text-decoration: none;
+	.nu-open-name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
-	.nu-build a:hover {
-		color: var(--accent);
+	.nu-head {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		justify-items: start;
 	}
 	.nu-plate {
 		font: 600 22px/1.15 var(--f-head);

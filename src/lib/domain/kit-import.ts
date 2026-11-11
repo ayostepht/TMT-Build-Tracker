@@ -424,7 +424,7 @@ export interface KitStatusDto {
 }
 
 import { MAKEGOOD_GUIDE_URL } from '../makegood.ts';
-/** Where MakeGood publishes the model and maker guide (it is not bundled); one source of truth. */
+/** Where MakeGood publishes the build guide PDF (it is not bundled); one source of truth. */
 export { MAKEGOOD_GUIDE_URL };
 
 export type KitReadiness = 'ready' | 'installing' | 'partial' | 'missing';

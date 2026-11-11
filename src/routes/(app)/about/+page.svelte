@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { MAKEGOOD_GUIDE_URL } from '#lib/makegood.ts';
+	import { MAKEGOOD_GUIDE_URL, MAKEGOOD_MODEL_URL } from '#lib/makegood.ts';
 	import { version } from '../../../../package.json';
 
-	const MODEL_URL = 'https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer';
 	const REPO_URL = 'https://github.com/ayostepht/TMT-Build-Tracker';
 	const ISSUES_URL = `${REPO_URL}/issues`;
 </script>
@@ -30,7 +29,7 @@
 			build. Thank you, MakeGood.
 		</p>
 		<div class="about-actions">
-			<a class="btn" href={MODEL_URL} target="_blank" rel="noopener noreferrer"
+			<a class="btn" href={MAKEGOOD_MODEL_URL} target="_blank" rel="noopener noreferrer"
 				>MakeGood on MakerWorld</a
 			>
 			<a class="btn" href={MAKEGOOD_GUIDE_URL} target="_blank" rel="noopener noreferrer"
@@ -38,7 +37,7 @@
 			>
 		</div>
 		<p class="muted">
-			The maker guide is a PDF on the model page. It is not part of this app: the Finish tab only
+			The maker guide is a PDF on Google Drive. It is not part of this app: the Finish tab only
 			names its page numbers and links to it.
 		</p>
 	</section>
@@ -71,6 +70,12 @@
 			<a class="btn" href={resolve('/(app)/help')}>Help</a>
 		</div>
 	</section>
+
+	<p class="muted">
+		How your data is handled and the rules of use:
+		<a href={resolve('/privacy')} data-testid="privacy-link">Privacy</a> and
+		<a href={resolve('/terms')} data-testid="terms-link">Terms</a>.
+	</p>
 </article>
 
 <!-- eslint-enable svelte/no-navigation-without-resolve -->

@@ -1,5 +1,13 @@
 import { expect, newClientContext, test } from './fixtures';
-import { createBuild, invite, joinViaInvite, ownerWithBuild, signUp, uniqueEmail } from './helpers';
+import {
+	createBuild,
+	invite,
+	joinViaInvite,
+	ownerWithBuild,
+	signUp,
+	startBuild,
+	uniqueEmail
+} from './helpers';
 
 // Stage 2 landing: Now printing + Next up across the chapter's builds, with the shared start/log
 // control. Exit check: starting a plate and logging it done take <= 2 taps each from landing.
@@ -131,6 +139,126 @@ test('the landing opens few live streams and stays navigable', async ({ page }) 
 	await page.getByTestId('new-build').click();
 	await expect(page).toHaveURL(/\/builds\/new/);
 });
+
+test('landing quick links and open-build pills lead to the build', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'landing-quick');
+	await page.goto(chapterUrl);
+	await settled(page);
+	const quick = page.getByTestId('landing-quick');
+	await expect(quick).toBeVisible();
+	const link = quick.getByRole('link', { name: /Test chair/ });
+	await expect(link).toHaveAttribute('href', `/builds/${buildId}`);
+
+	// On screen without scrolling, and a thumb-sized target.
+	await expect(link).toBeInViewport({ ratio: 1 });
+	const box = await link.boundingBox();
+	expect(box!.height).toBeGreaterThanOrEqual(44);
+	expect(box!.y + box!.height).toBeLessThanOrEqual(844);
+	expect(await page.evaluate(() => scrollY)).toBe(0);
+	expect(
+		await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+		'no sideways scroll'
+	).toBeLessThanOrEqual(0);
+
+	await link.click();
+	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}$`));
+
+	await page.goto(chapterUrl);
+	await settled(page);
+	const open = page.getByTestId('next-up-card').first().getByTestId('landing-open-build');
+	await expect(open).toHaveAttribute('href', `/builds/${buildId}`);
+	await open.click();
+	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}$`));
+
+	// With a plate printing, its Now printing card has the pill too.
+	await page.goto(chapterUrl);
+	await settled(page);
+	await page
+		.getByTestId('next-up-card')
+		.first()
+		.getByRole('button', { name: /^Start printing plate/ })
+		.click();
+	await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
+	const nowOpen = page.getByTestId('landing-now-card').getByTestId('landing-open-build');
+	await expect(nowOpen).toHaveAttribute('href', `/builds/${buildId}`);
+	await nowOpen.click();
+	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}$`));
+});
+
+test('a build card is one big link; the Setup pill inside it still goes to setup', async ({
+	page
+}) => {
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'landing-card');
+	// A second build left in setup.
+	await page.goto(chapterUrl);
+	const setupId = await startBuild(page, 'Setup chair');
+	await page.goto(chapterUrl);
+	await settled(page);
+
+	const done = page.getByTestId('build-card').filter({ hasText: 'Test chair' });
+	const inSetup = page.getByTestId('build-card').filter({ hasText: 'Setup chair' });
+	await expect(done).toHaveCount(1);
+	await expect(inSetup).toHaveCount(1);
+
+	// Click away from the title (right edge, vertically centred).
+	for (const [card, id] of [
+		[done, buildId],
+		[inSetup, setupId]
+	] as const) {
+		await card.scrollIntoViewIfNeeded();
+		const box = (await card.boundingBox())!;
+		await page.mouse.click(box.x + box.width - 8, box.y + box.height / 2);
+		await expect(page).toHaveURL(new RegExp(`/builds/${id}$`));
+		await page.goto(chapterUrl);
+		await settled(page);
+	}
+
+	await inSetup.getByRole('link', { name: /^Setup: step \d of 5/ }).click();
+	await expect(page).toHaveURL(new RegExp(`/builds/${setupId}/setup`));
+	await expect(done.getByRole('link', { name: /^Setup:/ })).toHaveCount(0);
+});
+
+test('a build card link is keyboard focusable and Enter opens it', async ({ page }) => {
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'landing-key');
+	await page.goto(chapterUrl);
+	await settled(page);
+	const link = page.getByTestId('build-card').getByRole('link', { name: 'Test chair' });
+	await link.focus();
+	await expect(link).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(new RegExp(`/builds/${buildId}$`));
+});
+
+for (const [label, name] of [
+	['quick links, pills and cards', 'Second chair'],
+	['a very long build name', 'A rather long build name that keeps going and going past the edge'],
+	['a 40-character single word as the name', 'Supercalifragilisticexpialidocious12345678']
+] as const) {
+	test(`the landing has no sideways scroll at 390 and 360px with ${label}`, async ({ page }) => {
+		const { chapterUrl } = await ownerWithBuild(page, 'landing-ovf');
+		await page.goto(chapterUrl);
+		await createBuild(page, name, null);
+		await page.goto(chapterUrl);
+		await settled(page);
+		// Print the plate of the long-named build, so its Now printing card is on the page.
+		await page
+			.getByTestId('next-up-card')
+			.filter({ hasText: name })
+			.getByRole('button', { name: /^Start printing plate/ })
+			.click();
+		await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
+		await expect(page.getByTestId('landing-quick')).toBeVisible();
+		await expect(page.getByTestId('build-card')).toHaveCount(2);
+		for (const width of [390, 360]) {
+			await page.setViewportSize({ width, height: 844 });
+			expect(
+				await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+				`${width}px`
+			).toBeLessThanOrEqual(0);
+		}
+	});
+}
 
 const SIZES = [
 	[390, 844],

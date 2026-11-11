@@ -92,10 +92,20 @@
 				)}>Sign in</a
 			>
 		</p>
+		<p class="muted auth-legal">
+			By creating an account you agree to the <a href={resolve('/terms')} data-testid="terms-link"
+				>Terms</a
+			>
+			and
+			<a href={resolve('/privacy')} data-testid="privacy-link">Privacy</a> notes.
+		</p>
 	</div>
 </main>
 
 <style>
+	.auth-legal {
+		font-size: var(--fs-sm);
+	}
 	.auth-brand {
 		display: flex;
 		align-items: center;
