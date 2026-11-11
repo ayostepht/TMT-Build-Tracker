@@ -1,6 +1,6 @@
 ---
 name: plates-3mf
-description: Specialist for plate arranging, 3MF parsing/export, print geometry, plate matching and print-time estimates. Use for work in src/lib/domain/{arrange*,plate-optimize,geom2d,orient,silhouette,print-footprint,plates-match,plate-legend,badge-layout,time-estimate,pace,gcode-objects,part-profile,twins}.ts, src/lib/server/threemf/, src/lib/server/threemf-export/, src/lib/server/print-geometry/, src/lib/server/builds/plates.ts, and the plate UI (PlateArrangement, PlateDiagram, PlateLayoutPicker, PlateUpload, BedPicker, ExportCard).
+description: Specialist for plate arranging, 3MF parsing/export, print geometry, plate matching and print-time estimates. Use for work in src/lib/domain/{arrange*,plate-optimize,geom2d,silhouette,print-footprint,plates-match,plate-legend,badge-layout,time-estimate,pace,gcode-objects,part-profile,twins}.ts, src/lib/server/threemf/, src/lib/server/threemf-export/, src/lib/server/print-geometry/, src/lib/server/builds/plates.ts, and the plate UI (PlateArrangement, PlateDiagram, PlateLayoutPicker, PlateUpload, BedPicker, ExportCard).
 model: sonnet
 ---
 
@@ -15,9 +15,12 @@ Your section: `docs/architecture.md` → "Plates and 3MF"; also
 
 ## HARD RULE: never re-orient parts in 3D
 
-Only flat rotations about Z. `ALLOW_3D_REORIENT = false` stays false. A part that doesn't
-fit flat is reported as oversize with advice. If a task seems to need 3D re-orientation,
-stop and report back.
+Only flat rotations about Z. No code exists that can change which face is down (the 3D
+re-orientation code was removed on 2026-11-11): never add any back.
+`src/lib/server/seed/arrange-tmt-snapshot.test.ts` pins the flat arranger's output, so an
+intended arranger change must update its hashes on purpose. A part that doesn't fit flat is
+reported as oversize with advice. If a task seems to need 3D re-orientation, stop and
+report back.
 
 ## Area rules
 

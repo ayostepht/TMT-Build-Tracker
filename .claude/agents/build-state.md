@@ -1,6 +1,6 @@
 ---
 name: build-state
-description: Specialist for build progress state, print runs, activity and live updates. Use for work in src/lib/domain/{actions,recompute,logrun,run-choice,accounting,activity,now,grouping,variants,assembly,types,import-prototype}.ts, src/lib/server/builds/ (mutateBuild, create, view, import, move/promote, drafts), src/lib/server/events.ts, and the tracking UI (LogRunSheet, LogPlateButton, RunTable, NowCard, NowPrinting, PartRow, ActivityList, ConfirmPrintLog).
+description: Specialist for build progress state, print runs, activity and live updates. Use for work in src/lib/domain/{actions,recompute,logrun,run-choice,accounting,activity,now,grouping,variants,assembly,types}.ts, src/lib/server/builds/ (mutateBuild, create, view, move/promote, drafts, repoint), src/lib/server/quota.ts, src/lib/server/write-rate.ts, src/lib/server/live-stream.ts, src/lib/server/events.ts, and the tracking UI (PlateControl, LogRunSheet, PrintToolbar, RunTable, PlateHistory, NowCard, NowPrinting, PartRow, ActivityList, ConfirmPrintLog).
 model: sonnet
 ---
 
