@@ -3,6 +3,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authClient } from '#lib/auth-client.ts';
+	import { clearPrivateCaches } from '#lib/client/pwa.ts';
 	import Dialog from '#lib/components/design/share/Dialog.svelte';
 	import AdminPicker from './AdminPicker.svelte';
 	import type { PageProps } from './$types';
@@ -26,6 +27,7 @@
 
 	async function signInAgain() {
 		await authClient.signOut();
+		await clearPrivateCaches().catch(() => {});
 		await invalidateAll();
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		await goto(resolve('/login') + '?redirect=' + encodeURIComponent('/account'));
@@ -138,6 +140,7 @@
 				use:enhance={() => {
 					busy = true;
 					return async ({ update }) => {
+						await clearPrivateCaches().catch(() => {});
 						await update({ reset: false });
 						busy = false;
 					};

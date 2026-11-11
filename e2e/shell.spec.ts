@@ -401,3 +401,51 @@ test.describe('toast on a phone', () => {
 		await page.screenshot({ path: `${SHOTS_B}/toast-390-dark.png` });
 	});
 });
+
+test('the app mark sits beside the name and the top bar stays one row at 360 px', async ({
+	page
+}) => {
+	test.setTimeout(90_000);
+	const { buildId } = await ownerWithBuild(page, 'mark');
+	const dir = '.playwright-mcp/stage3-app-shell';
+	for (const [w, h] of [
+		[360, 844],
+		[390, 844],
+		[1440, 900]
+	] as const) {
+		for (const scheme of ['light', 'dark'] as const) {
+			await page.setViewportSize({ width: w, height: h });
+			await page.emulateMedia({ colorScheme: scheme });
+			await page.goto(`/builds/${buildId}/print`);
+			await page.waitForLoadState('networkidle');
+			const mark = page.locator('.topbar .app-mark');
+			await expect(mark).toBeVisible();
+			await expect
+				.poll(() => mark.evaluate((i: HTMLImageElement) => i.naturalWidth))
+				.toBeGreaterThan(0);
+			const m = await page.evaluate(() => {
+				const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+				const sel = document.querySelector('.chapter-slot')!.getBoundingClientRect();
+				return {
+					topbar: r('.topbar').height,
+					mark: r('.topbar .app-mark').width,
+					brandRight: r('.shell-brand').right,
+					slotLeft: sel.left,
+					toggleRight: r('.navtoggle').right
+				};
+			});
+			if (w < 760) {
+				expect(m.topbar, `one-row top bar at ${w}`).toBeLessThanOrEqual(56);
+				expect(m.brandRight).toBeLessThanOrEqual(m.slotLeft + 0.5);
+				expect(m.toggleRight).toBeLessThanOrEqual(w);
+			}
+			expect(m.mark).toBe(w >= 1440 ? 32 : 28);
+			const o = await overflow(page);
+			expect(o.scroll).toBeLessThanOrEqual(o.client);
+			await page.screenshot({
+				path: `${dir}/topbar-${w}-${scheme}.png`,
+				clip: { x: 0, y: 0, width: w, height: 140 }
+			});
+		}
+	}
+});

@@ -71,6 +71,8 @@
 	}
 	function onkeydown(e: KeyboardEvent) {
 		if (open === null) return;
+		// A question on top (delete photo) takes Escape; the viewer stays.
+		if (asking.current) return;
 		if (e.key === 'Escape') close();
 		else if (e.key === 'ArrowLeft' && open > 0) open--;
 		else if (e.key === 'ArrowRight' && open < photos.length - 1) open++;

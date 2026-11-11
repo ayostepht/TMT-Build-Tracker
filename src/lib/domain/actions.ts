@@ -26,11 +26,23 @@ export function applyPatches(view: BuildView, patches: PartPatch[]): BuildView {
 	return { ...view, state };
 }
 
+/** A `YYYY-MM-DD` that is a real calendar date and not after today (local, like `today()`). */
+export function validPrintedOn(value: unknown, now: Date): value is string {
+	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+	const d = new Date(value + 'T00:00:00Z');
+	return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value && value <= today(now);
+}
+
+/**
+ * Status change for one part. `opts.printedOn` (already validated by the caller) is honoured only
+ * when the new status is Printed: it is how Undo puts back the original printed date.
+ */
 export function setStatus(
 	view: BuildView,
 	slug: string,
 	status: PartStatus,
-	now: Date
+	now: Date,
+	opts: { printedOn?: string } = {}
 ): PartPatch[] {
 	const st = view.state[slug];
 	if (!st || st.status === status) return [];
@@ -40,7 +52,8 @@ export function setStatus(
 		startedAt: status === 'Printing' ? now.toISOString() : null
 	};
 	if (status !== 'Printing') patch.runEstSeconds = null;
-	if (status === 'Printed' && !st.printedOn) patch.printedOn = today(now);
+	if (status === 'Printed' && opts.printedOn) patch.printedOn = opts.printedOn;
+	else if (status === 'Printed' && !st.printedOn) patch.printedOn = today(now);
 	if (status === 'To print') patch.printedOn = null;
 	return [patch];
 }

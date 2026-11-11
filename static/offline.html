@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="color-scheme" content="light dark" />
+		<title>Offline - TMT Build Tracker</title>
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<style>
+			:root {
+				--paper: #f4f5f8;
+				--card: #ffffff;
+				--ink: #161a2b;
+				--muted: #5d6478;
+				--line: #dde0e8;
+				--accent: #2b3f9e;
+				color-scheme: light dark;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--paper: #0f1220;
+					--card: #181c30;
+					--ink: #eef0f7;
+					--muted: #a3aac0;
+					--line: #2a3050;
+					--accent: #8ea0ff;
+				}
+			}
+			html,
+			body {
+				margin: 0;
+				min-height: 100%;
+			}
+			body {
+				background: var(--paper);
+				color: var(--ink);
+				font: 16px/1.5 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+				display: grid;
+				place-items: center;
+				min-height: 100vh;
+				padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+				box-sizing: border-box;
+			}
+			main {
+				max-width: 420px;
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 14px;
+				padding: 28px 24px;
+				text-align: center;
+			}
+			h1 {
+				margin: 0 0 8px;
+				font: 600 28px/1.15 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+			}
+			p {
+				margin: 0 0 20px;
+				color: var(--muted);
+			}
+			button {
+				font: inherit;
+				font-weight: 700;
+				min-height: 44px;
+				padding: 0 24px;
+				border-radius: 999px;
+				border: 0;
+				background: var(--accent);
+				color: var(--paper);
+				cursor: pointer;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>You are offline</h1>
+			<p>You are offline. Your changes are not saved until you are back online.</p>
+			<button type="button" id="retry">Retry</button>
+		</main>
+		<script>
+			document.getElementById('retry').addEventListener('click', function () {
+				location.reload();
+			});
+		</script>
+	</body>
+</html>

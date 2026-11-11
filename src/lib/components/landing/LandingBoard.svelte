@@ -92,7 +92,7 @@
 								<a class="lb-build" href={resolve('/(app)/builds/[id]', { id: c.id })}
 									>{c.view.build.name}</a
 								>
-								<NowCard {item} />
+								<NowCard {item} compact />
 							</div>
 						{/each}
 						{#if c.guide}<GuideViewer />{/if}

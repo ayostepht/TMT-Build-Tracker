@@ -4,6 +4,8 @@
 	import { navigating, page } from '$app/state';
 	import { untrack } from 'svelte';
 	import { PrinterStore } from '#lib/client/printer-store.svelte.ts';
+	import { clearPrivateCaches } from '#lib/client/pwa.ts';
+	import AppMark from '#lib/components/AppMark.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { authClient } from '#lib/auth-client.ts';
 	import type { LayoutProps } from './$types';
@@ -12,6 +14,7 @@
 
 	async function signOut() {
 		await authClient.signOut();
+		await clearPrivateCaches().catch(() => {});
 		await invalidateAll();
 		await goto(resolve('/login'));
 	}
@@ -151,7 +154,7 @@
 
 <div class="wrap shell" class:has-tabs={!!current && !onSetup}>
 	<header class="topbar">
-		<a class="brand" href={resolve('/(app)')}>TMT Build Tracker</a>
+		<a class="brand shell-brand" href={resolve('/(app)')}><AppMark />TMT Build Tracker</a>
 		<div class="chapter-slot">
 			{#if showSwitcher}
 				<label class="chapter">
@@ -386,6 +389,11 @@
 	.brand {
 		order: 0;
 		margin-right: 6px;
+	}
+	.shell-brand {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 	}
 	.main {
 		order: 1;

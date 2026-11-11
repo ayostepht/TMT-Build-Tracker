@@ -27,6 +27,15 @@ describe('responseDefaults', () => {
 		});
 		expect(h['content-security-policy']).toBeUndefined();
 		expect(h['x-content-type-options']).toBe('nosniff');
+		expect(h['cache-control']).toBe('no-cache');
+	});
+
+	it('revalidates the PWA files but leaves other paths to their own cache headers', () => {
+		const get = (pathname: string) =>
+			responseDefaults({ pathname, https: false, contentType: 'text/plain', status: 200 });
+		expect(get('/manifest.webmanifest')['cache-control']).toBe('no-cache');
+		expect(get('/offline.html')['cache-control']).toBe('no-cache');
+		expect(get('/_app/immutable/a.js')['cache-control']).toBeUndefined();
 	});
 });
 

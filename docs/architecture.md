@@ -380,6 +380,9 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   looks: top tabs on desktop, a fixed bottom bar on phones (`--bottom-bar-h` in the shell
   block at the end of `app.css`). `BuildHeader` is one line on phones. `ErrorPage.svelte`
   serves both `+error.svelte` files (fixed wording per status).
+- `AppMark.svelte` is the app mark (`static/icons/icon.svg`; PNGs regenerate from it) in the
+  top bar and signed-out headers. Sign-out, "Sign in again" and account deletion call
+  `clearPrivateCaches()` (`client/pwa.ts`).
 - **Landing**: `/` redirects to the chapter page (`teams/[slug]`), which shows
   `landing/LandingBoard` (Now printing and Next up for up to 3 builds; one `BuildCtx` per
   build via `CtxScope`; polls every 20 s, no per-build SSE; `nextUpPlate` in
@@ -393,7 +396,21 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - Image: `ghcr.io/ayostepht/tmt-build-tracker` (`latest`, semver, `sha-<short>`), kit pack
   baked in, `VOLUME /data`, `HEALTHCHECK` on `/api/health`, `BODY_SIZE_LIMIT=1100M`.
 - Unraid template `unraid/tmt-build-tracker.xml`; install guide in `README.md`.
-- Not a PWA yet (no manifest or service worker): see STATUS Next steps.
+- **PWA**: `static/manifest.webmanifest` (light colors; dark `theme-color` via media meta tags
+  in `src/app.html`), icons in `static/icons/`, `static/offline.html` (self-contained, no app JS).
+  `src/service-worker.ts` (SvelteKit registers it; imports `immutable`/`assets` from
+  `$app/manifest`, `version` from `$app/env`) precaches those and answers only: cache-first
+  precached files and `/_app/immutable/*`; versioned (`?v=`) kit GLBs via a runtime cache; a
+  failed page navigation gets `/offline.html`. Rules live in `src/lib/client/sw-rules.ts`
+  (never `/api/*`, `/invite`, `/reset-password`, non-GET, HTML documents). No `skipWaiting` until
+  the page posts `SKIP_WAITING` (`src/lib/client/pwa.ts`, started from `+layout.svelte`, shows a
+  toast with Reload). `scripts/response-defaults.mjs` sends `Cache-Control: no-cache` for the
+  worker, manifest and offline page. Needs a secure context; plain-http LAN pages have no worker.
+  The model runtime cache (`RUNTIME_CACHE` in `sw-rules.ts`) is bounded to 12 entries (oldest
+  evicted) and is the only cache that can hold per-user content: `clearPrivateCaches()` in
+  `pwa.ts` deletes it (never the shell precache) and sign-out / account deletion call it.
+  `src/service-worker.ts` is excluded from svelte-check (`tsconfig.json`); `npm run build`
+  type-checks it.
 - **Request pipeline** (`hooks.server.ts`): boot validation (`bootProblems`, exit 1) → body
   cap by route (`body-limits.ts`, default 1 MB) → `/api/auth/*` to Better Auth with a trusted
   client address (`client-ip.ts`: `ADDRESS_HEADER`/`XFF_DEPTH`; fails closed) → session →

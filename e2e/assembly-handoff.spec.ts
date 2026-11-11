@@ -220,6 +220,11 @@ test('photos are downscaled, uploaded, shown in a lightbox and deleted', async (
 	await page.locator('.gallery .thumb').click();
 	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
 	await page.getByRole('button', { name: 'Delete' }).click();
+	// Escape closes only the question on top; the viewer stays open.
+	await page.keyboard.press('Escape');
+	await expect(page.getByTestId('ask-dialog')).toBeHidden();
+	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
+	await page.getByRole('button', { name: 'Delete' }).click();
 	await page.getByTestId('ask-confirm').click();
 	await expect(page.locator('.gallery .thumb')).toHaveCount(0);
 	expect((await page.request.get(`/api/builds/${buildId}/photos/${photo.id}`)).status()).toBe(404);

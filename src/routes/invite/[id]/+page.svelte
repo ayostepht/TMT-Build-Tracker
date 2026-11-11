@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AppMark from '#lib/components/AppMark.svelte';
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
@@ -10,7 +11,7 @@
 <div class="wrap">
 	<div class="card auth">
 		<div>
-			<div class="kicker">TMT Build Tracker</div>
+			<div class="kicker auth-brand"><AppMark size={24} />TMT Build Tracker</div>
 			<h1>Join {data.invitation.team}</h1>
 		</div>
 		<p>
@@ -56,3 +57,11 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.auth-brand {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+</style>

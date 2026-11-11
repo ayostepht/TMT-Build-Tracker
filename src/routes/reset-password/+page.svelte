@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AppMark from '#lib/components/AppMark.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
@@ -60,7 +61,7 @@
 <div class="wrap">
 	<div class="card auth">
 		<div>
-			<div class="kicker">TMT Build Tracker</div>
+			<div class="kicker auth-brand"><AppMark size={24} />TMT Build Tracker</div>
 			<h1>Reset password</h1>
 		</div>
 		{#if done}
@@ -106,3 +107,11 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.auth-brand {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+</style>

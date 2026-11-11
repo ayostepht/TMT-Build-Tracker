@@ -134,6 +134,30 @@ describe('mutations', () => {
 		expect(events[0]).toMatchObject({ type: 'changed', kind: 'part.status', by: 'User editor' });
 	});
 
+	it('restores a printed date only when going back to Printed, validated, editor only', () => {
+		const id = mk();
+		const slug = loadBuildView(db, id, 'owner')!.parts[0].slug;
+		const st = () => loadBuildView(db, id, 'owner')!.state[slug];
+		setPartStatus(db, id, 'editor', slug, { status: 'Printed', printedOn: '2026-01-02' });
+		expect(st().printedOn).toBe('2026-01-02');
+		const bad = (body: object) => () => setPartStatus(db, id, 'editor', slug, body);
+		setPartStatus(db, id, 'editor', slug, { status: 'To print' });
+		expect(st().printedOn).toBeNull();
+		expect(bad({ status: 'Printed', printedOn: '2999-01-01' })).toThrowError(
+			expect.objectContaining({ status: 400 })
+		);
+		expect(bad({ status: 'Printed', printedOn: 'yesterday' })).toThrowError(
+			expect.objectContaining({ status: 400 })
+		);
+		expect(bad({ status: 'Printing', printedOn: '2026-01-02' })).toThrowError(
+			expect.objectContaining({ status: 400 })
+		);
+		expect(() =>
+			setPartStatus(db, id, 'viewer', slug, { status: 'Printed', printedOn: '2026-01-02' })
+		).toThrowError(expect.objectContaining({ status: 403 }));
+		expect(st().status).toBe('To print');
+	});
+
 	it('validates input', () => {
 		const id = mk();
 		expect(() => setPartStatus(db, id, 'owner', 'nope', { status: 'Printed' })).toThrow(ApiError);

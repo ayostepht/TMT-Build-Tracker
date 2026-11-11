@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-11 (audit Stage 1 pushed as 5a6c6da; Stage 2 done on local `main`, not
-pushed. Test copy is on r41, 7e05586; nothing from the audit is deployed yet)._
+_Last updated: 2026-11-11 (audit Stage 1 pushed as 5a6c6da; Stages 2 and 3 done on local
+`main`, not pushed. Test copy is on r41, 7e05586; nothing from the audit is deployed yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -16,7 +16,8 @@ done. Keep it under ~150 lines.
 2. Ask the maintainer: push Stage 2; merge PR #13 (CI: e2e without apt, image gated on
    e2e, Dependabot grouping; its run is green); delete the unused `PlateStart.svelte`,
    `LogPlateButton.svelte`, `FilamentPicker.svelte`; tidy Dependabot PRs #3-#12.
-3. Start Stage 3 (PWA) from Next steps; small Stage 2 leftovers are under Open items.
+3. Start Stage 4 (cleanup and design system) from Next steps; leftovers are under Open
+   items.
 4. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
 
 ## Where we are
@@ -43,12 +44,18 @@ has not started.
 | Spoolman (optional)                                                            | Done, mock-tested only                                                         |
 | Filament catalog + vendor supplement                                           | Done                                                                           |
 | Release (Unraid template, domain, public repo)                                 | Not started                                                                    |
-| PWA                                                                            | Not started (Next steps 1)                                                     |
+| PWA (manifest, icons, service worker, offline page, update prompt)             | Done; real-phone checks pending                                                |
 
 Reference result: Elegoo Centauri Carbon (256 × 256, cutter keep-out, pack 1.0.1) → 21
 plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced file.
 
 ## Waiting on the maintainer
+
+- (2026-11-11) After the next deploy behind https, on a real iPhone and Android phone:
+  install from the browser, icon and name ("TMT Builds"), splash, status bar and safe areas
+  in light and dark, resume after backgrounding shows fresh data, offline page and Retry,
+  "A new version is available" after a later deploy; favicon in a dark-mode desktop
+  browser; MakeGood credit vs "Reset view" on the 3D stage at 360 px.
 
 - (asked 2026-11-10) On a real iPhone: does focusing the picker search still zoom or pan
   sideways; do orbit and tap-to-select feel right; after backgrounding the home-screen app,
@@ -71,16 +78,13 @@ Route each to the agent named in brackets.
   this design"; draft cards have no 3D snapshot. Not yet raised with the maintainer: a
   selected part's chip covers the lower third of the phone stage; phone toasts cover the
   stage top for ~8 s.
-- **Stage 2 leftovers**: compact `NowCard` for the landing on phones (hide Started / slicer
-  inputs) [build-state]; landing shows 3 builds because each build's controls open a
+- **Stage 2 and 3 leftovers**: landing shows 3 builds because each build's controls open a
   printer stream: share one stream per chapter in `printer-store.svelte.ts`, then raise the
-  cap [printers]; undoing Printed → To print resets the printed date to today
-  (`setPartStatus` does not take `printedOn`) [build-state]; SDCP `PrintInfo.Status` 20
-  mid-print is unlabelled, needs the real printer [printers]; MakeGood credit vs "Reset
-  view" at 360 px unverified without a kit model [design-studio-ui]; Escape in the
-  photo-delete dialog may also close the photo viewer [app-shell]; a one-off `ECONNRESET`
-  on a PATCH in `printers.spec.ts` (suspected keep-alive reuse; retry in the spec if it
-  recurs) [e2e-playwright].
+  cap [printers]; SDCP `PrintInfo.Status` 20 mid-print is unlabelled, needs the real
+  printer [printers]; a one-off `ECONNRESET` on a PATCH in `printers.spec.ts` (suspected
+  keep-alive reuse; retry in the spec if it recurs) [e2e-playwright]; the update prompt's
+  worker hand-over is unit-tested only [release-pwa]; first install precaches about 3.6 MB,
+  a third of it the PDF worker [release-pwa].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
 - **Printers** [printers]: OctoEverywhere shared link for Elegoo (merged; r41 has it without
   the reconnect/backoff fix 9c44a33): the maintainer enters the link in the printer form
@@ -183,6 +187,7 @@ Stage 0 and **Stage 1 (safe to expose) are done**: modes, SSO-only public sign-i
 switch, outbound guard, trusted-proxy rate limits, boot validation, security headers and
 CSP, body caps, quotas and write limits, streaming-only uploads with zip caps, account
 deletion/export, site admin hand-over, CLI password reset (`docs/password-reset.md`).
+**Stage 3 (PWA) is done** apart from real-phone checks (see Waiting on the maintainer).
 **Stage 2 (daily loop and phone shell) is done**, exit checks measured: start a plate in
 1 tap and finish-and-log in 2 from landing; 93% of a 390 × 844 Print screen is content.
 Mac: keep Node 22 first on PATH (Homebrew's Node 25 breaks
@@ -191,19 +196,14 @@ its own `E2E_PORT`; the local `docker build` needs kit-pack download credentials
 job failed twice on 2026-11-11 installing the browser (runner could not reach Ubuntu's
 package server): re-run before reading it as a code failure.
 
-1. **Stage 3, PWA**: manifest (icons incl. maskable and apple-touch-icon, light/dark theme
-   colors, `display: standalone`, `start_url /`), iOS meta and safe-area insets, a service
-   worker caching the app shell and immutable assets/GLBs but never API data, offline
-   fallback, update prompt, re-checking r35/r36 resume behaviour in standalone mode, and a
-   real logo/favicon. Needs https; plain-http LAN installs must keep working without it.
-2. **Stage 4, cleanup and design system**: remove prototype import and re-orientation
+1. **Stage 4, cleanup and design system**: remove prototype import and re-orientation
    code, slim the image, style scales, class-name leaks, contrast, design studio a11y pass
    and Options placement. Open: squash migrations (needs a journal reset on the test copy).
-3. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
+2. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
    CONTRIBUTING/SECURITY, `v1.0.0`, e2e gating the image, Unraid template (+ Community
    Apps), repo public.
-4. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
+3. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
    plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),
    Prusa Link and Duet adapters; printer supervisor live test.
-5. **Stage 7, public launch**: `TMT_MODE=public`, backups of database and uploads, uptime
+4. **Stage 7, public launch**: `TMT_MODE=public`, backups of database and uploads, uptime
    check, soft launch.

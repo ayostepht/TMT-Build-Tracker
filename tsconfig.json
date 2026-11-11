@@ -12,5 +12,6 @@
 		"prettier.config.js",
 		"eslint.config.js",
 		"drizzle.config.ts"
-	]
+	],
+	"exclude": ["src/service-worker.ts"]
 }

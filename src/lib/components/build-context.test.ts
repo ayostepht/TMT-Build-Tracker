@@ -62,8 +62,25 @@ describe('BuildCtx optimistic actions', () => {
 		const t = toasts.items[0];
 		expect(t.action?.label).toBe('Undo');
 		await t.action!.run();
-		expect(api.setPartStatus).toHaveBeenLastCalledWith(ctx.id, slug, 'To print');
+		expect(api.setPartStatus).toHaveBeenLastCalledWith(ctx.id, slug, 'To print', undefined);
 		expect(ctx.view.state[slug].status).toBe('To print');
+	});
+
+	it('Undo of Printed to To print, then back to Printed, sends the snapshot printed date', async () => {
+		ctx.view = {
+			...ctx.view,
+			state: {
+				...ctx.view.state,
+				[slug]: { ...ctx.view.state[slug], status: 'Printed', printedOn: '2026-01-02' }
+			}
+		};
+		api.getView.mockImplementation(async () => ctx.view);
+		const before = [{ ...ctx.view.state[slug], slug }];
+		await ctx.setPartStatus(slug, 'To print');
+		expect(ctx.view.state[slug].printedOn).toBeNull();
+		expect(await ctx.restoreParts(before as never)).toBe(true);
+		expect(api.setPartStatus).toHaveBeenLastCalledWith(ctx.id, slug, 'Printed', '2026-01-02');
+		expect(ctx.view.state[slug].printedOn).toBe('2026-01-02');
 	});
 
 	it('Take off printer is optimistic and Undo puts the start time back', async () => {

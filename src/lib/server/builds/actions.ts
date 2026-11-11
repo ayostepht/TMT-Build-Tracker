@@ -7,7 +7,8 @@ import {
 	setRunEstimate,
 	setStatus,
 	startPrinting,
-	stopPrinting
+	stopPrinting,
+	validPrintedOn
 } from '#lib/domain/index.ts';
 import {
 	BUILD_PHASES,
@@ -197,12 +198,23 @@ export function setPartStatus(
 	if (!isObj(body) || !(PART_STATUSES as readonly unknown[]).includes(body.status))
 		bad('status must be one of ' + PART_STATUSES.join(', '));
 	const status = body.status as PartStatus;
+	const printedOn = body.printedOn;
+	if (printedOn !== undefined && status !== 'Printed')
+		bad('printedOn only applies when restoring a part to Printed');
 	mutateBuild(db, buildId, userId, (_tx, view, now) => {
 		if (!view.state[slug]) throw new ApiError(404, 'Unknown part');
+		if (printedOn !== undefined && !validPrintedOn(printedOn, now))
+			bad('printedOn must be a date (YYYY-MM-DD) that is not in the future');
 		return {
 			kind: 'part.status',
 			payload: { slug, from: view.state[slug].status, to: status },
-			patches: setStatus(view, slug, status, now)
+			patches: setStatus(
+				view,
+				slug,
+				status,
+				now,
+				typeof printedOn === 'string' ? { printedOn } : {}
+			)
 		};
 	});
 }

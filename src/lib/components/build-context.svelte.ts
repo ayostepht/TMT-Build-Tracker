@@ -118,7 +118,12 @@ export class BuildCtx {
 		return this.act(
 			async () => {
 				for (const s of before) {
-					await apiSetPartStatus(this.id, s.slug, s.status);
+					await apiSetPartStatus(
+						this.id,
+						s.slug,
+						s.status,
+						s.status === 'Printed' && s.printedOn ? s.printedOn : undefined
+					);
 					if (s.status === 'Printing') {
 						if (s.startedAt)
 							await printing(this.id, { action: 'setStart', slugs: [s.slug], when: s.startedAt });

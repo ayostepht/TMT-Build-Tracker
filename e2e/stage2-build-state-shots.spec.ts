@@ -101,3 +101,47 @@ test('Print tab and Now card screenshots; content share at 390 x 844', async ({ 
 		}
 	}
 });
+
+test('compact Now card on the landing and overflow of the full card at 360', async ({ page }) => {
+	test.setTimeout(180_000);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId, chapterUrl } = await ownerWithBuild(page, 'stage2c');
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	await page
+		.getByRole('button', { name: /^Start printing plate \d+$/ })
+		.first()
+		.click();
+	await expect(
+		page.getByRole('button', { name: /^Finish & log plate \d+$/ }).first()
+	).toBeVisible();
+
+	for (const w of [360, 390]) {
+		await page.setViewportSize({ width: w, height: 844 });
+		await page.goto(chapterUrl);
+		await page.waitForLoadState('networkidle');
+		const card = page.getByTestId('landing-now-card').first();
+		await expect(card.getByRole('button', { name: /^Finish & log plate \d+$/ })).toBeVisible();
+		await expect(card.getByText('Slicer grams')).toHaveCount(0);
+		await expect(card.getByTestId('now-details')).toBeVisible();
+		const box = await card.boundingBox();
+		console.log(`COMPACT ${w}px card height ${Math.round(box!.height)}`);
+		await page.screenshot({ path: `${SHOTS}/now-compact-${w}.png` });
+
+		await page.goto(`/builds/${buildId}`);
+		await page.waitForLoadState('networkidle');
+		const over = await page.evaluate(() => {
+			const bad: string[] = [];
+			const vw = document.documentElement.clientWidth;
+			for (const el of document.querySelectorAll('.now-card, .now-card *')) {
+				const r = el.getBoundingClientRect();
+				if (r.width && (r.right > vw + 0.5 || r.left < -0.5))
+					bad.push(`${el.tagName}.${(el as HTMLElement).className} ${Math.round(r.right)}`);
+			}
+			return { bad, scroll: document.documentElement.scrollWidth - vw };
+		});
+		console.log(`FULL ${w}px overflow ${JSON.stringify(over)}`);
+		expect(over.bad).toEqual([]);
+		expect(over.scroll).toBeLessThanOrEqual(0);
+	}
+});

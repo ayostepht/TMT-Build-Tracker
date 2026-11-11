@@ -19,6 +19,7 @@ import {
 	runTargets,
 	setPrintStart,
 	setStatus,
+	validPrintedOn,
 	startPrinting,
 	stopPrinting,
 	timeStats,
@@ -174,6 +175,21 @@ describe('actions', () => {
 		expect(q.startedAt).toBeNull();
 		const w = applyPatches(v, [q]);
 		expect(setStatus(w, 'seat-center', 'To print', now)[0].printedOn).toBeNull();
+	});
+
+	it('setStatus restores a given printedOn only for Printed; validPrintedOn rejects bad dates', () => {
+		const v = makeView();
+		expect(
+			setStatus(v, 'seat-center', 'Printed', now, { printedOn: '2026-02-01' })[0].printedOn
+		).toBe('2026-02-01');
+		expect(
+			setStatus(v, 'seat-center', 'Printing', now, { printedOn: '2026-02-01' })[0].printedOn
+		).toBe(undefined);
+		expect(validPrintedOn('2026-03-05', now)).toBe(true);
+		expect(validPrintedOn('2026-03-06', now)).toBe(false); // future
+		expect(validPrintedOn('2026-02-30', now)).toBe(false); // not a date
+		expect(validPrintedOn('5 March', now)).toBe(false);
+		expect(validPrintedOn(20260301, now)).toBe(false);
 	});
 
 	it('a perPartRuns plate needs 2 Success runs per part before Printed', () => {

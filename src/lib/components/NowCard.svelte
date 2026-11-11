@@ -9,6 +9,7 @@
 		toLocalInput,
 		type nowPrinting
 	} from '#lib/domain/index.ts';
+	import { resolve } from '$app/paths';
 	import { printing, updatePlate } from '#lib/client/api.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import type { Plate } from '#lib/domain/types.ts';
@@ -19,7 +20,8 @@
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 
 	type Item = ReturnType<typeof nowPrinting>[number];
-	let { item }: { item: Item } = $props();
+	/** compact: the glance version for the landing (no start/slicer inputs, no explainer, a Details link to the Print tab). */
+	let { item, compact = false }: { item: Item; compact?: boolean } = $props();
 
 	const ctx = getBuildCtx();
 	const slugs = $derived(item.parts.map((p) => p.slug));
@@ -133,54 +135,58 @@
 		</p>
 	{/if}
 
-	<div class="now-step">
-		<div class="now-step-title">1 · Sent to printer</div>
-		<div class="now-grid">
-			<label for="{fid}-st"
-				>Started
-				<input
-					type="datetime-local"
-					id="{fid}-st"
-					value={item.startedAt ? toLocalInput(new Date(item.startedAt)) : ''}
-					disabled={!ctx.canEdit}
-					onchange={(e) => setStart(e.currentTarget.value)}
-				/>
-			</label>
-			<label for="{fid}-sg"
-				>Slicer grams
-				<input
-					type="number"
-					id="{fid}-sg"
-					min="0"
-					step="1"
-					value={slicerShown ?? ''}
-					placeholder={bomRun ? `BOM ~${fmt(bomRun)}` : 'g'}
-					disabled={!ctx.canEdit}
-					onchange={(e) => {
-						const raw = e.currentTarget.value;
-						saveSlicer(raw === '' ? null : Math.max(0, Number(raw)));
-					}}
-				/>
-			</label>
-			<label for="{fid}-se"
-				>Slicer time
-				<input
-					type="text"
-					id="{fid}-se"
-					inputmode="text"
-					value={item.estSource === 'slicer' && item.estSeconds ? fmtHM(item.estSeconds) : ''}
-					placeholder={item.estSeconds ? `e.g. ${fmtHM(item.estSeconds)}` : 'e.g. 12h 30m'}
-					disabled={!ctx.canEdit}
-					onchange={(e) => setEstimate(e.currentTarget.value)}
-				/>
-			</label>
+	{#if !compact}
+		<div class="now-step">
+			<div class="now-step-title">1 · Sent to printer</div>
+			<div class="now-grid">
+				<label for="{fid}-st"
+					>Started
+					<input
+						type="datetime-local"
+						id="{fid}-st"
+						value={item.startedAt ? toLocalInput(new Date(item.startedAt)) : ''}
+						disabled={!ctx.canEdit}
+						onchange={(e) => setStart(e.currentTarget.value)}
+					/>
+				</label>
+				<label for="{fid}-sg"
+					>Slicer grams
+					<input
+						type="number"
+						id="{fid}-sg"
+						min="0"
+						step="1"
+						value={slicerShown ?? ''}
+						placeholder={bomRun ? `BOM ~${fmt(bomRun)}` : 'g'}
+						disabled={!ctx.canEdit}
+						onchange={(e) => {
+							const raw = e.currentTarget.value;
+							saveSlicer(raw === '' ? null : Math.max(0, Number(raw)));
+						}}
+					/>
+				</label>
+				<label for="{fid}-se"
+					>Slicer time
+					<input
+						type="text"
+						id="{fid}-se"
+						inputmode="text"
+						value={item.estSource === 'slicer' && item.estSeconds ? fmtHM(item.estSeconds) : ''}
+						placeholder={item.estSeconds ? `e.g. ${fmtHM(item.estSeconds)}` : 'e.g. 12h 30m'}
+						disabled={!ctx.canEdit}
+						onchange={(e) => setEstimate(e.currentTarget.value)}
+					/>
+				</label>
+			</div>
+			{#if !item.startedAt && ctx.canEdit}
+				<button
+					class="btn ghost sm"
+					type="button"
+					onclick={() => setStart(toLocalInput(new Date()))}>Started just now</button
+				>
+			{/if}
 		</div>
-		{#if !item.startedAt && ctx.canEdit}
-			<button class="btn ghost sm" type="button" onclick={() => setStart(toLocalInput(new Date()))}
-				>Started just now</button
-			>
-		{/if}
-	</div>
+	{/if}
 
 	<div class="now-timer">
 		{#if item.startedAt}
@@ -202,12 +208,23 @@
 	</div>
 
 	<div class="now-foot">
-		<span
-			>A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure flags them
-			for reprint.</span
-		>
+		{#if !compact}
+			<span
+				>A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure flags
+				them for reprint.</span
+			>
+		{/if}
 		{#if plate}
-			<div class="now-actions"><PlateControl {plate} size="md" /></div>
+			<div class="now-actions">
+				<PlateControl {plate} size="md" />
+				{#if compact}
+					<a
+						class="btn ghost"
+						href={resolve('/(app)/builds/[id]/print', { id: ctx.id })}
+						data-testid="now-details">Details</a
+					>
+				{/if}
+			</div>
 		{/if}
 	</div>
 </article>

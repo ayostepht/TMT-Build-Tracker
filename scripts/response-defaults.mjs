@@ -26,6 +26,9 @@ const PERMISSIONS_POLICY = [
 const LOCKDOWN_CSP = "default-src 'none'; frame-ancestors 'none'";
 const API_CSP = `${LOCKDOWN_CSP}; sandbox`;
 const HTML_FALLBACK_CSP = "frame-ancestors 'none'";
+// PWA files that must be revalidated on every load: a browser re-checks the service worker script
+// itself, but proxies and the HTTP cache must not pin a stale worker, manifest or offline page.
+const REVALIDATE_PATHS = new Set(['/service-worker.js', '/manifest.webmanifest', '/offline.html']);
 const PRIVATE_URL_PATHS = /^\/(invite|reset-password)(\/|$)/;
 
 /**
@@ -47,6 +50,7 @@ export function responseDefaults({ pathname, https, contentType, status }) {
 		'permissions-policy': PERMISSIONS_POLICY,
 		'cross-origin-resource-policy': 'same-origin'
 	};
+	if (REVALIDATE_PATHS.has(pathname)) out['cache-control'] = 'no-cache';
 	if (https) out['strict-transport-security'] = HSTS;
 	if (isHtml) out['cross-origin-opener-policy'] = 'same-origin';
 	if (pathname.startsWith('/api/')) out['content-security-policy'] = API_CSP;
