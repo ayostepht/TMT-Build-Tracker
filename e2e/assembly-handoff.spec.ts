@@ -224,7 +224,16 @@ test('photos are downscaled, uploaded, shown in a lightbox and deleted', async (
 	await page.keyboard.press('Escape');
 	await expect(page.getByTestId('ask-dialog')).toBeHidden();
 	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
-	await page.getByRole('button', { name: 'Delete' }).click();
+	const viewerDelete = page.getByRole('button', { name: 'Delete' });
+	await viewerDelete.click();
+	// Destructive question: Cancel has focus, so a stray Enter cancels and the photo stays.
+	await expect(page.getByTestId('ask-cancel')).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('ask-dialog')).toBeHidden();
+	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
+	await expect(viewerDelete).toBeFocused();
+	await expect(page.locator('.gallery .thumb')).toHaveCount(1);
+	await viewerDelete.click();
 	await page.getByTestId('ask-confirm').click();
 	await expect(page.locator('.gallery .thumb')).toHaveCount(0);
 	expect((await page.request.get(`/api/builds/${buildId}/photos/${photo.id}`)).status()).toBe(404);
@@ -265,6 +274,8 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	// Unfinished assembly: the shared dialog asks "hand off anyway?".
 	await page.getByRole('button', { name: 'Mark as handed off' }).click();
 	await expect(page.getByTestId('ask-message')).toContainText('Mark as handed off anyway?');
+	// Not destructive: Cancel is not the initial focus.
+	await expect(page.getByTestId('ask-cancel')).not.toBeFocused();
 	await page.getByTestId('ask-confirm').click();
 	await expect(page.getByRole('heading', { name: 'Handed off' })).toBeVisible();
 	await expect(page.getByTestId('build-phase')).toHaveText('done');

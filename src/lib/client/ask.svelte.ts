@@ -1,10 +1,17 @@
 /** Promise-based yes/no question for the shared Dialog (replaces the browser's confirm()). */
-export type AskOptions = { title?: string; confirmLabel?: string; cancelLabel?: string };
+export type AskOptions = {
+	title?: string;
+	confirmLabel?: string;
+	cancelLabel?: string;
+	/** Destructive ask: the dialog opens with Cancel focused. */
+	danger?: boolean;
+};
 export type AskState = {
 	message: string;
 	title: string;
 	confirmLabel: string;
 	cancelLabel: string;
+	danger: boolean;
 	resolve: (yes: boolean) => void;
 };
 
@@ -23,6 +30,7 @@ export function createAsk() {
 					title: opts.title ?? 'Are you sure?',
 					confirmLabel: opts.confirmLabel ?? 'Continue',
 					cancelLabel: opts.cancelLabel ?? 'Cancel',
+					danger: opts.danger ?? false,
 					resolve: (yes) => {
 						current = null;
 						res(yes);

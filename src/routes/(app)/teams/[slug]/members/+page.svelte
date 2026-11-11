@@ -138,6 +138,7 @@
 		title="Remove {who.name}?"
 		onclose={() => (removing = null)}
 		testid="remove-member-dialog"
+		danger
 	>
 		<p>
 			{who.name} will lose access to this chapter's builds and printers. Their print history stays.
@@ -154,7 +155,8 @@
 			}}
 		>
 			<input type="hidden" name="memberId" value={who.id} />
-			<button class="btn" type="button" onclick={() => (removing = null)}>Cancel</button>
+			<button class="btn" type="button" data-cancel onclick={() => (removing = null)}>Cancel</button
+			>
 			<button class="btn primary" data-testid="confirm-remove-member">Remove member</button>
 		</form>
 	</Dialog>

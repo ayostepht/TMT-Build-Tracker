@@ -1,6 +1,7 @@
 # Changelog
 
-Append-only history, newest first. "rN" is the Nth deploy to the maintainer's test copy.
+Internal deploy history, append-only, newest first. "rN" is the Nth deploy to the
+maintainer's test copy. Public release notes live in the root `CHANGELOG.md`, not here.
 Nobody needs to read this to work; current behaviour is in `docs/architecture.md`, current
 state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed, why, commit).
 

@@ -77,7 +77,16 @@ test('studio: draft, recolor, plates, hidden from builds, make it a build', asyn
 	await page.goto('/studio');
 	await page.waitForLoadState('networkidle');
 	await expect(page.locator('[data-draft]')).toHaveCount(1);
-	await page.getByTestId('delete-draft').click();
+	const deleteDraft = page.getByTestId('delete-draft');
+	await deleteDraft.click();
+	await expect(
+		page.getByTestId('delete-dialog').getByRole('button', { name: 'Cancel' })
+	).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('delete-dialog')).toHaveCount(0);
+	await expect(deleteDraft).toBeFocused();
+	await expect(page.locator('[data-draft]')).toHaveCount(1);
+	await deleteDraft.click();
 	await page.getByTestId('confirm-delete').click();
 	await expect(page.locator('[data-draft]')).toHaveCount(0);
 });

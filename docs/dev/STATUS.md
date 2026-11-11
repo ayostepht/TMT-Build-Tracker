@@ -16,7 +16,7 @@ done. Keep it under ~150 lines.
    No schema or startup change.
 2. **Stage 5** (see Next steps 1 for done and left). Next slices: README screenshots (the
    test copy has real data; the plate arranger shot needs an arranged layout),
-   user-facing changelog, Unraid Community Apps template.
+   Unraid Community Apps template.
 3. CI runs in private-repo mode (`.github/workflows/docker.yml`): pushes to `main` and PRs
    run only `test`, docs-only pushes run nothing, `e2e` and `image` run on `v*` tags and
    manual runs. Untested on GitHub: the account is out of Actions minutes (every job fails
@@ -102,9 +102,13 @@ Route each to the agent named in brackets.
   `editableTargets` lacks `kind` (can't tell builds from drafts); no "start a draft from
   this design"; draft cards have no 3D snapshot. Not yet raised with the maintainer: a
   selected part's chip covers the lower third of the phone stage; phone toasts cover the
-  stage top for ~8 s. Destructive confirmations (`AskDialog` via `share/Dialog.svelte`)
-  focus the confirm button first, so a stray Enter confirms (security Low, older than
-  wave 3): focus Cancel first on destructive asks.
+  stage top for ~8 s. Focus return after closing a dialog by button is
+  fixed in `share/Dialog.svelte` and the Studio draft delete; the same gap remains in
+  `PhotoGallery.svelte:73` (lightbox), `GuideViewer.svelte:84`, `BedPicker.svelte:222` and
+  the `PlatesPanel.svelte:61` upload sheet (opener not saved; copy the snippet from
+  `Dialog.svelte`) [app-shell, plates-3mf]. Three converting asks ("Switch layout and
+  convert", "Convert print logs", "Re-arrange and convert") and "Replace colors" are not
+  flagged `danger`: flag them if the maintainer wants Cancel-first there too.
 - **Leftovers**: SDCP `PrintInfo.Status` 20 mid-print is unlabelled, needs the real
   printer [printers]; a one-off `ECONNRESET` on a PATCH in `printers.spec.ts` (suspected
   keep-alive reuse; retry in the spec if it recurs) [e2e-playwright]; the update prompt's
@@ -229,6 +233,10 @@ Route each to the agent named in brackets.
   operator docs; `CLAUDE.md` and `.claude/agents/` stay where Claude Code reads them.
 - Public addresses confirmed (2026-11-11): `github.com/ayostepht/TMT-Build-Tracker` and the
   `ghcr.io/ayostepht/...` image. `SECURITY.md` read and acknowledged by the maintainer.
+- **Dialogs** (2026-11-11): a destructive confirmation opens with focus on Cancel
+  (`ask(msg, { danger: true })`, or `danger` plus `data-cancel` on `Dialog`); new ones must
+  be flagged. Root `CHANGELOG.md` is the public release log: a user-visible change adds a
+  line under Unreleased; `docs/dev/CHANGELOG.md` stays the internal deploy history.
 - Git history is kept as is when the repo goes public (private-range LAN addresses in old
   commits are accepted; no rewrite). Branch protection (no force push, no deletion,
   required `test` + `e2e`) is set the moment the repo is public: GitHub refuses it on a
@@ -271,7 +279,8 @@ also fix `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle; Type
    still private); arm64. Package is `tmt-build-tracker` 0.9.0 with
    `engines` (Node >=22.12 <23); `src/lib/version.ts` feeds About and `/api/health`
    (`{ ok, version }`); the 1.0.0 bump comes with the tag. Left: README screenshots (phone
-   Now card, plate arranger, 3D designer, printer card), user-facing changelog, `v1.0.0`, e2e gating the image, an e2e run with a
+   Now card, plate arranger, 3D designer, printer card), `v1.0.0` (rename `[Unreleased]` in the root `CHANGELOG.md` to
+   `[1.0.0] - date`, drop its pre-release wording, check it matches `package.json`), e2e gating the image, an e2e run with a
    kit pack installed, Unraid template (+ Community Apps), repo public.
 2. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
    plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),

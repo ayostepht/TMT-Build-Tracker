@@ -280,11 +280,17 @@
 		</div>
 	</Dialog>
 {:else if asking === 'delete'}
-	<Dialog title="Delete design?" onclose={() => (asking = null)} testid="delete-design-dialog">
+	<Dialog
+		title="Delete design?"
+		onclose={() => (asking = null)}
+		testid="delete-design-dialog"
+		danger
+	>
 		<div class="confirm">
 			<p>Delete "{d.name}"? Builds already made from it keep their colors.</p>
 			<div class="acts">
-				<button class="btn" type="button" onclick={() => (asking = null)}>Cancel</button>
+				<button class="btn" type="button" data-cancel onclick={() => (asking = null)}>Cancel</button
+				>
 				<button class="btn danger" type="button" disabled={busy} onclick={remove}>
 					Delete design
 				</button>

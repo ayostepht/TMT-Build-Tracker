@@ -1,0 +1,79 @@
+# Changelog
+
+All notable changes to TMT Build Tracker are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project aims to follow [Semantic Versioning](https://semver.org/) once 1.0.0 is out.
+
+To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md). Take a backup first: database migrations run automatically at start and cannot be undone.
+
+## [Unreleased]
+
+This is what the first public release, 1.0.0, will contain. The app is pre-release (version 0.9.0) and has not been published yet.
+
+### Added
+
+**Builds and chapters**
+
+- Plan a MakeGood 3D TMT chair as a **build**: every part, the print plates, filament colors and progress in one place. A guided setup walks through the kit, options, colors, printer and export, and you can reopen it later.
+- Build in a personal workspace ("My builds") or with a **chapter**: members with owner, editor and viewer roles, invitation links you copy and send yourself (the app sends no email), and live updates so everyone sees changes as they happen.
+- Pick the chair's variants (seat, rear caster, footrest, rim) and accessories; an activity feed records who changed what, and logging a print, starting a plate and part status changes can be undone.
+- **Studio** drafts: try colors and options, lay out plates and export without creating a build, then turn a draft into a build.
+- A **Help** page (getting started, printing day, glossary, FAQ), an **About** page, and **Privacy** and **Terms** pages. The build guide from MakeGood is linked, not included.
+
+**Color designer**
+
+- A 3D view of the chair that you can orbit, with a swatch picker per color role (primary, accent, soft, tires).
+- A bundled filament catalog (from SpoolmanDB, MIT) with PETG, PCTG and TPU colors, a few extra vendor colors, and your own custom filaments.
+- Palettes and a palette generator, color locks, and per-part color choices.
+- Save a color design and share it; the designs gallery lets anyone apply a design to a build or draft.
+
+**Plates and slicer export**
+
+- Automatic **plate arranging** for your printer's bed, with keep-out zones (for example a filament cutter) and a printer catalog with about 70 models and bed presets. Parts only ever rotate flat about the vertical axis: the app never tilts a part or changes which face is down. A part that does not fit flat is reported as oversize, with advice.
+- **3MF export** for Elegoo Slicer and OrcaSlicer, Bambu Studio, or a plain 3MF for other slicers, with each part's filament and MakeGood's per-part settings. It was opened in Elegoo Slicer once during development; a fuller re-test is still planned.
+- Upload your own sliced 3MF to read plate print times and filament use, or enter times by hand. The app shows expected hours and compares your pace with them.
+
+**Print tracking**
+
+- Start a plate in one tap and log the finish in two from the landing page ("Now printing" and "Next up"); the Print tab holds the full plate list, per-plate history and a log sheet for runs, failures and reprints, each with grams of filament used.
+- Edit or delete a log entry, and undo recent changes. Filament use is counted per color role.
+- Totals for time and filament per build.
+
+**Printers (read-only)**
+
+- Show a printer's live status (state, progress, temperatures, file, filament) next to your builds, link a running print job to a plate, and view the printer's camera. Elegoo (SDCP, tested on a real Centauri Carbon), Klipper (Moonraker), OctoPrint and Bambu Lab in LAN mode are supported; only the Elegoo connection has been checked against real hardware, the others against simulated printers.
+- Elegoo printers can connect through an OctoEverywhere shared link instead of using one of the printer's few direct connections.
+- The app never moves, heats, pauses, stops or starts a printer and never sends it a file. The one command it sends is Elegoo's "camera on". See [Printers](docs/guides/printers.md).
+- Optional Spoolman link to show spool weight remaining and deduct filament. It has only been tested against a simulated Spoolman.
+
+**Assembly and handoff**
+
+- An assembly checklist, build photos, handoff details for the recipient, and a printable summary of the finished build.
+
+**Installable phone app**
+
+- Add it to your home screen on iPhone, Android or desktop. It opens full screen with its own icon, supports light and dark mode and phone safe areas, and shows an offline page and an "update available" message on https addresses. Builds, plates and progress are never stored or edited offline. See [Install on your phone](docs/guides/phone-install.md).
+- Pages are designed for a phone at the printer: large tap targets, form fields that do not make iOS zoom, and fresh data when you return to the app.
+
+**Self-hosting and sign-in**
+
+- One Docker container with one data folder; start it with an empty folder and it sets itself up. Images for x86-64 and arm64. Guides for Docker, Docker Compose and Unraid (with a template file), plus backups and upgrades.
+- The MakeGood kit (3D model and print geometry, CC0, by MakeGood) installs automatically on first start. Site admins can import their own print geometry or replace the model.
+- Sign in with email and password, or single sign-on through any OpenID Connect provider (tested with Authentik). Choose who can sign up: anyone, invited people only, or nobody new.
+- A hosted "public" mode with Google and GitHub sign-in only, built-in usage limits, and no printers.
+- Reverse-proxy support with a fixed public address (`PUBLIC_URL`), or none for plain LAN use; guides for Nginx Proxy Manager, Caddy and Traefik.
+- Account page: export your data, delete your account, and (for site admins) hand over the role. Command-line password reset links for forgotten passwords.
+
+### Security
+
+- Security headers and a content security policy, request size caps, sign-in rate limits, and permission checks on the server for every change.
+- Printer and Spoolman addresses must be on private networks; redirects are never followed. Printer access codes, API keys and shared links are stored encrypted and never sent back to the browser or written to logs.
+- Streaming uploads with zip-bomb protection, and per-user write rate limits and storage quotas in public mode.
+
+### Known limits
+
+- Sign-up is open by default on a self-hosted install, and the app sends no email, so email addresses are unverified. Keep it on your LAN or set `SIGNUP=invite` or `SIGNUP=closed` (see [Environment reference](docs/guides/environment.md)).
+- Behind a reverse proxy the sign-in rate limit relies on a client-address header; a client that can reach the container port directly could fake its address. See [Reverse proxy](docs/guides/reverse-proxy.md#client-address-and-rate-limits).
+- Live printer status has not yet been watched through a full multi-day print.
+
+## Before 1.0
+
+The project was developed privately before this first release. There are no earlier public versions, so there is nothing to migrate from.

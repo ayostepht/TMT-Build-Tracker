@@ -96,7 +96,8 @@
 		if (
 			!(await asking.ask('Remove every imported guide image from this server?', {
 				title: 'Remove guide images?',
-				confirmLabel: 'Remove them'
+				confirmLabel: 'Remove them',
+				danger: true
 			}))
 		)
 			return;

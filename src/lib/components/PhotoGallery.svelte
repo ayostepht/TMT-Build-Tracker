@@ -49,7 +49,11 @@
 
 	async function remove(id: string) {
 		if (
-			!(await asking.ask('Delete this photo?', { title: 'Delete photo?', confirmLabel: 'Delete' }))
+			!(await asking.ask('Delete this photo?', {
+				title: 'Delete photo?',
+				confirmLabel: 'Delete',
+				danger: true
+			}))
 		)
 			return;
 		const idx = open;

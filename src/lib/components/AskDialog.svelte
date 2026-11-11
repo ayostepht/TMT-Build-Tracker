@@ -7,11 +7,15 @@
 </script>
 
 {#if q}
-	<Dialog title={q.title} onclose={() => q.resolve(false)} testid="ask-dialog">
+	<Dialog title={q.title} onclose={() => q.resolve(false)} testid="ask-dialog" danger={q.danger}>
 		<p class="ask-msg" data-testid="ask-message">{q.message}</p>
 		<div class="ask-actions">
-			<button class="btn" type="button" data-testid="ask-cancel" onclick={() => q.resolve(false)}
-				>{q.cancelLabel}</button
+			<button
+				class="btn"
+				type="button"
+				data-testid="ask-cancel"
+				data-cancel
+				onclick={() => q.resolve(false)}>{q.cancelLabel}</button
 			>
 			<button
 				class="btn primary"

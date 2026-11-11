@@ -81,6 +81,7 @@ While the repository is private, the container package is private too and pullin
 | [Install on your phone](docs/guides/phone-install.md)             | Home screen, offline behaviour                                                                 |
 | [Site admin: model and print geometry](docs/guides/site-admin.md) | Replacing the bundled 3D model, importing print geometry from the command line                 |
 | [Export for your slicer](docs/guides/slicer-export.md)            | The 3MF export for Elegoo Slicer, OrcaSlicer, Bambu Studio and others                          |
+| [Changelog](CHANGELOG.md)                                         | What changed in each release                                                                   |
 
 ## Development
 

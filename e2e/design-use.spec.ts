@@ -65,4 +65,15 @@ test('design page: "Use this design" focuses the build name and highlights the c
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.goto(`${designUrl}#use`);
 	await clickAndCheck();
+
+	// Delete (owner): destructive dialog opens on Cancel, so a stray Enter keeps the design.
+	const del = page.getByRole('button', { name: 'Delete design' });
+	await del.click();
+	const delDlg = page.getByTestId('delete-design-dialog');
+	await expect(delDlg.getByRole('button', { name: 'Cancel' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(delDlg).toHaveCount(0);
+	await expect(del).toBeFocused();
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1, name: 'Use Me' })).toBeVisible();
 });

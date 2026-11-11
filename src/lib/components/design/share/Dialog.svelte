@@ -10,18 +10,29 @@
 		title,
 		onclose,
 		children,
-		testid
-	}: { title: string; onclose: () => void; children: Snippet; testid?: string } = $props();
+		testid,
+		danger = false
+	}: {
+		title: string;
+		onclose: () => void;
+		children: Snippet;
+		testid?: string;
+		/** Destructive confirmation: focus starts on the `[data-cancel]` button, so a stray Enter cancels. */
+		danger?: boolean;
+	} = $props();
 
 	const uid = $props.id();
 
 	function modal(node: HTMLDialogElement) {
 		let gone = false;
+		// Remember the opener: an unmounted <dialog> does not get native focus restore.
+		const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		node.showModal();
-		// Safe control first: the field, else the primary action, else the first focusable.
-		node
-			.querySelector<HTMLElement>('input, select, button.primary')
-			?.focus({ preventScroll: true });
+		// Destructive: Cancel first. Otherwise the safe control: the field, else the primary action.
+		const first =
+			(danger ? node.querySelector<HTMLElement>('[data-cancel]') : null) ??
+			node.querySelector<HTMLElement>('input, select, button.primary');
+		first?.focus({ preventScroll: true });
 		// Native Escape closes the dialog and fires `close`; ignore the one our own teardown causes.
 		const onnative = () => {
 			if (!gone) onclose();
@@ -31,6 +42,15 @@
 			destroy() {
 				gone = true;
 				if (node.open) node.close();
+				// Give focus back unless something outside the dialog already took it on purpose.
+				const restore = () => {
+					const a = document.activeElement;
+					const lost = !a || a === document.body || node.contains(a);
+					if (lost && opener?.isConnected) opener.focus({ preventScroll: true });
+				};
+				restore();
+				// The opener may be re-rendered a tick later (e.g. after a form action).
+				setTimeout(restore, 0);
 			}
 		};
 	}

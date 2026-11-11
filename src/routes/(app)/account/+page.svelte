@@ -121,7 +121,7 @@
 </section>
 
 {#if open}
-	<Dialog title="Delete my account" onclose={close} testid="delete-account-dialog">
+	<Dialog title="Delete my account" onclose={close} testid="delete-account-dialog" danger>
 		{#if data.siteBlock === 'last_admin'}
 			<div class="stack acct-form" data-testid="handover">
 				<div class="error" role="alert" data-testid="delete-site-block">
@@ -129,7 +129,7 @@
 				</div>
 				<AdminPicker error={form?.adminError ?? ''} />
 				<div class="acct-actions">
-					<button class="btn" type="button" onclick={close}>Cancel</button>
+					<button class="btn" type="button" data-cancel onclick={close}>Cancel</button>
 				</div>
 			</div>
 		{:else}
@@ -213,7 +213,7 @@
 							disabled={!ready || busy}
 							data-testid="delete-account-confirm">Delete forever</button
 						>
-						<button class="btn" type="button" onclick={close}>Cancel</button>
+						<button class="btn" type="button" data-cancel onclick={close}>Cancel</button>
 					</div>
 				{/if}
 			</form>

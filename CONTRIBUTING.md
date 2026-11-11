@@ -80,4 +80,6 @@ docker run --rm -v "$PWD":/app -w /app mcr.microsoft.com/playwright:v<version>-n
 
 Describe what changed and why, and say which checks you ran. Keep a pull request to one subject, include tests for behaviour changes, and update the docs (README, `docs/guides/`, `docs/architecture.md`) when what a user or contributor sees changes. By contributing you agree your work is released under the project's [MIT license](LICENSE).
 
+User-visible changes add a line under `Unreleased` in [CHANGELOG.md](CHANGELOG.md) (Added, Changed, Fixed or Security, in plain language); the release step moves those lines under the new version.
+
 Security problems are not reported as issues or pull requests: see [SECURITY.md](SECURITY.md).

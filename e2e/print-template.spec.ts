@@ -130,7 +130,15 @@ test('use a sliced file as a print template, recolor, re-arrange with its times'
 	await expect(page.getByTestId('print-template-line')).toContainText('1 recolored since');
 
 	// Remove forgets the learned data and leaves the plates.
-	await page.getByTestId('template-remove').click();
+	const removeTemplate = page.getByTestId('template-remove');
+	await removeTemplate.click();
+	// Destructive question: Cancel has focus, so a stray Enter cancels and the template stays.
+	await expect(page.getByTestId('ask-cancel')).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('ask-dialog')).toBeHidden();
+	await expect(removeTemplate).toBeFocused();
+	await expect(page.getByTestId('print-template')).toHaveCount(1);
+	await removeTemplate.click();
 	await page.getByTestId('ask-confirm').click();
 	await expect(page.getByTestId('print-template')).toHaveCount(0);
 	await expect(wing).not.toContainText('from your slice');

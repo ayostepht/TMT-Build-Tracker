@@ -326,7 +326,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   same `arrangement.stale` flag Files uses (real builds, with a printer, editors).
   Anything fixed to the bottom on phones uses `bottom: var(--bottom-bar-h)`.
 - In-app confirmations: `createAsk()` (`client/ask.svelte.ts`) + `AskDialog.svelte`, wrapping
-  the shared `design/share/Dialog.svelte`. No browser `confirm()` remains.
+  the shared `design/share/Dialog.svelte`. No browser `confirm()` remains. `Dialog` takes
+  `danger` (initial focus on the first `[data-cancel]`; `createAsk().ask(msg, { danger })`
+  forwards it through `AskDialog`), records the opener before `showModal()` and refocuses
+  it on unmount when it is still connected and focus was lost.
 
 - **Design system** (`src/app.css`): scales `--fs-*` (8 steps, `--fs-field` 16 px for
   inputs), `--sp-*`, `--r-*`, `--shadow-*`; breakpoints 760 (phone shell), 900 (two

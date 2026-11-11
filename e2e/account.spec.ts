@@ -100,8 +100,17 @@ test('export my data, then delete my account', async ({ page, browser }) => {
 	expect(data.builds[0].build.name).toBe('Throwaway chair');
 
 	expect((await page.request.get('/api/account/users')).status()).toBe(403);
-	await page.getByTestId('delete-account-open').click();
+	const openDelete = page.getByTestId('delete-account-open');
+	await openDelete.click();
 	const dlg = page.getByTestId('delete-account-dialog');
+	await expect(dlg).toBeVisible();
+	// Destructive dialog: Cancel has focus, so a stray Enter cancels; the account stays.
+	await expect(dlg.getByRole('button', { name: 'Cancel' }).first()).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(dlg).toHaveCount(0);
+	await expect(openDelete).toBeFocused();
+	await expect(page).toHaveURL(/\/account/);
+	await openDelete.click();
 	await expect(dlg).toBeVisible();
 	if (SHOTS) await page.screenshot({ path: `${SHOTS}/account-dialog.png` });
 	const confirm = page.getByTestId('delete-account-confirm');

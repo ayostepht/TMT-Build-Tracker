@@ -184,7 +184,7 @@
 	async function removeTemplate() {
 		const yes = await asking.ask(
 			'Forget the print times and grams learned from this file? Your plates stay as they are; times go back to estimates.',
-			{ title: 'Remove print template', confirmLabel: 'Remove' }
+			{ title: 'Remove print template', confirmLabel: 'Remove', danger: true }
 		);
 		if (!yes) return;
 		removingTpl = true;

@@ -51,10 +51,19 @@
 
 	/** Opens the element as a modal <dialog> (native focus trap, Esc, inert page). */
 	function modal(node: HTMLDialogElement) {
+		// An unmounted <dialog> does not get native focus restore: remember the opener.
+		const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		node.showModal();
 		return {
 			destroy() {
 				if (node.open) node.close();
+				const restore = () => {
+					const a = document.activeElement;
+					if ((!a || a === document.body || node.contains(a)) && opener?.isConnected)
+						opener.focus({ preventScroll: true });
+				};
+				restore();
+				setTimeout(restore, 0);
 			}
 		};
 	}

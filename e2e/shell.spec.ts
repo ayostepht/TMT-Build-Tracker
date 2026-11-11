@@ -279,10 +279,18 @@ test('invites default to editor, copy the link, and removing a member asks first
 	await row.getByTestId('remove-member').click();
 	const dlg = page.getByTestId('remove-member-dialog');
 	await expect(dlg).toContainText('Remove Ed Editor?');
+	// Destructive dialog: Cancel has focus, so a stray Enter cancels and the member stays.
+	await expect(dlg.getByRole('button', { name: 'Cancel' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(dlg).toHaveCount(0);
+	await expect(row).toHaveCount(1);
+	await expect(row.getByTestId('remove-member')).toBeFocused();
+	await row.getByTestId('remove-member').click();
 	await page.screenshot({ path: `${SHOTS_B}/remove-member-${page.viewportSize()!.width}.png` });
 	await dlg.getByRole('button', { name: 'Cancel' }).click();
 	await expect(dlg).toHaveCount(0);
 	await expect(row).toHaveCount(1);
+	await expect(row.getByTestId('remove-member')).toBeFocused();
 	await row.getByTestId('remove-member').click();
 	await page.getByTestId('confirm-remove-member').click();
 	await expect(page.getByTestId('member-row').filter({ hasText: 'Ed Editor' })).toHaveCount(0);
