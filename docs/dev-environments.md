@@ -37,12 +37,6 @@ chromium`; `cp .env.example .env` for `npm run dev`. npm 11+ blocks install scri
 5. Real-file tests are optional (see below); without the files they skip.
 6. Have the `verifier` agent run the gate once.
 
-### Mac status (2026-11-10)
-
-`node_modules` was installed with Node 24 / npm 11 (esbuild scripts not approved). To do:
-Node 22 + `npm ci`, `brew install flock`, Playwright Chromium, `.env`. Delete this
-subsection once done.
-
 ## Running tools on the Unraid dev container
 
 The dev container has no Node. Run tooling in throwaway containers through the Docker
