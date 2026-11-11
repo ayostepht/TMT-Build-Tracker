@@ -16,7 +16,7 @@ services:
       # PUBLIC_URL: https://tmt.example.com
       # Required. Generate with: openssl rand -hex 32 (changing it later signs everyone
       # out and makes saved printer access codes unreadable)
-      BETTER_AUTH_SECRET: '' # required: generate with  openssl rand -hex 32
+      BETTER_AUTH_SECRET: '' # required, 32+ characters: generate with  openssl rand -hex 32
       # Optional. Comma-separated emails that are site admins (template kits, 3D models)
       # in addition to the first account created on this install.
       # ADMIN_EMAILS: you@example.com
@@ -25,6 +25,16 @@ services:
       # OIDC_CLIENT_ID: ""
       # OIDC_CLIENT_SECRET: ""
       # OIDC_PROVIDER_NAME: Authentik
+      # Planned, not active yet (read by config.ts, nothing uses them in this release):
+      # TMT_MODE: selfhost        # or public (SSO-only hosted instance, needs https PUBLIC_URL)
+      # SIGNUP: open              # open | invite | closed (self-hosted password sign-up)
+      # GOOGLE_CLIENT_ID: ""      # Google/GitHub need both variables of a pair
+      # GOOGLE_CLIENT_SECRET: ""
+      # GITHUB_CLIENT_ID: ""
+      # GITHUB_CLIENT_SECRET: ""
+      # Behind a reverse proxy you control that sets this header (adapter-node reads these):
+      # ADDRESS_HEADER: X-Forwarded-For
+      # XFF_DEPTH: 1
       # Optional. Largest slicer 3MF in MB (default 1024); the image allows bodies up to 1100 MB (BODY_SIZE_LIMIT).
       # MAX_3MF_MB: 1024
       # Optional. off = no background printer status connections.

@@ -115,10 +115,11 @@ Route each to the agent named in brackets.
   https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer
 - **Two modes**, `TMT_MODE=selfhost|public` (default `selfhost`). The public instance runs
   with no auth layer in front and is **SSO-only with Google and GitHub** (no passwords).
-  Self-hosted offers SSO (OIDC) **or** email/password **with email verification**, plus a
-  sign-up switch (2026-11-10). Orchestrator's reading, not yet confirmed: verification is
-  enforced when SMTP is configured; with no SMTP, passwords keep working unverified with a
-  startup warning, so a bare `docker run` still works.
+  Self-hosted offers SSO (OIDC) **or** email/password, plus a sign-up switch
+  (`SIGNUP=open|invite|closed`). **No email verification and no SMTP anywhere**
+  (2026-11-10). Consequence accepted for self-hosted: emails are unverified, so there
+  invitations and `ADMIN_EMAILS` trust whoever registers that address; the sign-up switch
+  is the control.
 - **Printers on the public instance: off for now, bridge later** (a companion container
   makers run at home that pushes read-only status). Self-hosted installs keep server-side
   connections, limited to private address ranges (2026-11-10).
@@ -129,6 +130,14 @@ Route each to the agent named in brackets.
 
 Stages from `docs/audit-2026-11.md` Part 2 (items, owners and exit checks are there).
 Stage 0 (placeholders for private addresses, `MAX_3MF_MB` docs, compose secret) is done.
+Done so far in Stage 1: the config contract in `config.ts` (`appMode`, `signupMode`,
+`socialProviders`, `trustedProxy`, `validatePublicMode`; nothing consumes it yet) and a
+production check that rejects secrets under 32 characters or known placeholders (still
+lazy: it fires on first auth use, not at boot). Done so far in Stage 2: the Now card's log
+sheet preselects Success; the build view re-fetches on reconnect, tab visible, online and
+focus. Mac e2e: keep Node 22 first on PATH (Homebrew's Node 25 breaks the build) and call
+`/opt/homebrew/bin/flock` by absolute path. The local `docker build` needs kit-pack
+download credentials.
 
 1. **Stage 1, safe to expose** (hard gate for public hosting): `TMT_MODE`, outbound guard
    for printers/camera/Spoolman, SSO-only public mode, sign-up switch, trusted-proxy rate

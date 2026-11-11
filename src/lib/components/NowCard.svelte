@@ -224,6 +224,7 @@
 	{#if ctx.canEdit}
 		<LogRunSheet
 			bind:open={sheetOpen}
+			quick
 			plateNumber={item.plate}
 			{slugs}
 			startedAt={item.startedAt}

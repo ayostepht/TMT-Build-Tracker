@@ -24,7 +24,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await expect(page.locator('.now-card')).toContainText(name);
 	await expect(header).toContainText('1 printing');
 
-	// Finishing opens the sheet; nothing is logged until a result is chosen and saved.
+	// Finishing opens the sheet with Success preselected (Save enabled); nothing is logged until saved.
 	const plateNo = ((await page.locator('.now-plate').first().innerText()).match(/Plate (\d+)/i) ??
 		[])[1];
 	await page.getByRole('button', { name: /Finish & log print/ }).click();
@@ -33,10 +33,18 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await expect(sheet).toBeVisible();
 	await expect(sheet.getByRole('button', { name: 'Success' })).toHaveAttribute(
 		'aria-pressed',
+		'true'
+	);
+	await expect(save).toBeEnabled();
+	await sheet.getByRole('button', { name: 'Failed' }).click();
+	await expect(sheet.getByRole('button', { name: 'Failed' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await expect(sheet.getByRole('button', { name: 'Success' })).toHaveAttribute(
+		'aria-pressed',
 		'false'
 	);
-	await expect(save).toBeDisabled();
-	await sheet.getByRole('button', { name: 'Failed' }).click();
 	await expect(save).toBeEnabled();
 	await sheet.getByLabel('Total print time').fill('2h 30m');
 	await sheet.getByLabel('Filament used (g)').fill('120');

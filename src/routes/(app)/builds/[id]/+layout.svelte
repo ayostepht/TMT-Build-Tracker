@@ -30,6 +30,7 @@
 	// Live updates for this build; any "changed" event re-fetches the view.
 	$effect(() => {
 		return subscribeBuild(buildId, () => void ctx.refresh(), {
+			onResync: () => void ctx.refresh(),
 			onStatus: (s: unknown) => {
 				ctx.sync = s === true || s === 'live' || s === 'open' || s === 'on' ? 'on' : 'off';
 			}
