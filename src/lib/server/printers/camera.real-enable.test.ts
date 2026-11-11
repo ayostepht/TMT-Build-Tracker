@@ -1,7 +1,7 @@
 /**
  * Opt-in probe against a real Elegoo printer: if its camera answers "not ready", send SDCP
  * Cmd 386 {Enable:1} (the only command the app may send) and grab one frame.
- *   TMT_REAL_ELEGOO=192.168.0.249 TMT_REAL_OUT=data/shots-camera/real-frame-enabled.jpg npx vitest run camera.real-enable
+ *   TMT_REAL_ELEGOO=<your printer's address> TMT_REAL_OUT=data/shots-camera/real-frame-enabled.jpg npx vitest run camera.real-enable
  * Skipped unless TMT_REAL_ELEGOO is set. At most 3 attempts, 5 s apart; never loops on failure.
  */
 import { writeFileSync } from 'node:fs';

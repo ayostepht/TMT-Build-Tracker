@@ -1,6 +1,6 @@
 /**
  * Opt-in probe against a real printer camera (read-only HTTP GETs on the camera port only):
- *   TMT_REAL_CAMERA=http://192.168.0.249:3031/video TMT_REAL_OUT=data/shots-camera/real-frame.jpg npx vitest run camera.real
+ *   TMT_REAL_CAMERA=http://<your printer's address>:3031/video TMT_REAL_OUT=data/shots-camera/real-frame.jpg npx vitest run camera.real
  * Skipped unless TMT_REAL_CAMERA is set.
  */
 import { writeFileSync } from 'node:fs';

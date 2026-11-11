@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-10 (docs restructure; last deploy r37, d1a815c)._
+_Last updated: 2026-11-10 (audit + staged proposal approved; last deploy r37, d1a815c)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -9,9 +9,10 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
-2. Design studio a11y pass and Options placement (open items, Design studio).
-3. Next steps list at the bottom.
+1. Read `docs/audit-2026-11.md` (audit + staged proposal, approved 2026-11-10; untracked
+   until Stage 1 ships because it describes exploitable gaps).
+2. Start Stage 1 and Stage 2 from Next steps (they run in parallel).
+3. Wait for (or ask about) the maintainer's iPhone checks below, then act on them.
 
 ## Where we are
 
@@ -73,9 +74,10 @@ Route each to the agent named in brackets.
   wired; 3D chair from 3MF only (no STEP) for user-uploaded templates.
 - **Kit** [kit-and-startup]: template copies: switching back to the built-in kit leaves
   the unused copy; designs from the base kit don't apply to a copy.
-- **Security** [release-pwa, review by security-reviewer]: without a proxy a client can
-  spoof `X-Forwarded-For` (trust it only from configured proxies); open sign-up (add an
-  invite/SSO-only setting); camera SSRF guard has no DNS-rebinding protection.
+- **Security**: 1 critical and 5 high findings for a public instance (any signed-up user
+  can point the server at any host/port; unverified email claims invites and site admin;
+  open sign-up; 1.1 GB global body limit; no quotas; `X-Forwarded-For` rate-limit bypass).
+  Details and owners: audit §1 and Stage 1. Not safe to expose publicly until Stage 1 ships.
 - **Screenshots never taken**: multi-run log-plate flow; palette locks
   (`data/shots-palette-locks/` spec, on the cloud machine).
 
@@ -105,23 +107,50 @@ Route each to the agent named in brackets.
 - Printers are read-only. Sole exception: Elegoo SDCP Cmd 386 `{"Enable":1}` to turn the
   camera on when someone views it. Never move, heat, pause, stop or start a print.
 - "Ready to print" section and bulk logging stay removed (too much space).
-- The maintainer installs on Unraid themselves. The README must be a complete Unraid
-  install guide (template XML, Docker tab steps, NPM + Authentik). Domain and Authentik
-  details stay with the maintainer. MakerWorld page for credit:
+- The maintainer installs on Unraid themselves. **README is Docker-first** (intro,
+  screenshots, 5-minute quick start) with Unraid, reverse proxies (NPM, Caddy, Traefik),
+  SSO, backups and printers as separate guides (2026-11-10; replaces "README must be a
+  complete Unraid + NPM + Authentik guide"). Domain details stay with the maintainer.
+  MakerWorld page for credit:
   https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer
+- **Two modes**, `TMT_MODE=selfhost|public` (default `selfhost`). The public instance runs
+  with no auth layer in front and is **SSO-only with Google and GitHub** (no passwords).
+  Self-hosted offers SSO (OIDC) **or** email/password **with email verification**, plus a
+  sign-up switch (2026-11-10). Orchestrator's reading, not yet confirmed: verification is
+  enforced when SMTP is configured; with no SMTP, passwords keep working unverified with a
+  startup warning, so a bare `docker run` still works.
+- **Printers on the public instance: off for now, bridge later** (a companion container
+  makers run at home that pushes read-only status). Self-hosted installs keep server-side
+  connections, limited to private address ranges (2026-11-10).
+- **Remove** the prototype import and the 3D re-orientation code (2026-11-10, Stage 4).
 - Don't re-run the full ~6 min e2e suite before every deploy when agents ran their specs.
 
 ## Next steps (in order)
 
-1. Act on the iPhone checks; design studio a11y pass and Options placement; credit
-   overlap at 360 px.
-2. Fix whatever the Elegoo Slicer export re-test turns up.
-3. Milestone 8 release: Unraid template XML (+ Community Apps), NPM + Authentik on the
-   maintainer's copy, README/install docs, make the repo public, CI e2e green on GitHub.
-4. Proper PWA: manifest (icons incl. maskable and apple-touch-icon, light/dark theme
+Stages from `docs/audit-2026-11.md` Part 2 (items, owners and exit checks are there).
+Stage 0 (placeholders for private addresses, `MAX_3MF_MB` docs, compose secret) is done.
+
+1. **Stage 1, safe to expose** (hard gate for public hosting): `TMT_MODE`, outbound guard
+   for printers/camera/Spoolman, SSO-only public mode, sign-up switch, trusted-proxy rate
+   limits, body limits, quotas, secret check, security headers, account deletion. Ends
+   with a `security-reviewer` re-audit: no Critical or High.
+2. **Stage 2, daily loop and phone shell** (parallel with Stage 1): Now printing / Next up
+   on the landing page, one start/log component, re-fetch on resume, optimistic status,
+   compact phone header and bottom bar, error page. Also the iPhone checks and whatever the
+   Elegoo Slicer export re-test turns up. Open: one name for chapter/workspace/team.
+3. **Stage 3, PWA**: manifest (icons incl. maskable and apple-touch-icon, light/dark theme
    colors, `display: standalone`, `start_url /`), iOS meta and safe-area insets, a service
    worker caching the app shell and immutable assets/GLBs but never API data, offline
-   fallback, update prompt, and re-checking r35/r36 resume behaviour in standalone mode.
-   Needs https (pair with the release's NPM/Authentik setup); plain-http LAN installs must
-   keep working without it.
-5. OctoEverywhere webhooks; printer supervisor live test.
+   fallback, update prompt, re-checking r35/r36 resume behaviour in standalone mode, and a
+   real logo/favicon. Needs https; plain-http LAN installs must keep working without it.
+4. **Stage 4, cleanup and design system**: remove prototype import and re-orientation
+   code, slim the image, style scales, class-name leaks, contrast, design studio a11y pass
+   and Options placement. Open: squash migrations (needs a journal reset on the test copy).
+5. **Stage 5, docs and 1.0**: Docker-first README and guides, in-app help/about/privacy,
+   CONTRIBUTING/SECURITY, `v1.0.0`, e2e gating the image, Unraid template (+ Community
+   Apps), repo public.
+6. **Stage 6, printer breadth**: https/wss for Moonraker and OctoPrint, hardware checks,
+   plate numbers in export names, the bridge, inbound webhooks (incl. OctoEverywhere),
+   Prusa Link and Duet adapters; printer supervisor live test.
+7. **Stage 7, public launch**: `TMT_MODE=public`, backups of database and uploads, uptime
+   check, soft launch.
