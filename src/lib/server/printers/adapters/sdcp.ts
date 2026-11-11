@@ -309,7 +309,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			// Link: wss to the link host; the name is validated (all answers public) right before
 			// the dial, but the global WebSocket cannot pin the address (see architecture notes).
 			if (link) {
-				await resolveAllowed(link.host);
+				await resolveAllowed(link.host, undefined, { allowShareLink: true });
 				url = shareLinkSocketUrl(link.origin);
 			} else {
 				const t = await resolveAllowed(cfg.host);

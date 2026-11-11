@@ -9,7 +9,7 @@ import { checkCameraUrl } from '#lib/printers/camera-url.ts';
 import type { CameraSource } from './camera-source';
 import { boundaryOf, cleanJpeg, MAX_FRAME_BYTES, MjpegParser } from './mjpeg';
 import { guardedFetch, isRedirect, OutboundError, REDIRECT_MESSAGE } from './outbound';
-import { backoff } from './types';
+import { backoff, maskSecrets } from './types';
 
 export interface Frame {
 	data: Buffer;
@@ -54,7 +54,7 @@ export class CameraError extends Error {
 	/** The stream stalled or stopped producing frames. */
 	stalled?: boolean;
 	constructor(message: string, extra: { status?: number; stalled?: boolean } = {}) {
-		super(message);
+		super(maskSecrets(message));
 		this.status = extra.status;
 		this.stalled = extra.stalled;
 	}
@@ -88,7 +88,8 @@ export async function openUpstream(
 	url: string,
 	host: string,
 	signal: AbortSignal,
-	o: Pick<HubOptions, 'connectTimeoutMs' | 'fetchFn'>
+	o: Pick<HubOptions, 'connectTimeoutMs' | 'fetchFn'>,
+	allowShareLink = false
 ): Promise<Response> {
 	const c = checkCameraUrl(url, host);
 	if (!c.ok) throw new CameraError('Camera redirected away from the printer');
@@ -100,8 +101,10 @@ export async function openUpstream(
 			method: 'GET',
 			redirect: 'manual',
 			signal: AbortSignal.any([signal, ctl.signal]),
-			headers: { accept: 'multipart/x-mixed-replace, image/jpeg, */*' }
-		});
+			headers: { accept: 'multipart/x-mixed-replace, image/jpeg, */*' },
+			// Only a source built from an Elegoo OctoEverywhere link may reach a share host.
+			...(allowShareLink ? { allowShareLink: true } : {})
+		} as RequestInit);
 	} catch (e) {
 		if (e instanceof OutboundError) throw new CameraError(e.message);
 		throw new CameraError(signal.aborted ? 'Closed' : 'Could not reach the camera');
@@ -161,7 +164,7 @@ async function grabOnce(source: CameraSource, opts: Partial<HubOptions>): Promis
 		const ctl = new AbortController();
 		const kill = setTimeout(() => ctl.abort(), o.connectTimeoutMs + o.stallTimeoutMs);
 		try {
-			const res = await openUpstream(url, source.host, ctl.signal, o);
+			const res = await openUpstream(url, source.host, ctl.signal, o, source.shareLink);
 			const ct = res.headers.get('content-type');
 			if (isMultipart(ct)) {
 				const b = boundaryOf(ct);
@@ -398,7 +401,7 @@ export class CameraSession {
 		let last: unknown;
 		for (const url of src.urls) {
 			try {
-				return await this.consume(url, src.host, signal);
+				return await this.consume(url, src.host, signal, src.shareLink);
 			} catch (e) {
 				if (signal.aborted) throw e;
 				last = e;
@@ -407,9 +410,14 @@ export class CameraSession {
 		throw last instanceof CameraError ? last : new CameraError('Could not reach the camera');
 	}
 
-	private async consume(url: string, host: string, signal: AbortSignal): Promise<boolean> {
+	private async consume(
+		url: string,
+		host: string,
+		signal: AbortSignal,
+		shareLink = false
+	): Promise<boolean> {
 		this.connects++;
-		const res = await openUpstream(url, host, signal, this.opts);
+		const res = await openUpstream(url, host, signal, this.opts, shareLink);
 		const ct = res.headers.get('content-type');
 		let frames = 0;
 		if (isMultipart(ct)) {
@@ -460,7 +468,7 @@ export class CameraSession {
 			this.publish(jpg);
 			await sleep(this.opts.pollMs, signal);
 			if (signal.aborted) return frames > 0;
-			const r = await openUpstream(url, host, signal, this.opts);
+			const r = await openUpstream(url, host, signal, this.opts, shareLink);
 			jpg = cleanJpeg(await readCapped(r, this.opts.maxFrameBytes, this.opts.stallTimeoutMs));
 		}
 	}

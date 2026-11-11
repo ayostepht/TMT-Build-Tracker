@@ -100,6 +100,28 @@ Sections match the subagents in `.claude/agents/`:
   `builds/import.ts` (`POST /api/builds/[id]/import`, `?dryRun=1`), CLI bundled by
   `vite.cli.config.ts` into `build/cli/` (`scripts/import-prototype.mjs`, see README).
 
+- **Quotas and caps** (`server/quota.ts`): every creation path calls `assertUnder(tx, key,
+count, {userId})` in the same synchronous transaction as its insert; a refusal is a
+  `QuotaError` (409, or 429 for slots) with `{error, code: 'quota'}`; `null` limit = no
+  query; only site admins are exempt. Bytes are measured from files on disk
+  (`workspaceUploadBytes`, `userUploadBytes`), never from client sizes; `assertUploadRoom`
+  before writing, `enforceStreamedUpload` after streaming. Slots: `acquireSseSlot`,
+  `acquireUploadSlot`. Constants in both modes: 2000 runs per build (`assertRunRoom`,
+  `assertRunTotal`), activity pruned to the newest 5000 per build (`pruneActivity`).
+- **Live streams** (`server/live-stream.ts`): shared SSE response; re-checks access on every
+  event and, with session validity, on each 25 s heartbeat; releases its slot once.
+- **Kit copies and builds**: `createBuild` refuses a copy owned by another workspace;
+  `moveBuild` and deletions call `builds/repoint.ts` `repointBuildsOffTemplates` (other
+  workspaces' builds go back to the copy's base kit).
+- **Write rate** (`server/write-rate.ts`, called in `hooks.server.ts` after the session is
+  resolved): token bucket per user on every non-GET request except `/api/auth/*`; off on
+  self-hosted installs unless `WRITE_RATE_PER_MIN` is set; refusal shaped for the caller
+  (action failure, HTML page, or JSON `{error, code: 'rate'}`).
+- **Printer job linking**: a job links to a plate only by file name or by one bound
+  expectation ("Start on <printer>", `jobId` in org settings, `ExpectedConfirm.svelte`);
+  never guessed. `jobNeverStarted` (domain/actions.ts) releases a cancelled print without
+  logging filament; progress is monotonic (`maxProgress`).
+
 ## Plates and 3MF (`plates-3mf`)
 
 - **Arranger:** `domain/arrange.ts` (see `arrange.README.md`). Flat rotations only
@@ -146,6 +168,17 @@ Sections match the subagents in `.claude/agents/`:
 - **Export:** `src/lib/server/threemf-export/` (Orca/Elegoo, Bambu, plain), painted
   supports, `bed_exclude_area`.
 
+- **Uploads**: 3MF upload is a raw body only (`?name=`; multipart gets 415 before the body is
+  read; curl uses `--data-binary`). Order on the plates route: upload slot (429), workspace
+  already over (409), disk floor (507), stream. The raw 3MF is never kept; thumbnails under
+  `3mf/<uploadId>/` and `plates/<buildId>/` count toward the workspace quota.
+- **Zip safety**: files on disk are read through the central directory only
+  (`threemf/zipfile.ts`; `cdSize` ≤ 64 MiB; no stream fallback: a missing directory is "not a
+  valid 3MF"). The fflate push parser is for in-memory inputs and aborts past 64 MB of
+  unwanted buffering. Bundles of 3MFs go through `print-geometry/nested-zip.ts` (entry
+  count, per-entry, cumulative and declared-versus-actual caps; scratch folder removed in
+  `finally`).
+
 ## Printers and camera (`printers`)
 
 - Read-only adapters (Elegoo SDCP, Moonraker, OctoPrint, Bambu LAN) in
@@ -182,6 +215,28 @@ Sections match the subagents in `.claude/agents/`:
   is dialled. `parseHost` rejects `*.octoeverywhere.com` and pasted links in Address.
   `safeError` masks share-link hosts. Live-probed read-only: the CC sends `PrintInfo.Status`
   20 while printing (OctoEverywhere shows it as "Bed Leveling", 0%).
+
+- **Outbound guard** (`server/printers/outbound.ts`): every printer, camera, discovery and
+  Spoolman connection goes through `assertOutboundAllowed` / `resolveAllowed` /
+  `guardedFetch`: refused entirely in `TMT_MODE=public`; otherwise private ranges only, DNS
+  resolved once and pinned, no redirects, metadata addresses denied. One exception: an
+  OctoEverywhere shared-link host (`printers/share-link.ts` `isShareLinkHost`) is admitted
+  when every DNS answer is a public address (`isGlobalUnicast`), https, no port. The exception
+  is opt-in (`allowShareLink`, passed only by the link socket check, the link camera source
+  and the two test routes in link mode); `maskSecrets` (`types.ts`) keeps the link host out
+  of every `OutboundError`, `CameraError` and adapter message.
+- **Shared link (Elegoo)**: encrypted secret `shareLink`, never returned; status over
+  `wss://<link>/websocket` (address checked before each dial, not pinned), Cmd 1 once, no
+  polling, no Cmd 386; camera `<link>/video` (pinned per hop). Host stored as the
+  placeholder `octoeverywhere`, never dialled.
+- **Remote data limits**: `MAX_REMOTE_MESSAGE_BYTES`, `safeFileName`/`safeText`,
+  `HostileGuard` (long backoff after an oversize frame), MainboardID
+  `[A-Za-z0-9_-]{1,64}`, 16 filaments; `mergeStatus` skips `__proto__`/`constructor`/
+  `prototype`. Backoff resets only on a valid Status/Attributes frame; `linkBackoff`
+  (10 s to 5 min) for links.
+- **Secrets and destinations** (`store.ts` `secretsForDestination`): stored secrets belong
+  to the address (host and port) or link they were saved for; changing the destination
+  needs its own secret re-entered.
 
 ## Design studio (`design-studio-ui`)
 
@@ -243,6 +298,21 @@ Sections match the subagents in `.claude/agents/`:
   upload and nudge editor.
 - Template copies: switching a build back to the built-in kit leaves the unused copy.
 
+- `templates/fork.ts`: kit copies (`forkTemplate`, `chooseBuildTemplate`, quota
+  `kitCopiesPerWorkspace`, reuse of an unused copy at the limit), `canViewTemplate` /
+  `assertTemplateViewable` (built-in, member of the owning workspace, site admin, or can see
+  a design on that copy) on `model.glb`, `hardware.glb`, `kit-status`, `plate-layouts`,
+  guide images. `templates/files.ts`: `kitCopyBytes`, `removeTemplateFiles`,
+  `removeWorkspaceTemplateFiles`. `templates/kit-upload.ts` + `print-geometry-upload.ts`:
+  kit uploads run public-mode rule (print-geometry import is site-admin only there), slot,
+  over-quota, disk floor, stream, re-check.
+- `models/jobs.ts`: `stepConversionsPerUser` (queued or running); `convert-core.ts`
+  refuses zip entries over 512 MB or 1 GB in total. `guide.ts`: 300 pages per template,
+  quota by size difference.
+- Startup: migrate, seed, `failStaleModelJobs`, `sweepImportsDir` (`imports-sweep.ts`:
+  temp uploads and scratch folders older than 1 h that no queued job needs). Schema:
+  `site_admin` (migration 0013).
+
 ## App shell (`app-shell`)
 
 - Build tabs (nested routes): Overview · Design · Print (tracking, logs, now printing) ·
@@ -256,6 +326,21 @@ Sections match the subagents in `.claude/agents/`:
 - Teams/chapters (`teams/[slug]`), onboarding, invitations (`/invite/[id]`, copyable link,
   no email). Top nav: Builds, Printers, Studio.
 
+- **Sign-in and modes** (`config.ts`, `auth.ts`, `auth-policy.ts`): `TMT_MODE`, `SIGNUP`,
+  social providers, `decideNewUser` (sign-up policy, `accountsTotal`, `signupsPerDay`).
+  Organization plugin: limits and hooks enforce chapter, member, invite and membership
+  quotas; `/organization/update`, `/leave`, `/check-slug` are disabled
+  (`ORGANIZATION_DISABLED_PATHS`); old non-pending invitations pruned to 50 per chapter.
+- **Site admins** (`access.ts` header comment has the rule; `site-admins.ts` grant, revoke,
+  search; `GET /api/account/users` admins only).
+- **Account** (`/account`, `server/account.ts`): export (`GET /api/account/export`), delete
+  (typed email plus password, or a session under 10 minutes old), hand-over picker.
+  Deletion order: re-point other workspaces' builds, delete owned kit copies (scoped to the
+  doomed workspaces), delete rows, remove files after commit (`planFiles`,
+  `removePlannedFiles`). Chapter delete uses the same plan in the organization hooks.
+- **Password reset**: operator CLI only (`scripts/reset-password-link.mjs`,
+  `server/password-reset.ts`, `/reset-password#token=`), see `docs/password-reset.md`.
+
 ## Release and deployment (`release-pwa`)
 
 - Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`).
@@ -263,3 +348,13 @@ Sections match the subagents in `.claude/agents/`:
   baked in, `VOLUME /data`, `HEALTHCHECK` on `/api/health`, `BODY_SIZE_LIMIT=1100M`.
 - Unraid template `unraid/tmt-build-tracker.xml`; install guide in `README.md`.
 - Not a PWA yet (no manifest or service worker): see STATUS Next steps.
+- **Request pipeline** (`hooks.server.ts`): boot validation (`bootProblems`, exit 1) → body
+  cap by route (`body-limits.ts`, default 1 MB) → `/api/auth/*` to Better Auth with a trusted
+  client address (`client-ip.ts`: `ADDRESS_HEADER`/`XFF_DEPTH`; fails closed) → session →
+  write rate → resolve with security headers (`security-headers.ts`; page CSP with nonces in
+  `vite.config.ts`). `scripts/response-defaults.mjs` (preloaded by `proxy-origin.mjs`, must
+  be copied into the image) adds default headers to static files and errors.
+- **Limits by configuration**: `quotas()`, `maxThreeMfBytes()` (1024 MB, 256 in public
+  mode), `minFreeDiskBytes()` / `diskHasRoom()`, `WRITE_RATE_*`; all validated at boot.
+- CI: `npm audit --omit=dev --audit-level=high` in the test job; Dependabot (npm weekly,
+  actions monthly).

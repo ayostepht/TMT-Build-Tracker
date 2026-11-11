@@ -20,7 +20,7 @@ export const POST: RequestHandler = (event) =>
 		// 4xx with a clear message in public mode or for a non-local address. Through an
 		// OctoEverywhere link the destination is the link's host (a validated public address).
 		const link = cfg.kind === 'elegoo-sdcp' ? shareLinkOf(cfg.secrets) : null;
-		await resolveAllowed(link ? link.host : cfg.host);
+		await resolveAllowed(link ? link.host : cfg.host, undefined, { allowShareLink: !!link });
 		const r = await testConnection(cfg);
 		return { connected: r.ok, status: r.status, message: r.message };
 	});

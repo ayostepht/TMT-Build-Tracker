@@ -26,7 +26,11 @@ const fake = (map: Record<string, string[]>) => async (h: string) => {
 
 describe('the shared-link host is the one public destination', () => {
 	it('passes when every answer is global unicast, and pins one of them', async () => {
-		const t = await resolveAllowed(HOST, fake({ [HOST]: ['2606:4700::1111', PUBLIC4, '8.8.8.8'] }));
+		const t = await resolveAllowed(
+			HOST,
+			fake({ [HOST]: ['2606:4700::1111', PUBLIC4, '8.8.8.8'] }),
+			{ allowShareLink: true }
+		);
 		expect(t).toMatchObject({
 			host: HOST,
 			ip: PUBLIC4,
@@ -34,7 +38,9 @@ describe('the shared-link host is the one public destination', () => {
 			shareLink: true,
 			literal: false
 		});
-		const v6 = await resolveAllowed(HOST, fake({ [HOST]: ['2606:4700::1111'] }));
+		const v6 = await resolveAllowed(HOST, fake({ [HOST]: ['2606:4700::1111'] }), {
+			allowShareLink: true
+		});
 		expect(v6).toMatchObject({ ip: '2606:4700::1111', family: 6 });
 	});
 
@@ -50,16 +56,16 @@ describe('the shared-link host is the one public destination', () => {
 		['::ffff:10.0.0.1'],
 		['0.0.0.0']
 	])('refuses a link name that resolves to %s', async (ip) => {
-		await expect(resolveAllowed(HOST, fake({ [HOST]: [ip] }))).rejects.toBeInstanceOf(
-			OutboundError
-		);
+		await expect(
+			resolveAllowed(HOST, fake({ [HOST]: [ip] }), { allowShareLink: true })
+		).rejects.toBeInstanceOf(OutboundError);
 	});
 
 	it('refuses the host when ANY answer is not public', async () => {
 		for (const bad of ['10.0.0.1', '169.254.169.254', '127.0.0.1']) {
-			await expect(resolveAllowed(HOST, fake({ [HOST]: [PUBLIC4, bad] }))).rejects.toThrow(
-				/public address/
-			);
+			await expect(
+				resolveAllowed(HOST, fake({ [HOST]: [PUBLIC4, bad] }), { allowShareLink: true })
+			).rejects.toThrow(/public address/);
 		}
 	});
 
@@ -84,17 +90,23 @@ describe('the shared-link host is the one public destination', () => {
 		const dns = vi.fn(async () => [PUBLIC4]);
 		await expect(resolveAllowed(HOST, dns)).rejects.toMatchObject({ kind: 'public' });
 		expect(dns).not.toHaveBeenCalled();
-		await expect(guardedFetch(`https://${HOST}/video`)).rejects.toMatchObject({ kind: 'public' });
+		await expect(
+			guardedFetch(`https://${HOST}/video`, { allowShareLink: true })
+		).rejects.toMatchObject({ kind: 'public' });
 	});
 
 	it('guardedFetch needs https and the default port on the share host', async () => {
 		const dns = vi.fn(async () => [PUBLIC4]);
 		setResolver(dns);
-		await expect(guardedFetch(`http://${HOST}/video`)).rejects.toThrow(/https on the default port/);
-		await expect(guardedFetch(`https://${HOST}:8443/video`)).rejects.toThrow(
+		await expect(guardedFetch(`http://${HOST}/video`, { allowShareLink: true })).rejects.toThrow(
 			/https on the default port/
 		);
-		await expect(guardedFetch(`http://${HOST}:80/video`)).rejects.toBeInstanceOf(OutboundError);
+		await expect(
+			guardedFetch(`https://${HOST}:8443/video`, { allowShareLink: true })
+		).rejects.toThrow(/https on the default port/);
+		await expect(
+			guardedFetch(`http://${HOST}:80/video`, { allowShareLink: true })
+		).rejects.toBeInstanceOf(OutboundError);
 		expect(dns).not.toHaveBeenCalled(); // refused before any lookup or connection
 	});
 

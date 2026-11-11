@@ -27,7 +27,7 @@ export const POST: RequestHandler = (event) =>
 		// Refused in public mode / for a non-local address, before any request. Through an
 		// OctoEverywhere link the destination is the link's host (a validated public address).
 		const link = cfg.kind === 'elegoo-sdcp' ? shareLinkOf(cfg.secrets) : null;
-		await resolveAllowed(link ? link.host : cfg.host);
+		await resolveAllowed(link ? link.host : cfg.host, undefined, { allowShareLink: !!link });
 		if (!cameraSupported(cfg.kind))
 			return { works: false, message: 'This printer type has no camera support.' };
 		// With an OctoEverywhere link the camera address comes from the link; a typed one is ignored.

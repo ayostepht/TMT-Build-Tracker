@@ -9,7 +9,8 @@
  *  - HTTP never follows redirects: `guardedFetch` hands every 3xx back and callers treat it as
  *    a failure. API keys are therefore only ever sent to the validated host.
  *
- *  - The ONE public destination: an OctoEverywhere shared-link host (`isShareLinkHost`). Its
+ *  - The ONE public destination, opt-in per call (`allowShareLink`, default false; only the Elegoo
+ *    link paths pass it): an OctoEverywhere shared-link host (`isShareLinkHost`). Its
  *    name is resolved like any other, but EVERY answer must be a global unicast address (the
  *    inverse of the private-range rule: a link name that points inward is refused), and it is
  *    reached over https on the default port only.
@@ -31,6 +32,7 @@ import {
 import { isShareLinkHost } from '#lib/printers/share-link.ts';
 import { ApiError } from '../access';
 import { isPublicMode } from '../config';
+import { maskSecrets } from './types';
 
 export const PUBLIC_MODE_MESSAGE = 'Printer connections are not available on this hosted site yet.';
 
@@ -41,7 +43,7 @@ export class OutboundError extends ApiError {
 		status = 400,
 		public kind: 'public' | 'address' | 'dns' | 'redirect' | 'protocol' = 'address'
 	) {
-		super(status, message);
+		super(status, maskSecrets(message)); // defence in depth: a share-link host never leaves in a message
 	}
 }
 
@@ -139,7 +141,8 @@ export const ipForUrl = (ip: string) => (ip.includes(':') ? `[${ip}]` : ip);
  */
 export async function resolveAllowed(
 	rawHost: string,
-	r: Resolver = resolver
+	r: Resolver = resolver,
+	opts: { allowShareLink?: boolean } = {}
 ): Promise<ResolvedTarget> {
 	assertOutboundAllowed();
 	const host = cleanHost(rawHost);
@@ -149,15 +152,24 @@ export async function resolveAllowed(
 		if (!v.ok) throw new OutboundError(refusedMessage(v, rawHost));
 		return { host, ip: v.ip, family: v.family === 6 || host.includes(':') ? 6 : 4, literal: true };
 	}
+	// A share-link host IS the secret: no message below may contain it, whatever the caller allows.
+	const secretHost = isShareLinkHost(host);
+	const notFound = () =>
+		new OutboundError(
+			secretHost
+				? 'The OctoEverywhere link could not be found. Check the link.'
+				: `Could not find ${host}. Check the address.`,
+			400,
+			'dns'
+		);
 	let answers: string[];
 	try {
 		answers = await r(host);
 	} catch {
-		throw new OutboundError(`Could not find ${host}. Check the address.`, 400, 'dns');
+		throw notFound();
 	}
-	if (!answers.length)
-		throw new OutboundError(`Could not find ${host}. Check the address.`, 400, 'dns');
-	if (isShareLinkHost(host)) {
+	if (!answers.length) throw notFound();
+	if (secretHost && opts.allowShareLink) {
 		// The one public destination: every answer must be global unicast, then pin one.
 		if (!answers.every((a) => isGlobalUnicast(a)))
 			throw new OutboundError(
@@ -175,7 +187,13 @@ export async function resolveAllowed(
 		};
 	}
 	const verdicts = answers.map((a) => classifyAddress(a));
-	for (const v of verdicts) if (!v.ok) throw new OutboundError(refusedMessage(v, host));
+	for (const v of verdicts)
+		if (!v.ok)
+			throw new OutboundError(
+				secretHost
+					? 'The OctoEverywhere link is not allowed here: it is not on your local network.'
+					: refusedMessage(v, host)
+			);
 	const ok = verdicts.filter((v) => v.ok);
 	const pick = ok.find((v) => !v.ip.includes(':')) ?? ok[0];
 	return { host, ip: pick.ip, family: pick.ip.includes(':') ? 6 : 4, literal: false };
@@ -222,7 +240,10 @@ const BAD_STATUS_MESSAGE = 'The device sent an invalid answer.';
 
 const NULL_BODY = new Set([101, 204, 205, 304]);
 
-type FetchInit = Parameters<typeof fetch>[1];
+type FetchInit = Parameters<typeof fetch>[1] & {
+	/** Elegoo OctoEverywhere link paths only: lets a share-link host through (public, https:443). */
+	allowShareLink?: boolean;
+};
 
 /**
  * `fetch` for user-supplied hosts. Resolves and validates the host, connects to the validated IP
@@ -237,13 +258,18 @@ export async function guardedFetch(
 	assertOutboundAllowed();
 	if (url.protocol !== 'http:' && url.protocol !== 'https:')
 		throw new OutboundError('The address must start with http:// or https://', 400, 'protocol');
-	if (isShareLinkHost(cleanHost(url.hostname)) && (url.protocol !== 'https:' || url.port))
+	const allowShareLink = init?.allowShareLink === true;
+	if (
+		allowShareLink &&
+		isShareLinkHost(cleanHost(url.hostname)) &&
+		(url.protocol !== 'https:' || url.port)
+	)
 		throw new OutboundError(
 			'The OctoEverywhere link is reached over https on the default port only.',
 			400,
 			'protocol'
 		);
-	const target = await resolveAllowed(url.hostname);
+	const target = await resolveAllowed(url.hostname, undefined, { allowShareLink });
 	const headers = new Headers(init?.headers);
 	if (!headers.has('accept-encoding')) headers.set('accept-encoding', 'identity');
 	const body = init?.body;

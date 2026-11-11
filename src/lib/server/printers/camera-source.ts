@@ -29,6 +29,8 @@ export interface CameraSource {
 	origin: CameraOrigin;
 	/** The printer's host: redirects and every request are held to it. */
 	host: string;
+	/** Built from an Elegoo OctoEverywhere link: the only source allowed to reach a share host. */
+	shareLink?: boolean;
 }
 
 export interface CameraTarget {
@@ -92,7 +94,9 @@ export async function resolveCameraSource(
 		const link = shareLinkOf(t.secrets);
 		if (link) {
 			const c = checkCameraUrl(shareLinkCameraUrl(link.origin), link.host);
-			return c.ok ? { urls: [c.url.toString()], origin: 'default', host: link.host } : null;
+			return c.ok
+				? { urls: [c.url.toString()], origin: 'default', host: link.host, shareLink: true }
+				: null;
 		}
 	}
 	const host = t.host;

@@ -13,7 +13,7 @@ import { emitPrinterEvent } from './bus';
 import { processStatus } from './jobs';
 import { PUBLIC_MODE_MESSAGE } from './outbound';
 import { toConfig } from './store';
-import type { AdapterHandle, ConnectFn } from './types';
+import { maskSecrets, type AdapterHandle, type ConnectFn } from './types';
 import type { PrinterKind } from '#lib/printers/status.ts';
 
 const WRITE_EVERY_MS = 10_000;
@@ -56,7 +56,11 @@ export class Supervisor {
 		try {
 			handle = this.adapters[cfg.kind](cfg);
 		} catch (e) {
-			console.error('[tmt] printer connect failed', row.name, e instanceof Error ? e.message : '');
+			console.error(
+				'[tmt] printer connect failed',
+				row.name,
+				maskSecrets(e instanceof Error ? e.message : '')
+			);
 			return;
 		}
 		const conn: Conn = { handle, unsub: () => {}, lastWrite: 0, lastKey: '' };
@@ -116,7 +120,10 @@ export class Supervisor {
 				lastSeenAt: s.state !== 'offline' ? new Date(now).toISOString() : undefined
 			});
 		} catch (e) {
-			console.error('[tmt] printer status error', e instanceof Error ? e.message : e);
+			console.error(
+				'[tmt] printer status error',
+				maskSecrets(e instanceof Error ? e.message : String(e))
+			);
 		}
 	}
 

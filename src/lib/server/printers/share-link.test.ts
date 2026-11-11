@@ -134,7 +134,7 @@ describe('camera through an OctoEverywhere link', () => {
 	});
 	it('uses the link /video, pinned to the link host', async () => {
 		const s = await resolveCameraSource(t({}));
-		expect(s).toEqual({ urls: [`${LINK}/video`], origin: 'default', host: HOST });
+		expect(s).toEqual({ urls: [`${LINK}/video`], origin: 'default', host: HOST, shareLink: true });
 	});
 	it('ignores a custom address and never opens the guard to another host', async () => {
 		const s = await resolveCameraSource(t({ cameraUrl: 'http://10.0.0.5:3031/video' }));

@@ -106,9 +106,12 @@ export function temp(v: unknown): number | undefined {
 
 /** Strip anything that could be a credential from an error before it is shown or logged. */
 export function safeError(e: unknown): string {
-	const m = e instanceof Error ? e.message : String(e);
+	return maskSecrets(e instanceof Error ? e.message : String(e)).slice(0, 200);
+}
+
+/** A message with any OctoEverywhere share-link host (it is the secret) or long token blanked. */
+export function maskSecrets(m: string): string {
 	return m
 		.replace(/shared-[^.\s/]+\.octoeverywhere\.com/gi, '***')
-		.replace(/[A-Za-z0-9+/=_-]{24,}/g, '***')
-		.slice(0, 200);
+		.replace(/[A-Za-z0-9+/=_-]{24,}/g, '***');
 }
