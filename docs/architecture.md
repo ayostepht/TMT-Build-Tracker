@@ -384,8 +384,8 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 - Build tabs (nested routes): Overview · Design · Print (tracking, logs, now printing) ·
   Files (bed/printer, plates, sliced file, export, kit status) · Finish · Settings.
-  308 redirects: `/parts` → `/print`, `/plates` → `/files`, `/assembly`, `/handoff` →
-  `/finish#…`; `/print#plates|#export|#settings` redirect client-side to `/files#…`.
+  `/print#plates|#export|#settings` redirect client-side to `/files#…`. The older tab URLs
+  (`/parts`, `/plates`, `/assembly`, `/handoff`) were removed on 2026-11-11 and are 404s.
 - Setup wizard (`builds/[id]/setup`): `?step=` takes 1–5 or
   template/options/colors/print/files/export.
 - Finish tab: assembly checklist (MakeGood guide page numbers, guide not bundled), photos,
@@ -420,8 +420,8 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   dialog must `preventDefault` on Escape or the outer dialog closes too (`ApplyDesign`).
   The `<Toast />` host is a `popover="manual"` in the top layer, so a toast shows above an
   open dialog; it is not clickable until the dialog closes (accepted, STATUS Decisions).
-  `client/focus-trap.ts` has no users left. Inline confirms use `inlineConfirm` or
-  `focusIn`. Guard: `e2e/a11y.spec.ts` (hit-test based `reachable()` helper). Test ids added
+  There is no hand-written focus trap. Inline confirms use `inlineConfirm` or `focusIn`
+  from `client/focus.ts`. Guard: `e2e/a11y.spec.ts` (hit-test based `reachable()` helper). Test ids added
   in wave 3: `build-phase`, `member-row`, `filament-tile`, `now-card`.
 - **Shell**: `(app)/+layout.svelte` has a one-row phone top bar (`.navpanel` is a panel
   behind `nav-toggle` on phones; phone specs call `openNav(page)`), the `<Toast />` host

@@ -21,7 +21,7 @@
 		today
 	} from '#lib/domain/index.ts';
 	import { deleteRun, logRun, undoRun, updateRun } from '#lib/client/api.ts';
-	import { focusIn } from '#lib/client/focus-trap.ts';
+	import { focusIn } from '#lib/client/focus.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { toasts } from './toast.svelte.ts';
 

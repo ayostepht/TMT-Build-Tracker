@@ -13,7 +13,7 @@
 	import BedPicker from './BedPicker.svelte';
 	import AskDialog from './AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
-	import { focusIn } from '#lib/client/focus-trap.ts';
+	import { focusIn } from '#lib/client/focus.ts';
 
 	const asking = createAsk();
 

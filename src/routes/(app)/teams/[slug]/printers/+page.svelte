@@ -2,7 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { jobAction, removePrinter, updatePrinter } from '#lib/client/api.ts';
-	import { focusIn } from '#lib/client/focus-trap.ts';
+	import { focusIn } from '#lib/client/focus.ts';
 	import { PrinterStore } from '#lib/client/printer-store.svelte.ts';
 	import PrinterCard from '#lib/components/PrinterCard.svelte';
 	import PrinterJobLink from '#lib/components/PrinterJobLink.svelte';

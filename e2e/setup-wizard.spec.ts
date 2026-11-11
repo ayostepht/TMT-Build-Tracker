@@ -181,32 +181,18 @@ test('"Upload your own files" makes a workspace-owned copy of the kit', async ({
 	expect((await view()).build.templateId).toBe(own.build.templateId);
 });
 
-test('old tab URLs redirect to the new tabs', async ({ page }) => {
-	const { buildId } = await ownerWithBuild(page, 'redirects');
+test('old /parts, /plates, /assembly and /handoff URLs are gone (404)', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'gone-tabs');
 	const b = `/builds/${buildId}`;
-	// 308 for every old path, with the query string kept.
-	for (const [from, to] of [
-		['parts', 'print'],
-		['plates', 'files'],
-		['assembly', 'finish'],
-		['handoff', 'finish']
-	]) {
-		const r = await page.request.get(`${b}/${from}?x=1`, { maxRedirects: 0 });
-		expect(r.status(), from).toBe(308);
-		expect(r.headers()['location'], from).toContain(`${b}/${to}?x=1`);
+	for (const old of ['parts', 'plates', 'assembly', 'handoff']) {
+		const r = await page.request.get(`${b}/${old}`, { maxRedirects: 0 });
+		expect(r.status(), old).toBe(404);
 	}
-	await page.goto(`${b}/parts`);
-	await expect(page).toHaveURL(new RegExp(`${b}/print$`));
-	await expect(page.getByRole('toolbar', { name: 'Filter parts' })).toBeVisible();
-	await page.goto(`${b}/plates`);
-	await expect(page).toHaveURL(new RegExp(`${b}/files$`));
-	await expect(page.getByTestId('plate-layout')).toBeVisible();
-	await page.goto(`${b}/assembly`);
-	await expect(page).toHaveURL(new RegExp(`${b}/finish#assembly$`));
-	await page.goto(`${b}/handoff`);
-	await expect(page).toHaveURL(new RegExp(`${b}/finish#handoff$`));
-	await expect(page.getByLabel('Recipient name')).toBeVisible();
+});
 
+test('old /print anchors move on to /files', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'print-anchors');
+	const b = `/builds/${buildId}`;
 	// /print was the plates view: its old anchors (bookmarks) move on to /files.
 	for (const h of ['plates', 'export', 'settings']) {
 		await page.goto(`${b}/print#${h}`);

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { inlineConfirm } from '#lib/client/focus-trap.ts';
+	import { inlineConfirm } from '#lib/client/focus.ts';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { deleteBuild, updateBuild } from '#lib/client/api.ts';

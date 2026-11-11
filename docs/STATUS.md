@@ -1,8 +1,9 @@
 # Project status
 
-_Last updated: 2026-11-11 (audit Stages 1-3 and most of Stage 4 are on `main`. Test copy is
-on r43 = eba0e72 (Stage 4 wave 2). Stage 4 wave 3 (the whole app on the shared `ds-*` styles,
-native dialogs) and the removal of the old global styles from `app.css` are on `main` and NOT deployed yet)._
+_Last updated: 2026-11-11 (audit Stages 1-3 and Stage 4 bar one item are on `main`. Test copy
+is on r43 = eba0e72 (Stage 4 wave 2). Stage 4 wave 3 (the whole app on the shared `ds-*`
+styles, native dialogs), the removal of the old global styles from `app.css` and the last
+deletions are on `main` and NOT deployed yet; the maintainer has approved deploying them as r44)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/CHANGELOG.md`; how things work goes in
@@ -11,16 +12,15 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **`client/focus-trap.ts` has no users left**: delete it once the maintainer says so
-   (asked 2026-11-11) [app-shell].
-2. **Deploy wave 3 as r44** (maintainer's OK needed; from the Unraid dev container), then
-   look on the test copy at what could not be seen locally: the plate view toggle and the
-   "rotated N°" badge (need print geometry), the Now card while printing, printer badges
-   other than "Printing", toasts over dialogs on a phone.
-3. Remaining Stage 4 after that: `three`/`pdfjs-dist` to devDependencies (a dependency
-   change: runs alone, on Unraid for the image build); legacy redirects and
-   `src/lib/index.ts` (maintainer asked 2026-11-11: delete or keep until 1.0). Then Stage 5
-   from Next steps.
+1. **On Unraid, alone** (maintainer approved both 2026-11-11): move `three`/`pdfjs-dist` to
+   devDependencies (a dependency change: no other agent running; prove first that the
+   production image loads neither at runtime; image build + empty-`/data` run), then
+   **deploy r44** from the resulting `main` (rehearse, the dependency set changed).
+2. After r44, look on the test copy at what could not be seen locally: the plate view
+   toggle and the "rotated N°" badge (need print geometry), the Now card while printing,
+   printer badges other than "Printing", toasts over dialogs on a phone; the old tab URLs
+   are 404s and `/print#plates` still moves on to `/files#plates`.
+3. Then Stage 5 from Next steps (docs work can start on the Mac while Unraid does 1).
 4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
    (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
    test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
@@ -57,12 +57,6 @@ Reference result: Elegoo Centauri Carbon (256 × 256, cutter keep-out, pack 1.0.
 plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced file.
 
 ## Waiting on the maintainer
-
-- (2026-11-11) Look at the wave 3 controls (after r44, or in `.playwright-mcp/stage4c-*/`):
-  the selected `ds-seg` option now has an accent underline as well as the raised pill
-  (dark mode needed it); the part status control and the log sheet's Result use it, so the
-  selected option is the same accent colour whatever the status (Failed looks like
-  Success); the camera dialog's title is small on desktop.
 
 - (2026-11-11) Keep or delete the GitHub release asset for kit pack 1.0.0 (no longer baked
   into the image)? (The 21-plate re-check after the re-orientation removal passed on r42.)
@@ -204,7 +198,9 @@ Route each to the agent named in brackets.
   chapter builds they created pass to another owner (2026-11-11).
 - **Shared styles** (2026-11-11): one segmented control (`ds-seg`), badge (`ds-badge`),
   modal/sheet (`ds-modal`, always a native `<dialog>` opened with `showModal()`) and card
-  (`.card` = `ds-card`) for the whole app. While a dialog is open a toast shows above it but
+  (`.card` = `ds-card`) for the whole app. The maintainer approved the wave 3 look
+  (`ds-seg` accent underline, one accent colour for the selected status/Result option,
+  small camera dialog title). While a dialog is open a toast shows above it but
   cannot be clicked (Undo waits until the dialog closes): accepted as is.
 - Git history is kept as is when the repo goes public (private-range LAN addresses in old
   commits are accepted; no rewrite). Branch protection (no force push, no deletion,
@@ -236,9 +232,10 @@ package server): re-run before reading it as a code failure.
    stored arrangement is treated as stale (no more 500 on export), the false reverse-proxy
    startup hint fixed, the deprecated globals deleted from `app.css` (373 lines; kept on
    purpose: `.tiles`, `.sw`, `.mini` via `Swatch`, `.spools`, `.clock`, `.tpl-list`, the
-   other `.now-*`). One shared `isObj` (`domain/guards.ts`). Left: `three`/`pdfjs-dist` to devDependencies
-   (runs alone, needs an image build: do it on Unraid); legacy redirects and
-   `src/lib/index.ts` (deletions: maintainer's call). The two `slugify` copies stay on
+   other `.now-*`). One shared `isObj` (`domain/guards.ts`). `client/focus-trap.ts` (its two live helpers
+   moved to `client/focus.ts`), the four legacy tab redirects and `src/lib/index.ts` are
+   deleted. Left: `three`/`pdfjs-dist` to devDependencies (runs alone, needs an image
+   build: do it on Unraid). The two `slugify` copies stay on
    purpose (`teams.ts`: 40 chars, fallback `chapter`; `templates/fork.ts`: 30, `kit`). Open: squash migrations (needs a journal reset on the test copy; would also fix
    `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle (needs a decision);
    TypeScript 7 (Dependabot PR #11 fails check: a deliberate upgrade).

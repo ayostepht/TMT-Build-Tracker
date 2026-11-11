@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { focusIn } from '#lib/client/focus-trap.ts';
+	import { focusIn } from '#lib/client/focus.ts';
 	import { applyDesign, listDesigns, type DesignListItem } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';

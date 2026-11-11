@@ -1,6 +1,6 @@
 ---
 name: app-shell
-description: Specialist for the app's shell and remaining screens: auth and sessions UI, teams/chapters, invitations, personal workspaces, onboarding, the setup wizard, the build layout and tabs (Overview, Finish, Settings, summary, redirects), the top navigation, the kit admin UI (/admin), and draft Settings. Use for work in src/routes/(app)/{+layout*,+page*,onboarding,teams,admin,builds/[id]/{+layout*,+page*,setup,finish,settings,summary,assembly,handoff,parts,plates}}, src/routes/invite/, src/routes/{login,signup}, src/lib/server/teams.ts, src/lib/server/auth.ts, src/lib/permissions.ts, src/lib/server/access.ts, and the components those routes use that no other specialist owns.
+description: Specialist for the app's shell and remaining screens: auth and sessions UI, teams/chapters, invitations, personal workspaces, onboarding, the setup wizard, the build layout and tabs (Overview, Finish, Settings, summary), the top navigation, the kit admin UI (/admin), and draft Settings. Use for work in src/routes/(app)/{+layout*,+page*,onboarding,teams,admin,builds/[id]/{+layout*,+page*,setup,finish,settings,summary}}, src/routes/invite/, src/routes/{login,signup}, src/lib/server/teams.ts, src/lib/server/auth.ts, src/lib/permissions.ts, src/lib/server/access.ts, and the components those routes use that no other specialist owns.
 model: sonnet
 ---
 
@@ -22,8 +22,8 @@ Your section: `docs/architecture.md` → "App shell" and the Workspaces/Drafts n
   copyable links.
 - Build mutations go through `mutateBuild` (build-state rules); if a change needs new
   domain rules or a schema change, report back so the orchestrator routes it.
-- Keep the old-route redirects working (`/parts`, `/plates`, `/assembly`, `/handoff`,
-  `/print#…`). Route ids include `(app)`.
+- Keep the `/print#…` → `/files#…` anchor redirects working (the older `/parts`, `/plates`,
+  `/assembly`, `/handoff` redirects were removed). Route ids include `(app)`.
 - Kit admin is for site admins only (first user or `ADMIN_EMAILS`); the hardware model is
   not user-uploadable; kit files live in the wizard's template step and Files.
 - Finish tab: reference MakeGood's guide by page number and link; never bundle the PDF.

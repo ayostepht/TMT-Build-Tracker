@@ -40,7 +40,7 @@ test('stage 4b shell screenshots', async ({ page, browser }) => {
 		['onboarding', '/onboarding'],
 		['account', '/account'],
 		['overview', `/builds/${buildId}`],
-		['assembly', `/builds/${buildId}/assembly`],
+		['assembly', `/builds/${buildId}/finish#assembly`],
 		['finish', `/builds/${buildId}/finish`],
 		['summary', `/builds/${buildId}/summary`],
 		['settings', `/builds/${buildId}/settings`],

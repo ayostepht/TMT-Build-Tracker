@@ -45,7 +45,7 @@ test('stage 4c shell screenshots', async ({ page }) => {
 				['builds-list', '/builds'],
 				['overview', `/builds/${buildId}`],
 				['setup1-template', `/builds/${buildId}/setup?step=1`],
-				['assembly', `/builds/${buildId}/assembly`]
+				['assembly', `/builds/${buildId}/finish#assembly`]
 			] as const) {
 				await page.goto(path);
 				await page.waitForLoadState('networkidle');
