@@ -29,7 +29,7 @@
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/better-sqlite3": "^9.6.0",
-		"@types/node": "^22",
+		"@types/node": "^26",
 		"@types/three": "^0.187.0",
 		"drizzle-kit": "^0.31.10",
 		"drizzle-orm": "^0.45.2",
