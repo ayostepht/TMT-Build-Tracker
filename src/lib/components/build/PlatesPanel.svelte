@@ -27,10 +27,13 @@
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
 	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
+	import AskDialog from '#lib/components/AskDialog.svelte';
+	import { createAsk } from '#lib/client/ask.svelte.ts';
 
 	/** Setup wizard: plate pictures only, no print log or slicer grams. */
 	let { wizard = false }: { wizard?: boolean } = $props();
 	const ctx = getBuildCtx();
+	const asking = createAsk();
 	/** Studio drafts have no tracking either: no print log, slicer grams or start buttons. */
 	const draft = $derived(ctx.view.build.kind === 'draft');
 	const track = $derived(!wizard && !draft);
@@ -130,12 +133,11 @@
 	);
 	let removingTpl = $state(false);
 	async function removeTemplate() {
-		if (
-			!confirm(
-				'Forget the print times and grams learned from this file? Your plates stay as they are; times go back to estimates.'
-			)
-		)
-			return;
+		const yes = await asking.ask(
+			'Forget the print times and grams learned from this file? Your plates stay as they are; times go back to estimates.',
+			{ title: 'Remove print template', confirmLabel: 'Remove' }
+		);
+		if (!yes) return;
 		removingTpl = true;
 		try {
 			await forgetPrintTemplate(ctx.id);
@@ -155,7 +157,13 @@
 				await arrangePlates(ctx.id);
 			} catch (e) {
 				if (e instanceof Error && /print log/.test(e.message)) {
-					if (!confirm(`${e.message}\n\nRe-arrange and convert them?`)) return;
+					if (
+						!(await asking.ask(`${e.message}\n\nRe-arrange and convert them?`, {
+							title: 'Re-arrange plates',
+							confirmLabel: 'Re-arrange and convert'
+						}))
+					)
+						return;
 					await arrangePlates(ctx.id, true);
 				} else throw e;
 			}
@@ -249,6 +257,8 @@
 		)
 	);
 </script>
+
+<AskDialog ask={asking} />
 
 <svelte:window
 	onhashchange={() => void openFromHash()}
@@ -840,7 +850,7 @@
 	}
 	.drop-overlay {
 		position: fixed;
-		inset: 0;
+		inset: 0 0 var(--bottom-bar-h, 0px) 0;
 		z-index: 100;
 		display: grid;
 		place-items: center;
@@ -865,7 +875,7 @@
 	}
 	.upload-backdrop {
 		position: fixed;
-		inset: 0;
+		inset: 0 0 var(--bottom-bar-h, 0px) 0;
 		z-index: 90;
 		display: grid;
 		align-items: start;

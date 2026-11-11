@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { groupParts } from '#lib/domain/index.ts';
@@ -104,7 +105,24 @@
 	const activeRole = $derived(
 		curRole === 'all' || ctx.view.filaments.some((f) => f.key === curRole) ? curRole : 'all'
 	);
-	const groups = $derived(groupParts(ctx.view, curBy, { role: activeRole, hidePrinted: curHide }));
+	// Parts that became Printed during this visit (here, or live from another member) stay visible
+	// with a "Printed just now" marker until a reload or until the Hide printed toggle is touched.
+	const justPrinted = new SvelteSet<string>();
+	const prevStatus: Record<string, string | undefined> = Object.fromEntries(
+		ctx.view.parts.map((p) => [p.slug, ctx.view.state[p.slug]?.status])
+	);
+	$effect(() => {
+		for (const p of ctx.view.parts) {
+			const s = ctx.view.state[p.slug]?.status;
+			if (s === prevStatus[p.slug]) continue;
+			prevStatus[p.slug] = s;
+			if (s === 'Printed') justPrinted.add(p.slug);
+			else justPrinted.delete(p.slug);
+		}
+	});
+	const groups = $derived(
+		groupParts(ctx.view, curBy, { role: activeRole, hidePrinted: curHide, keep: justPrinted })
+	);
 	// Plate history: collapsed by default, one toggle per plate group (not part of the toolbar).
 	let histOpen = $state<Record<string, boolean>>({});
 	const histCount = (key: string) =>
@@ -140,6 +158,7 @@
 	onhide={(v) => {
 		hideChoice = v;
 		ovHide = null;
+		justPrinted.clear();
 	}}
 	onby={(v) => {
 		by = v;
@@ -167,7 +186,11 @@
 			{/if}
 			<div class="rows">
 				{#each g.parts as p (p.slug)}
-					<PartRow part={p} focus={flash === `part-${p.slug}`} />
+					<PartRow
+						part={p}
+						focus={flash === `part-${p.slug}`}
+						justNow={curHide && justPrinted.has(p.slug)}
+					/>
 				{/each}
 			</div>
 		</section>

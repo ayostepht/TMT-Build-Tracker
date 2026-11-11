@@ -10,7 +10,15 @@
 	import LogRunSheet from './LogRunSheet.svelte';
 	import PlateControl from './PlateControl.svelte';
 
-	let { part, focus = false }: { part: PartDef; focus?: boolean } = $props();
+	let {
+		part,
+		focus = false,
+		justNow = false
+	}: {
+		part: PartDef;
+		focus?: boolean;
+		/** Became Printed during this visit while Printed parts are hidden. */ justNow?: boolean;
+	} = $props();
 
 	const ctx = getBuildCtx();
 	let open = $state(false);
@@ -67,7 +75,14 @@
 	let deleteFirst = $state(false);
 </script>
 
-<div class="row" class:flash={focus} id="part-{part.slug}" data-s={st?.status} data-id={part.slug}>
+<div
+	class="row"
+	class:flash={focus}
+	class:just-now-row={justNow}
+	id="part-{part.slug}"
+	data-s={st?.status}
+	data-id={part.slug}
+>
 	<div class="row-main">
 		<div>
 			<div class="pname">
@@ -84,7 +99,8 @@
 					{filLabel(fil, part.role)}
 				</span>
 				<span class="num">{part.bomGrams ? `~${fmt(part.bomGrams)} g` : 'weight n/a'}</span>
-				{#if st?.printedOn}<span>printed {st.printedOn}</span>{/if}
+				{#if justNow}<span class="just-now" data-testid="printed-just-now">Printed just now</span
+					>{:else if st?.printedOn}<span>printed {st.printedOn}</span>{/if}
 			</div>
 		</div>
 		<div class="settings">
@@ -229,3 +245,13 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.just-now {
+		font-weight: 600;
+		color: var(--ink);
+	}
+	.just-now-row .row-main {
+		opacity: 0.7;
+	}
+</style>

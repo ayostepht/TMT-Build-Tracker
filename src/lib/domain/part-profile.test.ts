@@ -39,6 +39,27 @@ describe('learnPartProfiles: volume split', () => {
 		expect(wing.partRole).toBe('primary');
 	});
 
+	it('does not give a stray slot (a role no part on the plate has) to the plate parts', () => {
+		const stray: LearnPlate = { ...plate, filamentGrams: { '1': 300, '2': 100, '3': 20 } };
+		const out = learnPartProfiles({
+			plates: [stray],
+			parts,
+			filamentMap: { ...filamentMap, '3': 'tire' }
+		});
+		expect(out.find((p) => p.slug === 'wing-left')!.gramsByRole).toEqual({ primary: 300 });
+		expect(out.find((p) => p.slug === 'handle')!.gramsByRole).toEqual({ accent: 100 });
+	});
+
+	it('still counts a plate sliced only in a color no part has under the parts own color', () => {
+		const only: LearnPlate = { ...plate, filamentGrams: { '3': 400 } };
+		const out = learnPartProfiles({ plates: [only], parts, filamentMap: { '3': 'tire' } });
+		const total = out.reduce(
+			(a, p) => a + Object.values(p.gramsByRole).reduce((x, y) => x + y, 0),
+			0
+		);
+		expect(total).toBeCloseTo(400, 1);
+	});
+
 	it('splits a filament by volume when several parts share its role', () => {
 		const two: LearnPlate = {
 			...plate,

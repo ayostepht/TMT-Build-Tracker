@@ -184,6 +184,21 @@ export const updateDesignMeta = (id: string, patch: { name?: string; isPublic?: 
 export const deleteDesign = (id: string) =>
 	call('DELETE', `/api/designs/${encodeURIComponent(id)}`);
 
+export interface DesignListItem {
+	id: string;
+	name: string;
+	authorName?: string | null;
+	mine: boolean;
+	roles: { key: string; hex: string }[];
+}
+
+/** Saved and shared designs that fit a kit template. */
+export const listDesigns = (templateId: string) =>
+	call<{ designs: DesignListItem[] }>(
+		'GET',
+		`/api/designs?templateId=${encodeURIComponent(templateId)}`
+	);
+
 /** Replace a build's colors with a saved design. */
 export const applyDesign = (id: string, buildId: string) =>
 	call('POST', `/api/designs/${encodeURIComponent(id)}/apply`, { buildId });

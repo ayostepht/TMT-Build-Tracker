@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { applyDesign, createBuild, deleteDesign, updateDesignMeta } from '#lib/client/api.ts';
+	import Dialog from '#lib/components/design/share/Dialog.svelte';
 	import ModelStage from '#lib/components/design/ModelStage.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
@@ -88,19 +89,27 @@
 				designId: d.id,
 				name: buildName.trim()
 			});
-			await goto(resolve('/(app)/builds/[id]', { id }));
+			await goto(resolve('/(app)/builds/[id]/setup', { id }));
 		});
+
+	/** Which confirmation dialog is open (replaces the browser confirm()). */
+	let asking = $state<'copy' | 'delete' | null>(null);
+	const targetBuild = $derived(data.targets.builds.find((x) => x.id === target));
+
+	const askCopy = () => {
+		if (!targetBuild) {
+			error = 'Pick a build.';
+			return;
+		}
+		error = null;
+		asking = 'copy';
+	};
 
 	const copy = () =>
 		run(async () => {
+			asking = null;
 			const b = data.targets.builds.find((x) => x.id === target);
 			if (!b) throw new Error('Pick a build.');
-			if (
-				!confirm(
-					`Replace the colors of "${b.name}" with "${d.name}"? Filament names, materials, colors and every part's slot change. Spools and print progress stay.`
-				)
-			)
-				return;
 			await applyDesign(d.id, b.id);
 			await goto(resolve('/(app)/builds/[id]/design', { id: b.id }));
 		});
@@ -114,7 +123,7 @@
 
 	const remove = () =>
 		run(async () => {
-			if (!confirm(`Delete "${d.name}"? Builds already made from it keep their colors.`)) return;
+			asking = null;
 			await deleteDesign(d.id);
 			await goto(resolve('/(app)/designs'));
 		});
@@ -187,7 +196,7 @@
 					<h3>Start a new build</h3>
 					{#if data.targets.workspaces.length}
 						<label class="field">
-							Workspace
+							Chapter or My builds
 							<select bind:value={workspace}>
 								{#each data.targets.workspaces as w (w.id)}<option value={w.id}>{w.name}</option
 									>{/each}
@@ -199,7 +208,9 @@
 						</label>
 						<button class="btn primary" disabled={busy} onclick={start}>Start a build</button>
 					{:else}
-						<p class="muted">You need to be an editor in a workspace to start a build.</p>
+						<p class="muted">
+							You need to be an editor in a chapter (or have My builds) to start a build.
+						</p>
 					{/if}
 				</div>
 
@@ -218,7 +229,7 @@
 								{/each}
 							</select>
 						</label>
-						<button class="btn" disabled={busy} onclick={copy}>Copy into my build…</button>
+						<button class="btn" disabled={busy} onclick={askCopy}>Copy into my build…</button>
 					</div>
 				{/if}
 			</section>
@@ -243,7 +254,9 @@
 						<button class="btn" disabled={busy} onclick={togglePublic}>
 							{d.isPublic ? 'Make private' : 'Share publicly'}
 						</button>
-						<button class="btn danger" disabled={busy} onclick={remove}>Delete design</button>
+						<button class="btn danger" disabled={busy} onclick={() => (asking = 'delete')}
+							>Delete design</button
+						>
 					</div>
 				</section>
 			{/if}
@@ -251,7 +264,43 @@
 	</div>
 </section>
 
+{#if asking === 'copy' && targetBuild}
+	<Dialog title="Replace colors?" onclose={() => (asking = null)} testid="copy-design-dialog">
+		<div class="confirm">
+			<p>
+				Replace the colors of "{targetBuild.name}" with "{d.name}"? Filament names, materials,
+				colors and every part's slot change. Spools and print progress stay.
+			</p>
+			<div class="acts">
+				<button class="btn" type="button" onclick={() => (asking = null)}>Cancel</button>
+				<button class="btn primary" type="button" disabled={busy} onclick={copy}>
+					Replace colors
+				</button>
+			</div>
+		</div>
+	</Dialog>
+{:else if asking === 'delete'}
+	<Dialog title="Delete design?" onclose={() => (asking = null)} testid="delete-design-dialog">
+		<div class="confirm">
+			<p>Delete "{d.name}"? Builds already made from it keep their colors.</p>
+			<div class="acts">
+				<button class="btn" type="button" onclick={() => (asking = null)}>Cancel</button>
+				<button class="btn danger" type="button" disabled={busy} onclick={remove}>
+					Delete design
+				</button>
+			</div>
+		</div>
+	</Dialog>
+{/if}
+
 <style>
+	.confirm {
+		display: grid;
+		gap: 12px;
+	}
+	.confirm p {
+		margin: 0;
+	}
 	section.stack {
 		display: grid;
 		gap: 16px;

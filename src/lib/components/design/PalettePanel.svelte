@@ -1070,7 +1070,7 @@
 	/* ---- sticky Apply / Cancel bar ---- */
 	.pbar {
 		position: sticky;
-		bottom: 0;
+		bottom: var(--bottom-bar-h, 0px);
 		z-index: 15;
 		display: flex;
 		gap: 10px;

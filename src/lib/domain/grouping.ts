@@ -22,7 +22,7 @@ const STATUS_ORDER: Record<PartStatus, number> = {
 export function groupParts(
 	view: BuildView,
 	by: GroupBy,
-	opts: { role: string | 'all'; hidePrinted: boolean }
+	opts: { role: string | 'all'; hidePrinted: boolean; keep?: ReadonlySet<string> }
 ): PartGroup[] {
 	const plateNo = new Map<string, number>();
 	for (const pl of view.plates) for (const s of pl.parts) plateNo.set(s, pl.number);
@@ -48,7 +48,7 @@ export function groupParts(
 	const visible = view.parts.filter(
 		(p) =>
 			(opts.role === 'all' || p.role === opts.role) &&
-			!(opts.hidePrinted && view.state[p.slug]?.status === 'Printed')
+			!(opts.hidePrinted && view.state[p.slug]?.status === 'Printed' && !opts.keep?.has(p.slug))
 	);
 
 	const groups: PartGroup[] = [];

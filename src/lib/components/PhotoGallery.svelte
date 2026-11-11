@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import AskDialog from './AskDialog.svelte';
+	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { deletePhoto, photoUrl, uploadPhoto } from '#lib/client/api.ts';
 	import { downscalePhoto } from '#lib/client/images.ts';
 	import type { PhotoKind } from '#lib/domain/types.ts';
@@ -20,6 +22,7 @@
 	let input = $state<HTMLInputElement>();
 	let closeBtn = $state<HTMLButtonElement>();
 	let lastFocus: Element | null = null;
+	const asking = createAsk();
 
 	async function pick(e: Event & { currentTarget: HTMLInputElement }) {
 		const files = [...(e.currentTarget.files ?? [])];
@@ -48,7 +51,10 @@
 	}
 
 	async function remove(id: string) {
-		if (!confirm('Delete this photo?')) return;
+		if (
+			!(await asking.ask('Delete this photo?', { title: 'Delete photo?', confirmLabel: 'Delete' }))
+		)
+			return;
 		const idx = open;
 		await ctx.act(() => deletePhoto(ctx.id, id));
 		if (idx !== null) open = photos.length ? Math.min(idx, photos.length - 1) : null;
@@ -73,6 +79,8 @@
 </script>
 
 <svelte:window {onkeydown} />
+
+<AskDialog ask={asking} />
 
 <div class="gallery">
 	{#if ctx.canEdit}

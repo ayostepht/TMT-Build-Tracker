@@ -1,12 +1,18 @@
 import { expect, test } from './fixtures';
 import {
 	createBuild,
+	invite,
+	joinViaInvite,
+	signInAsAdmin,
+	startBuild,
+	toSetupStep,
 	createChapter,
 	openNav,
 	ownerWithBuild,
 	signUp,
 	uniqueEmail
 } from './helpers';
+import { newClientContext } from './fixtures';
 import type { Page } from '@playwright/test';
 
 // Phone shell (Stage 2): one-row top bar, one-line build header, bottom tab bar, error page,
@@ -243,4 +249,155 @@ test('screenshots: builds list, Overview, Print, error, toast', async ({ page })
 		await page.screenshot({ path: `${SHOTS}/toast-${w}-light.png` });
 		await page.locator('.toast-x').first().click();
 	}
+});
+
+// ---- Stage 2 wave B ----
+const SHOTS_B = '.playwright-mcp/stage2b-app-shell';
+
+test('invites default to editor, copy the link, and removing a member asks first', async ({
+	page,
+	browser,
+	context
+}) => {
+	await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+	const { chapterUrl } = await ownerWithBuild(page, 'invites');
+	await page.goto(chapterUrl);
+	await page.getByRole('link', { name: 'Members', exact: true }).click();
+	await page.waitForLoadState('networkidle');
+	await expect(page.locator('form[action="?/invite"]').getByLabel('Role')).toHaveValue('editor');
+	await page.screenshot({ path: `${SHOTS_B}/invite-form-${page.viewportSize()!.width}.png` });
+
+	const email = uniqueEmail('invitee');
+	const link = await invite(page, email, 'editor');
+	await page.getByTestId('copy-invite').click();
+	await expect(page.getByTestId('copy-invite')).toHaveText('Copied');
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+	await page.screenshot({ path: `${SHOTS_B}/invite-copied-${page.viewportSize()!.width}.png` });
+
+	const joined = await joinViaInvite(browser, link, 'Ed Editor', email);
+	await joined.context.close();
+	await page.reload();
+	const row = page.locator('li.tpl', { hasText: 'Ed Editor' });
+	await row.getByTestId('remove-member').click();
+	const dlg = page.getByTestId('remove-member-dialog');
+	await expect(dlg).toContainText('Remove Ed Editor?');
+	await page.screenshot({ path: `${SHOTS_B}/remove-member-${page.viewportSize()!.width}.png` });
+	await dlg.getByRole('button', { name: 'Cancel' }).click();
+	await expect(dlg).toHaveCount(0);
+	await expect(row).toHaveCount(1);
+	await row.getByTestId('remove-member').click();
+	await page.getByTestId('confirm-remove-member').click();
+	await expect(page.locator('li.tpl', { hasText: 'Ed Editor' })).toHaveCount(0);
+});
+
+test('wizard: Continue is blocked on Files until a printer is chosen', async ({ page }) => {
+	await signUp(page, 'Wanda Wizard', uniqueEmail('wizard-block'));
+	await startBuild(page, 'Blocked chair');
+	await toSetupStep(page, 4);
+	await expect(page.getByTestId('wizard-next')).toBeDisabled();
+	await expect(page.getByTestId('wizard-blocker')).toContainText('Choose your printer');
+	await expect(page.getByTestId('setup-step-5')).toBeDisabled();
+	// Asking for the Export step by URL lands on Files.
+	await page.goto(page.url().replace(/step=4/, 'step=5'));
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByTestId('wizard-blocker')).toBeVisible();
+	await page.screenshot({ path: `${SHOTS_B}/wizard-blocked-${page.viewportSize()!.width}.png` });
+	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
+	await page.getByTestId('bed-preset-256x256').click();
+	await page.getByTestId('arrange-bed').click();
+	await expect(page.getByTestId('layout-name')).toContainText('Arranged for');
+	await expect(page.getByTestId('wizard-blocker')).toHaveCount(0);
+	await expect(page.getByTestId('wizard-next')).toBeEnabled();
+});
+
+test('a build started from a design goes through the setup wizard', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'design-wizard');
+	const saved = await page.request.post('/api/designs', {
+		data: { buildId, name: `Wizard design ${Date.now().toString(36)}` }
+	});
+	expect(saved.ok()).toBe(true);
+	const { id: designId } = (await saved.json()) as { id: string };
+	const view0 = (await (await page.request.get(`/api/builds/${buildId}/view`)).json()) as {
+		build: { organizationId: string; templateId: string };
+	};
+	const res = await page.request.post('/api/builds', {
+		data: {
+			organizationId: view0.build.organizationId,
+			templateId: view0.build.templateId,
+			designId,
+			name: 'From a design'
+		}
+	});
+	expect(res.ok()).toBe(true);
+	const { id } = (await res.json()) as { id: string };
+	const view = (await (await page.request.get(`/api/builds/${id}/view`)).json()) as {
+		build: { setupStep: number | null };
+	};
+	// Colors come from the design, so the wizard starts at Options or Files, not Template.
+	expect([2, 4]).toContain(view.build.setupStep);
+	await page.goto(`/builds/${id}/setup`);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByTestId('setup-wizard')).toBeVisible();
+	await expect(page.getByTestId('setup-step-1')).toHaveClass(/done/);
+});
+
+test('Settings: spools fit their card, colors point to Design, the prototype import is admin-only', async ({
+	page,
+	browser
+}) => {
+	const adminCtx = await newClientContext(browser);
+	const adminPage = await adminCtx.newPage();
+	await signInAsAdmin(adminPage);
+	await adminCtx.close();
+
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'settings');
+	await page.goto(`/builds/${buildId}/settings`);
+	await page.waitForLoadState('networkidle');
+	await expect(
+		page.getByRole('heading', { name: 'Import from the original prototype' })
+	).toHaveCount(0);
+	await expect(page.getByTestId('change-colors')).toBeVisible();
+	const bad = await page.evaluate(() => {
+		const card = document
+			.querySelector('[data-testid="settings-filament"]')!
+			.getBoundingClientRect();
+		return [...document.querySelectorAll('[data-testid="settings-filament"] input')].filter(
+			(i) => i.getBoundingClientRect().right > card.right + 0.5
+		).length;
+	});
+	expect(bad).toBe(0);
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		await page.screenshot({ path: `${SHOTS_B}/settings-1440-${scheme}.png`, fullPage: true });
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.screenshot({ path: `${SHOTS_B}/settings-390-dark.png`, fullPage: true });
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.screenshot({ path: `${SHOTS_B}/settings-390-light.png`, fullPage: true });
+});
+
+test.describe('toast on a phone', () => {
+	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+	test('sits just above the bottom bar, never over it or the build header', async ({ page }) => {
+		const { buildId } = await ownerWithBuild(page, 'toast');
+		await page.goto(`/builds/${buildId}/print`);
+		await page.waitForLoadState('networkidle');
+		await page.getByRole('button', { name: 'Printed', exact: true }).first().click();
+		const toast = page.locator('.toast').first();
+		await expect(toast).toBeVisible();
+		const m = await page.evaluate(() => {
+			const t = document.querySelector('.toast')!.getBoundingClientRect();
+			const bar = document.querySelector('nav.tabs[data-bottom] .tb-in')!.getBoundingClientRect();
+			const head = document.querySelector('header.head')!.getBoundingClientRect();
+			return { toastTop: t.top, toastBottom: t.bottom, barTop: bar.top, headBottom: head.bottom };
+		});
+		expect(m.toastBottom).toBeLessThanOrEqual(m.barTop);
+		expect(m.toastBottom).toBeGreaterThan(m.barTop - 24);
+		expect(m.toastTop).toBeGreaterThan(m.headBottom);
+		await page.screenshot({ path: `${SHOTS_B}/toast-390-light.png` });
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await page.screenshot({ path: `${SHOTS_B}/toast-390-dark.png` });
+	});
 });

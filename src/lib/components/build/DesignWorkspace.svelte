@@ -459,7 +459,7 @@
 		align-items: start;
 	}
 	.design.embedded {
-		padding-bottom: 16px;
+		padding-bottom: calc(16px + var(--bottom-bar-h, 0px));
 	}
 	/* Phones: the stage is pinned right under the page's tab bar while the panel scrolls beneath. */
 	.stagecol {
@@ -597,9 +597,14 @@
 	.pickhost {
 		display: flex;
 		flex-direction: column;
-		height: max(320px, calc(100dvh - var(--stick, 0px) - var(--stageh) - 24px));
+		height: max(
+			320px,
+			calc(100dvh - var(--stick, 0px) - var(--stageh) - 24px - var(--bottom-bar-h, 0px))
+		);
 		min-height: 0;
 		min-width: 0;
+		/* The page can scroll past the picker, so its last row is never behind the build's bottom tab bar. */
+		margin-bottom: var(--bottom-bar-h, 0px);
 	}
 	/* Desktop: fixed-viewport two panes. The stage fills the left, the panel scrolls on its own. */
 	@media (min-width: 900px) {

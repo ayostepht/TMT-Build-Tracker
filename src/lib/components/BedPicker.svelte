@@ -39,9 +39,9 @@
 		onchange?: (p: BuildPrinter | null) => void;
 		name?: string;
 		disabled?: boolean;
-		/** Workspace whose printers (Printers page) are offered first. */
+		/** Chapter or My builds whose printers (Printers page) are offered first. */
 		orgId?: string;
-		/** With exactly one printer in the workspace and no choice yet, select it. */
+		/** With exactly one printer for this chapter or My builds and no choice yet, select it. */
 		preselectSingle?: boolean;
 	} = $props();
 
@@ -242,7 +242,8 @@
 				{#if canAddPrinter}<option value={NEW_PRINTER}>New printer…</option>{/if}
 			</select>
 			<span class="hint"
-				>Printers from the Printers page of all your workspaces. Or pick a standard bed size below.</span
+				>Printers from the Printers page of all your chapters and My builds. Or pick a standard bed
+				size below.</span
 			>
 		</label>
 	{/if}
@@ -524,7 +525,7 @@
 	}
 	.np-backdrop {
 		position: fixed;
-		inset: 0;
+		inset: 0 0 var(--bottom-bar-h, 0px) 0;
 		z-index: 100;
 		background: rgb(0 0 0 / 0.5);
 		overflow-y: auto;

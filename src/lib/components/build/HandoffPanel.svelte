@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AskDialog from '#lib/components/AskDialog.svelte';
+	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { markHandedOff, saveHandoff, setAssemblyItem, updateBuild } from '#lib/client/api.ts';
@@ -64,14 +66,22 @@
 	);
 
 	async function complete() {
-		if (problems.length && !confirm(`${problems.join('. ')}.\n\nMark as handed off anyway?`))
+		if (
+			problems.length &&
+			!(await asking.ask(`${problems.join('. ')}.\n\nMark as handed off anyway?`, {
+				title: 'Hand off anyway?',
+				confirmLabel: 'Mark as handed off'
+			}))
+		)
 			return;
 		if (await ctx.act(() => markHandedOff(ctx.id, body()))) dirty = false;
 	}
 	const reopen = () => ctx.act(() => updateBuild(ctx.id, { phase: 'handoff' }));
 	const touch = () => ((dirty = true), (saved = false));
+	const asking = createAsk();
 </script>
 
+<AskDialog ask={asking} />
 <section class="stack ho">
 	{#if handedOff}
 		<div class="card donecard" role="status">

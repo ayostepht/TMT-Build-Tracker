@@ -122,6 +122,19 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   never guessed. `jobNeverStarted` (domain/actions.ts) releases a cancelled print without
   logging filament; progress is monotonic (`maxProgress`).
 
+- **Start/log control**: `PlateControl.svelte` is the one control (Start printing / Finish &
+  log / Take off printer / Log a print…) on Print, Files, the Now card and the landing;
+  props `plate`, `only?`, `size?`, `alwaysLog?`. `PlateStart` and `LogPlateButton` are
+  retired.
+- **Optimistic actions**: `BuildCtx.act(fn, { patches })` applies `applyPatches`
+  (`domain/actions.ts`) at once, rolls back on failure, and the re-fetched view always wins.
+  `setPartStatus`, `startParts`, `takeOffParts`, `restoreParts` each push a 15 s Undo toast
+  (`UNDO_MS`). Logging a run is not optimistic.
+- **Print toolbar**: `PrintToolbar.svelte`; one row with a Filter sheet on phones, not
+  sticky. Stored per build as `{ role, hide?, group }` in `tmt-ui:<id>`; "Hide printed"
+  defaults on once a part is Printed; parts that become Printed during a visit stay visible
+  ("Printed just now", `groupParts(..., { keep })`). Specs use `keepPrintedVisible`.
+
 ## Plates and 3MF (`plates-3mf`)
 
 - **Arranger:** `domain/arrange.ts` (see `arrange.README.md`). Flat rotations only
@@ -178,6 +191,14 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   unwanted buffering. Bundles of 3MFs go through `print-geometry/nested-zip.ts` (entry
   count, per-entry, cumulative and declared-versus-actual caps; scratch folder removed in
   `finally`).
+
+- **Files tab**: printed plates fold behind a toggle (`tmt-files-printed:<buildId>`), rows
+  and cards carry `id="plate-N"` (hash opens a folded plate). One "Export format" select
+  for the list (`client/export-flavor.svelte.ts`, per device) and a one-tap export per
+  plate; `exportFilename` adds `-plateN` for any single-plate export, which `matchPlate`
+  (`domain/printer-match.ts`) links by name.
+- `learnPartProfiles` (`domain/part-profile.ts`) gives a plate's grams only to roles its
+  parts have (stray slicer slots are skipped unless no slot matches).
 
 ## Printers and camera (`printers`)
 
@@ -238,6 +259,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   to the address (host and port) or link they were saved for; changing the destination
   needs its own secret re-entered.
 
+- **Job linking UI**: `JobLinkControl` (core; never guesses a plate), used by `PrinterJobs`
+  (build page) and `PrinterJobLink` (Printers page, build picker first). `GET
+/api/printers?org=` returns `builds` and `expected` for editors only;
+  `pendingExpected(db, org, buildId?)`. A disabled printer reads "Monitoring stopped";
+  buttons "Stop monitoring" / "Resume monitoring".
+
 ## Design studio (`design-studio-ui`)
 
 - **DesignWorkspace** (`components/build/DesignWorkspace.svelte`, also used by the wizard
@@ -268,6 +295,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   a workspace with the author), gallery `/designs`, `/designs/[slug]` ("Use this design"
   scrolls to and focuses the Use card), `/studio` (New draft, gallery strip).
 - Toasts: top on phone, bottom-left on desktop.
+
+- `DesignWorkspace` shows a dismissible "Plates and export are out of date" notice from the
+  same `arrangement.stale` flag Files uses (real builds, with a printer, editors).
+  Anything fixed to the bottom on phones uses `bottom: var(--bottom-bar-h)`.
+- In-app confirmations: `createAsk()` (`client/ask.svelte.ts`) + `AskDialog.svelte`, wrapping
+  the shared `design/share/Dialog.svelte`. No browser `confirm()` remains.
 
 ## Filaments (`filaments-catalog`)
 
@@ -340,6 +373,19 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `removePlannedFiles`). Chapter delete uses the same plan in the organization hooks.
 - **Password reset**: operator CLI only (`scripts/reset-password-link.mjs`,
   `server/password-reset.ts`, `/reset-password#token=`), see `docs/password-reset.md`.
+
+- **Shell**: `(app)/+layout.svelte` has a one-row phone top bar (`.navpanel` is a panel
+  behind `nav-toggle` on phones; phone specs call `openNav(page)`), the `<Toast />` host
+  (phones: above the bottom bar) and a navigation progress bar. `TabBar` is one nav with two
+  looks: top tabs on desktop, a fixed bottom bar on phones (`--bottom-bar-h` in the shell
+  block at the end of `app.css`). `BuildHeader` is one line on phones. `ErrorPage.svelte`
+  serves both `+error.svelte` files (fixed wording per status).
+- **Landing**: `/` redirects to the chapter page (`teams/[slug]`), which shows
+  `landing/LandingBoard` (Now printing and Next up for up to 3 builds; one `BuildCtx` per
+  build via `CtxScope`; polls every 20 s, no per-build SSE; `nextUpPlate` in
+  `landing/next-up.ts`). `/builds` is "All builds" grouped by chapter.
+- Wizard blocks Files without a printer; `POST /api/builds` with a `designId` starts the
+  wizard. Finish folds steps that were done when the page opened.
 
 ## Release and deployment (`release-pwa`)
 

@@ -35,17 +35,37 @@
 		files: 4,
 		export: 5
 	};
+	/** Export needs a printer (its bed size and filament slots), so Files is where the wizard stops without one. */
+	const needsPrinter = $derived(!ctx.view.printer);
+	const MAX_WITHOUT_PRINTER = 4;
 	const step = $derived.by(() => {
 		const n = param && param in STEP_NAMES ? STEP_NAMES[param] : Number(param);
-		if (Number.isInteger(n) && n >= 1 && n <= 5) return Math.min(n, reached);
-		return Math.min(ctx.view.build.setupStep ?? 1, 5);
+		const asked =
+			Number.isInteger(n) && n >= 1 && n <= 5
+				? Math.min(n, reached)
+				: Math.min(ctx.view.build.setupStep ?? 1, 5);
+		return needsPrinter ? Math.min(asked, MAX_WITHOUT_PRINTER) : asked;
 	});
+	/** Why Continue is blocked on this step, or '' (it is not). */
+	const blocker = $derived(
+		step === 4 && needsPrinter
+			? "Choose your printer above to continue: the export uses its bed size and filament slots. Add one on the Printers page if it isn't listed."
+			: ''
+	);
 
 	let busy = $state(false);
 	let error = $state('');
 
 	async function go(to: number | 'done') {
 		error = '';
+		if (
+			to === 'done'
+				? needsPrinter
+				: typeof to === 'number' && to > MAX_WITHOUT_PRINTER && needsPrinter
+		) {
+			error = 'Choose your printer first: the export uses its bed size and filament slots.';
+			return;
+		}
 		if (typeof to === 'number' && to > (ctx.view.build.setupStep ?? 5)) {
 			try {
 				await setSetupStep(ctx.id, to);
@@ -105,7 +125,7 @@
 				<button
 					type="button"
 					class="st {state}"
-					disabled={s.n > reached}
+					disabled={s.n > reached || (s.n > MAX_WITHOUT_PRINTER && needsPrinter)}
 					aria-current={!isDone && s.n === step ? 'step' : undefined}
 					data-testid="setup-step-{s.n}"
 					onclick={() => go(s.n)}
@@ -213,6 +233,11 @@
 	{/if}
 
 	{#if !isDone}
+		{#if blocker}
+			<p class="banner blocker" id="wizard-blocker" role="status" data-testid="wizard-blocker">
+				{blocker}
+			</p>
+		{/if}
 		<div class="nav">
 			{#if step > 1}
 				<button type="button" class="btn" data-testid="wizard-back" onclick={() => go(step - 1)}
@@ -225,6 +250,8 @@
 					type="button"
 					class="btn primary"
 					data-testid="wizard-next"
+					disabled={!!blocker}
+					aria-describedby={blocker ? 'wizard-blocker' : undefined}
 					onclick={() => go(step + 1)}>Continue</button
 				>
 			{:else}
@@ -353,6 +380,9 @@
 	}
 	.sp {
 		flex: 1;
+	}
+	.blocker {
+		margin: 0;
 	}
 	.nav .btn {
 		min-width: 120px;

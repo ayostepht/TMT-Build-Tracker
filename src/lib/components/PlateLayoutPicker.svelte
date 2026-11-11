@@ -11,6 +11,10 @@
 	} from '#lib/client/api.ts';
 	import { DEFAULT_BED_PRESET, printerFromBed, printerSummary } from '#lib/printers/printer.ts';
 	import BedPicker from './BedPicker.svelte';
+	import AskDialog from './AskDialog.svelte';
+	import { createAsk } from '#lib/client/ask.svelte.ts';
+
+	const asking = createAsk();
 
 	/**
 	 * Picks how the plates of a template or a build are laid out.
@@ -49,7 +53,7 @@
 		buildId?: string;
 		name?: string;
 		printerName?: string;
-		/** Workspace whose printers are offered first in the bed picker. */
+		/** Chapter or My builds whose printers are offered first in the bed picker. */
 		orgId?: string;
 		disabled?: boolean;
 		allowUpload?: boolean;
@@ -131,7 +135,13 @@
 			await apply(false);
 		} catch (e) {
 			if (e instanceof Error && /print log/.test(e.message)) {
-				if (!confirm(`${e.message}\n\nSwitch layout and convert them?`)) return false;
+				if (
+					!(await asking.ask(`${e.message}\n\nSwitch layout and convert them?`, {
+						title: 'Switch layout',
+						confirmLabel: 'Switch and convert'
+					}))
+				)
+					return false;
 				await apply(true);
 			} else throw e;
 		}
@@ -209,6 +219,7 @@
 	}
 </script>
 
+<AskDialog ask={asking} />
 <div class="plate-layout-picker">
 	{#if !buildId}
 		<input type="hidden" {name} value={value === ARRANGE ? '' : value} />

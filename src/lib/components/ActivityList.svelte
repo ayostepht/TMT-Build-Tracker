@@ -26,6 +26,6 @@
 			{/each}
 		</ul>
 	{:else}
-		<p class="empty">Nothing yet. Changes by your team show up here.</p>
+		<p class="empty">Nothing yet. Changes on this build show up here.</p>
 	{/if}
 </section>

@@ -596,8 +596,16 @@ test('Now printing shows the live printer box and camera tile at 390 and 1440, a
 	const live = page.getByTestId('printer-live');
 	const err = page.getByTestId('printer-status-error');
 	await expect(err).toContainText('Printer status unavailable', { timeout: 20_000 });
-	failing = false;
+	// Retry while the requests still fail: the error stays and the button stays put.
 	await err.getByRole('button', { name: 'Retry' }).click();
+	await expect(err).toContainText('Printer status unavailable');
+	failing = false;
+	// Once requests succeed again, any reload (an SSE event, the 30 s poll, window focus) clears the
+	// error by itself, so the button can vanish before this click lands. Both paths must recover.
+	await err
+		.getByRole('button', { name: 'Retry' })
+		.click({ timeout: 3_000 })
+		.catch(() => {});
 	await expect(live).toBeVisible({ timeout: 20_000 });
 	await expect(err).toBeHidden();
 	await expect(page.getByTestId('camera-tile')).toBeVisible();

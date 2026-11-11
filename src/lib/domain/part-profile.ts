@@ -137,6 +137,14 @@ export function learnPartProfiles(input: {
 			else a.volumePlates++;
 		}
 
+		// A plate's grams go only to roles its parts have: a stray slot (say TPU on a PETG plate) must not
+		// become grams of a part that never uses it. When NO slot matches a part role (the build was
+		// recolored since slicing), nothing is stray and the plate's filament counts under the parts' own color.
+		const partRoles = new Set(mapped.map((w) => partOf.get(w.o.slug!)!.role));
+		const anySlotMatches = Object.entries(pl.filamentGrams).some(
+			([i, g]) => g > 0 && partRoles.has(input.filamentMap[i] ?? '')
+		);
+
 		for (const [idx, g] of Object.entries(pl.filamentGrams)) {
 			const role = input.filamentMap[idx];
 			if (!role || !(g > 0)) continue;
@@ -152,6 +160,7 @@ export function learnPartProfiles(input: {
 				continue;
 			}
 			const inRole = mapped.filter((w) => partOf.get(w.o.slug!)!.role === role);
+			if (!inRole.length && anySlotMatches) continue; // stray slot
 			const pool = inRole.length ? inRole : mapped;
 			const sum = pool.reduce((a, w) => a + w.wTime, 0);
 			if (sum <= 0) continue;

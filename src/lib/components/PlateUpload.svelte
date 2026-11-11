@@ -7,6 +7,8 @@
 		type UploadResult
 	} from '#lib/client/api.ts';
 	import { untrack } from 'svelte';
+	import AskDialog from './AskDialog.svelte';
+	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { objectKey } from '#lib/domain/plates-match.ts';
 	import { planPlateParts, type PlatePartsPlan } from '#lib/domain/twins.ts';
 	import { inactiveSlugs, resolveChoices } from '#lib/domain/variants.ts';
@@ -32,6 +34,8 @@
 		/** Called once `initialFile` was taken, so the owner can clear it. */
 		oninitial?: () => void;
 	} = $props();
+
+	const asking = createAsk();
 
 	type Phase = 'pick' | 'uploading' | 'review' | 'applying';
 	let phase = $state<Phase>('pick');
@@ -169,10 +173,11 @@
 		if (!up) return;
 		if (
 			attachedRuns > 0 &&
-			!confirm(
+			!(await asking.ask(
 				`${attachedRuns} print log${attachedRuns === 1 ? ' is' : 's are'} attached to the current plates. ` +
-					'They will be converted to part logs (part statuses stay as they are). Continue?'
-			)
+					'They will be converted to part logs (part statuses stay as they are). Continue?',
+				{ title: 'Convert print logs', confirmLabel: 'Convert and continue' }
+			))
 		)
 			return;
 		phase = 'applying';
@@ -216,6 +221,7 @@
 	}
 </script>
 
+<AskDialog ask={asking} />
 <section class="card upload" aria-label="Upload a 3MF">
 	<div class="head">
 		<h2>Upload my sliced 3MF</h2>

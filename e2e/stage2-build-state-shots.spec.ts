@@ -26,6 +26,29 @@ test('Print tab and Now card screenshots; content share at 390 x 844', async ({ 
 		page.getByRole('button', { name: /^Finish & log plate \d+$/ }).first()
 	).toBeVisible();
 
+	// Plate just marked Printed stays visible (dimmed, marked) at both phone widths; toolbar must not wrap.
+	for (const w of [360, 390]) {
+		await page.setViewportSize({ width: w, height: 844 });
+		await page.goto(`/builds/${buildId}/print`);
+		await page.waitForLoadState('networkidle');
+		const f = page.getByTestId('print-filter-open');
+		const h = await f.evaluate((el) => (el as HTMLElement).getBoundingClientRect().height);
+		console.log(`FILTER BUTTON ${w}px height ${Math.round(h)}`);
+		await page.screenshot({ path: `${SHOTS}/print-toolbar-${w}.png` });
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	await page
+		.getByRole('button', { name: /^Log a print on plate \d+$/ })
+		.first()
+		.click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('dialog')).toBeHidden();
+	await expect(page.getByTestId('printed-just-now').first()).toBeVisible();
+	await page.getByTestId('printed-just-now').first().scrollIntoViewIfNeeded();
+	await page.screenshot({ path: `${SHOTS}/print-just-printed-390.png` });
+
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
 		for (const vp of [

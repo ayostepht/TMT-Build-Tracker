@@ -130,8 +130,8 @@ test('use a sliced file as a print template, recolor, re-arrange with its times'
 	await expect(page.getByTestId('print-template-line')).toContainText('1 recolored since');
 
 	// Remove forgets the learned data and leaves the plates.
-	page.once('dialog', (d) => d.accept());
 	await page.getByTestId('template-remove').click();
+	await page.getByTestId('ask-confirm').click();
 	await expect(page.getByTestId('print-template')).toHaveCount(0);
 	await expect(wing).not.toContainText('from your slice');
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Elegoo Centauri Carbon');

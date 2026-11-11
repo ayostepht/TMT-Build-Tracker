@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { applyDesign } from '#lib/client/api.ts';
+	import { applyDesign, listDesigns, type DesignListItem } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { toasts } from '#lib/components/toast.svelte.ts';
@@ -7,14 +7,7 @@
 	let { ondone }: { ondone: () => void } = $props();
 	const ctx = getBuildCtx();
 
-	interface Item {
-		id: string;
-		name: string;
-		authorName?: string | null;
-		mine: boolean;
-		roles: { key: string; hex: string }[];
-	}
-	let items = $state<Item[] | null>(null);
+	let items = $state<DesignListItem[] | null>(null);
 	let error = $state<string | null>(null);
 	let chosen = $state('');
 	let confirming = $state(false);
@@ -23,11 +16,7 @@
 	$effect(() => {
 		const tpl = ctx.view.build.templateId;
 		let live = true;
-		fetch(`/api/designs?templateId=${encodeURIComponent(tpl)}`)
-			.then(async (r) => {
-				if (!r.ok) throw new Error('Could not load saved designs.');
-				return (await r.json()) as { designs: Item[] };
-			})
+		listDesigns(tpl)
 			.then((j) => live && (items = j.designs))
 			.catch((e) => live && (error = e instanceof Error ? e.message : 'Could not load designs.'));
 		return () => (live = false);

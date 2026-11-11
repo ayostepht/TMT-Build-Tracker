@@ -219,8 +219,8 @@ test('photos are downscaled, uploaded, shown in a lightbox and deleted', async (
 
 	await page.locator('.gallery .thumb').click();
 	await expect(page.getByRole('dialog', { name: 'Photo viewer' })).toBeVisible();
-	page.once('dialog', (d) => void d.accept());
 	await page.getByRole('button', { name: 'Delete' }).click();
+	await page.getByTestId('ask-confirm').click();
 	await expect(page.locator('.gallery .thumb')).toHaveCount(0);
 	expect((await page.request.get(`/api/builds/${buildId}/photos/${photo.id}`)).status()).toBe(404);
 
@@ -257,8 +257,10 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 		.setInputFiles({ name: 'done.png', mimeType: 'image/png', buffer: PNG_64 });
 	await expect(page.locator('.gallery .thumb img')).toHaveCount(1);
 
-	page.once('dialog', (d) => void d.accept()); // unfinished assembly: "hand off anyway?"
+	// Unfinished assembly: the shared dialog asks "hand off anyway?".
 	await page.getByRole('button', { name: 'Mark as handed off' }).click();
+	await expect(page.getByTestId('ask-message')).toContainText('Mark as handed off anyway?');
+	await page.getByTestId('ask-confirm').click();
 	await expect(page.getByRole('heading', { name: 'Handed off' })).toBeVisible();
 	await expect(page.locator('.phase')).toHaveText('done');
 	await page.goto(`/builds/${buildId}`);

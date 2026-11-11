@@ -1,17 +1,41 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import LandingBoard from '#lib/components/landing/LandingBoard.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 	const canEdit = $derived(data.canEdit);
 </script>
 
-<div class="head-row">
-	<h2>Builds</h2>
-	{#if canEdit}
-		<a class="btn primary" href={resolve('/(app)/builds/new')} data-testid="new-build">New build</a>
-	{/if}
-</div>
+{#if data.builds.length === 0}
+	<div class="card stack" data-testid="landing-empty">
+		<h2>Plan, print and hand off a chair</h2>
+		<p>
+			TMT Build Tracker helps {data.team.personal ? 'you' : 'your chapter'} build a MakeGood 3D TMT chair:
+			pick colors, print the plates, assemble it and hand it over. Once a build is under way, this page
+			shows what is printing and what to print next.
+		</p>
+		{#if canEdit}
+			<div>
+				<a class="btn primary" href={resolve('/(app)/builds/new')} data-testid="new-build"
+					>New build</a
+				>
+			</div>
+		{:else}
+			<p class="muted">Ask a chapter owner for editor access to start a build.</p>
+		{/if}
+	</div>
+{:else}
+	<LandingBoard views={data.landing.views} more={data.landing.more} />
+	<div class="head-row">
+		<h2>Builds</h2>
+		{#if canEdit}
+			<a class="btn primary" href={resolve('/(app)/builds/new')} data-testid="new-build"
+				>New build</a
+			>
+		{/if}
+	</div>
+{/if}
 <ul class="tpl-list">
 	{#each data.builds as b (b.id)}
 		<li class="tpl">
@@ -27,8 +51,6 @@
 				{/if}
 			</div>
 		</li>
-	{:else}
-		<li class="muted">No builds yet.</li>
 	{/each}
 </ul>
 
@@ -51,6 +73,10 @@
 		justify-content: space-between;
 		gap: 12px;
 		flex-wrap: wrap;
+	}
+	.head-row {
+		margin-top: 28px;
+		margin-bottom: 12px;
 	}
 	.head-row h2 {
 		margin: 0;

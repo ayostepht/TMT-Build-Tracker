@@ -52,7 +52,7 @@
 	{:else}
 		<p class="muted" data-testid="kit-ask-admin-print">
 			{ctx.view.build.templateOwned
-				? 'Ask a workspace owner or editor to add files.'
+				? 'Ask someone with edit access to add the files.'
 				: 'Ask your admin to add or replace the MakeGood files.'}
 		</p>
 	{/if}

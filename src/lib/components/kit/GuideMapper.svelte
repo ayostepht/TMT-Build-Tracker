@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AskDialog from '#lib/components/AskDialog.svelte';
+	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { invalidateAll } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import {
@@ -91,7 +93,13 @@
 	}
 
 	async function clearAll() {
-		if (!confirm('Remove every imported guide image from this server?')) return;
+		if (
+			!(await asking.ask('Remove every imported guide image from this server?', {
+				title: 'Remove guide images?',
+				confirmLabel: 'Remove them'
+			}))
+		)
+			return;
 		busy = true;
 		try {
 			await clearGuideImages(templateId);
@@ -111,7 +119,10 @@
 	});
 	const thumb = (pdf: number) => uploadedGuidePageUrl(templateId, pdf, version);
 	const selPdf = $derived(selected !== null ? (map[selected] ?? null) : null);
+	const asking = createAsk();
 </script>
+
+<AskDialog ask={asking} />
 
 {#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if status && hasUploads}

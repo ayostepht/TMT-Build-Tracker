@@ -95,3 +95,21 @@ test('Choosing Failed does not prefill the plate grams (empty counts as 0 g)', a
 	await expect(sheet).toBeHidden();
 	await expect(page.locator('.row[data-s="Reprint"]').first()).toBeVisible();
 });
+
+test('a plate printed during this visit stays visible, marked, until reload (Hide printed on)', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'justnow');
+	await page.goto(`/builds/${buildId}/print`);
+	await page.getByLabel('Group by').selectOption('plate');
+	const log = page.getByRole('button', { name: /^Log a print on plate \d+$/ });
+	await log.first().click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('dialog')).toBeHidden();
+	// The build is now under way, so Printed parts are hidden by default, but not the ones just done.
+	await expect(page.getByLabel('Hide printed').first()).toBeChecked();
+	await expect(page.getByTestId('printed-just-now').first()).toBeVisible();
+	await page.reload();
+	await expect(page.getByTestId('printed-just-now')).toHaveCount(0);
+	await expect(page.locator('.row[data-s="Printed"]')).toHaveCount(0);
+});

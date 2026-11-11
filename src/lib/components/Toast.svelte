@@ -42,14 +42,22 @@
 		position: fixed;
 		left: 16px;
 		right: 16px;
-		/* Phones: top, under the nav, so toasts never sit on the sticky Apply bar, a bottom sheet or the
-		   in-page confirmations. Stacked toasts are laid out in a column, never on top of each other. */
-		top: 64px;
+		/* Phones: just above the bottom tab bar (never over it), where the thumb is and the build header
+		   stays readable. Stacked toasts are laid out in a column, never on top of each other. */
+		bottom: calc(var(--bottom-bar-h, 0px) + 8px);
 		display: grid;
 		justify-items: center;
 		gap: 8px;
 		z-index: 2000;
 		pointer-events: none;
+	}
+	/* A modal dialog or bottom sheet from the shared Dialog is open: its actions sit at the bottom, so
+	   toasts move to the top until it closes. (Native <dialog> sheets sit above toasts anyway.) */
+	@media (max-width: 899px) {
+		:global(:root:has([aria-modal='true'])) .toasts {
+			bottom: auto;
+			top: 12px;
+		}
 	}
 	/* Desktop: bottom-left, away from the right-hand panel and its Apply / Cancel bar. */
 	@media (min-width: 900px) {

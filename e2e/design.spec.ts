@@ -87,6 +87,10 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await expect(page.locator('li[data-role="e2e-red"]')).toContainText('E2E Red');
 	await page.getByLabel('Build name').fill('From design');
 	await page.getByRole('button', { name: 'Start a build' }).click();
+	// A build started from a saved design lands in the setup wizard; leaving it reaches the build.
+	await expect(page).toHaveURL(/\/builds\/[^/]+\/setup$/);
+	await expect(page.getByTestId('setup-wizard')).toBeVisible();
+	await page.getByTestId('skip-setup').click();
 	await expect(page).toHaveURL(/\/builds\/[^/]+$/);
 
 	await page.getByRole('link', { name: 'Design', exact: true }).click();

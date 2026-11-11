@@ -43,7 +43,7 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	await page.getByRole('button', { name: 'Move build' }).click();
 	await expect(page).toHaveURL(/\/teams\//);
 	await expect(page.getByRole('heading', { level: 1, name: chapterName })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Solo chair' })).toBeVisible();
+	await expect(page.getByRole('listitem').getByRole('link', { name: 'Solo chair' })).toBeVisible();
 
 	// It is gone from My builds, and the activity log notes the move.
 	await page.waitForLoadState('networkidle');

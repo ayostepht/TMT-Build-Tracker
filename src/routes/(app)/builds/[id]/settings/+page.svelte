@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { BUILD_PHASES, type BuildPhase, type FilamentRole } from '#lib/domain/types.ts';
+	import { filamentLabel } from '#lib/domain/labels.ts';
 	import { updateBuild, updateFilament, deleteBuild } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
-	import FilamentPicker from '#lib/components/FilamentPicker.svelte';
+	import Swatch from '#lib/components/Swatch.svelte';
 	import MoveToChapter from '#lib/components/MoveToChapter.svelte';
 	import ImportPrototype from '#lib/components/ImportPrototype.svelte';
 	import SpoolLink from '#lib/components/SpoolLink.svelte';
@@ -12,6 +14,8 @@
 
 	const ctx = getBuildCtx();
 	const b = $derived(ctx.view.build);
+	/** Install-wide admin: the prototype import (a repo script, going away) is for them only. */
+	const siteAdmin = $derived((page.data as { siteAdmin?: boolean }).siteAdmin === true);
 
 	// Drafts start from the saved values; they only reset when the saved value changes.
 	let name = $derived(b.name);
@@ -83,21 +87,18 @@
 		{/if}
 	</form>
 
-	<section class="card">
+	<section class="card" data-testid="settings-filament">
 		<h2>Filament</h2>
 		<p class="muted">
-			Names, colors and spools for this build. The template's roles stay the same; only this build
-			changes.
+			The colors this build uses, and how many spools you have of each. Colors are chosen in the
+			Design tab.
 		</p>
 		{#each ctx.view.filaments as f (f.key)}
 			<div class="fil-role" data-role={f.key}>
-				<FilamentPicker
-					value={{ name: f.name, material: f.material, hex: f.hex }}
-					preferMaterial={f.tpu ? 'TPU 95A' : 'PETG'}
-					organizationId={ctx.view.build.organizationId}
-					disabled={!ctx.canEdit}
-					onchange={(v) => saveFil(f, v)}
-				/>
+				<div class="fil-sum">
+					<Swatch hex={f.hex} tpu={f.tpu} />
+					<span class="fil-name">{filamentLabel(f, f.key)}</span>
+				</div>
 				<label class="field"
 					>Spools (kg)
 					<input
@@ -118,6 +119,14 @@
 				>
 			</div>
 		{/each}
+		<div>
+			<a
+				class="btn go"
+				href={resolve('/(app)/builds/[id]/design', { id: ctx.id })}
+				data-testid="change-colors"
+				>Change colors in Design <span class="btn-arrow" aria-hidden="true">→</span></a
+			>
+		</div>
 		<SpoolLink />
 	</section>
 
@@ -134,7 +143,7 @@
 	</section>
 
 	<MoveToChapter />
-	<ImportPrototype />
+	{#if siteAdmin}<ImportPrototype />{/if}
 
 	{#if ctx.view.role === 'owner'}
 		<section class="card danger-zone">
@@ -185,11 +194,28 @@
 <style>
 	.fil-role {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 140px;
+		grid-template-columns: minmax(0, 1fr) minmax(110px, 160px);
 		gap: 10px;
 		align-items: end;
 		padding: 12px 0;
 		border-top: 1px solid var(--line);
+	}
+	.fil-role .field,
+	.fil-role .field input {
+		min-width: 0;
+		width: 100%;
+		box-sizing: border-box;
+	}
+	.fil-sum {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+	.fil-name {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		font-weight: 600;
 	}
 	@media (max-width: 640px) {
 		.fil-role {
