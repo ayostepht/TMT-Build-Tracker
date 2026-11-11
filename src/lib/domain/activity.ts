@@ -139,7 +139,7 @@ function describeMarked(a: ActivityItem, view: Names): string {
 		case 'printing.start':
 			return `${who} put ${parts(p.slugs)} on the printer`;
 		case 'printing.stop':
-			return `${who} took ${parts(p.slugs)} off the printer`;
+			return `${who} took ${parts(p.slugs)} off the printer${num(p.unlinkedJobs) ? '; the running print is no longer linked to it' : ''}`;
 		case 'printing.setStart':
 			return `${who} changed the print start time for ${parts(p.slugs)}`;
 		case 'printing.setEstimate': {

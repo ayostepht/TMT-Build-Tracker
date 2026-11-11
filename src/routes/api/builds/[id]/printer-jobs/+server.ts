@@ -1,7 +1,7 @@
 import { ApiError, buildAccess } from '#lib/server/access.ts';
 import { requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
-import { buildJobs } from '#lib/server/printers/jobs.ts';
+import { buildJobs, pendingExpected } from '#lib/server/printers/jobs.ts';
 import { listPrinters, toPublic } from '#lib/server/printers/store.ts';
 import type { RequestHandler } from './$types';
 
@@ -14,6 +14,7 @@ export const GET: RequestHandler = (event) =>
 		return {
 			organizationId: access.organizationId,
 			jobs: buildJobs(db, event.params.id, access.organizationId),
+			expected: pendingExpected(db, access.organizationId, event.params.id),
 			printers: listPrinters(db, access.organizationId).map((p) => toPublic(p))
 		};
 	});

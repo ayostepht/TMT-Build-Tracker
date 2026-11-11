@@ -135,6 +135,18 @@ export interface PrinterJobView {
 	pendingConfirm: boolean;
 }
 
+/** "Start on <printer>" was clicked for this plate: offer to confirm the printer's job is it. */
+export interface PrinterExpectedView {
+	printerId: string;
+	printerName: string;
+	buildId: string;
+	plateNumber: number;
+	partSlugs: string[] | null;
+	/** The unlinked job the suggestion is about. */
+	jobId: string;
+	at: number;
+}
+
 export const fmtRemaining = (sec: number | undefined | null): string => {
 	if (sec == null || !Number.isFinite(sec)) return '';
 	const s = Math.max(0, Math.round(sec));

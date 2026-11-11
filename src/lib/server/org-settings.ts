@@ -84,12 +84,14 @@ export function setDeduction(
 	});
 }
 
-/** "Start on printer X": the plate the user said they are about to print there (cleared when a job attaches). */
+/** "Start on printer X": the plate the user said they are printing there. A suggestion the user confirms; cleared when a job attaches or ends. */
 export interface ExpectedPlate {
 	buildId: string;
 	plate: number;
 	/** The part(s) the next job covers (perPartRuns plates: one color per print). */
 	partSlugs?: string[];
+	/** The unlinked job that was already running when it was sent, or the first job that started after. */
+	jobId?: string;
 	at: number;
 }
 export function getExpected(db: Db, orgId: string, printerId: string): ExpectedPlate | null {

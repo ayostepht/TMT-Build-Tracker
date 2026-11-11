@@ -1,5 +1,10 @@
 import { buildPrinterJobs, listPrinters } from './api.ts';
-import type { PrinterJobView, PrinterPublic, PrinterStatus } from '#lib/printers/status.ts';
+import type {
+	PrinterExpectedView,
+	PrinterJobView,
+	PrinterPublic,
+	PrinterStatus
+} from '#lib/printers/status.ts';
 
 /**
  * Printers and jobs of a team, kept live over the team's SSE stream (`/api/printers/events`).
@@ -8,6 +13,8 @@ import type { PrinterJobView, PrinterPublic, PrinterStatus } from '#lib/printers
 export class PrinterStore {
 	printers = $state<PrinterPublic[]>([]);
 	jobs = $state<PrinterJobView[]>([]);
+	/** "Start on <printer>" suggestions for this build awaiting the user's confirmation. */
+	expected = $state<PrinterExpectedView[]>([]);
 	loaded = $state(false);
 	error = $state<string | null>(null);
 	canEdit = $state(false);
@@ -34,6 +41,7 @@ export class PrinterStore {
 				if (my !== this.seq) return;
 				this.printers = r.printers;
 				this.jobs = r.jobs;
+				this.expected = r.expected ?? [];
 			} else {
 				const r = await listPrinters(this.org);
 				if (my !== this.seq) return;

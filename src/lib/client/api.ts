@@ -1,4 +1,5 @@
 import type {
+	PrinterExpectedView,
 	PrinterJobView,
 	PrinterKind,
 	PrinterPublic,
@@ -651,10 +652,12 @@ export const discoverPrinters = (org: string) =>
 		organizationId: org
 	});
 export const buildPrinterJobs = (buildId: string) =>
-	call<{ organizationId: string; jobs: PrinterJobView[]; printers: PrinterPublic[] }>(
-		'GET',
-		`${b(buildId)}/printer-jobs`
-	);
+	call<{
+		organizationId: string;
+		jobs: PrinterJobView[];
+		printers: PrinterPublic[];
+		expected: PrinterExpectedView[];
+	}>('GET', `${b(buildId)}/printer-jobs`);
 export const jobAction = (
 	jobId: string,
 	body:

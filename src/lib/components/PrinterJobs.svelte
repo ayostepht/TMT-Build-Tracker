@@ -5,6 +5,7 @@
 	import { defaultRunParts } from '#lib/domain/index.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import ConfirmPrintLog from './ConfirmPrintLog.svelte';
+	import ExpectedConfirm from './ExpectedConfirm.svelte';
 	import { runChoices, runOptionLabel } from './run-label.ts';
 
 	/**
@@ -19,6 +20,11 @@
 		store.jobs.filter((j) => !j.buildId && (j.status === 'printing' || j.status === 'paused'))
 	);
 	const pending = $derived(store.jobs.filter((j) => j.pendingConfirm && j.buildId === ctx.id));
+
+	/** Jobs where the user chose "Different plate" instead of confirming the suggestion. */
+	let other = $state<Record<string, boolean>>({});
+	const suggestion = (j: PrinterJobView) =>
+		other[j.id] ? undefined : store.expected.find((e) => e.jobId === j.id && e.buildId === ctx.id);
 
 	let busy = $state<string | null>(null);
 	let err = $state('');
@@ -64,7 +70,9 @@
 					)} left{/if}){/if}
 			<div class="muted">Not linked to a plate yet.</div>
 		</div>
-		{#if ctx.canEdit}
+		{#if ctx.canEdit && suggestion(j)}
+			<ExpectedConfirm exp={suggestion(j)!} onother={() => (other[j.id] = true)} />
+		{:else if ctx.canEdit}
 			<label class="sel"
 				><span class="sr-only">Link to plate</span>
 				<select

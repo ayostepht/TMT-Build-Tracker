@@ -20,11 +20,11 @@ import { createBuild } from '../builds/create';
 import { addRun, printingAction, updatePlate } from '../builds/actions';
 import { loadBuildView } from '../builds/view';
 import { onBuildEvents } from '../builds/test-helpers';
-import { setOrgSettings } from '../org-settings';
+import { getExpected, setExpected, setOrgSettings } from '../org-settings';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { subscribePrinterEvents } from './bus';
-import { buildJobs, confirmJob, dismissJob, linkJob, processStatus } from './jobs';
+import { buildJobs, confirmJob, dismissJob, linkJob, pendingExpected, processStatus } from './jobs';
 import { Supervisor } from './supervisor';
 import { createPrinter } from './store';
 import type { ConnectFn, StatusCallback } from './types';
@@ -216,10 +216,11 @@ describe('job lifecycle', () => {
 		).toBeTruthy();
 	});
 
-	it('falls back to the build planned for this printer with one plate marked Printing', () => {
+	it('never guesses: one plate marked Printing does not attach a job with an unrelated file name', () => {
 		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['wing-left'] });
 		processStatus(db, printerId, printing('mystery.gcode', 3, 100), at(3));
-		expect(jobs()[0]).toMatchObject({ buildId, plateNumber: 6 });
+		expect(jobs()[0].buildId).toBeNull();
+		expect(partStatus('wing-left')).toBe('Printing');
 	});
 
 	it('does not guess when two plates are marked Printing', () => {
@@ -368,8 +369,7 @@ describe('per-part runs (wheel rims: one color per print)', () => {
 		).toHaveLength(2);
 	});
 
-	it('an expectation with partSlugs links the next job to that part', async () => {
-		const { setExpected } = await import('../org-settings');
+	it('an expectation with partSlugs becomes a suggestion for that part; confirming links it', () => {
 		setExpected(db, 'org1', printerId, {
 			buildId,
 			plate: 13,
@@ -377,10 +377,57 @@ describe('per-part runs (wheel rims: one color per print)', () => {
 			at: Date.now()
 		});
 		processStatus(db, printerId, printing('whatever.gcode', 5, 300), at(5));
-		expect(jobs()[0]).toMatchObject({ plateNumber: 13 });
+		expect(jobs()[0].buildId).toBeNull();
+		const [exp] = pendingExpected(db, 'org1', buildId);
+		expect(exp).toMatchObject({
+			printerId,
+			plateNumber: 13,
+			partSlugs: ['rims-2-3'],
+			jobId: jobs()[0].id
+		});
+		db.update(printers)
+			.set({ lastStatus: printing('whatever.gcode', 5, 300) as never })
+			.run();
+		linkJob(
+			db,
+			jobs()[0].id,
+			'org1',
+			'owner',
+			buildId,
+			exp.plateNumber,
+			exp.partSlugs ?? undefined
+		);
+		expect(jobs()[0]).toMatchObject({ buildId, plateNumber: 13 });
 		expect(jobPartSlugs()).toEqual(['rims-2-3']);
+		expect(getExpected(db, 'org1', printerId)).toBeNull();
+		expect(pendingExpected(db, 'org1', buildId)).toEqual([]);
 	});
 
+	it('wheel regression: after a wheel run the next unrelated job is not auto-linked (auto-log on and off)', () => {
+		for (const auto of [true, false]) {
+			db.delete(printerJobs).run();
+			setOrgSettings(db, 'org1', { autoLogPrints: auto });
+			processStatus(db, printerId, printing(FILE, 5, 300), at(5));
+			expect(jobs()[0]).toMatchObject({ plateNumber: 13 });
+			processStatus(
+				db,
+				printerId,
+				{ state: 'done', progress: 100, fileName: FILE, elapsedSec: 7200 },
+				at(130)
+			);
+			// One of two runs for that part: Printing is still set on it (the old fallback keyed on this).
+			processStatus(
+				db,
+				printerId,
+				printing('ECC_0.4_tmt_4691_Overture PETG HF_0.2_11h1m.gcode', 2, 100),
+				at(200)
+			);
+			const next = jobs().find((j) => j.fileName.startsWith('ECC_'))!;
+			expect(next.buildId, `auto-log ${auto}`).toBeNull();
+			expect(next.plateNumber).toBeNull();
+			processStatus(db, printerId, { state: 'idle', progress: null }, at(210));
+		}
+	});
 	it("finish logs a run only for the chosen part, with that part's grams", () => {
 		setOrgSettings(db, 'org1', { autoLogPrints: true });
 		updatePlate(db, buildId, 'owner', 13, { slicerByPart: { 'rims-1-4': 140, 'rims-2-3': 148 } });
@@ -453,5 +500,89 @@ describe('per-part runs (wheel rims: one color per print)', () => {
 		confirmJob(db, jobs()[0].id, 'org1', 'owner', {});
 		const [run] = db.select().from(printRuns).all();
 		expect(run).toMatchObject({ partSlug: 'rims-1-4', grams: 140 });
+	});
+});
+
+describe('suggestions from "Start on printer" and take-off', () => {
+	const slicerFile = 'ECC_0.4_tmt_4691_Overture PETG HF_0.2_11h1m.gcode';
+	const expectPlate = (plate: number, partSlugs?: string[], jobId?: string) =>
+		setExpected(db, 'org1', printerId, {
+			buildId,
+			plate,
+			...(partSlugs ? { partSlugs } : {}),
+			...(jobId ? { jobId } : {}),
+			at: Date.now()
+		});
+	const withStatus = (file: string) =>
+		db
+			.update(printers)
+			.set({ lastStatus: printing(file, 5, 300) as never })
+			.run();
+
+	it('an expectation does not attach at job creation and is reported pending', () => {
+		expectPlate(2);
+		processStatus(db, printerId, printing(slicerFile, 1, 30), at(1));
+		expect(jobs()[0].buildId).toBeNull();
+		expect(partStatus('handle-right')).toBe('To print');
+		expect(pendingExpected(db, 'org1', buildId)).toMatchObject([
+			{ printerId, buildId, plateNumber: 2, jobId: jobs()[0].id }
+		]);
+		expect(pendingExpected(db, 'org1', 'other-build')).toEqual([]);
+	});
+
+	it('sent while the print already runs: the suggestion is bound to that unlinked job', async () => {
+		processStatus(db, printerId, printing(slicerFile, 1, 30), at(1));
+		const { expectOnPrinterJob } = await import('./jobs');
+		expectOnPrinterJob(db, printerId, { buildId, plate: 2 });
+		expect(pendingExpected(db, 'org1', buildId)[0].jobId).toBe(jobs()[0].id);
+	});
+
+	it('choosing another plate clears the suggestion', () => {
+		expectPlate(2);
+		processStatus(db, printerId, printing(slicerFile, 1, 30), at(1));
+		withStatus(slicerFile);
+		linkJob(db, jobs()[0].id, 'org1', 'owner', buildId, 1);
+		expect(jobs()[0]).toMatchObject({ plateNumber: 1 });
+		expect(getExpected(db, 'org1', printerId)).toBeNull();
+	});
+
+	it('a suggestion never applies to a second job', () => {
+		expectPlate(2);
+		processStatus(db, printerId, printing(slicerFile, 1, 30), at(1));
+		processStatus(db, printerId, { state: 'idle', progress: null }, at(40)); // ended unlinked
+		expect(pendingExpected(db, 'org1', buildId)).toEqual([]);
+		processStatus(db, printerId, printing('next.gcode', 1, 30), at(60));
+		expect(jobs().every((j) => j.buildId === null)).toBe(true);
+		expect(pendingExpected(db, 'org1', buildId)).toEqual([]);
+	});
+
+	it('a stale suggestion (over 12 h) is ignored and dropped', () => {
+		setExpected(db, 'org1', printerId, { buildId, plate: 2, at: Date.now() - 13 * 3600_000 });
+		processStatus(db, printerId, printing(slicerFile, 1, 30), at(1));
+		expect(pendingExpected(db, 'org1', buildId)).toEqual([]);
+		expect(getExpected(db, 'org1', printerId)).toBeNull();
+	});
+
+	it('a file name that names the plate still links by itself', () => {
+		processStatus(db, printerId, printing('Plate 2 - Handle Right.gcode', 5, 300), at(5));
+		expect(jobs()[0]).toMatchObject({ buildId, plateNumber: 2 });
+	});
+
+	it('taking a plate off the printer unlinks its live job, logs no run, leaves other plates alone', () => {
+		processStatus(db, printerId, printing('Plate 2 - Handle Right.gcode', 5, 300), at(5));
+		expect(partStatus('handle-right')).toBe('Printing');
+		// stopping a different plate does not touch the job
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['handle-left'] });
+		printingAction(db, buildId, 'owner', { action: 'stop', slugs: ['handle-left'] });
+		expect(jobs()[0]).toMatchObject({ buildId, plateNumber: 2 });
+		const ev = onBuildEvents(buildId);
+		printingAction(db, buildId, 'owner', { action: 'stop', slugs: ['handle-right'] });
+		expect(jobs()[0]).toMatchObject({ buildId: null, plateNumber: null, partSlugs: null });
+		expect(jobs()[0].status).toBe('printing');
+		expect(partStatus('handle-right')).toBe('To print');
+		expect(db.select().from(printRuns).all()).toHaveLength(0);
+		expect(ev.length).toBeGreaterThan(0);
+		// the Overview offers it again
+		expect(buildJobs(db, buildId, 'org1').map((j) => j.id)).toEqual([jobs()[0].id]);
 	});
 });
