@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-11 (test copy on r44 = 6ce39e3. r45 = b9ea636 is on `main`, gated on
-the full suite, approved and waiting for the Unraid deploy. Stage 5 in progress)._
+_Last updated: 2026-11-12 (test copy on r45 = b9ea636, deployed from main 7fba2db. Next:
+the migration squash as r46. Stage 5 in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -10,22 +10,15 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **r45 ready to deploy: b9ea636** (maintainer approved 2026-11-11; docs-only commits
-   after it are fine). On `main` since r44: `/privacy` and `/terms`, the build guide link,
-   landing navigation, the Files tab heading fix, tracking card buttons, version 0.9.0 in
-   About and `/api/health`, destructive dialogs open on Cancel and all dialogs return
-   focus, the design studio a11y pass, 44 px buttons on touch, `--field-line` borders, the
-   designer's Options at the top of the Parts tab, no stored SSO tokens or session IPs.
-   **Startup changed** (no schema change): a one-off idempotent cleanup runs after
-   migrations (`auth-cleanup.ts`). The rehearsal must check: `user`, `session` and
-   `account` row counts unchanged; the "auth cleanup" log line once on the first start and
-   not on a restart; every `session.ip_address` empty; no account with an access or
-   refresh token or expiry; `id_token` only on `provider_id = 'oidc'` rows; `password`,
-   `scope`, `provider_id`, `account_id`, `user_id` unchanged; an empty `/data` starts
-   without the line. After the swap the maintainer signs in once with each method they use.
-2. **Migration squash, as r46** (maintainer approved 2026-11-11; must land before anyone
-   else installs the app). Needs a journal reset on the test copy and its own rehearsal;
-   would also fix `templates.owner_org_id` lacking ON DELETE CASCADE [kit-and-startup].
+1. **Migration squash, as r46** (maintainer approved 2026-11-11; must land before anyone
+   else installs the app). Built and waiting on a branch on the Mac: push it, `verifier`
+   gate, then record "r46 ready to deploy: <commit>" here. Replaces the 14 migrations with
+   one baseline; a database at the full old chain is upgraded at startup in one
+   transaction, anything else refuses to start. Needs its own rehearsal (journal 14 → 1,
+   schema dump equal to an empty-data install, row counts, FK and integrity checks); also
+   fixes `templates.owner_org_id` lacking ON DELETE CASCADE [kit-and-startup].
+2. **r45 is live** (b9ea636): the maintainer signs in once with each method they use
+   (password, Authentik). Rehearsal and live were clean (see CHANGELOG).
 3. **Going public** (maintainer will flip it after r46): the pre-public scan of all 135
    commits found no credentials or personal data (pattern search; no gitleaks installed).
    The same day: make the `ghcr.io` package public, update the README's "Image access"
@@ -33,8 +26,9 @@ done. Keep it under ~150 lines.
    branch protection (`test` + `e2e`), private vulnerability reporting, link the changelog
    from `/about`. CI is in private-repo mode until then and the account is out of Actions
    minutes (GHCR has no image after 578eb84; the test copy is built locally).
-4. **Stage 5** leftovers (Next steps 1): README screenshots (on a throwaway instance with
-   invented data, never the live copy), Unraid Community Apps template, `v1.0.0`.
+4. **Stage 5** leftovers (Next steps 1): Unraid Community Apps template, `v1.0.0`. README
+   screenshots are done (`docs/images/`, throwaway r45 instance with invented data and the
+   SDCP mock; re-shoot with `data/readme-shots/run.sh` on Unraid).
 5. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
@@ -68,10 +62,13 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
-- (2026-11-11) After r45: sign in once with each method in use (password, Authentik) and
+- (2026-11-12) r45 is live: sign in once with each method in use (password, Authentik) and
   say whether the landing quick row of build buttons stays (it repeats the build name
   that is also on each card).
-- Delete on Unraid? `data/cf-run-r1`, `data/cf-run-r2`, `link-sweep/`, `mobile-perf/`,
+- Delete on Unraid? r45 check leftovers: the test copy's `migrate-rehearsal/r45` (rehearsal
+  DB with a throwaway account) and `migrate-rehearsal/r45-check` (a copy of the live data
+  with a throwaway owner account and one generated test photo), repo `data/r45-check/`
+  (holds that account's password) and `data/readme-shots/`. Older: `data/cf-run-r1`, `data/cf-run-r2`, `link-sweep/`, `mobile-perf/`,
   `cam-fix/`, loose `shoot-*.mjs` / `*-run.sh`, and the old `tmt-backup-pre-r10..r37.db`
   backups. Stale remote branches (`ci/e2e-container`, `feat/octoeverywhere-share-link`,
   `fix/*`, `hotfix/*`): delete before going public?
@@ -123,10 +120,20 @@ Route each to the agent named in brackets.
   by role) [build-state]; a local `npm run dev`/built server without release credentials
   logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Files tab** [plates-3mf]: the heading/select disagreement is fixed on `main` (one
-  `plates/layouts` fetch in `PlatesPanel`, passed to the picker). Why the live copy took
-  ~3 s is unconfirmed (suspected: the request queued behind SSE and printer streams on the
-  same host): after r45, look at the network waterfall if "Loading…" lingers.
+- **Files tab** [plates-3mf]: on r45 (copy of live data, in-app navigation) the 1440 view
+  agrees from the first render, but at 390 the layout select still showed "Loading…" while
+  the heading already named the layout (agreed after network idle; one run per width).
+  Look at the network waterfall; suspected: the fetch queued behind SSE and printer streams.
+- **r45 live checks** (2026-11-12, copy of live data; shots in `data/r45-check/shots/` on
+  Unraid): privacy/terms/login/signup, landing quick row, Next up build button, whole-card
+  links, long names, About 0.9.0, guide link, Cancel-first dialog with focus return,
+  picker styling and Options placement all pass. Open: on the phone Print tab some
+  controls are under 44 px: part-name buttons `button.pbtn` 22 px, the status buttons
+  (To print / Printing / Printed / Reprint) 40 px, `button.more` "+" 40 px, `.bh-more`
+  40 px [plates-3mf, design-studio-ui]; desktop landing Next up "Start on <printer>" is 29
+  px beside 38 px buttons [app-shell]; the picker's "All colors" select looks clipped at
+  the right edge at 390 dark (not measured) [design-studio-ui]. Unchecked: Now printing
+  card button (nothing printing) and remove-member dialog (no chapter with other members).
 - **r44 live checks, small things**: the plate view toggle and the "rotated N°" badge only
   render with an arranged layout (`/arrangement` returns no plates for an uploaded 3MF), so
   they are still unseen live (see Pick up here 4); the tracking card text actions are
@@ -160,8 +167,7 @@ Route each to the agent named in brackets.
   upload; migration 0007 created `templates.owner_org_id` without the ON DELETE CASCADE the
   schema declares (worked around in `account.ts` `deleteOwnedTemplates`; fix with the
   migration squash); chapter delete runs our cleanup just before Better Auth's own delete,
-  not in one transaction; activity is pruned to the newest 5000 rows per build; no privacy
-  or terms page yet (Stage 5); write-rate and slot state is per process (single process
+  not in one transaction; activity is pruned to the newest 5000 rows per build; write-rate and slot state is per process (single process
   only); an OctoEverywhere link's status socket (wss) has its address checked as public right
   before each dial but is not pinned (the camera path is pinned).
   Accepted on self-hosted installs: unverified emails, so an `ADMIN_EMAILS` address is

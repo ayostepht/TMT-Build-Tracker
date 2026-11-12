@@ -4,6 +4,28 @@ A self-hostable web app for makers 3D-printing the MakeGood 3D TMT (toddler mobi
 
 > **Status:** pre-release. All features are built and running on a test copy; the public release (public repository and container package) is still to come. Until then see [Image access](#image-access).
 
+## Screenshots
+
+Taken on a throwaway instance with invented demo data.
+
+<p align="center">
+  <img src="docs/images/screenshot-phone-now-card.png" alt="Phone view of a build: the Now printing card for plate 1, with the elapsed and remaining time and a Finish and log button" width="300">
+</p>
+
+The Now card on a phone, where makers update status next to the printer.
+
+![The plate arranger: a top view of one print plate for the Elegoo Centauri Carbon bed, each part drawn in its filament color with numbered badges](docs/images/screenshot-plate-arranger.png)
+
+The plate arranger lays the parts out flat on your printer's bed.
+
+![The 3D color designer: the toddler chair model in red, white and yellow next to the list of filament slots](docs/images/screenshot-color-designer.png)
+
+The 3D color designer, with ready-made palettes and per-part colors.
+
+![A printer card showing a live, read-only status for an Elegoo printer: 42 percent, layer 168 of 400, temperatures](docs/images/screenshot-printer-card.png)
+
+Optional read-only printer status (shown here against a simulated printer).
+
 ## MakeGood files and credit
 
 The MakeGood 3D TMT 3D model and print files are by MakeGood, released as Creative Commons Public Domain (CC0); bundled as a kit pack. Find the design on [MakerWorld](https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer). The maker guide is not included: get it from MakeGood.

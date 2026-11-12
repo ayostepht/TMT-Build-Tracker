@@ -7,6 +7,12 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r45** (b9ea636, from main 7fba2db): Stage 5 pages (`/privacy`, `/terms`, build guide
+  link, landing navigation), Files heading fix, version 0.9.0, Cancel-first destructive
+  dialogs and focus return, design studio a11y pass, 44 px touch buttons, no stored SSO
+  tokens or session IPs (startup `auth-cleanup.ts`). Rehearsal and live: one cleanup line
+  (7 sessions, 0 accounts), none on restart, row counts identical in 37 tables. README
+  screenshots added afterwards from a throwaway instance.
 - **r44** (6ce39e3): Stage 4 finished: wave 3 (every screen on `ds-seg`/`ds-badge`/
   `ds-modal`/`ds-card`, native dialogs), old global styles deleted from `app.css`,
   `focus-trap.ts`, the legacy tab redirects and `src/lib/index.ts` deleted, one shared
