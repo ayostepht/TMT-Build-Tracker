@@ -7,6 +7,12 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r46** (cfe1c61, from main 2185ff4): migration squash. The 14 migrations become one
+  baseline; a database at the full old chain is upgraded at startup in one transaction
+  (7 tables rebuilt, journal 14 → 1), anything else refuses to start. Adds ON DELETE
+  CASCADE on `templates.owner_org_id`. Rehearsal and live: one upgrade line, none on
+  restart, `sqlite_master` identical to an empty install, FK and integrity checks clean,
+  row counts identical in 36 tables; all build tabs checked on the rehearsal copy.
 - **r45** (b9ea636, from main 7fba2db): Stage 5 pages (`/privacy`, `/terms`, build guide
   link, landing navigation), Files heading fix, version 0.9.0, Cancel-first destructive
   dialogs and focus return, design studio a11y pass, 44 px touch buttons, no stored SSO
