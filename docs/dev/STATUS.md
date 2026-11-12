@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-12 (test copy on r45 = b9ea636, deployed from main 7fba2db. Next:
-the migration squash as r46. Stage 5 in progress)._
+_Last updated: 2026-11-12 (public, 0.9.0 released; test copy on r50 = e4584d5, a local
+build; main is at 0e413e1 and ahead of it by docs only. No agents or work in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -13,11 +13,21 @@ done. Keep it under ~150 lines.
 0. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
    was merged, `v0.9.0` tagged, CI in full mode (`CI_FULL=true`). `main` is protected and
    work lands through pull requests (see CLAUDE.md "The repository is public"). Image
-   channels: `latest`/`0.9.0`/`0.9` from the tag, `edge` from `main`. The maintainer will
-   invite beta testers on the MakeGood TMT forum. Open right after the flip: the maintainer
-   makes the `ghcr.io` package public once the first image exists; then verify an
-   anonymous `docker pull`, the issue forms and the in-app guide anchors on GitHub. Watch:
-   on r50 the live link status was at most 12 s old in samples (5 s on r49), steady but
+   channels: `latest`/`0.9.0`/`0.9` from the tag, `edge` from `main`. Done since the flip:
+   the `ghcr.io` package is public and pulls anonymously (amd64 + arm64); Unraid ran a cold
+   start of the published image against an empty data directory three times, all clean;
+   release `v0.9.0` is published and marked Latest (kit pack 1.0.1 release kept, 1.0.0
+   release and tag deleted); secret scanning 0 alerts, private vulnerability reporting on,
+   fork pull requests need approval, workflow token read-only; pull requests #15
+   (pull request template, code of conduct) and #17 (README quick start matches the app)
+   merged; issue #16 "Beta testers: start here" is pinned; four issue forms (bug, feature
+   request, install feedback, printer report). No open pull requests. The maintainer is
+   finalising the MakeGood TMT forum post (their own wording, discloses that Claude was
+   used) and will post it themselves. Still theirs: upload the social preview image
+   (repository settings), glance at the "New issue" page, paste the Unraid cleanup prompt
+   (`data/r50-check/`, `/workspace/tmt-coldstart`). Expect first outside issues and
+   Dependabot pull requests: triage and review freely, merge others' only on the
+   maintainer's go-ahead. Watch: on r50 the live link status was at most 12 s old in samples (5 s on r49), steady but
    unexplained [printers]; the live camera on r50 was not checked by Unraid (maintainer to
    look). Next deploys of the test copy use published images (`sha-<short>` / `edge`), see
    dev-environments. Worktrees for parallel agents: trial on the next multi-agent task.
@@ -118,17 +128,12 @@ done. Keep it under ~150 lines.
    their build afterwards. Rollback: `tmt-build-tracker:r45` + `tmt-backup-pre-r46.db`.
    A real OIDC (Authentik) sign-in is a 1.0 checklist item: the r45 token handling is only
    unit-tested and the maintainer will test it before `v1.0.0`.
-6. **Going public** (r46 is live, so this is next once the maintainer has reviewed r47): the pre-public scan of all 135
-   commits found no credentials or personal data (pattern search; no gitleaks installed).
-   The same day: make the `ghcr.io` package public, update the README's "Image access"
-   caveat, set `CI_FULL=true`, require approval for outside collaborators' workflow runs,
-   branch protection (`test` + `e2e`), private vulnerability reporting, link the changelog
-   from `/about`. CI is in private-repo mode until then and the account is out of Actions
-   minutes (GHCR has no image after 578eb84; the test copy is built locally).
-7. **Stage 5** leftovers (Next steps 1): Unraid Community Apps template, `v1.0.0`. README
-   screenshots are done (`docs/images/`, throwaway r45 instance with invented data and the
-   SDCP mock; the re-shoot scripts were deleted with the scratch, so a re-shoot starts over).
-8. Wait for (or ask about) the maintainer's phone checks below, then act on them.
+6. **Towards 1.0**: Unraid Community Apps template, `v1.0.0`, a real Authentik sign-in
+   (maintainer), Klipper / OctoPrint / Bambu on real hardware through beta testers, the
+   hosted (`TMT_MODE=public`) paths on a real deploy, a duplicate-link check (needs a
+   `link_hash` column: schema change, ask first). README screenshots (`docs/images/`, five)
+   come from `scripts/preview/readme-shots.mjs` against the local preview.
+7. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
 
@@ -153,7 +158,7 @@ has not started.
 | Elegoo via OctoEverywhere shared link                                          | Done; status + camera confirmed live through the link (r44)                    |
 | Spoolman (optional)                                                            | Done, mock-tested only                                                         |
 | Filament catalog + vendor supplement                                           | Done                                                                           |
-| Release (Unraid template, domain, public repo)                                 | Not started                                                                    |
+| Release (Unraid template, domain, public repo)                                 | Public repo and 0.9.0 image done; Unraid template and domain not started       |
 | PWA (manifest, icons, service worker, offline page, update prompt)             | Done; real-phone checks pending                                                |
 
 Reference result: Elegoo Centauri Carbon (256 × 256, cutter keep-out, pack 1.0.1) → 21
@@ -161,19 +166,12 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
-- (2026-11-12) r45 is live: sign in once with each method in use (password, Authentik) and
-  say whether the landing quick row of build buttons stays (it repeats the build name
-  that is also on each card).
-- Delete on Unraid? r45 check leftovers: the test copy's `migrate-rehearsal/r45` (rehearsal
-  DB with a throwaway account) and `migrate-rehearsal/r45-check` (a copy of the live data
-  with a throwaway owner account and one generated test photo), repo `data/r45-check/`
-  (holds that account's password) and `data/readme-shots/`. Older: `data/cf-run-r1`, `data/cf-run-r2`, `link-sweep/`, `mobile-perf/`,
-  `cam-fix/`, loose `shoot-*.mjs` / `*-run.sh`, and the old `tmt-backup-pre-r10..r37.db`
-  backups. Stale remote branches (`ci/e2e-container`, `feat/octoeverywhere-share-link`,
-  `fix/*`, `hotfix/*`): delete before going public?
-
-- (2026-11-11) Keep or delete the GitHub release asset for kit pack 1.0.0 (no longer baked
-  into the image)? (The 21-plate re-check after the re-orientation removal passed on r42.)
+- (2026-11-12) Look at the camera tile on the live build (not checked on r50).
+- Unraid scratch: the maintainer approved deleting the r45 to r50 check folders as they
+  came up; the last prompt (`data/r50-check/`, `/workspace/tmt-coldstart`) may not have
+  been pasted yet. Older leftovers and old `tmt-backup-pre-r*.db` backups: have Unraid
+  list what is still there before asking again. Stale remote branches (`ci/*`, `feat/*`,
+  `fix/*`, `hotfix/*`): list with `git branch -r` and ask before deleting.
 
 - (2026-11-11) After the next deploy behind https, on a real iPhone and Android phone:
   install from the browser, icon and name ("TMT Builds"), splash, status bar and safe areas
