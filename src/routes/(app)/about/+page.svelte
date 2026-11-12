@@ -53,6 +53,13 @@
 			>
 			and the license text is in
 			<a href="{REPO_URL}/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">LICENSE</a>.
+			What changed in each release is in the
+			<a
+				href="{REPO_URL}/blob/main/CHANGELOG.md"
+				target="_blank"
+				rel="noopener noreferrer"
+				data-testid="changelog-link">Changelog</a
+			>.
 		</p>
 	</section>
 

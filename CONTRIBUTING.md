@@ -40,11 +40,10 @@ A change is done when `check`, `lint`, `test` and `build` pass, the end-to-end s
 
 ### How CI runs
 
-The workflow is `.github/workflows/docker.yml`. While the repository is private, CI is kept cheap:
+The workflow is `.github/workflows/docker.yml`:
 
-- A push to `main` or a pull request runs only the `test` job (check, lint, unit tests, route-folder guard). A push that changes only docs runs nothing.
-- The `e2e` job and the Docker image build run on `v*` tags and on manual runs: Actions, then docker, then Run workflow.
-- After the repository goes public, set the repository variable `CI_FULL=true` (Settings, Secrets and variables, Actions, Variables) so every push and pull request runs the full pipeline, end-to-end suite included.
+- A push to `main` or a pull request runs the `test` job (check, lint, unit tests, route-folder guard). A push that changes only docs runs nothing.
+- The `e2e` job and the Docker image build run on `v*` tags and on manual runs (Actions, then docker, then Run workflow). When the repository variable `CI_FULL=true` is set (Settings, Secrets and variables, Actions, Variables), every push and pull request also runs the end-to-end suite, and every push to `main` builds the image. Pull requests never publish an image.
 
 Run the end-to-end specs you touched locally before you open a pull request.
 

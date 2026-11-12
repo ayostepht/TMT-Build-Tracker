@@ -1,10 +1,10 @@
 name: docker
 
-# Private-repo mode (Actions minutes are limited): a push to main or a pull request runs only
+# Default mode (repository variable CI_FULL unset): a push to main or a pull request runs only
 # `test` (~4 min). `e2e` and `image` run on `v*` tags and on manual runs (Actions > docker >
-# Run workflow). SWITCH FOR PUBLIC: once the repo is public and minutes are free, set the
-# repository variable CI_FULL=true (Settings > Secrets and variables > Actions > Variables) and
-# e2e runs on every push and PR, image on every push to main. Delete the variable to go back.
+# Run workflow). Set the repository variable CI_FULL=true (Settings > Secrets and variables >
+# Actions > Variables) and e2e runs on every push and PR, image on every push to main (and
+# `latest` follows main). Delete the variable to go back.
 on:
   push:
     branches: [main]
@@ -120,8 +120,9 @@ jobs:
             type=sha
       - uses: docker/build-push-action@v7
         with:
-          # The repo is private for now: the Dockerfile reads the kit pack release asset through the
-          # GitHub API with this token (used by the download step only). Once public, the plain URL works.
+          # The Dockerfile uses this token only in the kit pack download step, to read the release
+          # asset through the GitHub API (needed in a private fork; on the public repository the
+          # plain release URL works too).
           secrets: |
             gh_token=${{ secrets.GITHUB_TOKEN }}
           context: .

@@ -2,7 +2,7 @@
 
 Tested with the Docker tab of Unraid 7. Allow about 0.5 GB of disk for the image and about 150 MB in appdata (the installed kit pack: 3D model and print geometry). Memory use is small (about 250 MB at rest); a site admin who imports STEP files peaks near 650 MB for a minute or two, and an admin print-geometry import near 500 MB.
 
-The image is `ghcr.io/ayostepht/tmt-build-tracker`. While the repository is private the package is private too: read [Image access](../../README.md#image-access) in the README first, or the pull fails with `unauthorized`.
+The image is `ghcr.io/ayostepht/tmt-build-tracker`. The image is public: Unraid pulls it without a login. It is published for x86-64 and arm64; only x86-64 has been run by the project.
 
 ## 1. Prepare the appdata folder
 
@@ -36,15 +36,7 @@ wget -O /boot/config/plugins/dockerMan/templates-user/my-tmt-build-tracker.xml \
   https://raw.githubusercontent.com/ayostepht/TMT-Build-Tracker/main/unraid/tmt-build-tracker.xml
 ```
 
-While the repository is private `wget` gets a 404. Use a GitHub token that can read the repository (classic `repo` scope, or a fine-grained token with Contents: read) instead, and do not leave the token in a script:
-
-```bash
-curl -fL -H "Authorization: token <your token>" \
-  -o /boot/config/plugins/dockerMan/templates-user/my-tmt-build-tracker.xml \
-  https://raw.githubusercontent.com/ayostepht/TMT-Build-Tracker/main/unraid/tmt-build-tracker.xml
-```
-
-(Or copy the contents of `unraid/tmt-build-tracker.xml` into a file of that name yourself.) The template icon is loaded from GitHub, so it only shows once the repository is public.
+(Or copy the contents of `unraid/tmt-build-tracker.xml` into a file of that name yourself.) The template icon is loaded from GitHub.
 
 Then:
 

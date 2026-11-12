@@ -113,6 +113,10 @@ test('about page: version, feedback link, MakeGood credit, safe external links',
 	expect(body.ok).toBe(true);
 	expect(body.version).toBe(PKG_VERSION);
 
+	await expect(page.getByTestId('changelog-link')).toHaveAttribute(
+		'href',
+		/\/blob\/main\/CHANGELOG\.md$/
+	);
 	await expect(page.getByTestId('feedback-link')).toHaveAttribute('href', /\/issues$/);
 	await expect(page.locator('main a[href*="makerworld.com"]').first()).toBeVisible();
 
