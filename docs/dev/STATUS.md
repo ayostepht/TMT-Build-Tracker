@@ -10,6 +10,32 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
+0. **r48 is committed (c64d852), gated, NOT yet approved for deploy**: the maintainer is
+   reviewing it in the local preview (`npm run preview:demo`, port 5200; see
+   dev-environments). Do not deploy until STATUS says "r48 ready to deploy". Contents: one
+   actionable status badge for plates and parts (`StatusBadge`, `WherePrinting`; choosing
+   Printing with a connected printer asks where; Printed opens the log sheet; finishing is
+   now 3 taps); phone color picker (one filter row with a Brand select, card grows with
+   content, shorter pinned viewer while picking; single brand on the phone); Help is a
+   top-level nav item, top bar fits at 761-1100 px; Printers page shows linked and running
+   prints, other unlinked ones behind a closed disclosure; build-details save records only
+   changed fields (`Outcome.skip`); landing spacing; public docs wording pass. Gate: check,
+   lint, 1468 unit tests, build, full e2e 195 passed; security review clean. Open
+   question for the maintainer: single-part plates show the status on plate and part.
+   Workflow from now on (maintainer, 2026-11-12): before every Unraid deploy, start the
+   local preview and let the maintainer review there first.
+   **Next: r49 Integrations** (maintainer's design, 2026-11-12): Integrations is the one
+   place to add or change connections, each with setup steps and a "works hosted / needs
+   your own network" label; the Printers page only lists printers that exist (empty state
+   and a Manage link point to Integrations; the per-workspace Printers tab goes away);
+   OctoEverywhere becomes a vendor-neutral option (today only Elegoo works through a link:
+   build Klipper and OctoPrint through a link, confirm whether Bambu LAN can work at all);
+   a manual printer with a name and no address for hand logging (check whether a schema
+   change is needed and tell the maintainer first); hosted mode (`TMT_MODE=public`) allows
+   OctoEverywhere links only (revisits the "no printers in public mode" rule with the
+   maintainer's yes; needs `security-reviewer`); a quiet "Connect a printer" hint on Print
+   and Files when none is connected; Help section. Later ideas, not started: PrusaLink /
+   Prusa Connect, finish notifications (ntfy, Discord, Home Assistant); avoid Bambu cloud.
 1. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
    `test`, no restore needed). Rehearsal clean (no upgrade line, journal still the
    baseline row, row counts equal). All 8 r47 checks passed on a copy of the live data with

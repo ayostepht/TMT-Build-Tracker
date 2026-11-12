@@ -409,6 +409,19 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## App shell (`app-shell`)
 
+- r48: top-level nav is Builds, Studio, Designs, Printers, Help; the account menu holds
+  Create a chapter (phone), Kit admin, Account, Sign out; a 761-1100 px media block
+  shortens the chapter select and account name. Tracking controls are `StatusBadge`
+  (menu button in the top layer; plain badge for viewers) used by `PlateControl` (plate
+  status derived in the component: Printing, Printed, Reprint, Partly printed, To print)
+  and `PartRow`; `StartOnPrinter` hosts the `WherePrinting` dialog and the
+  `ExpectedConfirm` follow-up. `updateBuild` records only changed fields; `Outcome.skip`
+  in `mutateBuild` writes no activity row and emits no event. `teamJobs` returns up to 15
+  linked plus 30 unlinked jobs; `splitTeamJobs` (`printers/status.ts`) puts linked and
+  running jobs in "Recent prints" and the rest in a closed disclosure. Phone swatch picker
+  (<900 px): Brand select instead of chips, card grows with content, `.design.pickopen`
+  shrinks the pinned stage. Local review tool: `scripts/preview-demo.mjs`
+  (`npm run preview:demo`, see `docs/dev/dev-environments.md`).
 - r47: the signed-in layout has a footer (`app-footer`: Help, About, Privacy, Terms) and
   About in the account menu. The workspace page lists Builds first, then `LandingBoard`
   (Now printing, Next up). `FilamentTiles.svelte` renders the Overview filaments as one
