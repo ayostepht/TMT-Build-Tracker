@@ -138,6 +138,43 @@ test('upload sheet is a real modal: focus in, Tab trapped, Escape closes, focus 
 	await page.keyboard.press('Escape');
 	await expect(dlg).toBeHidden();
 	await expect(page.getByTestId('use-own-sliced')).toBeFocused();
+
+	// The Cancel button returns focus to the opener too.
+	await opener.click();
+	await expect(dlg).toBeVisible();
+	await dlg.getByRole('button', { name: 'Cancel' }).first().click();
+	await expect(dlg).toBeHidden();
+	await expect(page.getByTestId('use-own-sliced')).toBeFocused();
+});
+
+test('upload sheet: after a successful upload focus is not lost to the page body', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await signUp(page, 'Una Upload', uniqueEmail('upfocus'));
+	const id = await createBuild(page, 'Upload focus chair');
+	await page.goto(`/builds/${id}/files`);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('use-own-sliced').click();
+	const dlg = page.getByRole('dialog', { name: 'Use my own sliced file' });
+	await dlg.getByTestId('3mf-file').setInputFiles({
+		name: 'my chair.3mf',
+		mimeType: 'model/3mf',
+		buffer: Buffer.from(sliced())
+	});
+	await dlg.getByTestId('apply-upload').click();
+	await expect(dlg).toBeHidden();
+	await expect(page.getByTestId('layout-name')).toHaveText('Your uploaded 3MF');
+	// The sliced-file card was replaced by the uploaded-file card: focus is on a control of the page.
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const a = document.activeElement;
+				return !!a && a !== document.body && a.getAttribute('data-testid');
+			})
+		)
+		.toMatch(/use-own-sliced|template-replace/);
 });
 
 test('compact printer summary, switching layouts asks first, printers from other workspaces', async ({

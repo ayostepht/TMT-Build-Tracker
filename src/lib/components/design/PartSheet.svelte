@@ -208,6 +208,20 @@
 		color: var(--warn);
 		white-space: nowrap;
 	}
+	/* Touch screens: grow the hit area of the small close button and guide link to 44 px without
+	   changing the chip's layout. */
+	@media (pointer: coarse) {
+		.x,
+		.guide {
+			position: relative;
+		}
+		.x::after,
+		.guide::after {
+			content: '';
+			position: absolute;
+			inset: -6px;
+		}
+	}
 	.narrow {
 		display: none;
 	}

@@ -65,3 +65,31 @@ export function inlineConfirm(node: HTMLElement, options: InlineConfirmOptions) 
 		}
 	};
 }
+
+/**
+ * Focus return for a native <dialog> opened with showModal() inside a Svelte action. Call it
+ * before showModal() (it records the opener), and call the returned function from the action's
+ * `destroy`: an unmounted <dialog> gets no native focus restore, only Escape does. The opener is
+ * refocused only when focus is lost (on <body> or inside the closing dialog), so a native Escape
+ * restore is not repeated and a deliberate focus move elsewhere is not stolen. It runs now and
+ * again after a tick, because the opener may be re-rendered after a form action. If the opener is
+ * gone by then (e.g. the photo it showed was deleted), `fallback` picks another target.
+ */
+export function rememberOpener(
+	fallback?: () => HTMLElement | null | undefined
+): (dialog: HTMLElement) => void {
+	const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+	return (dialog) => {
+		const lost = () => {
+			const a = document.activeElement;
+			return !a || a === document.body || dialog.contains(a);
+		};
+		const restore = (useFallback: boolean) => {
+			if (!lost()) return;
+			const target = opener?.isConnected ? opener : useFallback ? fallback?.() : null;
+			if (target?.isConnected) target.focus({ preventScroll: true });
+		};
+		restore(false);
+		setTimeout(() => restore(true), 0);
+	};
+}

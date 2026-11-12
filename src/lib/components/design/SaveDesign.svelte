@@ -130,7 +130,7 @@
 		flex: 1;
 		min-width: 0;
 		padding: var(--sp-4) var(--sp-5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);

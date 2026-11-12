@@ -277,14 +277,14 @@
 		width: 100%;
 		box-sizing: border-box;
 		padding: var(--sp-5) var(--sp-5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
 		font-family: inherit;
 	}
 	input[type='color'] {
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 	}

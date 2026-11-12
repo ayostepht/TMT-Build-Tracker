@@ -215,15 +215,27 @@
 	/**
 	 * Moves the dialog to <body> (the picker may sit inside a form, and PrinterForm is a form too)
 	 * and opens it as a modal: the browser gives focus trapping, an inert page, Escape and focus
-	 * restore.
+	 * restore. Closing by Cancel or a successful add unmounts the dialog, which gets no native
+	 * restore, so the opener is remembered and refocused on destroy (only if focus was lost).
 	 */
 	function modal(node: HTMLDialogElement) {
+		const active = document.activeElement;
+		const opener = active instanceof HTMLElement && active !== document.body ? active : null;
 		document.body.appendChild(node);
 		node.showModal();
 		return {
 			destroy() {
 				if (node.open) node.close();
 				node.remove();
+				// Give focus back unless something outside the dialog already took it on purpose.
+				const restore = () => {
+					const a = document.activeElement;
+					const lost = !a || a === document.body || node.contains(a);
+					if (lost && opener?.isConnected) opener.focus({ preventScroll: true });
+				};
+				restore();
+				// The opener may be re-rendered a tick later (e.g. after the printer list reloads).
+				setTimeout(restore, 0);
 			}
 		};
 	}

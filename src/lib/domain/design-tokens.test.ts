@@ -68,6 +68,23 @@ describe('theme tokens', () => {
 		it(`${name}: muted text on the --line tag background reaches 4.5:1`, () => {
 			expect(ratio(T.muted, T.line)).toBeGreaterThanOrEqual(4.5);
 		});
+		it(`${name}: the focus ring (accent) reaches 3:1 against every surface it is drawn on`, () => {
+			const low = ['paper', 'card', 'accent-soft']
+				.map((b) => [b, ratio(T.accent, T[b])] as const)
+				.filter(([, r]) => r < 3)
+				.map(([b, r]) => `accent on ${b}: ${r.toFixed(2)}`);
+			expect(low).toEqual([]);
+		});
+		it(`${name}: --field-line (text field and select borders) reaches 3:1 on paper and card`, () => {
+			// WCAG 1.4.11: the border is the only cue that a field is a field, so it needs 3:1
+			// (the decorative --line hairline, about 1.3:1, is for cards and dividers only).
+			expect(ratio(T['field-line'], T.paper)).toBeGreaterThanOrEqual(3);
+			expect(ratio(T['field-line'], T.card)).toBeGreaterThanOrEqual(3);
+		});
+		it(`${name}: plate bed labels reach 4.5:1 and bed lines 3:1 on the bed`, () => {
+			expect(ratio(T['bed-text'], T.bed)).toBeGreaterThanOrEqual(4.5);
+			expect(ratio(T['bed-line'], T.bed)).toBeGreaterThanOrEqual(3);
+		});
 		it(`${name}: --on-fill on solid accent, ok, bad and run fills reaches 4.5:1`, () => {
 			const low = ['accent', 'ok', 'bad', 'run']
 				.map((k) => [k, ratio(T['on-fill'], T[k])] as const)

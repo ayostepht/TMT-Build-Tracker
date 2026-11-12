@@ -165,7 +165,7 @@
 	}
 	input {
 		padding: var(--sp-4) var(--sp-5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);
@@ -262,6 +262,20 @@
 		border: 1px solid var(--line);
 		color: var(--muted);
 		white-space: nowrap;
+	}
+	/* Touch screens (any width): 44 px targets for the filter chips and the part rows. */
+	@media (pointer: coarse) {
+		.pchip,
+		.prow {
+			min-height: 44px;
+		}
+		.pchip {
+			min-width: 44px;
+			justify-content: center;
+		}
+		input {
+			min-height: 44px;
+		}
 	}
 	/* Desktop: the pane scrolls, so the search + chips and then the group headers stick under the tabs. */
 	@media (min-width: 900px) {

@@ -95,18 +95,20 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
-- **Design studio** [design-studio-ui]: a11y pass (audit L1-L4: contrast, focus order,
-  aria); Options section placement at the bottom of the Parts tab (audit M6, needs a layout
+- **Design studio** [design-studio-ui]: a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
+  borders, `design-announce` live region, swatch focus ring, picker fields styled); left
+  over: eight field rules in `app.css` still border with `--line` (`.chapter select`,
+  `.spools input`, `.tog select`, `.logform select`, `.slicer-in input`, `.now-lab input`,
+  `.fil-edit label.field input`, `.detail select`), `.btn` is 29 px high on touch tablets
+  and 40 px on phones (raise to 44 px on coarse pointers app-wide? maintainer's call); Options section placement at the bottom of the Parts tab (audit M6, needs a layout
   decision from the maintainer); "MakeGood · CC0" credit wraps over the chair at 360 px;
   `share/ApplyDesign` uses raw fetch (add `listDesigns` to `client/api.ts`);
   `editableTargets` lacks `kind` (can't tell builds from drafts); no "start a draft from
   this design"; draft cards have no 3D snapshot. Not yet raised with the maintainer: a
   selected part's chip covers the lower third of the phone stage; phone toasts cover the
-  stage top for ~8 s. Focus return after closing a dialog by button is
-  fixed in `share/Dialog.svelte` and the Studio draft delete; the same gap remains in
-  `PhotoGallery.svelte:73` (lightbox), `GuideViewer.svelte:84`, `BedPicker.svelte:222` and
-  the `PlatesPanel.svelte:61` upload sheet (opener not saved; copy the snippet from
-  `Dialog.svelte`) [app-shell, plates-3mf]. Three converting asks ("Switch layout and
+  stage top for ~8 s. Dialog focus return is fixed everywhere (shared
+  `rememberOpener` in `client/focus.ts`; `Dialog.svelte`, `BedPicker` and `PlatesPanel`
+  still carry inline copies: unify later). Three converting asks ("Switch layout and
   convert", "Convert print logs", "Re-arrange and convert") and "Replace colors" are not
   flagged `danger`: flag them if the maintainer wants Cancel-first there too.
 - **Leftovers**: SDCP `PrintInfo.Status` 20 mid-print is unlabelled, needs the real
@@ -237,6 +239,8 @@ Route each to the agent named in brackets.
   (`ask(msg, { danger: true })`, or `danger` plus `data-cancel` on `Dialog`); new ones must
   be flagged. Root `CHANGELOG.md` is the public release log: a user-visible change adds a
   line under Unreleased; `docs/dev/CHANGELOG.md` stays the internal deploy history.
+- `--field-line` is the border token for form fields (3:1); `--line` is for cards and
+  dividers only (2026-11-11).
 - Git history is kept as is when the repo goes public (private-range LAN addresses in old
   commits are accepted; no rewrite). Branch protection (no force push, no deletion,
   required `test` + `e2e`) is set the moment the repo is public: GitHub refuses it on a

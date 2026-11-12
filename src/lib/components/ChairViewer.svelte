@@ -174,7 +174,7 @@
 	class="chair-viewer"
 	bind:this={host}
 	role="img"
-	aria-label="3D view of the chair. Drag to turn it, pinch or scroll to zoom."
+	aria-label="3D view of the chair. Drag to turn it, pinch or scroll to zoom. The part list and color slots next to it do the same things with the keyboard."
 >
 	{#if status === 'nowebgl'}
 		{#if fallback}

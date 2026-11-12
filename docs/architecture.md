@@ -329,7 +329,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   the shared `design/share/Dialog.svelte`. No browser `confirm()` remains. `Dialog` takes
   `danger` (initial focus on the first `[data-cancel]`; `createAsk().ask(msg, { danger })`
   forwards it through `AskDialog`), records the opener before `showModal()` and refocuses
-  it on unmount when it is still connected and focus was lost.
+  it on unmount when it is still connected and focus was lost. Other native dialogs
+  (photo lightbox, guide viewer, New-printer dialog, upload sheet) do the same;
+  `rememberOpener(fallback?)` in `client/focus.ts` is the shared helper. Design studio
+  a11y: `DesignWorkspace` announces slot and part color changes in a `design-announce`
+  status region; 44 px targets are `pointer: coarse` blocks in `SwatchPicker`, `PartList`,
+  `PartSheet` and `DesignWorkspace`; the contrast guard is `domain/design-tokens.test.ts`.
 
 - **Design system** (`src/app.css`): scales `--fs-*` (8 steps, `--fs-field` 16 px for
   inputs), `--sp-*`, `--r-*`, `--shadow-*`; breakpoints 760 (phone shell), 900 (two

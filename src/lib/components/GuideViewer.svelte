@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { guidePageImageUrl } from '#lib/client/api.ts';
+	import { rememberOpener } from '#lib/client/focus.ts';
 	import { MAKEGOOD_GUIDE_URL } from '#lib/makegood.ts';
 
 	const ctx = getBuildCtx();
@@ -81,6 +82,7 @@
 	/** Opens the element as a modal <dialog>: native focus trap, inert page, Escape and focus restore. */
 	function modal(node: HTMLDialogElement) {
 		let gone = false;
+		const giveFocusBack = rememberOpener();
 		node.showModal();
 		node.querySelector<HTMLElement>('[data-initial]')?.focus({ preventScroll: true });
 		// Native Escape closes the dialog and fires `close`; ignore the one our own teardown causes.
@@ -92,6 +94,7 @@
 			destroy() {
 				gone = true;
 				if (node.open) node.close();
+				giveFocusBack(node);
 			}
 		};
 	}

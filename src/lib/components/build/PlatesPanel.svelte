@@ -43,8 +43,10 @@
 	// The control that opened the upload sheet. The "Use my own sliced file" card is replaced while
 	// the sheet is open, so focus goes back to the control with the same test id when it closes.
 	let openerId: string | null = null;
+	let openerEl: HTMLElement | null = null;
 	function openUpload() {
 		const a = document.activeElement;
+		openerEl = a instanceof HTMLElement && a !== document.body ? a : null;
 		openerId = a instanceof HTMLElement ? (a.dataset.testid ?? null) : null;
 		uploading = true;
 		notice = null;
@@ -58,10 +60,30 @@
 	}
 	/** Opens the upload sheet as a modal <dialog>: native focus trap, inert page and Escape. */
 	function modal(node: HTMLDialogElement) {
+		// Remember the opener: an unmounted <dialog> does not get native focus restore.
+		const active = document.activeElement;
+		const opener =
+			openerEl ?? (active instanceof HTMLElement && active !== document.body ? active : null);
+		openerEl = null;
 		node.showModal();
 		return {
 			destroy() {
 				if (node.open) node.close();
+				// Give focus back unless something outside the dialog already took it on purpose.
+				const restore = () => {
+					const a = document.activeElement;
+					const lost = !a || a === document.body || node.contains(a);
+					if (!lost) return;
+					const target = opener?.isConnected
+						? opener
+						: openerId
+							? document.querySelector<HTMLElement>(`[data-testid="${openerId}"]`)
+							: null;
+					target?.focus({ preventScroll: true });
+				};
+				restore();
+				// The opener card is re-rendered a tick later; closeUpload's lookup covers the rest.
+				setTimeout(restore, 0);
 			}
 		};
 	}

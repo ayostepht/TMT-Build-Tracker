@@ -63,6 +63,8 @@
 	--ink: #161a2b;
 	--muted: #5b6276;
 	--line: #dde0e8;
+	/* border of a text field, select or other control whose edge is the only cue (3:1 on paper and card) */
+	--field-line: #7a8196;
 	--accent: #2b3f9e;
 	--accent-soft: #e7eafb;
 	--ok: #1e764b;
@@ -79,7 +81,7 @@
 	--bed-dot: #bdb7ab;
 	--bed-line: #6f695d;
 	--bed-edge: #aaa498;
-	--bed-text: #6a655b;
+	--bed-text: #655f55;
 	--scrim: rgb(0 0 0 / 0.5);
 	--scrim-strong: rgb(10 12 24 / 0.72);
 	--f-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
@@ -94,6 +96,7 @@
 		--ink: #e8eaf3;
 		--muted: #9aa1b8;
 		--line: #2a3047;
+		--field-line: #6c748f;
 		--accent: #8ea0ff;
 		--accent-soft: #232a4d;
 		--ok: #5fd39a;
@@ -109,7 +112,7 @@
 		--bed-dot: #8b919b;
 		--bed-line: #d4d8df;
 		--bed-edge: #838995;
-		--bed-text: #d6dae1;
+		--bed-text: #e4e7ec;
 		--scrim: rgb(0 0 0 / 0.5);
 		--scrim-strong: rgb(10 12 24 / 0.72);
 		color-scheme: dark;
@@ -121,6 +124,7 @@
 	--ink: #e8eaf3;
 	--muted: #9aa1b8;
 	--line: #2a3047;
+	--field-line: #6c748f;
 	--accent: #8ea0ff;
 	--accent-soft: #232a4d;
 	--ok: #5fd39a;
@@ -136,7 +140,7 @@
 	--bed-dot: #8b919b;
 	--bed-line: #d4d8df;
 	--bed-edge: #838995;
-	--bed-text: #d6dae1;
+	--bed-text: #e4e7ec;
 	--scrim: rgb(0 0 0 / 0.5);
 	--scrim-strong: rgb(10 12 24 / 0.72);
 	color-scheme: dark;
@@ -622,7 +626,7 @@ label.field {
 }
 label.field input {
 	padding: var(--sp-5) var(--sp-5);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--paper);
 	font-size: var(--fs-base);
@@ -1479,7 +1483,7 @@ a.pill-link {
 .form-grid label.field select,
 label.field select {
 	padding: var(--sp-5) var(--sp-5);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--paper);
 	font-size: var(--fs-base);

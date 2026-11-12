@@ -734,6 +734,21 @@
 		gap: var(--sp-4);
 		align-items: center;
 	}
+	/* The app's field style (the same as the other forms): token fill and text, rounded, --field-line border. */
+	.searchrow input,
+	select {
+		padding: var(--sp-4) var(--sp-5);
+		border: 1px solid var(--field-line);
+		border-radius: var(--r-md);
+		background: var(--paper);
+		color: var(--ink);
+		font-size: var(--fs-base);
+	}
+	.searchrow input:focus-visible,
+	select:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
 	.searchrow input {
 		flex: 1;
 		min-width: 0;
@@ -820,7 +835,7 @@
 		grid-template-columns: repeat(auto-fill, 36px);
 		gap: var(--sp-4);
 		justify-content: space-between;
-		padding: var(--sp-2);
+		padding: var(--sp-3);
 	}
 	.sw {
 		position: relative;
@@ -836,6 +851,11 @@
 	.sw:focus-visible {
 		transform: scale(1.12);
 		border-color: var(--ink);
+	}
+	/* The keyboard ring sits outside the swatch on the card, so it reads over light and dark colors alike. */
+	.sw:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 	/* Small tag on swatches that palettes never pick (silk, matte, other hardness ...). */
 	.sw.excl::after {
@@ -982,6 +1002,25 @@
 	.ico:focus-visible {
 		background: var(--accent-soft);
 		color: var(--ink);
+	}
+	/* Touch screens wider than a phone (tablets, touch laptops): the same 44 px targets as phones. */
+	@media (pointer: coarse) and (min-width: 900px) {
+		.sw {
+			width: 44px;
+			height: 44px;
+		}
+		.grid {
+			grid-template-columns: repeat(auto-fill, 44px);
+			gap: var(--sp-3);
+		}
+		.sp-chip,
+		.btn.sm,
+		.nhead,
+		.opick,
+		.searchrow input,
+		select {
+			min-height: 44px;
+		}
 	}
 	.sheet > :not(.body) {
 		flex: none;

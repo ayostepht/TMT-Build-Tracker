@@ -165,10 +165,16 @@
 		document.getElementById(`tab-${TABS[n].id}`)?.focus();
 	}
 
+	/** Spoken (not shown) confirmation of a color or part change, for screen reader users. */
+	let announce = $state('');
+
 	async function move(role: string) {
 		if (!part) return;
 		const r = applyPartRole(live, part.slug, role, { bothSides });
 		if (!Object.keys(r.changes).length) return;
+		const to = live.filaments.find((f) => f.key === role);
+		const n = Object.keys(r.changes).length;
+		announce = `${part.name}${n > 1 ? ` and ${n - 1} matching part${n > 2 ? 's' : ''}` : ''} moved to ${roleLabel(role, to)}`;
 		pending = { ...pending, ...r.changes };
 		await ctx.act(() => setBuildDesign(ctx.id, { partRoles: r.changes }));
 		const next = { ...pending };
@@ -178,6 +184,10 @@
 
 	async function pickFilament(role: string, v: PickedFilament) {
 		optimistic = { ...optimistic, [role]: v };
+		announce = `${roleLabel(
+			role,
+			live.filaments.find((f) => f.key === role)
+		)} is now ${v.name}, ${v.material}`;
 		await ctx.act(() => updateFilament(ctx.id, role, v));
 		if (optimistic[role] === v) {
 			const next = { ...optimistic };
@@ -188,6 +198,7 @@
 
 	async function addSlot(v: PickedFilament) {
 		picker = null;
+		announce = `Added a color slot: ${v.name}, ${v.material}`;
 		await ctx.act(() => setBuildDesign(ctx.id, { addRole: v }));
 	}
 
@@ -242,6 +253,15 @@
 	data-testid="design-workspace"
 	style="--stick:{stick}px;--tabsh:{tabsH}px;{fill ? `--fill:${fill}` : ''}"
 >
+	<div
+		class="sr-only"
+		role="status"
+		aria-live="polite"
+		aria-atomic="true"
+		data-testid="design-announce"
+	>
+		{announce}
+	</div>
 	<div class="stagecol">
 		<div class="stagebox">
 			<ModelStage
@@ -533,6 +553,11 @@
 		position: sticky;
 		top: calc(var(--stick, 0px) + var(--stageh) + 8px);
 		z-index: 5;
+	}
+	@media (pointer: coarse) {
+		.dw-tabs > button {
+			min-height: 44px;
+		}
 	}
 	.dw-tabs > button:focus-visible {
 		outline: 2px solid var(--accent);

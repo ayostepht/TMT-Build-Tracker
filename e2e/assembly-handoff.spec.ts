@@ -310,3 +310,51 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	expect(await viewer.page.content()).not.toContain('secret-contact@example.test');
 	await viewer.context.close();
 });
+
+test('photo viewer returns focus to the thumbnail, or to Add photos after the last delete', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'photofocus');
+	await page.goto(`/builds/${buildId}/finish`);
+	await page.waitForLoadState('networkidle');
+	const input = page.locator('#photos').getByTestId('photo-input');
+	for (const n of [1, 2])
+		await input.setInputFiles({ name: `c${n}.png`, mimeType: 'image/png', buffer: PNG_64 });
+	const thumbs = page.locator('.gallery .thumb');
+	await expect(thumbs).toHaveCount(2);
+	const viewer = page.getByRole('dialog', { name: 'Photo viewer' });
+
+	await thumbs.nth(1).click();
+	await expect(viewer).toBeVisible();
+	await page.getByRole('button', { name: 'Close photo' }).click();
+	await expect(viewer).toBeHidden();
+	await expect(thumbs.nth(1)).toBeFocused();
+
+	await thumbs.nth(0).click();
+	await expect(viewer).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(viewer).toBeHidden();
+	await expect(thumbs.nth(0)).toBeFocused();
+
+	await thumbs.nth(1).click();
+	await expect(viewer).toBeVisible();
+	await viewer.click({ position: { x: 2, y: 2 } });
+	await expect(viewer).toBeHidden();
+	await expect(thumbs.nth(1)).toBeFocused();
+
+	// Delete from inside the viewer: one photo left, close, focus lands on it.
+	await thumbs.nth(1).click();
+	await viewer.getByRole('button', { name: 'Delete' }).click();
+	await page.getByTestId('ask-confirm').click();
+	await expect(thumbs).toHaveCount(1);
+	await page.getByRole('button', { name: 'Close photo' }).click();
+	await expect(thumbs.nth(0)).toBeFocused();
+
+	// The last photo: the viewer closes itself and focus goes to the Add button.
+	await thumbs.nth(0).click();
+	await viewer.getByRole('button', { name: 'Delete' }).click();
+	await page.getByTestId('ask-confirm').click();
+	await expect(thumbs).toHaveCount(0);
+	await expect(viewer).toBeHidden();
+	await expect(page.locator('#photos').getByRole('button', { name: /^Add .*s$/ })).toBeFocused();
+});

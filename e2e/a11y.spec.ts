@@ -225,3 +225,24 @@ test('a toast raised before a modal opens is shown but not reachable while the m
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	expect(await reachable(undo)).toBe(true);
 });
+
+test('build guide viewer: Close, Escape and a backdrop click return focus to the opener', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'guidefocus');
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	const opener = page.locator('.ptb-guide').first();
+	const dlg = page.getByRole('dialog');
+	for (const close of [
+		() => page.getByRole('button', { name: 'Close guide' }).click(),
+		() => page.keyboard.press('Escape'),
+		() => dlg.click({ position: { x: 2, y: 2 } })
+	]) {
+		await opener.click();
+		await expect(dlg).toBeVisible();
+		await close();
+		await expect(dlg).toBeHidden();
+		await expect(opener).toBeFocused();
+	}
+});

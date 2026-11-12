@@ -139,11 +139,21 @@
 		max-width: 420px;
 		min-height: 40px;
 		padding: var(--sp-4) var(--sp-5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--card);
 		color: var(--ink);
 		font-size: var(--fs-base);
+	}
+	@media (pointer: coarse) {
+		.meta h3 a {
+			display: inline-block;
+			padding-block: var(--sp-6);
+		}
+		.filters input,
+		.filters :global(.ds-seg > button) {
+			min-height: 44px;
+		}
 	}
 	.count {
 		font-size: var(--fs-md);

@@ -215,3 +215,198 @@ test('shared dialog: close button is at least 40px and named', async ({ page }) 
 	expect(box!.width).toBeGreaterThanOrEqual(40);
 	expect(box!.height).toBeGreaterThanOrEqual(40);
 });
+
+const openPrimaryPicker = async (page: Page) => {
+	await page
+		.locator('li.slot[data-role="primary"]')
+		.getByRole('button', { name: /^Change filament for/ })
+		.first()
+		.click();
+	const picker = page.getByTestId('swatch-picker');
+	await expect(picker).toBeVisible();
+	return picker;
+};
+
+test('screen reader status: picking a swatch and moving a part are announced', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11yannounce');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	const status = page.getByTestId('design-announce');
+	await expect(status).toHaveAttribute('role', 'status');
+	await expect(status).toHaveText('');
+
+	const picker = await openPrimaryPicker(page);
+	await picker.getByTestId('swatch').first().click();
+	await expect(status).toHaveText(/is now .+/);
+	await picker.getByRole('button', { name: 'Done' }).click();
+
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await page.locator('[data-testid="part-row"][data-slug="wing-left"]').click();
+	const sheet = page.getByTestId('part-sheet');
+	const target = sheet.locator('.slotbtn:not(.cur):not([disabled])').first();
+	const slotName = (await target.locator('.rl').innerText()).trim();
+	await target.click();
+	await expect(status).toHaveText(
+		new RegExp(`moved to ${slotName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+	);
+});
+
+test('touch: swatches, part chips and rows, tabs and picker fields are at least 44px', async ({
+	browser
+}) => {
+	test.setTimeout(90_000);
+	const context = await browser.newContext({
+		viewport: { width: 1024, height: 900 },
+		hasTouch: true
+	});
+	const page = await context.newPage();
+	try {
+		const { buildId } = await ownerWithBuild(page, 'a11ytouch');
+		await page.goto(`/builds/${buildId}/design`);
+		await page.waitForLoadState('networkidle');
+		expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+
+		const tooSmall = (loc: import('@playwright/test').Locator, dim: 'width' | 'height' | 'both') =>
+			loc.evaluateAll(
+				(els, d) =>
+					els
+						.map((e) => e.getBoundingClientRect())
+						.filter((r) => r.width > 0)
+						.filter((r) =>
+							d === 'both' ? r.width < 43.5 || r.height < 43.5 : r[d as 'width' | 'height'] < 43.5
+						)
+						.map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`),
+				dim
+			);
+
+		for (const name of ['Colors', 'Palettes', 'Parts']) {
+			const box = await page.getByRole('tab', { name }).boundingBox();
+			expect(box!.height, `${name} tab height`).toBeGreaterThanOrEqual(43.5);
+		}
+
+		await page.getByRole('tab', { name: 'Parts' }).click();
+		expect(await tooSmall(page.locator('.pchip'), 'height')).toEqual([]);
+		expect(await tooSmall(page.locator('.prow'), 'height')).toEqual([]);
+		await page.getByRole('tab', { name: 'Colors' }).click();
+
+		const picker = await openPrimaryPicker(page);
+		const sw = picker.locator('button.sw');
+		expect(await sw.count()).toBeGreaterThan(0);
+		expect(await tooSmall(sw, 'both')).toEqual([]);
+	} finally {
+		await context.close();
+	}
+});
+
+test('swatch picker: keyboard focus ring is a solid outline', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11yring');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	const picker = await openPrimaryPicker(page);
+	// Focus a swatch, then move with an arrow key so :focus-visible applies as for a keyboard user.
+	await picker.locator('button.sw').first().focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(picker.locator('button.sw').nth(1)).toBeFocused();
+	const ring = await page.evaluate(() => {
+		const cs = getComputedStyle(document.activeElement as Element);
+		return {
+			style: cs.outlineStyle,
+			width: parseFloat(cs.outlineWidth),
+			cls: (document.activeElement as Element).className
+		};
+	});
+	expect(ring.cls).toContain('sw');
+	expect(ring.style).toBe('solid');
+	expect(ring.width).toBeGreaterThanOrEqual(2);
+});
+
+test('swatch picker: search and selects are styled 16px, 44px-tall fields on a phone', async ({
+	browser
+}) => {
+	const context = await browser.newContext({
+		viewport: { width: 390, height: 844 },
+		hasTouch: true,
+		isMobile: true
+	});
+	const page = await context.newPage();
+	try {
+		const { buildId } = await ownerWithBuild(page, 'a11yfields');
+		await page.goto(`/builds/${buildId}/design`);
+		await page.waitForLoadState('networkidle');
+		const picker = await openPrimaryPicker(page);
+		const fields = [
+			picker.getByLabel('Search colors'),
+			picker.getByLabel('Color family'),
+			picker.getByLabel('More brands')
+		];
+		for (const f of fields) {
+			await f.scrollIntoViewIfNeeded();
+			const m = await f.evaluate((el) => {
+				const cs = getComputedStyle(el);
+				return {
+					label: el.getAttribute('aria-label'),
+					radius: parseFloat(cs.borderTopLeftRadius),
+					font: parseFloat(cs.fontSize),
+					height: el.getBoundingClientRect().height
+				};
+			});
+			expect(m.radius, `${m.label} radius`).toBeGreaterThan(0);
+			expect(m.font, `${m.label} font size`).toBeGreaterThanOrEqual(16);
+			expect(m.height, `${m.label} height`).toBeGreaterThanOrEqual(43.5);
+		}
+	} finally {
+		await context.close();
+	}
+});
+
+test('swatch picker: + Add opens the custom filament form', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11yadd');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	const picker = await openPrimaryPicker(page);
+	await picker.getByRole('button', { name: 'Add a filament' }).click();
+	await expect(picker.getByRole('heading', { name: 'Add a filament' })).toBeVisible();
+	await expect(picker.getByTestId('custom-filament-form')).toBeVisible();
+});
+
+test('Find a part field has a border distinct from the card divider', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11yborder');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	const field = page.getByLabel('Find a part');
+	await expect(field).toBeVisible();
+	const { border, line } = await field.evaluate((el) => {
+		const probe = document.createElement('div');
+		probe.style.borderTop = '1px solid var(--line)';
+		document.body.appendChild(probe);
+		const line = getComputedStyle(probe).borderTopColor;
+		probe.remove();
+		return { border: getComputedStyle(el).borderTopColor, line };
+	});
+	expect(border).not.toBe(line);
+});
+
+test('Colors | Palettes | Parts tabs: arrow keys, Home and End move the selection', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'a11ytabs');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	const tab = (n: string) => page.getByRole('tab', { name: n });
+	await tab('Colors').focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(tab('Palettes')).toHaveAttribute('aria-selected', 'true');
+	await expect(tab('Palettes')).toBeFocused();
+	await page.keyboard.press('End');
+	await expect(tab('Parts')).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('ArrowLeft');
+	await expect(tab('Palettes')).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('Home');
+	await expect(tab('Colors')).toHaveAttribute('aria-selected', 'true');
+});

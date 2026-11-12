@@ -377,6 +377,13 @@
 	.parts {
 		font-size: var(--fs-sm);
 	}
+	@media (pointer: coarse) {
+		.parts summary {
+			display: flex;
+			align-items: center;
+			min-height: 44px;
+		}
+	}
 	.parts summary {
 		cursor: pointer;
 		color: var(--muted);
@@ -431,7 +438,7 @@
 	select,
 	input {
 		padding: var(--sp-4) var(--sp-5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);

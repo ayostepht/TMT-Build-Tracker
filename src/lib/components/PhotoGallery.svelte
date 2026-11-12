@@ -3,6 +3,7 @@
 	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { deletePhoto, photoUrl, uploadPhoto } from '#lib/client/api.ts';
 	import { downscalePhoto } from '#lib/client/images.ts';
+	import { rememberOpener } from '#lib/client/focus.ts';
 	import type { PhotoKind } from '#lib/domain/types.ts';
 	import { ago, getBuildCtx } from './build-context.svelte.ts';
 
@@ -19,6 +20,13 @@
 	let error = $state('');
 	let open = $state<number | null>(null);
 	let input = $state<HTMLInputElement>();
+	let addBtn = $state<HTMLButtonElement>();
+	let gridEl = $state<HTMLUListElement>();
+	// Last photo shown in the viewer: where focus goes if its thumbnail is gone (photo deleted).
+	let lastShown = 0;
+	$effect(() => {
+		if (open !== null) lastShown = open;
+	});
 	const asking = createAsk();
 
 	async function pick(e: Event & { currentTarget: HTMLInputElement }) {
@@ -70,6 +78,10 @@
 	/** Opens the element as a modal <dialog>: native focus trap, inert page, Escape and focus restore. */
 	function modal(node: HTMLDialogElement) {
 		let gone = false;
+		const giveFocusBack = rememberOpener(() => {
+			const thumbs = gridEl?.querySelectorAll<HTMLElement>('.thumb');
+			return thumbs?.length ? thumbs[Math.min(lastShown, thumbs.length - 1)] : addBtn;
+		});
 		node.showModal();
 		node.querySelector<HTMLElement>('[data-initial]')?.focus({ preventScroll: true });
 		// Native Escape closes the dialog and fires `close`; ignore the one our own teardown causes.
@@ -81,6 +93,7 @@
 			destroy() {
 				gone = true;
 				if (node.open) node.close();
+				giveFocusBack(node);
 			}
 		};
 	}
@@ -101,8 +114,12 @@
 <div class="gallery">
 	{#if ctx.canEdit}
 		<div class="up">
-			<button type="button" class="btn" disabled={busy !== null} onclick={() => input?.click()}
-				>Add {label}s</button
+			<button
+				bind:this={addBtn}
+				type="button"
+				class="btn"
+				disabled={busy !== null}
+				onclick={() => input?.click()}>Add {label}s</button
 			>
 			<input
 				bind:this={input}
@@ -118,7 +135,7 @@
 	{/if}
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	{#if photos.length}
-		<ul class="grid">
+		<ul class="grid" bind:this={gridEl}>
 			{#each photos as p, i (p.id)}
 				<li>
 					<button
