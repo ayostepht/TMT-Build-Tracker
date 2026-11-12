@@ -63,6 +63,8 @@ docker run -d --name tmt-build-tracker --restart unless-stopped \
   ghcr.io/ayostepht/tmt-build-tracker:latest
 ```
 
+If port 3000 is already in use on the machine, change the first number (for example `-p 3091:3000`) and open that port instead.
+
 Or with Docker Compose:
 
 ```bash
@@ -79,8 +81,8 @@ Migrations and seeding of the standard kit run automatically at start. The healt
 
 1. `docker ps` shows the container as **healthy** after about 20 seconds. If it stops, run `docker logs tmt-build-tracker`: the log says what is wrong (see [Troubleshooting](docs/guides/troubleshooting.md)).
 2. The log should show `[tmt] seeded templates: makegood-tmt-revb`, `Listening on http://0.0.0.0:3000`, and within a few seconds `[tmt] kit pack: makegood-tmt-revb 1.0.1: model installed, 40 print geometry row(s)...`. A Better Auth warning "Base URL is not set" is normal while `PUBLIC_URL` is empty.
-3. Open `http://<server-ip>:3000`, press **Sign up** and create your account. **The first account created on the install is the site admin** (kit admin pages at `/admin/templates`). More admins can be named in `ADMIN_EMAILS` (case-insensitive; read at start, so restart the container after changing it).
-4. The MakeGood kit (model, print geometry, credit) is already installed; nothing to upload.
+3. Open `http://<server-ip>:3000`, on the sign-in page choose **Create one** (next to "No account?") and create your account. **The first account created on the install is the site admin** (kit admin pages at `/admin/templates`). More admins can be named in `ADMIN_EMAILS` (case-insensitive; read at start, so restart the container after changing it).
+4. The MakeGood kit (model, print geometry, credit) is already installed; nothing to upload. To see it, press **New build** on the page you land on, then **Create build**: a five-step setup opens (Template, Options, Colors, Files, Export) and the 3D chair appears at the Colors step. The in-app **Help** page explains the rest.
 
 **Sign-up is open by default:** anyone who can reach the web page can create an account, and the app sends no email. Keep the port on your LAN, or put it behind a proxy with access control, rather than forwarding it straight to the internet; `SIGNUP=invite` or `SIGNUP=closed` restricts it (see the [environment reference](docs/guides/environment.md)). Builds belong to a person's own workspace or to a chapter, and chapter invitations are copyable `/invite/<id>` links (no email is sent). Forgot a password? See [Backup and upgrade](docs/guides/backup-and-upgrade.md#forgotten-passwords).
 

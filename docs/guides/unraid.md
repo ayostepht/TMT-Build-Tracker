@@ -93,8 +93,8 @@ Empty optional variables are harmless: they behave as if unset. The template has
 
 1. In the Docker tab the container should show as **started**, and after about 20 seconds **healthy**. If it does not start, open its **Logs** (the container's menu, or `docker logs tmt-build-tracker`).
 2. In the log you should see `[tmt] seeded templates: makegood-tmt-revb`, `Listening on http://0.0.0.0:3000`, and within a few seconds `[tmt] kit pack: makegood-tmt-revb 1.0.1: model installed, 40 print geometry row(s)...`. A Better Auth warning "Base URL is not set" is normal while `PUBLIC_URL` is empty.
-3. Click the container icon and choose **WebUI** (or open `http://<unraid-ip>:8420`). Press **Sign up** and create your account. **The first account created on the install is the site admin** (kit admin pages at `/admin/templates`). More admins can be named in `ADMIN_EMAILS` (match is case-insensitive; the variable is read at start, so restart the container after changing it).
-4. The MakeGood kit (model, print geometry, credit) is already installed; nothing to upload.
+3. Click the container icon and choose **WebUI** (or open `http://<unraid-ip>:8420`). On the sign-in page choose **Create one** (next to "No account?") and create your account. **The first account created on the install is the site admin** (kit admin pages at `/admin/templates`). More admins can be named in `ADMIN_EMAILS` (match is case-insensitive; the variable is read at start, so restart the container after changing it).
+4. The MakeGood kit (model, print geometry, credit) is already installed; nothing to upload. To see it, press **New build** on the page you land on, then **Create build**: a five-step setup opens and the 3D chair appears at the Colors step.
 
 Sign-up is open: anyone who can reach the web page can create an account, and the app does not send email. Keep the port on your LAN, or put it behind a proxy with access control, rather than forwarding it straight to the internet. Builds belong to a person's own workspace or to a chapter, and chapter invitations are copyable `/invite/<id>` links (no email is sent).
 
