@@ -10,9 +10,9 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **r48 is committed (c64d852), gated, NOT yet approved for deploy**: the maintainer is
-   reviewing it in the local preview (`npm run preview:demo`, port 5200; see
-   dev-environments). Do not deploy until STATUS says "r48 ready to deploy". Contents: one
+0. **r48 ready to deploy: c64d852** (UI and two small server changes, no migration). The
+   maintainer reviewed it in the local preview on 2026-11-12 ("Demo looks great!").
+   Contents: one
    actionable status badge for plates and parts (`StatusBadge`, `WherePrinting`; choosing
    Printing with a connected printer asks where; Printed opens the log sheet; finishing is
    now 3 taps); phone color picker (one filter row with a Brand select, card grows with
