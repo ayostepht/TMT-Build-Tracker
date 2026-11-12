@@ -40,7 +40,10 @@ This is what the first public release, 1.0.0, will contain. The app is pre-relea
 **Printers (read-only)**
 
 - Show a printer's live status (state, progress, temperatures, file, filament) next to your builds, link a running print job to a plate, and view the printer's camera. Elegoo (SDCP, for example the Centauri Carbon), Klipper (Moonraker), OctoPrint and Bambu Lab in LAN mode are supported. The Elegoo connection is the one in regular use on a real printer (Centauri Carbon); Klipper, OctoPrint and Bambu Lab LAN are newer and the project has not yet run them against real printers, so please report problems in the [issue tracker](https://github.com/ayostepht/TMT-Build-Tracker/issues).
-- Elegoo printers can connect through an OctoEverywhere shared link instead of using one of the printer's few direct connections.
+- Printers are added, edited and removed on the workspace's **Integrations** page (**Add a printer**), with short setup steps for each kind. A chapter's Printers tab shows their status.
+- Elegoo, Klipper (Moonraker) and OctoPrint printers can connect through an OctoEverywhere shared link instead of a local address (for Elegoo this also spares the printer's few direct connections). Elegoo, on your network or through a link, is the one in regular use; Klipper and OctoPrint through a link are expected to work from OctoEverywhere's documentation but have not been confirmed against real printers.
+- A **Not connected** printer: a name only, for logging prints by hand. The app never contacts it.
+- A plate is started and logged from its status badge: **Where is it printing?** picks the printer (or none), and **Printed** logs the result.
 - The app never moves, heats, pauses, stops or starts a printer and never sends it a file. The one command it sends is Elegoo's "camera on". See [Printers](docs/guides/printers.md).
 - Optional Spoolman link to show spool weight remaining and deduct filament. The Spoolman link is new and not yet proven against a real Spoolman install.
 
@@ -58,14 +61,14 @@ This is what the first public release, 1.0.0, will contain. The app is pre-relea
 - One Docker container with one data folder; start it with an empty folder and it sets itself up. Images for x86-64 and arm64. Guides for Docker, Docker Compose and Unraid (with a template file), plus backups and upgrades.
 - The MakeGood kit (3D model and print geometry, CC0, by MakeGood) installs automatically on first start. Site admins can import their own print geometry or replace the model.
 - Sign in with email and password, or single sign-on through any OpenID Connect provider (Authentik is documented step by step). Choose who can sign up: anyone, invited people only, or nobody new.
-- A hosted "public" mode with Google and GitHub sign-in only, built-in usage limits, and no printers.
+- A hosted "public" mode with Google and GitHub sign-in only and built-in usage limits. Printers there connect through OctoEverywhere links or are not connected; local printer addresses, printer discovery and Spoolman are not available, and link printers are limited per workspace and per site (`QUOTA_LINK_PRINTERS_PER_WORKSPACE`, `QUOTA_LINK_PRINTERS_TOTAL`, `QUOTA_MANUAL_PRINTERS_PER_WORKSPACE`).
 - Reverse-proxy support with a fixed public address (`PUBLIC_URL`), or none for plain LAN use; guides for Nginx Proxy Manager, Caddy and Traefik.
 - Account page: export your data, delete your account, and (for site admins) hand over the role. Command-line password reset links for forgotten passwords.
 
 ### Security
 
 - Security headers and a content security policy, request size caps, sign-in rate limits, and permission checks on the server for every change.
-- Printer and Spoolman addresses must be on private networks; redirects are never followed. Printer access codes, API keys and shared links are stored encrypted and never sent back to the browser or written to logs.
+- Printer and Spoolman addresses must be on private networks (the one exception is an OctoEverywhere shared link); redirects are never followed. Printer access codes, API keys and shared links are stored encrypted and never sent back to the browser or written to logs.
 - Streaming uploads with zip-bomb protection, and per-user write rate limits and storage quotas in public mode.
 
 ### Known limits

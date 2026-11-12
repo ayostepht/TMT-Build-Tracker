@@ -1,6 +1,7 @@
 import { isObj, type Obj } from '#lib/domain/guards.ts';
 /** Klipper via Moonraker: WebSocket JSON-RPC with `printer.objects.subscribe`. Read-only. */
 import type { PrinterStatus } from '#lib/printers/status.ts';
+import { shareLinkFor, shareLinkUrl } from '#lib/printers/share-link.ts';
 import {
 	guardedFetch,
 	ipForUrl,
@@ -15,7 +16,12 @@ import {
 } from '../outbound';
 import {
 	backoff,
+	CONNECT_TIMEOUT_MS,
+	FLOODED_MESSAGE,
 	HostileGuard,
+	linkBackoff,
+	LINK_SILENT_CLOSE_MS,
+	MessageBudget,
 	num,
 	OVERSIZED_MESSAGE,
 	safeError,
@@ -85,15 +91,50 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 	let retry: ReturnType<typeof setTimeout> | undefined;
 	let ping: ReturnType<typeof setInterval> | undefined;
 	let stale: ReturnType<typeof setTimeout> | undefined;
+	let connectTimer: ReturnType<typeof setTimeout> | undefined;
 	let acc: Obj = {};
 	const hostile = new HostileGuard();
+	// OctoEverywhere shared link: https/wss to the link host (the web interface's own paths), no
+	// port. A relay that hangs up must not be re-dialled every few seconds, so `attempt` resets
+	// only once a valid message arrived and the delays are the slower `linkBackoff` ones.
+	const link = shareLinkFor(cfg.kind, cfg.secrets);
+	const delay = (extra = 0) => (link ? linkBackoff(attempt++) : backoff(attempt++ + extra));
 
+	/**
+	 * Close the socket we hold (it hung, or went silent) and retry on the normal backoff; through a
+	 * link that is `linkBackoff`. The close handler ignores it because `ws` is cleared first.
+	 */
+	const dropSocket = (message: string) => {
+		const s = ws;
+		ws = null;
+		if (s) {
+			s.onmessage = null;
+			try {
+				s.close();
+			} catch {
+				/* ignore */
+			}
+		}
+		clearInterval(ping);
+		clearTimeout(stale);
+		clearTimeout(connectTimer);
+		if (subj.closed) return;
+		subj.emit({ state: 'offline', progress: null, message });
+		clearTimeout(retry);
+		retry = setTimeout(() => void open(), delay());
+	};
 	const armStale = () => {
 		clearTimeout(stale);
-		stale = setTimeout(
-			() => subj.emit({ state: 'offline', progress: null, message: 'No data from the printer' }),
-			45000
-		);
+		const STALE = 45000;
+		stale = setTimeout(() => {
+			if (!link) return dropSocket('No data from the printer');
+			// Link: report it, but keep the socket until the long silence limit.
+			subj.emit({ state: 'offline', progress: null, message: 'No data from the printer' });
+			stale = setTimeout(
+				() => dropSocket('No data from the printer'),
+				LINK_SILENT_CLOSE_MS - STALE
+			);
+		}, STALE);
 	};
 	const reconnect = () => {
 		clearInterval(ping);
@@ -101,23 +142,31 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 		if (subj.closed) return;
 		subj.emit({ state: 'offline', progress: null, message: 'Disconnected' });
 		clearTimeout(retry);
-		retry = setTimeout(() => void open(), backoff(attempt++));
+		retry = setTimeout(() => void open(), delay());
 	};
 
 	async function open() {
 		if (subj.closed) return;
-		let base: string;
-		let named: string;
+		let named: string; // http(s) origin the REST calls go to
+		let wsBase: string;
 		try {
-			// Resolved and validated on every (re)connect; both requests go to the validated IP.
-			const t = await resolveAllowed(cfg.host);
-			base = `${ipForUrl(t.ip)}:${cfg.port ?? 7125}`;
-			named = `${ipForUrl(t.host)}:${cfg.port ?? 7125}`; // keeps the Host header; guardedFetch pins the IP
+			// Resolved and validated on every (re)connect; both requests go to the validated IP
+			// (link: the validated public address; the global WebSocket cannot pin it, so the name is
+			// validated right before the dial).
+			if (link) {
+				await resolveAllowed(link.host, undefined, { allowShareLink: true });
+				named = link.origin;
+				wsBase = `wss://${link.host}`;
+			} else {
+				const t = await resolveAllowed(cfg.host);
+				named = `http://${ipForUrl(t.host)}:${cfg.port ?? 7125}`; // keeps the Host header; guardedFetch pins the IP
+				wsBase = `ws://${ipForUrl(t.ip)}:${cfg.port ?? 7125}`;
+			}
 		} catch (e) {
 			if (subj.closed) return;
 			subj.emit({ state: 'error', progress: null, message: safeError(e) });
 			if (!(e instanceof OutboundError && e.kind === 'public'))
-				retry = setTimeout(() => void open(), backoff(attempt++ + 3));
+				retry = setTimeout(() => void open(), delay(3));
 			return;
 		}
 		if (subj.closed) return;
@@ -125,31 +174,38 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 		if (cfg.secrets.apiKey) {
 			// Browsers/WebSocket cannot set headers: trade the API key for a one-shot token.
 			try {
-				const r = await guardedFetch(`http://${named}/access/oneshot_token`, {
+				const r = await guardedFetch(shareLinkUrl(named, '/access/oneshot_token'), {
 					headers: { 'X-Api-Key': cfg.secrets.apiKey },
-					signal: AbortSignal.timeout(5000)
+					signal: AbortSignal.timeout(5000),
+					...(link ? { allowShareLink: true } : {})
 				});
 				if (isRedirect(r.status)) throw new Error(REDIRECT_MESSAGE);
 				const j = (await readJsonCapped(r)) as { result?: string };
 				if (j.result) query = `?token=${encodeURIComponent(j.result)}`;
 			} catch (e) {
 				subj.emit({ state: 'offline', progress: null, message: safeError(e) });
-				retry = setTimeout(() => void open(), backoff(attempt++));
+				retry = setTimeout(() => void open(), delay());
 				return;
 			}
 			if (subj.closed) return;
 		}
 		let sock: WebSocket;
 		try {
-			sock = new WebSocket(`ws://${base}/websocket${query}`);
+			sock = new WebSocket(`${wsBase}/websocket${query}`);
 		} catch (e) {
 			subj.emit({ state: 'offline', progress: null, message: safeError(e) });
-			retry = setTimeout(() => void open(), backoff(attempt++));
+			retry = setTimeout(() => void open(), delay());
 			return;
 		}
 		ws = sock;
-		/** Oversized or non-text frame: drop the socket and come back on a long backoff. */
-		const tooBig = () => {
+		const budget = new MessageBudget();
+		// A peer that accepts the TCP connection but never finishes the handshake.
+		clearTimeout(connectTimer);
+		connectTimer = setTimeout(() => {
+			if (ws === sock && sock.readyState === 0) dropSocket('Timed out connecting to the printer');
+		}, CONNECT_TIMEOUT_MS);
+		/** Oversized, non-text or flooding peer: drop the socket and come back on a long backoff. */
+		const tooBig = (message = OVERSIZED_MESSAGE) => {
 			ws = null; // the close handler below then ignores this socket
 			sock.onmessage = null;
 			clearInterval(ping);
@@ -159,12 +215,18 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			} catch {
 				/* ignore */
 			}
-			subj.emit({ state: 'error', progress: null, message: OVERSIZED_MESSAGE });
+			clearTimeout(connectTimer);
+			subj.emit({ state: 'error', progress: null, message });
 			clearTimeout(retry);
-			retry = setTimeout(() => void open(), hostile.trip());
+			// Through a link: never faster than the slow link backoff either.
+			retry = setTimeout(
+				() => void open(),
+				Math.max(hostile.trip(), link ? linkBackoff(attempt++) : 0)
+			);
 		};
 		sock.onopen = () => {
-			attempt = 0;
+			clearTimeout(connectTimer);
+			if (!link) attempt = 0;
 			acc = {};
 			armStale();
 			sock.send(
@@ -198,9 +260,12 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			}
 		};
 		const handle = (data: unknown) => {
+			// Checked before JSON.parse: nothing over the cap, or past the per-second budget, is parsed.
 			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
+			if (!budget.take(data.length)) return tooBig(FLOODED_MESSAGE);
 			const m: unknown = JSON.parse(data);
 			if (!isObj(m)) return;
+			attempt = 0;
 			hostile.good();
 			armStale();
 			if (m.id === 1 && isObj(m.result) && isObj(m.result.status)) {
@@ -219,6 +284,7 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 		};
 		sock.onerror = () => {};
 		sock.onclose = () => {
+			clearTimeout(connectTimer);
 			if (ws === sock) reconnect();
 		};
 	}
@@ -231,6 +297,7 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			clearInterval(ping);
 			clearTimeout(retry);
 			clearTimeout(stale);
+			clearTimeout(connectTimer);
 			const s = ws;
 			ws = null;
 			try {

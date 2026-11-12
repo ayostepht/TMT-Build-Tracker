@@ -3,9 +3,12 @@ import { cleanHost } from './address.ts';
 import { isShareLinkHost } from './share-link.ts';
 import type { PrinterKind } from './status.ts';
 
-/** Bambu's LAN camera is a proprietary stream (RTSPS / port 6000 JPEG protocol): not supported. */
+/**
+ * Bambu's LAN camera is a proprietary stream (RTSPS / port 6000 JPEG protocol): not supported.
+ * A manual (not connected) printer has no address to fetch from.
+ */
 export function cameraSupported(kind: PrinterKind): boolean {
-	return kind !== 'bambu-lan';
+	return kind !== 'bambu-lan' && kind !== 'manual';
 }
 
 /**

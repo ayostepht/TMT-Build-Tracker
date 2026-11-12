@@ -307,12 +307,16 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 	mutateBuild(db, buildId, userId, (tx, view, now) => {
 		const slugs = slugList(body.slugs, view);
 		switch (action) {
-			case 'start':
+			case 'start': {
+				// Where it was started (a printer's name from "Where is it printing?"): remembered in the
+				// activity row so the log sheet can prefill it and the sentence can say it.
+				const printer = optStr(body.printer, 'printer', 100);
 				return {
 					kind: 'printing.start',
-					payload: { slugs },
+					payload: { slugs, ...(printer ? { printer } : {}) },
 					patches: startPrinting(view, slugs, now)
 				};
+			}
 			case 'stop': {
 				// The plate leaves the printer: a live job linked to these parts is no longer linked to
 				// the plate (the printer is still printing), so it can be linked again from the Overview.
@@ -766,6 +770,10 @@ export function updateRun(
 			if (typeof body.note !== 'string') bad('note must be a string');
 			set.note = body.note.slice(0, 2000);
 			changed.note = true;
+		}
+		if (body.printer !== undefined) {
+			set.printer = optStr(body.printer, 'printer', 100) ?? null;
+			changed.printer = true;
 		}
 		if (body.partSlug !== undefined) {
 			const s = optStr(body.partSlug, 'partSlug') ?? null;

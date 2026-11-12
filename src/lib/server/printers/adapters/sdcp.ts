@@ -30,8 +30,12 @@ import {
 } from '../outbound';
 import {
 	backoff,
+	CONNECT_TIMEOUT_MS,
+	FLOODED_MESSAGE,
 	HostileGuard,
 	linkBackoff,
+	LINK_SILENT_CLOSE_MS,
+	MessageBudget,
 	num,
 	OVERSIZED_MESSAGE,
 	safeError,
@@ -261,6 +265,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	let poll: ReturnType<typeof setInterval> | undefined;
 	let retry: ReturnType<typeof setTimeout> | undefined;
 	let stale: ReturnType<typeof setTimeout> | undefined;
+	let connectTimer: ReturnType<typeof setTimeout> | undefined;
 	let mainboardId = cleanMainboardId(cfg.secrets.mainboardId);
 	const hostile = new HostileGuard();
 	let attributes: Obj | undefined;
@@ -276,10 +281,39 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		ws.send(sdcpEnvelope(cmd, {}, mainboardId));
 	};
 
+	/**
+	 * Close the socket we hold (it hung, or went silent) and retry on the normal backoff, which
+	 * through a link is `linkBackoff`. `ws` is cleared first so the close handler ignores it.
+	 */
+	const dropSocket = (message: string) => {
+		const sock = ws;
+		ws = null;
+		if (sock) {
+			sock.onmessage = null;
+			try {
+				sock.close();
+			} catch {
+				/* ignore */
+			}
+		}
+		clearInterval(poll);
+		clearTimeout(stale);
+		clearTimeout(connectTimer);
+		if (subj.closed) return;
+		subj.emit({ state: 'offline', progress: null, message });
+		clearTimeout(retry);
+		retry = setTimeout(() => void open(), delay());
+	};
 	const armStale = () => {
 		clearTimeout(stale);
 		stale = setTimeout(() => {
+			if (!link) return dropSocket('No data from the printer');
+			// Link: report it, but keep the socket until the long silence limit.
 			subj.emit({ state: 'offline', progress: null, message: 'No data from the printer' });
+			stale = setTimeout(
+				() => dropSocket('No data from the printer'),
+				LINK_SILENT_CLOSE_MS - STALE_MS
+			);
 		}, STALE_MS);
 	};
 
@@ -334,8 +368,14 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			return;
 		}
 		const sock = ws;
-		/** Oversized or non-text frame: drop the socket and come back on a long backoff. */
-		const tooBig = () => {
+		const budget = new MessageBudget();
+		// A peer that accepts the TCP connection but never finishes the handshake.
+		clearTimeout(connectTimer);
+		connectTimer = setTimeout(() => {
+			if (ws === sock && sock.readyState === 0) dropSocket('Timed out connecting to the printer');
+		}, CONNECT_TIMEOUT_MS);
+		/** Oversized, non-text or flooding peer: drop the socket and come back on a long backoff. */
+		const tooBig = (message = OVERSIZED_MESSAGE) => {
 			ws = null; // the close handler below then ignores this socket
 			sock.onmessage = null;
 			clearInterval(poll);
@@ -345,11 +385,17 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			} catch {
 				/* ignore */
 			}
-			subj.emit({ state: 'error', progress: null, message: OVERSIZED_MESSAGE });
+			clearTimeout(connectTimer);
+			subj.emit({ state: 'error', progress: null, message });
 			clearTimeout(retry);
-			retry = setTimeout(() => void open(), hostile.trip());
+			// Through a link: never faster than the slow link backoff either.
+			retry = setTimeout(
+				() => void open(),
+				Math.max(hostile.trip(), link ? linkBackoff(attempt++) : 0)
+			);
 		};
 		sock.onopen = () => {
+			clearTimeout(connectTimer);
 			armStale();
 			askedAttributes = false;
 			if (link) return; // OctoEverywhere pushes status by itself; the MainboardID comes with it
@@ -367,7 +413,9 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			}
 		};
 		const handle = (data: unknown) => {
+			// Checked before JSON.parse: nothing over the cap, or past the per-second budget, is parsed.
 			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
+			if (!budget.take(data.length)) return tooBig(FLOODED_MESSAGE);
 			const msg: unknown = JSON.parse(data);
 			if (!isObj(msg)) return;
 			hostile.good();
@@ -403,6 +451,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			/* close follows */
 		};
 		sock.onclose = () => {
+			clearTimeout(connectTimer);
 			if (ws === sock) scheduleReconnect();
 		};
 	}
@@ -428,6 +477,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			clearInterval(poll);
 			clearTimeout(retry);
 			clearTimeout(stale);
+			clearTimeout(connectTimer);
 			const s = ws;
 			ws = null;
 			try {

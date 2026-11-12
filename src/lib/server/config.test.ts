@@ -437,6 +437,54 @@ describe('quotas', () => {
 	});
 });
 
+describe('linkPrintersPerWorkspace', () => {
+	it('is unlimited self-hosted, 3 in public mode, and configurable', async () => {
+		expect((await load()).linkPrintersPerWorkspace()).toBeNull();
+		expect((await load({ TMT_MODE: 'public' })).linkPrintersPerWorkspace()).toBe(3);
+		expect(
+			(
+				await load({ TMT_MODE: 'public', QUOTA_LINK_PRINTERS_PER_WORKSPACE: '5' })
+			).linkPrintersPerWorkspace()
+		).toBe(5);
+		expect(
+			(
+				await load({ TMT_MODE: 'public', QUOTA_LINK_PRINTERS_PER_WORKSPACE: 'off' })
+			).linkPrintersPerWorkspace()
+		).toBeNull();
+	});
+	it('reports a bad value as a boot problem', async () => {
+		const c = await load({ NODE_ENV: 'development', QUOTA_LINK_PRINTERS_PER_WORKSPACE: 'many' });
+		expect(c.bootProblems().join(' ')).toMatch(/QUOTA_LINK_PRINTERS_PER_WORKSPACE/);
+	});
+});
+
+describe('link printer totals and manual printer cap', () => {
+	it('defaults: 200 link printers instance-wide and 10 manual per workspace in public mode only', async () => {
+		const sh = await load();
+		expect(sh.linkPrintersTotal()).toBeNull();
+		expect(sh.manualPrintersPerWorkspace()).toBeNull();
+		const pub = await load({ TMT_MODE: 'public' });
+		expect(pub.linkPrintersTotal()).toBe(200);
+		expect(pub.manualPrintersPerWorkspace()).toBe(10);
+	});
+	it('are configurable, `off` removes them, a bad value is a boot problem', async () => {
+		const c = await load({
+			TMT_MODE: 'public',
+			QUOTA_LINK_PRINTERS_TOTAL: '7',
+			QUOTA_MANUAL_PRINTERS_PER_WORKSPACE: 'off'
+		});
+		expect(c.linkPrintersTotal()).toBe(7);
+		expect(c.manualPrintersPerWorkspace()).toBeNull();
+		const bad = await load({ NODE_ENV: 'development', QUOTA_LINK_PRINTERS_TOTAL: 'lots' });
+		expect(bad.bootProblems().join(' ')).toMatch(/QUOTA_LINK_PRINTERS_TOTAL/);
+		const bad2 = await load({
+			NODE_ENV: 'development',
+			QUOTA_MANUAL_PRINTERS_PER_WORKSPACE: 'x'
+		});
+		expect(bad2.bootProblems().join(' ')).toMatch(/QUOTA_MANUAL_PRINTERS_PER_WORKSPACE/);
+	});
+});
+
 describe('maxThreeMfBytes', () => {
 	const MB = 1024 * 1024;
 	it('defaults to 1024 MB in selfhost and 256 MB in public mode; MAX_3MF_MB wins', async () => {

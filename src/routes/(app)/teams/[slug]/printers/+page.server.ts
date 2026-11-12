@@ -1,7 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { normalizeRole } from '#lib/server/access.ts';
-import { isPublicMode } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { member, organization } from '#lib/server/db/schema.ts';
 import { isPersonalMetadata } from '#lib/server/teams.ts';
@@ -21,8 +20,6 @@ export const load: PageServerLoad = ({ params, locals }) => {
 	const personal = isPersonalMetadata(org.metadata);
 	return {
 		team: { id: org.id, slug: org.slug, name: personal ? 'My builds' : org.name },
-		canEdit: role !== 'viewer',
-		// Hosted (public) site: no printer or camera connection is ever made, so no forms are offered.
-		printersAvailable: !isPublicMode()
+		canEdit: role !== 'viewer'
 	};
 };

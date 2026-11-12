@@ -288,9 +288,9 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 	for (const t of ['Builds', 'Members', 'Printers', 'Integrations'])
 		await expect(ct.getByRole('link', { name: t, exact: true })).toBeVisible();
 	await ct.getByRole('link', { name: 'Integrations' }).click();
-	await expect(page.getByTestId('autolog')).toBeVisible();
+	await expect(page.getByTestId('integrations-printers')).toBeVisible();
 	await ct.getByRole('link', { name: 'Printers' }).click();
-	await expect(page.getByTestId('add-printer')).toBeVisible();
+	await expect(page.getByTestId('printers-manage').first()).toBeVisible();
 	await ct.getByRole('link', { name: 'Members' }).click();
 	await expect(page.getByRole('heading', { name: 'Invite', exact: true })).toBeVisible();
 });

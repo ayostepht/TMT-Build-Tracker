@@ -9,7 +9,9 @@
 	} from '#lib/client/api.ts';
 	import { printerBrands } from '#lib/printers/catalog.ts';
 	import { cameraSupported, defaultCameraUrl } from '#lib/printers/camera-url.ts';
-	import { SHARE_LINK_HOST_PLACEHOLDER } from '#lib/printers/share-link.ts';
+	import type { ConnectionOptionView } from '#lib/printers/connection-options.ts';
+	import { SETUP_TEXT, guideUrl } from '#lib/printers/setup-steps.ts';
+	import { SHARE_LINK_HOST_PLACEHOLDER, supportsShareLink } from '#lib/printers/share-link.ts';
 	import {
 		PRINTER_KIND_INFO,
 		PRINTER_KINDS,
@@ -19,15 +21,27 @@
 	} from '#lib/printers/status.ts';
 	import PrinterCard from './PrinterCard.svelte';
 
-	/** Add or edit a printer. Secret fields are write-only: blank keeps the stored value. */
+	/**
+	 * Add or edit a printer. Secret fields are write-only: blank keeps the stored value.
+	 * With `option` (the Integrations page) the form is that one connection option: only its fields,
+	 * its setup steps above them, no printer-type select. Without it (the plate picker's inline
+	 * "New printer") it is the general form with a type select. `typeChoices` (OctoEverywhere only)
+	 * adds a "Printer type" select that calls `ontype` with the chosen option's key.
+	 */
 	let {
 		org,
 		printer = null,
+		option = null,
+		typeChoices = [],
+		ontype,
 		ondone,
 		oncancel
 	}: {
 		org: string;
 		printer?: PrinterPublic | null;
+		option?: ConnectionOptionView | null;
+		typeChoices?: { key: string; label: string }[];
+		ontype?: (key: string) => void;
 		ondone: () => void;
 		oncancel: () => void;
 	} = $props();
@@ -35,7 +49,7 @@
 	const brands = printerBrands();
 	const init = () => ({
 		name: printer?.name ?? '',
-		kind: (printer?.kind ?? 'elegoo-sdcp') as PrinterKind,
+		kind: (printer?.kind ?? option?.kind ?? 'elegoo-sdcp') as PrinterKind,
 		host: printer?.host === SHARE_LINK_HOST_PLACEHOLDER ? '' : (printer?.host ?? ''),
 		port: printer?.port ?? null,
 		catalogId: printer?.catalogId ?? '',
@@ -56,7 +70,19 @@
 	const hasSavedLink = $derived(!!printer?.secretsSet.includes('shareLink'));
 	/** Reached through an OctoEverywhere link (typed or saved): no address, port or camera address. */
 	const viaLink = $derived(
-		f.kind === 'elegoo-sdcp' && (!!secrets.shareLink?.trim() || (hasSavedLink && !removeLink))
+		option
+			? option.via === 'link'
+			: supportsShareLink(f.kind) && (!!secrets.shareLink?.trim() || (hasSavedLink && !removeLink))
+	);
+	/** A printer that is never contacted: a name (and model) is all there is. */
+	const isManual = $derived(f.kind === 'manual');
+	const optField = (key: string) => option?.fields.find((x) => x.key === key);
+	const fieldList = $derived(
+		info.secrets.filter((x) => (option ? !!optField(x.key) : !(viaLink && x.key === 'mainboardId')))
+	);
+	const setup = $derived(option ? SETUP_TEXT[option.key] : null);
+	const canTest = $derived(
+		isManual ? false : viaLink ? !!secrets.shareLink?.trim() || hasSavedLink : !!f.host.trim()
 	);
 	// Saved secrets only work at the destination they were saved for (an address, or the link
 	// itself): the server asks for them again when it changes. In link mode the link is the secret.
@@ -100,6 +126,8 @@
 			if (typed !== undefined && (typed !== '' || !fld.secret)) s[fld.key] = typed;
 		}
 		if (removeLink && !s.shareLink) s.shareLink = '';
+		if (isManual)
+			return { name: f.name, kind: f.kind, catalogId: f.catalogId || null, enabled: true };
 		return {
 			name: f.name,
 			kind: f.kind,
@@ -174,50 +202,95 @@
 	}
 </script>
 
+<!-- External guide links only (the repository on GitHub): nothing to resolve. -->
+<!-- eslint-disable svelte/no-navigation-without-resolve -->
 <form class="card pf" onsubmit={save} data-testid="printer-form">
 	<h3>{printer ? `Edit ${printer.name}` : 'Add a printer'}</h3>
+	{#if setup && option}
+		{#if printer}
+			<details class="pf-steps" data-testid="pf-steps">
+				<summary>How this is set up</summary>
+				<ol>
+					{#each setup.steps as st (st)}<li>{st}</li>{/each}
+				</ol>
+				<a href={guideUrl(setup.anchor)} target="_blank" rel="noreferrer noopener">Full guide</a>
+			</details>
+		{:else}
+			<div class="pf-steps" data-testid="pf-steps">
+				<h4>How to set it up</h4>
+				<ol>
+					{#each setup.steps as st (st)}<li>{st}</li>{/each}
+				</ol>
+				<a
+					class="pf-guide"
+					href={guideUrl(setup.anchor)}
+					target="_blank"
+					rel="noreferrer noopener"
+					data-testid="pf-guide">Full guide</a
+				>
+			</div>
+		{/if}
+	{/if}
 	<div class="form-grid">
 		<label class="field"
 			>Name <input bind:value={f.name} required maxlength="80" placeholder="Shop Centauri" /></label
 		>
-		<label class="field"
-			>Type
-			<select bind:value={f.kind} disabled={!!printer} data-testid="pf-kind">
-				{#each PRINTER_KINDS as k (k)}<option value={k}>{PRINTER_KIND_INFO[k].label}</option>{/each}
-			</select>
-		</label>
-		<label class="field"
-			>Address <input
-				bind:value={f.host}
-				required={!viaLink}
-				placeholder={viaLink ? 'Not needed with a shared link' : '192.168.0.50'}
-				autocapitalize="none"
-				autocomplete="off"
-				data-testid="pf-host"
-			/></label
-		>
-		{#if !viaLink}
+		{#if typeChoices.length}
 			<label class="field"
-				>Port
-				<input
-					type="number"
-					min="1"
-					max="65535"
-					inputmode="numeric"
-					value={f.port ?? ''}
-					placeholder={String(info.defaultPort)}
-					data-testid="pf-port"
-					oninput={(e) => (f.port = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+				>Printer type
+				<select
+					value={option?.key}
+					disabled={!!printer}
+					data-testid="pf-link-type"
+					onchange={(e) => ontype?.(e.currentTarget.value)}
+				>
+					{#each typeChoices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+				</select>
+			</label>
+		{:else if !option}
+			<label class="field"
+				>Type
+				<select bind:value={f.kind} disabled={!!printer} data-testid="pf-kind">
+					{#each PRINTER_KINDS as k (k)}<option value={k}>{PRINTER_KIND_INFO[k].label}</option
+						>{/each}
+				</select>
+			</label>
+		{/if}
+		{#if !isManual && (option ? option.via === 'lan' : true)}
+			<label class="field"
+				>Address <input
+					bind:value={f.host}
+					required={!viaLink}
+					placeholder={viaLink ? 'Not needed with a shared link' : '192.168.0.50'}
+					autocapitalize="none"
+					autocomplete="off"
+					data-testid="pf-host"
 				/></label
 			>
+			{#if !viaLink}
+				<label class="field"
+					>Port
+					<input
+						type="number"
+						min="1"
+						max="65535"
+						inputmode="numeric"
+						value={f.port ?? ''}
+						placeholder={String(info.defaultPort)}
+						data-testid="pf-port"
+						oninput={(e) => (f.port = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+					/></label
+				>
+			{/if}
 		{/if}
-		{#each info.secrets.filter((x) => !(viaLink && x.key === 'mainboardId')) as fld (fld.key)}
+		{#each fieldList as fld (fld.key)}
 			<label class="field"
-				>{fld.label}
+				>{optField(fld.key)?.label ?? fld.label}
 				<input
 					type={fld.secret ? 'password' : 'text'}
 					autocomplete="off"
 					autocapitalize="none"
+					required={!!optField(fld.key)?.required && !printer?.secretsSet.includes(fld.key)}
 					value={secrets[fld.key] ?? (fld.secret ? '' : (printer?.identifiers[fld.key] ?? ''))}
 					placeholder={fld.secret && printer?.secretsSet.includes(fld.key)
 						? moved
@@ -231,8 +304,9 @@
 						>The saved value is only used at the address it was saved for. Re-enter it to use this
 						address.</small
 					>{/if}
-				{#if fld.hint}<small>{fld.hint}</small>{/if}
-				{#if fld.key === 'shareLink' && hasSavedLink && !secrets.shareLink?.trim()}
+				{#if optField(fld.key)?.hint ?? fld.hint}<small>{optField(fld.key)?.hint ?? fld.hint}</small
+					>{/if}
+				{#if fld.key === 'shareLink' && hasSavedLink && !secrets.shareLink?.trim() && !option}
 					<button
 						class="btn sm linkrm"
 						type="button"
@@ -243,21 +317,23 @@
 				{/if}
 			</label>
 		{/each}
-		<label class="field"
-			>Model (optional)
-			<select bind:value={f.catalogId}>
-				<option value="">Not set</option>
-				{#each brands as b (b.brand)}
-					<optgroup label={b.brand}>
-						{#each b.printers as p (p.id)}<option value={p.id}>{p.model}</option>{/each}
-					</optgroup>
-				{/each}
-			</select>
-		</label>
+		{#if !option || optField('catalogId')}
+			<label class="field"
+				>Model (optional)
+				<select bind:value={f.catalogId}>
+					<option value="">Not set</option>
+					{#each brands as b (b.brand)}
+						<optgroup label={b.brand}>
+							{#each b.printers as p (p.id)}<option value={p.id}>{p.model}</option>{/each}
+						</optgroup>
+					{/each}
+				</select>
+			</label>
+		{/if}
 	</div>
-	<p class="muted hint">{info.hint}</p>
+	{#if !option}<p class="muted hint">{info.hint}</p>{/if}
 
-	{#if f.kind === 'elegoo-sdcp' && !viaLink}
+	{#if (option ? option.key === 'elegoo-lan' : f.kind === 'elegoo-sdcp') && !viaLink}
 		<div class="disc">
 			<button
 				class="btn sm"
@@ -288,63 +364,65 @@
 		</div>
 	{/if}
 
-	<fieldset class="cam" data-testid="pf-camera">
-		<legend>Camera</legend>
-		{#if camSupported}
-			<label class="chk"
-				><input type="checkbox" bind:checked={f.cameraEnabled} data-testid="pf-camera-on" /> Show the
-				camera while this printer is printing</label
-			>
-			{#if viaLink}
-				<p class="muted hint" data-testid="pf-camera-via-link">
-					The camera comes through the OctoEverywhere link too.
-				</p>
-			{:else}
-				<label class="field"
-					>Camera address (optional)
-					<input
-						bind:value={f.cameraUrl}
-						placeholder={camPlaceholder}
-						autocapitalize="none"
-						autocomplete="off"
-						maxlength="500"
-						data-testid="pf-camera-url"
-					/>
-					<small
-						>Leave empty to use the automatic address. A custom address must be on the same address
-						as the printer (any port).</small
-					>
-				</label>
-			{/if}
-			<div class="actions">
-				<button
-					class="btn sm"
-					type="button"
-					onclick={runCameraTest}
-					disabled={camTesting || (!f.host && !viaLink)}
-					data-testid="pf-camera-test">{camTesting ? 'Testing…' : 'Test camera'}</button
+	{#if !isManual}
+		<fieldset class="cam" data-testid="pf-camera">
+			<legend>Camera</legend>
+			{#if camSupported}
+				<label class="chk"
+					><input type="checkbox" bind:checked={f.cameraEnabled} data-testid="pf-camera-on" /> Show the
+					camera while this printer is printing</label
 				>
-			</div>
-			{#if cam}
-				<div data-testid="pf-camera-result">
-					{#if cam.works && cam.image}
-						<img class="camprev" src={cam.image} alt="Camera test frame" />
-					{:else}
-						<span class="bad">{cam.message ?? 'No picture'}</span>
-					{/if}
+				{#if viaLink}
+					<p class="muted hint" data-testid="pf-camera-via-link">
+						The camera comes through the OctoEverywhere link too.
+					</p>
+				{:else}
+					<label class="field"
+						>Camera address (optional)
+						<input
+							bind:value={f.cameraUrl}
+							placeholder={camPlaceholder}
+							autocapitalize="none"
+							autocomplete="off"
+							maxlength="500"
+							data-testid="pf-camera-url"
+						/>
+						<small
+							>Leave empty to use the automatic address. A custom address must be on the same
+							address as the printer (any port).</small
+						>
+					</label>
+				{/if}
+				<div class="actions">
+					<button
+						class="btn sm"
+						type="button"
+						onclick={runCameraTest}
+						disabled={camTesting || !canTest}
+						data-testid="pf-camera-test">{camTesting ? 'Testing…' : 'Test camera'}</button
+					>
 				</div>
+				{#if cam}
+					<div data-testid="pf-camera-result">
+						{#if cam.works && cam.image}
+							<img class="camprev" src={cam.image} alt="Camera test frame" />
+						{:else}
+							<span class="bad">{cam.message ?? 'No picture'}</span>
+						{/if}
+					</div>
+				{/if}
+			{:else}
+				<p class="muted hint" data-testid="pf-camera-unsupported">
+					Camera is not supported for Bambu Lab printers: their camera uses a proprietary stream.
+				</p>
 			{/if}
-		{:else}
-			<p class="muted hint" data-testid="pf-camera-unsupported">
-				Camera is not supported for Bambu Lab printers: their camera uses a proprietary stream.
-			</p>
-		{/if}
-	</fieldset>
+		</fieldset>
 
-	<label class="chk"
-		><input type="checkbox" bind:checked={f.enabled} /> Monitor this printer (uncheck to stop monitoring;
-		the print is not affected)</label
-	>
+		<label class="chk"
+			><input type="checkbox" bind:checked={f.enabled} data-testid="pf-enabled" /> Monitor this printer
+			(uncheck to stop monitoring; the print is not affected)</label
+		>
+	{/if}
 
 	{#if error}<div class="error" role="alert">{error}</div>{/if}
 	{#if test}
@@ -371,13 +449,15 @@
 		<button class="btn primary" disabled={busy} data-testid="pf-save"
 			>{printer ? 'Save' : 'Add printer'}</button
 		>
-		<button
-			class="btn"
-			type="button"
-			onclick={runTest}
-			disabled={testing || (!f.host && !viaLink)}
-			data-testid="pf-test">{testing ? 'Testing…' : 'Test connection'}</button
-		>
+		{#if !isManual}
+			<button
+				class="btn"
+				type="button"
+				onclick={runTest}
+				disabled={testing || !canTest}
+				data-testid="pf-test">{testing ? 'Testing…' : 'Test connection'}</button
+			>
+		{/if}
 		<button class="btn" type="button" onclick={oncancel}>Cancel</button>
 	</div>
 </form>
@@ -409,6 +489,27 @@
 		object-fit: contain;
 		background: #0c0e16; /* camera stage: dark in both themes */
 		border-radius: var(--r-md);
+	}
+	.pf-steps h4 {
+		margin: 0 0 var(--sp-3);
+		font-size: var(--fs-md);
+	}
+	.pf-steps {
+		border: 1px solid var(--line);
+		border-radius: var(--r-lg);
+		padding: var(--sp-5) var(--sp-6);
+		background: var(--bg-soft, transparent);
+	}
+	.pf-steps ol {
+		margin: 0 0 var(--sp-4);
+		padding-left: 1.3em;
+		display: grid;
+		gap: var(--sp-3);
+		font-size: var(--fs-sm);
+	}
+	.pf-steps summary {
+		cursor: pointer;
+		min-height: 24px;
 	}
 	.linkrm {
 		justify-self: start;

@@ -66,11 +66,27 @@ export function setStatus(
 	return [patch];
 }
 
+/**
+ * A part of a multi-run plate that is marked Printing only because a run was logged and more are
+ * needed: a successful run covers it, and it has no start time (logging a run clears it). Nothing
+ * is on the printer for it right now; the next run starts it again.
+ */
+export function betweenRuns(view: BuildView, slug: string): boolean {
+	const st = view.state[slug];
+	if (!st || st.status !== 'Printing' || st.startedAt) return false;
+	return view.runs.some(
+		(r) =>
+			r.plateNumber != null &&
+			r.result === 'Success' &&
+			runTargets(view, { ...r, plateNumber: r.plateNumber }).includes(slug)
+	);
+}
+
 export function startPrinting(view: BuildView, slugs: string[], now: Date): PartPatch[] {
 	const out: PartPatch[] = [];
 	for (const slug of slugs) {
 		const st = view.state[slug];
-		if (st && st.status !== 'Printing') {
+		if (st && (st.status !== 'Printing' || betweenRuns(view, slug))) {
 			out.push({ slug, status: 'Printing', startedAt: now.toISOString() });
 		}
 	}

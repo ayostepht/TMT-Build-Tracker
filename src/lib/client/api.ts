@@ -1,3 +1,4 @@
+import type { ConnectionOptionView } from '#lib/printers/connection-options.ts';
 import type {
 	PrinterExpectedView,
 	PrinterJobView,
@@ -120,6 +121,8 @@ export const printing = (
 		slugs: string[];
 		when?: string;
 		seconds?: number | null;
+		/** `start` only: the printer's name, kept in the activity row ("put Plate 3 on Garage printer"). */
+		printer?: string;
 	}
 ) => call('POST', `${b(id)}/printing`, body);
 
@@ -140,6 +143,7 @@ export const updateRun = (
 		grams?: number | null;
 		hours?: number | null;
 		note?: string;
+		printer?: string | null;
 		partSlug?: string | null;
 	}
 ) => call('PATCH', `${b(id)}/runs/${encodeURIComponent(runId)}`, patch);
@@ -612,6 +616,7 @@ export const listPrinters = (org: string) =>
 	}>('GET', `/api/printers?org=${encodeURIComponent(org)}`);
 export interface PrinterWorkspace {
 	id: string;
+	slug: string;
 	name: string;
 	personal: boolean;
 	canEdit: boolean;
@@ -622,6 +627,12 @@ export const listMyPrinters = (first?: string) =>
 	call<{ workspaces: PrinterWorkspace[] }>(
 		'GET',
 		`/api/printers/mine${first ? `?first=${encodeURIComponent(first)}` : ''}`
+	);
+/** The ways a printer can be added, as this site offers them (`hosted` follows the server's mode). */
+export const getPrinterOptions = () =>
+	call<{ hosted: boolean; connectionOptions: ConnectionOptionView[] }>(
+		'GET',
+		'/api/printers/options'
 	);
 export const addPrinter = (org: string, input: PrinterInput) =>
 	call<{ printer: PrinterPublic }>('POST', '/api/printers', { ...input, organizationId: org });
@@ -712,11 +723,11 @@ export const expectOnPrinter = (
 	plateNumber: number,
 	partSlugs?: string[]
 ) =>
-	call('POST', `/api/printers/${encodeURIComponent(printerId)}/expect`, {
-		buildId,
-		plateNumber,
-		partSlugs
-	});
+	call<{ manual?: boolean; printer?: { id: string; name: string } }>(
+		'POST',
+		`/api/printers/${encodeURIComponent(printerId)}/expect`,
+		{ buildId, plateNumber, partSlugs }
+	);
 
 // ---- kit status (any signed-in user)
 

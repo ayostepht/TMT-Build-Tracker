@@ -1,7 +1,7 @@
 import { cameraSupported } from '#lib/printers/camera-url.ts';
 import type { PrinterKind } from '#lib/printers/status.ts';
+import { ApiError } from '#lib/server/access.ts';
 import { requireUserId, respond } from '#lib/server/api.ts';
-import { isPublicMode } from '#lib/server/config.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { printerForMember, sourceFor } from '#lib/server/printers/camera-access.ts';
 import type { RequestHandler } from './$types';
@@ -12,9 +12,15 @@ export const GET: RequestHandler = (event) =>
 		const db = getDb();
 		const { row } = printerForMember(db, event.params.id, requireUserId(event));
 		const supported = cameraSupported(row.kind as PrinterKind);
-		// Public mode: no camera is ever fetched, so the tile simply does not show.
-		const src =
-			supported && row.cameraEnabled && !isPublicMode() ? await sourceFor(db, row.id) : null;
+		// Hosted site: only a printer on an OctoEverywhere link has a camera; for any other the
+		// refusal means no tile (sourceFor throws a 403 there, which is "no camera" here).
+		let src = null;
+		if (supported && row.cameraEnabled)
+			try {
+				src = await sourceFor(db, row.id);
+			} catch (e) {
+				if (!(e instanceof ApiError)) throw e;
+			}
 		return {
 			supported,
 			enabled: row.cameraEnabled,

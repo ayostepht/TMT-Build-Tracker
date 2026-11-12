@@ -140,3 +140,18 @@ for (const width of [360, 390]) {
 		await check('apply dialog');
 	});
 }
+
+for (const width of [360, 390]) {
+	test(`Integrations and Printers pages do not scroll sideways at ${width}px`, async ({ page }) => {
+		await page.setViewportSize({ width, height: 800 });
+		const { chapterUrl } = await ownerWithBuild(page, `mobileint${width}`);
+		for (const path of ['integrations', 'printers']) {
+			await page.goto(`${chapterUrl}/${path}`);
+			await page.waitForLoadState('networkidle');
+			const m = await sideways(page);
+			expect(m.scroll, `${path}: page width`).toBeLessThanOrEqual(m.vw);
+			expect(m.wide, `${path}: elements past the screen edge`).toEqual([]);
+			expect(m.small, `${path}: fields under 16px`).toEqual([]);
+		}
+	});
+}

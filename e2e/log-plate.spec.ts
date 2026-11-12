@@ -113,3 +113,27 @@ test('a plate printed during this visit stays visible, marked, until reload (Hid
 	await expect(page.getByTestId('printed-just-now')).toHaveCount(0);
 	await expect(page.locator('.row[data-s="Printed"]')).toHaveCount(0);
 });
+
+test('A fractional slicer estimate prefills a value the field takes, and Save works untouched', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'fraction');
+	const { plate, button } = await firstPlateLog(page, buildId);
+	const r = await page.request.patch(`/api/builds/${buildId}/plates/${plate}`, {
+		data: { slicerGrams: 162.52 },
+		headers: { origin: new URL(page.url()).origin }
+	});
+	expect(r.ok()).toBe(true);
+	await page.reload();
+	await page.getByLabel('Group by').selectOption('plate');
+	await button.click();
+	const sheet = page.getByRole('dialog');
+	await expect(sheet.getByLabel('Filament used (g)')).toHaveValue('162.52');
+	await sheet.getByRole('button', { name: 'Success', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(sheet).toBeHidden();
+	const v = (await (await page.request.get(`/api/builds/${buildId}/view`)).json()) as {
+		runs: { grams: number | null }[];
+	};
+	expect(v.runs.map((x) => x.grams)).toEqual([162.52]);
+});

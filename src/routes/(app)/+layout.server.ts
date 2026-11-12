@@ -66,7 +66,7 @@ export const load: LayoutServerLoad = async ({ locals, url, request }) => {
 		activeTeamId,
 		/** Install-wide admin (first user or ADMIN_EMAILS): shows the "Kit admin" link. */
 		siteAdmin: isSiteAdmin(db, locals.user),
-		/** Hosted site: no printers or Spoolman, so the nav hides those links. */
+		/** Hosted site: printers are limited to OctoEverywhere links and not-connected ones. */
 		publicMode: isPublicMode(),
 		invitationCount: mayUseInvitations(
 			{ publicMode: appMode() === 'public', signup: signupMode() },

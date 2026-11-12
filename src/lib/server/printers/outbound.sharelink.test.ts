@@ -85,14 +85,26 @@ describe('the shared-link host is the one public destination', () => {
 			);
 	});
 
-	it('public mode refuses the share host before any DNS', async () => {
+	it('public mode: the share host passes only on a link call; everything else is refused before DNS', async () => {
 		vi.stubEnv('TMT_MODE', 'public');
 		const dns = vi.fn(async () => [PUBLIC4]);
+		// no allowShareLink: refused, nothing resolved
 		await expect(resolveAllowed(HOST, dns)).rejects.toMatchObject({ kind: 'public' });
+		await expect(guardedFetch(`https://${HOST}/video`)).rejects.toMatchObject({ kind: 'public' });
+		// a LAN name or address is refused even on a link call
+		for (const h of ['printer.lan', '192.168.0.5', 'example.com'])
+			await expect(resolveAllowed(h, dns, { allowShareLink: true })).rejects.toMatchObject({
+				kind: 'public'
+			});
 		expect(dns).not.toHaveBeenCalled();
+		// the link call resolves the name and admits a public answer only
+		await expect(resolveAllowed(HOST, dns, { allowShareLink: true })).resolves.toMatchObject({
+			shareLink: true
+		});
+		expect(dns).toHaveBeenCalledTimes(1);
 		await expect(
-			guardedFetch(`https://${HOST}/video`, { allowShareLink: true })
-		).rejects.toMatchObject({ kind: 'public' });
+			resolveAllowed(HOST, async () => ['10.0.0.5'], { allowShareLink: true })
+		).rejects.toMatchObject({ kind: 'address' });
 	});
 
 	it('guardedFetch needs https and the default port on the share host', async () => {

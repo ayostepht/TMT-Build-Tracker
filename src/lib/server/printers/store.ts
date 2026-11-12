@@ -1,5 +1,6 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import {
+	MANUAL_HOST_PLACEHOLDER,
 	PRINTER_KIND_INFO,
 	PRINTER_KINDS,
 	type PrinterKind,
@@ -11,14 +12,21 @@ import { cleanHost } from '#lib/printers/address.ts';
 import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
 import {
 	parseShareLink,
-	shareLinkOf,
+	shareLinkFor,
+	supportsShareLink,
 	SHARE_LINK_HOST_PLACEHOLDER,
 	SHARE_LINK_KEY,
 	isOctoEverywhereAddress
 } from '#lib/printers/share-link.ts';
 import { ApiError } from '../access';
 import type { Db } from '../db';
-import { isPublicMode } from '../config';
+import {
+	isPublicMode,
+	linkPrintersPerWorkspace,
+	linkPrintersTotal,
+	manualPrintersPerWorkspace
+} from '../config';
+import { QuotaError } from '../quota';
 import { printers } from '../db/schema';
 import { decryptSecrets, encryptSecrets, type Secrets } from './secrets';
 import { hostBlockReason, PUBLIC_MODE_MESSAGE } from './outbound';
@@ -39,6 +47,8 @@ export function toPublic(r: Row, editor = false): PrinterPublic {
 	const kind = r.kind as PrinterKind;
 	const secrets = decryptSecrets(r.secretEnc);
 	const pub = publicKeys(kind);
+	const connection: PrinterPublic['connection'] =
+		kind === 'manual' ? 'manual' : shareLinkFor(kind, secrets) ? 'link' : 'lan';
 	return {
 		id: r.id,
 		organizationId: r.organizationId,
@@ -54,7 +64,10 @@ export function toPublic(r: Row, editor = false): PrinterPublic {
 		status: (r.lastStatus as PrinterStatus | null) ?? null,
 		secretsSet: Object.keys(secrets).filter((k) => secrets[k]),
 		identifiers: Object.fromEntries(pub.filter((k) => secrets[k]).map((k) => [k, secrets[k]])),
-		blocked: hostBlockReason(r.host)
+		connection,
+		// Manual printers are never dialled; a link printer is allowed on the hosted site; anything
+		// else is judged by its address (and is refused outright on the hosted site).
+		blocked: connection === 'lan' ? hostBlockReason(r.host) : null
 	};
 }
 
@@ -115,7 +128,12 @@ interface ParsedInput {
 	secrets?: Secrets; // only the fields supplied
 }
 
-export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput {
+export function parsePrinterInput(
+	body: unknown,
+	partial: boolean,
+	/** The stored kind when the body (an edit) does not carry one. */
+	kindHint?: PrinterKind
+): ParsedInput {
 	if (typeof body !== 'object' || body === null || Array.isArray(body)) return bad('Invalid body');
 	const o = body as Obj;
 	const out: ParsedInput = {};
@@ -127,16 +145,20 @@ export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput 
 		if (!(PRINTER_KINDS as readonly unknown[]).includes(o.kind)) bad('Unknown printer type');
 		out.kind = o.kind as PrinterKind;
 	}
+	const kindNow = out.kind ?? kindHint;
 	const typedLink =
 		typeof (o.secrets as Obj | undefined)?.[SHARE_LINK_KEY] === 'string' &&
 		!!((o.secrets as Obj)[SHARE_LINK_KEY] as string).trim();
-	if (o.host !== undefined || !partial) {
+	if (kindNow === 'manual') {
+		// Not connected: no address (a typed one is ignored), no port, no secrets.
+		if (o.host !== undefined || !partial) out.host = MANUAL_HOST_PLACEHOLDER;
+	} else if (o.host !== undefined || !partial) {
 		// A printer reached through an OctoEverywhere link needs no address.
 		const blank = typeof o.host !== 'string' || !o.host.trim();
 		out.host = blank && typedLink ? SHARE_LINK_HOST_PLACEHOLDER : parseHost(o.host);
 	}
 	if (o.port !== undefined) {
-		if (o.port === null || o.port === '') out.port = null;
+		if (o.port === null || o.port === '' || kindNow === 'manual') out.port = null;
 		else if (
 			typeof o.port !== 'number' ||
 			!Number.isInteger(o.port) ||
@@ -167,13 +189,21 @@ export function parsePrinterInput(body: unknown, partial: boolean): ParsedInput 
 		if (typeof o.cameraEnabled !== 'boolean') bad('cameraEnabled must be true or false');
 		out.cameraEnabled = o.cameraEnabled as boolean;
 	}
-	if (o.secrets !== undefined) {
+	if (o.secrets !== undefined && kindNow === 'manual') {
+		out.secrets = {}; // nothing to keep: no address, link or keys
+	} else if (o.secrets !== undefined) {
 		if (typeof o.secrets !== 'object' || o.secrets === null || Array.isArray(o.secrets))
 			bad('secrets must be an object');
 		const s: Secrets = {};
 		for (const [k, v] of Object.entries(o.secrets as Obj)) {
 			if (typeof v !== 'string' || v.length > 300) bad(`${k} must be text`);
 			s[k] = (v as string).trim();
+			if (k === SHARE_LINK_KEY && s[k] && kindNow && !supportsShareLink(kindNow))
+				bad(
+					kindNow === 'bambu-lan'
+						? 'Bambu Lab printers cannot be reached through an OctoEverywhere link (LAN mode is a direct MQTT connection). Use LAN mode on your own network.'
+						: 'This printer type has no OctoEverywhere link.'
+				);
 			if (k === SHARE_LINK_KEY && s[k]) {
 				// Validated and normalised; the error never echoes the (secret) link.
 				const c = parseShareLink(s[k]);
@@ -248,7 +278,7 @@ export function secretsForDestination(
 	next: { host: string; port: number | null },
 	supplied: Secrets | undefined
 ): Secrets {
-	const linkOf = (s: Secrets | undefined) => (kind === 'elegoo-sdcp' ? shareLinkOf(s) : null);
+	const linkOf = (s: Secrets | undefined) => shareLinkFor(kind, s);
 	const curLink = linkOf(stored.secrets);
 	const typed = supplied?.[SHARE_LINK_KEY];
 	const nextLink =
@@ -265,61 +295,139 @@ export function secretsForDestination(
 		: stored.secrets;
 }
 
-/** Hosted (public) mode never connects to printers, so there is nothing to save. */
+/** Hosted site: the refusal for everything that is not a link printer or a manual one. */
 function refuseInPublicMode(): void {
 	if (isPublicMode()) throw new ApiError(403, PUBLIC_MODE_MESSAGE);
 }
 
+/**
+ * Hosted site: a workspace may hold only so many printers reached through an OctoEverywhere link
+ * (`linkPrintersPerWorkspace`, default 3): each is a long-lived connection to a third party. Link
+ * printers are exactly the rows whose host is the link placeholder. Call it synchronously right
+ * before the write (the database is synchronous, so two requests cannot both pass).
+ */
+export function assertLinkRoom(db: Db, orgId: string, exceptId?: string): void {
+	const count = (inOrg: boolean) =>
+		db
+			.select({ n: sql<number>`count(*)` })
+			.from(printers)
+			.where(
+				and(
+					inOrg ? eq(printers.organizationId, orgId) : undefined,
+					eq(printers.host, SHARE_LINK_HOST_PLACEHOLDER),
+					exceptId ? ne(printers.id, exceptId) : undefined
+				)
+			)
+			.get()?.n ?? 0;
+	const limit = linkPrintersPerWorkspace();
+	if (limit !== null) {
+		const n = count(true);
+		if (n >= limit)
+			throw new QuotaError(
+				limit === 0
+					? 'Printers cannot be connected through an OctoEverywhere link on this server. Ask the admin.'
+					: `This workspace already has ${n} ${n === 1 ? 'printer' : 'printers'} connected through OctoEverywhere links, the limit on this server. Remove one or ask the admin.`
+			);
+	}
+	const total = linkPrintersTotal();
+	if (total !== null && count(false) >= total)
+		throw new QuotaError(
+			'This server has reached its limit of printers connected through OctoEverywhere links. Ask the admin.'
+		);
+}
+
+/** Hosted site: a workspace may hold only so many not-connected printers (`manualPrintersPerWorkspace`, default 10). */
+export function assertManualRoom(db: Db, orgId: string, exceptId?: string): void {
+	const limit = manualPrintersPerWorkspace();
+	if (limit === null) return;
+	const n =
+		db
+			.select({ n: sql<number>`count(*)` })
+			.from(printers)
+			.where(
+				and(
+					eq(printers.organizationId, orgId),
+					eq(printers.kind, 'manual'),
+					exceptId ? ne(printers.id, exceptId) : undefined
+				)
+			)
+			.get()?.n ?? 0;
+	if (n < limit) return;
+	throw new QuotaError(
+		limit === 0
+			? 'Printers that are not connected cannot be added on this server. Ask the admin.'
+			: `This workspace already has ${n} ${n === 1 ? 'printer' : 'printers'} that are not connected, the limit on this server. Remove one or ask the admin.`
+	);
+}
+
+/** Hosted site: only link printers and manual printers may exist; everything else needs a LAN address. */
+function assertHostedKind(kind: PrinterKind, linked: boolean): void {
+	if (isPublicMode() && kind !== 'manual' && !linked) refuseInPublicMode();
+}
+
 export function createPrinter(db: Db, orgId: string, userId: string, body: unknown): Row {
-	refuseInPublicMode();
 	const p = parsePrinterInput(body, false);
-	const secrets = mergeSecrets(p.kind!, {}, p.secrets);
-	if (!secrets[SHARE_LINK_KEY] && p.host === SHARE_LINK_HOST_PLACEHOLDER)
+	const kind = p.kind!;
+	const secrets = mergeSecrets(kind, {}, p.secrets);
+	const linked = !!secrets[SHARE_LINK_KEY];
+	assertHostedKind(kind, linked);
+	if (kind !== 'manual' && !linked && p.host === SHARE_LINK_HOST_PLACEHOLDER)
 		bad('Enter the printer address');
-	if (secrets[SHARE_LINK_KEY]) {
+	if (!linked && kind !== 'manual' && p.host === MANUAL_HOST_PLACEHOLDER)
+		bad('Enter the printer address');
+	if (linked) {
 		p.cameraUrl = null; // the link decides where the camera is
 		p.host = SHARE_LINK_HOST_PLACEHOLDER; // and where the printer is; a typed address is ignored
 	}
-	checkCamera(p.cameraUrl, p.host!, p.kind!);
-	return db
-		.insert(printers)
-		.values({
-			organizationId: orgId,
-			name: p.name!,
-			kind: p.kind!,
-			host: p.host!,
-			port: p.port ?? null,
-			catalogId: p.catalogId ?? null,
-			enabled: p.enabled ?? true,
-			cameraUrl: p.cameraUrl ?? null,
-			cameraEnabled: p.cameraEnabled ?? true,
-			secretEnc: Object.keys(secrets).length ? encryptSecrets(secrets) : null,
-			createdBy: userId
-		})
-		.returning()
-		.get();
+	if (kind === 'manual') {
+		p.cameraUrl = null;
+		p.cameraEnabled = false;
+	}
+	checkCamera(p.cameraUrl, p.host!, kind);
+	return db.transaction((tx) => {
+		// Duplicate-link check (same link already used in another workspace on a hosted site) would go here: skipped, it needs a keyed-hash column (schema change).
+		if (linked) assertLinkRoom(tx, orgId);
+		if (kind === 'manual') assertManualRoom(tx, orgId);
+		return tx
+			.insert(printers)
+			.values({
+				organizationId: orgId,
+				name: p.name!,
+				kind,
+				host: p.host!,
+				port: kind === 'manual' ? null : (p.port ?? null),
+				catalogId: p.catalogId ?? null,
+				enabled: p.enabled ?? true,
+				cameraUrl: p.cameraUrl ?? null,
+				cameraEnabled: p.cameraEnabled ?? true,
+				secretEnc: Object.keys(secrets).length ? encryptSecrets(secrets) : null,
+				createdBy: userId
+			})
+			.returning()
+			.get();
+	});
 }
 
 export function updatePrinter(db: Db, id: string, orgId: string, body: unknown): Row {
-	// Pausing and renaming stay possible so an old row can be tidied; nothing else is saved.
-	if (isPublicMode()) {
-		const o = (typeof body === 'object' && body !== null ? body : {}) as Obj;
-		const harmless = Object.entries(o).every(
-			([k, v]) => k === 'name' || (k === 'enabled' && v === false)
-		);
-		if (!harmless) refuseInPublicMode();
-	}
+	// Hosted site: pausing and renaming always stay possible so an old row can be tidied.
+	const o = (typeof body === 'object' && body !== null ? body : {}) as Obj;
+	const harmless = Object.entries(o).every(
+		([k, v]) => k === 'name' || (k === 'enabled' && v === false)
+	);
 	const cur = db
 		.select()
 		.from(printers)
 		.where(and(eq(printers.id, id), eq(printers.organizationId, orgId)))
 		.get();
 	if (!cur) throw new ApiError(404, 'Not found');
-	const p = parsePrinterInput(body, true);
+	const p = parsePrinterInput(body, true, cur.kind as PrinterKind);
 	const kind = p.kind ?? (cur.kind as PrinterKind);
 	const kindChanged = kind !== cur.kind;
-	const host = p.host ?? cur.host;
-	const port = p.port !== undefined ? p.port : cur.port;
+	const manual = kind === 'manual';
+	// Leaving manual: its placeholder is not an address, so one must be typed (or a link).
+	const curHost = cur.host === MANUAL_HOST_PLACEHOLDER && !manual ? '' : cur.host;
+	const host = manual ? MANUAL_HOST_PLACEHOLDER : (p.host ?? curHost);
+	const port = manual ? null : p.port !== undefined ? p.port : cur.port;
 	const secrets = mergeSecrets(
 		kind,
 		kindChanged
@@ -333,7 +441,9 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 		p.secrets
 	);
 	const linked = !!secrets[SHARE_LINK_KEY];
-	if (!linked && host === SHARE_LINK_HOST_PLACEHOLDER) bad('Enter the printer address');
+	if (isPublicMode() && !harmless) assertHostedKind(kind, linked);
+	if (!manual && !linked && (host === SHARE_LINK_HOST_PLACEHOLDER || !host))
+		bad('Enter the printer address');
 	const cameraUrl =
 		!cameraSupported(kind) || linked
 			? null
@@ -346,15 +456,23 @@ export function updatePrinter(db: Db, id: string, orgId: string, body: unknown):
 	};
 	if (p.name !== undefined) set.name = p.name;
 	if (p.kind !== undefined) set.kind = p.kind;
-	if (p.host !== undefined) set.host = p.host;
+	if (p.host !== undefined || manual || kindChanged) set.host = host;
 	if (linked) set.host = SHARE_LINK_HOST_PLACEHOLDER; // the link is the destination
-	if (p.port !== undefined) set.port = p.port;
+	if (p.port !== undefined || manual) set.port = port;
 	if (p.catalogId !== undefined) set.catalogId = p.catalogId;
 	if (p.enabled !== undefined) set.enabled = p.enabled;
 	if (p.cameraUrl !== undefined) set.cameraUrl = p.cameraUrl;
 	if (p.cameraEnabled !== undefined) set.cameraEnabled = p.cameraEnabled;
-	if (kind === 'bambu-lan' || linked) set.cameraUrl = null;
-	return db.update(printers).set(set).where(eq(printers.id, id)).returning().get();
+	if (kind === 'bambu-lan' || linked || manual) set.cameraUrl = null;
+	if (manual) set.cameraEnabled = false;
+	return db.transaction((tx) => {
+		// A printer that becomes (or stays) a link printer counts against the hosted cap, except
+		// when this edit only tidies it (pause, rename) or it was one already.
+		if (linked && !harmless && cur.host !== SHARE_LINK_HOST_PLACEHOLDER)
+			assertLinkRoom(tx, orgId, id);
+		if (manual && cur.kind !== 'manual') assertManualRoom(tx, orgId, id);
+		return tx.update(printers).set(set).where(eq(printers.id, id)).returning().get();
+	});
 }
 
 export function deletePrinter(db: Db, id: string, orgId: string): void {
@@ -383,8 +501,17 @@ export function configFromInput(db: Db, orgId: string, body: unknown): PrinterCo
 	const typedHost = typeof o.host === 'string' && o.host.trim() ? o.host : undefined;
 	const p = parsePrinterInput(
 		{ ...o, name: 'test', kind, host: typedHost ?? stored?.host ?? o.host ?? '' },
-		true
+		true,
+		kind
 	);
+	if (kind === 'manual')
+		return {
+			id: stored?.id ?? 'test',
+			kind,
+			host: MANUAL_HOST_PLACEHOLDER,
+			port: null,
+			secrets: {}
+		};
 	const port = p.port !== undefined ? p.port : (stored?.port ?? null);
 	const keep =
 		stored && stored.kind === kind
@@ -397,7 +524,9 @@ export function configFromInput(db: Db, orgId: string, body: unknown): PrinterCo
 			: {};
 	const secrets = mergeSecrets(kind, keep, p.secrets);
 	const linked = !!secrets[SHARE_LINK_KEY];
-	if (!linked && p.host === SHARE_LINK_HOST_PLACEHOLDER) bad('Enter the printer address');
+	if (!linked && (p.host === SHARE_LINK_HOST_PLACEHOLDER || p.host === MANUAL_HOST_PLACEHOLDER))
+		bad('Enter the printer address');
+	assertHostedKind(kind, linked);
 	return {
 		id: stored?.id ?? 'test',
 		kind,

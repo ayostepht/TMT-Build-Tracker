@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Plate } from '#lib/domain/types.ts';
+	import { betweenRuns } from '#lib/domain/index.ts';
 	import { defaultRunParts } from '#lib/domain/run-choice.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
@@ -45,8 +46,11 @@
 
 	const status = (s: string) => ctx.view.state[s]?.status;
 	const scope = $derived(only ? [only] : plate.parts);
-	const on = $derived(scope.filter((s) => status(s) === 'Printing'));
-	const idle = $derived(scope.filter((s) => !['Printed', 'Printing'].includes(status(s) ?? '')));
+	// "On the printer" = Printing with a run actually under way; a part between the runs of a
+	// multi-run plate is still marked Printing but is not on the printer.
+	const between = $derived(scope.filter((s) => betweenRuns(ctx.view, s)));
+	const on = $derived(scope.filter((s) => status(s) === 'Printing' && !between.includes(s)));
+	const idle = $derived(scope.filter((s) => status(s) !== 'Printed' && !on.includes(s)));
 	const unprinted = $derived(plate.parts.filter((s) => status(s) !== 'Printed'));
 	// What a log covers: the parts on the printer when any are, else every part still to do.
 	const logSlugs = $derived.by(() => {
@@ -80,10 +84,10 @@
 	const plateStatus = $derived.by(() => {
 		const sts = scope.map((s) => status(s) ?? 'To print');
 		if (!sts.length) return 'To print';
-		if (sts.includes('Printing')) return 'Printing';
+		if (on.length) return 'Printing';
 		if (sts.every((x) => x === 'Printed')) return 'Printed';
 		if (sts.includes('Reprint')) return 'Reprint';
-		return sts.includes('Printed') ? 'Partly printed' : 'To print';
+		return sts.includes('Printed') || between.length ? 'Partly printed' : 'To print';
 	});
 	// Statuses valid from here, in menu order. Starting needs a part that is not on the printer yet.
 	const options = $derived.by(() => {

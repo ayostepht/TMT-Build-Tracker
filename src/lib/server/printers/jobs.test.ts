@@ -294,7 +294,7 @@ describe('supervisor', () => {
 		subscribePrinterEvents('org1', (e) => events.push(e.type));
 		const sup = new Supervisor(
 			db,
-			{ 'elegoo-sdcp': fake, moonraker: fake, octoprint: fake, 'bambu-lan': fake },
+			{ 'elegoo-sdcp': fake, moonraker: fake, octoprint: fake, 'bambu-lan': fake, manual: fake },
 			60_000
 		);
 		sup.start();

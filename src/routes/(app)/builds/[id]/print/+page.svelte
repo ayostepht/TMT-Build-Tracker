@@ -8,6 +8,7 @@
 	import PartRow from '#lib/components/PartRow.svelte';
 	import PlateTime from '#lib/components/PlateTime.svelte';
 	import PlateControl from '#lib/components/PlateControl.svelte';
+	import PrinterHint from '#lib/components/PrinterHint.svelte';
 	import PrintToolbar from '#lib/components/PrintToolbar.svelte';
 	import PlateHistory from '#lib/components/PlateHistory.svelte';
 
@@ -149,6 +150,8 @@
 {/snippet}
 
 <svelte:head><title>Print · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
+
+<PrinterHint />
 
 <PrintToolbar
 	role={activeRole}

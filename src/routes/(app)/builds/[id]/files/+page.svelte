@@ -2,12 +2,15 @@
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import ExportCard from '#lib/components/ExportCard.svelte';
 	import PlatesPanel from '#lib/components/build/PlatesPanel.svelte';
+	import PrinterHint from '#lib/components/PrinterHint.svelte';
 	import PrintSettings from '#lib/components/build/PrintSettings.svelte';
 
 	const ctx = getBuildCtx();
 </script>
 
 <svelte:head><title>Files · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>
+
+<PrinterHint />
 
 <nav class="jump" aria-label="On this page">
 	<a class="pill-link" href="#plates">Printer and plates</a>

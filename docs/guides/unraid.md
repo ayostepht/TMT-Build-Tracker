@@ -108,7 +108,7 @@ Sign-up is open: anyone who can reach the web page can create an account, and th
 
 ## 5. Printers on your network
 
-Bridge networking can reach printers on your LAN by IP address (the app only makes outgoing connections; it reads status and never sends control commands). Add printers on the **Printers** page by IP address. The Elegoo "find printers" button uses a UDP broadcast, which does not cross Docker's bridge: it finds nothing in bridge mode. Either add the printer by its IP address, or give the container an address on the LAN (Network Type `Custom: br0`, or `Host`). With `Host` the container uses the server's ports directly: add a variable `PORT` with a free port such as `8420` and open `http://<unraid-ip>:8420`. On `br0` the Unraid server itself cannot reach the container unless "Host access to custom networks" is enabled in Docker settings. Per-brand details: [Printers](printers.md).
+Bridge networking can reach printers on your LAN by IP address (the app only makes outgoing connections; it reads status and never sends control commands). Add printers on the **Integrations** page (**Add a printer**) by IP address. The Elegoo "find printers" button uses a UDP broadcast, which does not cross Docker's bridge: it finds nothing in bridge mode. Either add the printer by its IP address, or give the container an address on the LAN (Network Type `Custom: br0`, or `Host`). With `Host` the container uses the server's ports directly: add a variable `PORT` with a free port such as `8420` and open `http://<unraid-ip>:8420`. On `br0` the Unraid server itself cannot reach the container unless "Host access to custom networks" is enabled in Docker settings. Per-brand details: [Printers](printers.md).
 
 ## Updating
 

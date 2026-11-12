@@ -9,10 +9,17 @@ const PKG_VERSION = (JSON.parse(readFileSync('package.json', 'utf8')) as { versi
 // The static Help and About pages: reachable from the account menu, anchors, FAQ, links, and
 // no phone overflow. Body sentences are deliberately not asserted (copy changes).
 
-const SECTIONS = ['Getting started', 'Printing day', 'Glossary', 'FAQ'] as const;
+const SECTIONS = [
+	'Getting started',
+	'Printing day',
+	'Connect a printer',
+	'Glossary',
+	'FAQ'
+] as const;
 const ANCHORS: Record<(typeof SECTIONS)[number], string> = {
 	'Getting started': 'getting-started',
 	'Printing day': 'printing-day',
+	'Connect a printer': 'connect-printer',
 	Glossary: 'glossary',
 	FAQ: 'faq'
 };

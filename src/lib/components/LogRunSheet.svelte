@@ -17,11 +17,13 @@
 		runTargets,
 		runOutcomeSummary,
 		snapshotParts,
+		startedOnPrinter,
 		toLocalInput,
 		today
 	} from '#lib/domain/index.ts';
 	import { deleteRun, logRun, undoRun, updateRun } from '#lib/client/api.ts';
 	import { focusIn } from '#lib/client/focus.ts';
+	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { toasts } from './toast.svelte.ts';
 
@@ -59,6 +61,8 @@
 	const plateNumber = $derived(editRun ? editRun.plateNumber : plateNumberIn);
 	const slugs = $derived(editRun ? runTargets(ctx.view, editRun) : slugsIn);
 	const uid = $props.id();
+	const pstore = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
+	$effect(() => pstore.acquire());
 
 	let dlg = $state<HTMLDialogElement>();
 	let trigger: HTMLElement | null = null;
@@ -76,6 +80,32 @@
 	let editDate = $state('');
 	let confirmDelete = $state(false);
 	let keepStatuses = $state(false);
+	/** Printer name for the log; '' = not set. */
+	let printer = $state('');
+	const printerNames = $derived(
+		[...new Set(pstore.printers.filter((p) => p.enabled).map((p) => p.name))].sort((a, b) =>
+			a.localeCompare(b)
+		)
+	);
+	// A saved or remembered name that is no longer a listed printer stays selectable.
+	const printerOptions = $derived(
+		printer && !printerNames.includes(printer) ? [...printerNames, printer] : printerNames
+	);
+	const showPrinter = $derived(printerNames.length > 0 || !!printer);
+	/** Where this plate was started ("Where is it printing?"), else the connected printer running its job. */
+	function guessPrinter(): string {
+		const a = startedOnPrinter(ctx.view, slugs, plateNumber);
+		if (a) return a;
+		const job = pstore.jobs.find(
+			(j) =>
+				j.buildId === ctx.id &&
+				(j.status === 'printing' || j.status === 'paused') &&
+				(plateNumber != null
+					? j.plateNumber === plateNumber
+					: (j.partSlugs ?? []).some((s) => slugs.includes(s)))
+		);
+		return job?.printerName ?? '';
+	}
 
 	const plate = $derived(
 		plateNumber == null ? null : (ctx.view.plates.find((p) => p.number === plateNumber) ?? null)
@@ -92,7 +122,8 @@
 	const slicerDefault = $derived.by(() => {
 		if (!plate) return null;
 		const v = plate.perPartRuns ? plate.slicerByPart[pickedSlug ?? slugs[0]] : plate.slicerGrams;
-		if (typeof v === 'number' && v > 0) return v;
+		// Grams are stored as decimals; keep two places so the prefill is a tidy number.
+		if (typeof v === 'number' && v > 0) return Math.round(v * 100) / 100;
 		if (quick && !plate.perPartRuns) {
 			const sum = Object.values(plate.filamentGrams).reduce((a, b) => a + b, 0);
 			if (sum > 0) return Math.round(sum);
@@ -159,7 +190,7 @@
 			result: res,
 			grams: gramsShown === '' ? null : Number(gramsShown),
 			hours: hoursFromSeconds(durSeconds),
-			printer: null,
+			printer: printer || null,
 			note: note.trim()
 		};
 	}
@@ -182,6 +213,7 @@
 			date: editDate || editRun.date,
 			grams: gramsShown === '' ? null : Number(gramsShown),
 			hours: hoursFromSeconds(durSeconds),
+			printer: printer || null,
 			note: note.trim()
 		};
 	});
@@ -232,6 +264,7 @@
 		durEdited = false;
 		confirmDelete = !!editRun && deleteFirst;
 		keepStatuses = false;
+		printer = editRun ? (editRun.printer ?? '') : guessPrinter();
 		editDate = today();
 		picked = slugs[0] ?? '';
 		error = null;
@@ -275,6 +308,13 @@
 		}
 	}
 	let delBtn = $state<HTMLButtonElement>();
+	let errEl = $state<HTMLParagraphElement>();
+	/** A rejected save shows its reason in the sheet and moves focus to it. */
+	async function showError(msg: string) {
+		error = msg;
+		await tick();
+		errEl?.focus();
+	}
 	async function keepLog() {
 		confirmDelete = false;
 		await tick();
@@ -299,7 +339,7 @@
 			open = false;
 			toasts.push('Print log deleted');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'That did not delete.';
+			void showError(err instanceof Error ? err.message : 'That did not delete.');
 			await ctx.refresh();
 		} finally {
 			busy = false;
@@ -319,6 +359,7 @@
 			if (d.date !== editRun.date) patch.date = d.date;
 			if (d.grams !== editRun.grams) patch.grams = d.grams;
 			if (d.hours !== editRun.hours) patch.hours = d.hours;
+			if (d.printer !== editRun.printer) patch.printer = d.printer;
 			if (d.note !== editRun.note) patch.note = d.note;
 			try {
 				if (Object.keys(patch).length) await updateRun(ctx.id, editRun.id, patch);
@@ -326,7 +367,7 @@
 				open = false;
 				toasts.push('Print log updated');
 			} catch (err) {
-				error = err instanceof Error ? err.message : 'That did not save.';
+				void showError(err instanceof Error ? err.message : 'That did not save.');
 				await ctx.refresh();
 			} finally {
 				busy = false;
@@ -348,7 +389,7 @@
 				}
 			});
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'That did not save.';
+			void showError(err instanceof Error ? err.message : 'That did not save.');
 			await ctx.refresh();
 		} finally {
 			busy = false;
@@ -365,7 +406,7 @@
 	onclick={onbackdrop}
 >
 	{#if open}
-		<form onsubmit={save}>
+		<form onsubmit={save} novalidate>
 			<header class="ds-modal__head lrs-head">
 				<h2 id="{uid}-t">{title}</h2>
 				<button class="x" type="button" aria-label="Cancel" onclick={() => (open = false)}>×</button
@@ -450,25 +491,40 @@
 						id="{uid}-g"
 						type="number"
 						min="0"
-						step="1"
+						step="any"
 						inputmode="decimal"
 						placeholder={result === 'Failed'
 							? 'optional'
 							: bomEstimate > 0
 								? `BOM ~${fmt(bomEstimate)}`
 								: 'g'}
+						aria-invalid={gramsInvalid}
+						aria-describedby={gramsInvalid ? `${uid}-gerr` : undefined}
 						value={gramsShown}
 						oninput={(e) => {
 							grams = e.currentTarget.value;
 							gramsEdited = true;
 						}}
 					/>
-					{#if result === 'Failed' && !gramsEdited}<small
+					{#if gramsInvalid}<small class="err" id="{uid}-gerr" role="alert"
+							>Enter the grams as a number, 0 or more (for example 162.5).</small
+						>
+					{:else if result === 'Failed' && !gramsEdited}<small
 							>Optional: grams actually used. Left empty it counts as 0 g.</small
 						>
 					{:else if slicerDefault != null && !gramsEdited && !editRun}<small>{gramsSource}</small
 						>{/if}
 				</label>
+
+				{#if showPrinter}
+					<label class="f" for="{uid}-pr"
+						>Printer
+						<select id="{uid}-pr" data-testid="log-printer" bind:value={printer}>
+							<option value="">Not set</option>
+							{#each printerOptions as n (n)}<option value={n}>{n}</option>{/each}
+						</select>
+					</label>
+				{/if}
 
 				<label class="f" for="{uid}-n"
 					>Notes
@@ -483,7 +539,7 @@
 				<p class="summary" aria-live="polite">
 					{summary || 'Choose a result to see what saving will do.'}
 				</p>
-				{#if error}<p class="err" role="alert">{error}</p>{/if}
+				{#if error}<p class="err" role="alert" tabindex="-1" bind:this={errEl}>{error}</p>{/if}
 
 				{#if editRun && confirmDelete}
 					<div

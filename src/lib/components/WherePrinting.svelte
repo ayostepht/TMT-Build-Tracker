@@ -3,7 +3,9 @@
 
 	/**
 	 * "Where is it printing?": the small dialog behind choosing Printing when the workspace has
-	 * enabled printers. A radio per printer (the first preselected) and "Not on a connected printer".
+	 * enabled printers. A radio per printer (connected ones first, the first preselected; printers
+	 * that are not connected get a muted "not connected") and "Not on a connected printer", which
+	 * reads "Somewhere else" once a not-connected printer is listed.
 	 * `parts` (more than one) adds a "Which part?" choice, for plates that print one part per run.
 	 * Nothing is sent to the printer: the line below the list says so.
 	 */
@@ -13,14 +15,25 @@
 		onconfirm,
 		onclose
 	}: {
-		printers: { id: string; name: string }[];
+		printers: {
+			id: string;
+			name: string;
+			connection?: 'lan' | 'link' | 'manual';
+			status?: { state: string; fileName?: string } | null;
+		}[];
 		parts?: { slug: string; name: string }[];
 		onconfirm: (printerId: string | null, slug: string | null) => void;
 		onclose: () => void;
 	} = $props();
 	const uid = $props.id();
+	// Connected first, not-connected (manual) after; stable within each group.
+	const ordered = $derived([
+		...printers.filter((p) => p.connection !== 'manual'),
+		...printers.filter((p) => p.connection === 'manual')
+	]);
+	const hasManual = $derived(ordered.some((p) => p.connection === 'manual'));
 	// svelte-ignore state_referenced_locally
-	let where = $state<string>(printers[0]?.id ?? '');
+	let where = $state<string>(ordered[0]?.id ?? '');
 	// svelte-ignore state_referenced_locally
 	let part = $state<string>(parts[0]?.slug ?? '');
 </script>
@@ -45,7 +58,7 @@
 	{/if}
 	<fieldset class="wp-set">
 		<legend class="wp-sr">Printer</legend>
-		{#each printers as p (p.id)}
+		{#each ordered as p (p.id)}
 			<label class="wp-opt">
 				<input
 					type="radio"
@@ -54,12 +67,19 @@
 					bind:group={where}
 					data-testid="where-printer-{p.id}"
 				/>
-				<span>{p.name}</span>
+				<span class="wp-text"
+					>{p.name}{#if p.connection === 'manual'}
+						<span class="muted wp-sfx" data-testid="where-manual-{p.id}">not connected</span
+						>{/if}{#if p.connection !== 'manual' && p.status && (p.status.state === 'printing' || p.status.state === 'paused') && p.status.fileName}
+						<small class="muted wp-job" data-testid="where-job-{p.id}"
+							>{p.status.state === 'paused' ? 'Paused' : 'Printing'} now: {p.status.fileName}</small
+						>{/if}</span
+				>
 			</label>
 		{/each}
 		<label class="wp-opt">
 			<input type="radio" name="{uid}-where" value="" bind:group={where} data-testid="where-none" />
-			<span>Not on a connected printer</span>
+			<span>{hasManual ? 'Somewhere else' : 'Not on a connected printer'}</span>
 		</label>
 	</fieldset>
 	<p class="muted wp-note">
@@ -114,6 +134,20 @@
 	.wp-opt input {
 		margin: 0;
 		flex: none;
+	}
+	.wp-text {
+		min-width: 0;
+	}
+	.wp-job {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.wp-sfx {
+		margin-left: var(--sp-2);
+		font-size: var(--fs-sm);
 	}
 	.wp-note {
 		margin: 0;

@@ -89,15 +89,29 @@ describe('stored secrets belong to their destination (address or link)', () => {
 		expect(other.secrets.shareLink).toBe(L2);
 	});
 
-	it('a printer type that cannot use links never gets one, so addresses stay the rule', () => {
-		const { db, octo } = setup();
-		expect(() => updatePrinter(db, octo.id, 'o', { host: '10.0.0.77' })).toThrow(/Re-enter/);
-		expect(() =>
-			updatePrinter(db, octo.id, 'o', { secrets: { shareLink: L1 }, host: '10.0.0.6' })
-		).not.toThrow();
-		const r = updatePrinter(db, octo.id, 'o', { name: 'x' });
+	it('a printer type that cannot use links (Bambu LAN) never gets one, so addresses stay the rule', () => {
+		const { db } = setup();
+		const bambu = createPrinter(db, 'o', 'u1', {
+			name: 'B',
+			kind: 'bambu-lan',
+			host: '10.0.0.8',
+			secrets: { accessCode: 'CODE', serial: 'SN1' }
+		});
+		expect(() => updatePrinter(db, bambu.id, 'o', { secrets: { shareLink: L1 } })).toThrow(
+			/Bambu Lab/
+		);
+		const r = updatePrinter(db, bambu.id, 'o', { name: 'x' });
 		expect(decryptSecrets(r.secretEnc).shareLink).toBeUndefined();
-		expect(decryptSecrets(r.secretEnc).apiKey).toBe('KEY');
-		expect(r.host).toBe('10.0.0.6');
+		expect(decryptSecrets(r.secretEnc).accessCode).toBe('CODE');
+		expect(r.host).toBe('10.0.0.8');
+	});
+
+	it('OctoPrint and Klipper can move to a link: the stored key does not ride along', () => {
+		const { db, octo } = setup();
+		const r = updatePrinter(db, octo.id, 'o', { secrets: { shareLink: L1, apiKey: 'NEW' } });
+		expect(decryptSecrets(r.secretEnc)).toEqual({ shareLink: L1, apiKey: 'NEW' });
+		expect(r.host).toBe('octoeverywhere');
+		const r2 = updatePrinter(db, octo.id, 'o', { secrets: { shareLink: L2 } });
+		expect(decryptSecrets(r2.secretEnc)).toEqual({ shareLink: L2 }); // the old key is not sent to another link
 	});
 });

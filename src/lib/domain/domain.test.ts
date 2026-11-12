@@ -21,6 +21,7 @@ import {
 	setStatus,
 	validPrintedOn,
 	startPrinting,
+	betweenRuns,
 	stopPrinting,
 	timeStats,
 	toLocalInput,
@@ -359,6 +360,22 @@ describe('printer job that never started', () => {
 		expect(jobNeverStarted({ progress: null, elapsedSec: 120 })).toBe(true);
 		expect(jobNeverStarted({ progress: null, elapsedSec: 3600 })).toBe(false);
 		expect(jobNeverStarted({ progress: null })).toBe(false);
+	});
+	it('betweenRuns: Printing without a start time after a won run; startPrinting starts the next run', () => {
+		const v0 = makeView();
+		const plate = v0.plates.find((p) => p.perPartRuns)!;
+		const [a, b] = plate.parts;
+		let v = applyPatches(v0, startPrinting(v0, [a, b], now));
+		expect(betweenRuns(v, a)).toBe(false); // started: on the printer
+		v = log(v, { plateNumber: plate.number, partSlug: a, result: 'Success' });
+		expect(v.state[a].status).toBe('Printing');
+		expect(betweenRuns(v, a)).toBe(true);
+		expect(betweenRuns(v, b)).toBe(false); // started, no run logged
+		const again = startPrinting(v, [a], now);
+		expect(again).toEqual([{ slug: a, status: 'Printing', startedAt: now.toISOString() }]);
+		expect(betweenRuns(applyPatches(v, again), a)).toBe(false);
+		// Between runs nothing is on the printer: the part is not in "Now printing".
+		expect(nowPrinting(v).flatMap((c) => c.parts.map((p) => p.slug))).toEqual([b]);
 	});
 	it('releases Printing parts to To print, but a multi-run part between runs stays Printing', () => {
 		const v0 = makeView();

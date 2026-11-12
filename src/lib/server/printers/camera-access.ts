@@ -4,7 +4,7 @@ import type { Db } from '../db';
 import { json } from '@sveltejs/kit';
 import { CameraError, getCameraHub, type CameraSession } from './camera';
 import { resolveCameraSource, toCameraTarget, type CameraSource } from './camera-source';
-import { shareLinkOf } from '#lib/printers/share-link.ts';
+import { shareLinkFor, shareLinkOf } from '#lib/printers/share-link.ts';
 import { enableSdcpCamera } from './adapters/sdcp';
 import { assertOutboundAllowed } from './outbound';
 import { getSupervisor } from './supervisor';
@@ -22,10 +22,10 @@ export function cameraChanged(printerId: string) {
 
 /** Resolve (cached for a minute: Moonraker/OctoPrint are asked over HTTP) the printer's camera. */
 export async function sourceFor(db: Db, printerId: string): Promise<CameraSource | null> {
-	assertOutboundAllowed();
+	const row = getPrinter(db, printerId);
+	assertCameraAllowed(row);
 	const hit = cache.get(printerId);
 	if (hit && Date.now() - hit.at < TTL_MS) return hit.src;
-	const row = getPrinter(db, printerId);
 	if (!row) return null;
 	const src = await resolveCameraSource(toCameraTarget(row));
 	cache.set(printerId, { at: Date.now(), src });
@@ -40,9 +40,16 @@ export function printerForMember(db: Db, printerId: string, userId: string) {
 	return { row, role };
 }
 
+/** Hosted site: only a printer reached through an OctoEverywhere link has a camera. */
+function assertCameraAllowed(row: ReturnType<typeof getPrinter>): void {
+	assertOutboundAllowed({
+		allowShareLink: !!row && !!shareLinkFor(row.kind, toConfig(row).secrets)
+	});
+}
+
 export function sessionFor(db: Db, printerId: string): CameraSession {
-	assertOutboundAllowed();
 	const row = getPrinter(db, printerId);
+	assertCameraAllowed(row);
 	return getCameraHub().session(
 		printerId,
 		async () => {

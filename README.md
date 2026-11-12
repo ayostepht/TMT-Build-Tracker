@@ -12,17 +12,17 @@ Pick the filament for each color slot (primary, accent and so on) and see the ch
 
 ![The plate arranger: a top view of one print plate for a 256 by 256 mm bed, with red and white parts laid out flat and numbered by group](docs/images/screenshot-plate-arranger.png)
 
-The app lays the parts out flat on the plates for your printer's bed and shows how much of the bed is used. You can export the plate as a 3MF for your slicer or start printing from here.
+The app lays the parts out flat on the plates for your printer's bed and shows how much of the bed is used. You can export the plate as a 3MF for your slicer or start printing it.
 
 <p align="center">
-  <img src="docs/images/screenshot-phone-now-card.png" alt="A phone screen showing the plate currently printing, its filament, an elapsed-time and time-left line, and a Finish and log button" width="300">
+  <img src="docs/images/screenshot-phone-now-card.png" alt="A phone screen showing the plate currently printing, its filament, an elapsed-time and time-left line, and a Printed button" width="300">
 </p>
 
-On your phone at the printer: the plate that is printing, how long it has run and when it should finish. When the plate is done, tap Finish and log to mark its parts as printed, or flag a failure so they are queued for a reprint.
+On your phone at the printer: the plate that is printing, how long it has run and when it should finish. When the plate is done, tap the plate's status badge and choose Printed to log it and mark its parts as printed, or flag a failure so they are queued for a reprint.
 
 ![A printers page with one printer card showing a Printing badge, a progress bar at 42 percent, layer 168 of 400, time left and temperatures](docs/images/screenshot-printer-card.png)
 
-Optional: connect a printer (Elegoo, Klipper with Moonraker, OctoPrint or Bambu Lab in LAN mode) to see its status, progress and temperatures next to each plate. The app only reads from printers; it never starts, stops, pauses or moves them.
+Optional: add a printer on the Integrations page (Elegoo, Klipper with Moonraker, OctoPrint or Bambu Lab in LAN mode on your network, or Elegoo, Klipper or OctoPrint through an OctoEverywhere shared link, which also works on a hosted site) to see its status, progress and temperatures next to each plate, or add one that is not connected to log prints by hand. The app only reads from printers; it never starts, stops, pauses or moves them.
 
 ## MakeGood files and credit
 
@@ -89,19 +89,19 @@ While the repository is private, the container package is private too and pullin
 
 ## Guides
 
-| Guide                                                             | What is in it                                                                                  |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [Unraid](docs/guides/unraid.md)                                   | Template or manual install, settings, first start, updating, backups, uninstall                |
-| [Reverse proxy](docs/guides/reverse-proxy.md)                     | `PUBLIC_URL`, Nginx Proxy Manager, Caddy, Traefik, security headers, upload size, live updates |
-| [Single sign-on](docs/guides/sso.md)                              | Generic OpenID Connect, Authentik, Google and GitHub (public mode), who may sign up            |
-| [Backup and upgrade](docs/guides/backup-and-upgrade.md)           | What to back up, restore, updating the image, password reset links                             |
-| [Printers](docs/guides/printers.md)                               | Elegoo, Klipper (Moonraker), OctoPrint, Bambu LAN, Docker networking, what the app never does  |
-| [Environment reference](docs/guides/environment.md)               | Every variable, defaults, limits                                                               |
-| [Troubleshooting](docs/guides/troubleshooting.md)                 | Symptom, cause and fix                                                                         |
-| [Install on your phone](docs/guides/phone-install.md)             | Home screen, offline behaviour                                                                 |
-| [Site admin: model and print geometry](docs/guides/site-admin.md) | Replacing the bundled 3D model, importing print geometry from the command line                 |
-| [Export for your slicer](docs/guides/slicer-export.md)            | The 3MF export for Elegoo Slicer, OrcaSlicer, Bambu Studio and others                          |
-| [Changelog](CHANGELOG.md)                                         | What changed in each release                                                                   |
+| Guide                                                             | What is in it                                                                                                                                                 |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Unraid](docs/guides/unraid.md)                                   | Template or manual install, settings, first start, updating, backups, uninstall                                                                               |
+| [Reverse proxy](docs/guides/reverse-proxy.md)                     | `PUBLIC_URL`, Nginx Proxy Manager, Caddy, Traefik, security headers, upload size, live updates                                                                |
+| [Single sign-on](docs/guides/sso.md)                              | Generic OpenID Connect, Authentik, Google and GitHub (public mode), who may sign up                                                                           |
+| [Backup and upgrade](docs/guides/backup-and-upgrade.md)           | What to back up, restore, updating the image, password reset links                                                                                            |
+| [Printers](docs/guides/printers.md)                               | Integrations page, hosted or self-hosted, Elegoo, Klipper (Moonraker), OctoPrint, Bambu LAN, OctoEverywhere links, Docker networking, what the app never does |
+| [Environment reference](docs/guides/environment.md)               | Every variable, defaults, limits                                                                                                                              |
+| [Troubleshooting](docs/guides/troubleshooting.md)                 | Symptom, cause and fix                                                                                                                                        |
+| [Install on your phone](docs/guides/phone-install.md)             | Home screen, offline behaviour                                                                                                                                |
+| [Site admin: model and print geometry](docs/guides/site-admin.md) | Replacing the bundled 3D model, importing print geometry from the command line                                                                                |
+| [Export for your slicer](docs/guides/slicer-export.md)            | The 3MF export for Elegoo Slicer, OrcaSlicer, Bambu Studio and others                                                                                         |
+| [Changelog](CHANGELOG.md)                                         | What changed in each release                                                                                                                                  |
 
 ## Development
 

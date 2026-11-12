@@ -100,11 +100,17 @@ test('stage 4b printers screenshots', async ({ page, browser }) => {
 				await expect(page.getByTestId('link-plate')).toBeVisible({ timeout: 15_000 });
 				await shot('overview-unlinked');
 
-				// Printers page: card, edit form, add form, remove confirm
+				// Printers page: status cards and recent prints only
 				await page.goto(`/teams/${slug}/printers`);
 				await expect(page.getByTestId('printer-card')).toBeVisible();
 				await expect(page.getByTestId('job-list')).toBeVisible({ timeout: 15_000 });
 				await shot('printers');
+
+				// Integrations: rows, chooser, edit form, remove confirm
+				await page.goto(`/teams/${slug}/integrations`);
+				await page.waitForLoadState('networkidle');
+				await expect(page.getByTestId('printer-row')).toBeVisible();
+				await shot('integrations');
 				await page.getByRole('button', { name: 'Add a printer' }).click();
 				await shot('printers-add');
 				await page.getByRole('button', { name: 'Cancel' }).click();
@@ -113,12 +119,7 @@ test('stage 4b printers screenshots', async ({ page, browser }) => {
 				await page.getByRole('button', { name: 'Cancel' }).click();
 				await page.getByRole('button', { name: 'Remove…' }).click();
 				await shot('printers-remove-confirm');
-				await page.getByRole('button', { name: /^(Keep|Cancel)$/ }).click();
-
-				// Integrations
-				await page.goto(`/teams/${slug}/integrations`);
-				await page.waitForLoadState('networkidle');
-				await shot('integrations');
+				await page.getByTestId('ask-cancel').click();
 				idle();
 			}
 		}

@@ -1,6 +1,6 @@
 /** Data for the "Now printing" cards. */
 import { estPerRun, plateByNumber, units } from './accounting.ts';
-import { runInfo } from './actions.ts';
+import { betweenRuns, runInfo } from './actions.ts';
 import type { BuildView, PartDef, Plate } from './types.ts';
 
 export interface NowCard {
@@ -22,7 +22,10 @@ export function plateOf(view: BuildView, slug: string): Plate | null {
 }
 
 export function nowPrinting(view: BuildView): NowCard[] {
-	const printing = view.parts.filter((p) => view.state[p.slug]?.status === 'Printing');
+	// Parts between the runs of a multi-run plate are marked Printing but nothing is on the printer.
+	const printing = view.parts.filter(
+		(p) => view.state[p.slug]?.status === 'Printing' && !betweenRuns(view, p.slug)
+	);
 	const byPlate = new Map<number, PartDef[]>();
 	for (const p of printing) {
 		const pl = plateOf(view, p.slug);

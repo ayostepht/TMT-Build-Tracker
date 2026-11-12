@@ -1,7 +1,23 @@
 /** Printer integration types shared by server and browser. No Node imports. */
 
-export const PRINTER_KINDS = ['elegoo-sdcp', 'moonraker', 'octoprint', 'bambu-lan'] as const;
+export const PRINTER_KINDS = [
+	'elegoo-sdcp',
+	'moonraker',
+	'octoprint',
+	'bambu-lan',
+	'manual'
+] as const;
 export type PrinterKind = (typeof PRINTER_KINDS)[number];
+
+/** Stored in `printers.host` for a manual (not connected) printer: not an address, never dialled. */
+export const MANUAL_HOST_PLACEHOLDER = 'manual';
+
+const SHARE_LINK_FIELD: SecretField = {
+	key: 'shareLink',
+	label: 'OctoEverywhere shared link (optional)',
+	secret: true,
+	hint: "Reaches the printer through OctoEverywhere's existing connection instead of its address."
+};
 
 export const PRINTER_KIND_INFO: Record<
 	PrinterKind,
@@ -29,13 +45,13 @@ export const PRINTER_KIND_INFO: Record<
 	moonraker: {
 		label: 'Klipper (Moonraker)',
 		defaultPort: 7125,
-		secrets: [{ key: 'apiKey', label: 'API key (optional)', secret: true }],
+		secrets: [{ key: 'apiKey', label: 'API key (optional)', secret: true }, SHARE_LINK_FIELD],
 		hint: 'Moonraker WebSocket on port 7125.'
 	},
 	octoprint: {
 		label: 'OctoPrint',
 		defaultPort: 80,
-		secrets: [{ key: 'apiKey', label: 'API key', secret: true }],
+		secrets: [{ key: 'apiKey', label: 'API key', secret: true }, SHARE_LINK_FIELD],
 		hint: 'OctoPrint REST API; create an application key in its settings.'
 	},
 	'bambu-lan': {
@@ -46,6 +62,12 @@ export const PRINTER_KIND_INFO: Record<
 			{ key: 'serial', label: 'Serial number', secret: false }
 		],
 		hint: 'LAN-only mode over MQTT (TLS). Access code and serial are on the printer screen.'
+	},
+	manual: {
+		label: 'Not connected',
+		defaultPort: 0,
+		secrets: [],
+		hint: 'No address and no connection: log what is on this printer by hand.'
 	}
 };
 
@@ -120,6 +142,8 @@ export interface PrinterPublic {
 	secretsSet: string[];
 	/** Non-secret identifiers (serial, mainboard id). */
 	identifiers: Record<string, string>;
+	/** How it is reached: a LAN address, an OctoEverywhere shared link, or `manual` (never dialled). */
+	connection: 'lan' | 'link' | 'manual';
 	/** Why this printer can never be reached (hosted site, or a non-local address); null when it can. */
 	blocked: string | null;
 }

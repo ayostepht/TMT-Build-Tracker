@@ -230,6 +230,35 @@ describe('mutations', () => {
 		expect(loadBuildView(db, id, 'owner')!.state[slug].status).toBe('To print');
 	});
 
+	it('records the printer on a start and on a run edit', () => {
+		const id = mk();
+		const v0 = loadBuildView(db, id, 'owner')!;
+		const slug = v0.parts[0].slug;
+		printingAction(db, id, 'owner', {
+			action: 'start',
+			slugs: [slug],
+			printer: ' Garage printer '
+		});
+		const v1 = loadBuildView(db, id, 'owner')!;
+		const row = v1.activity.find((a) => a.kind === 'printing.start')!;
+		expect(row.payload.printer).toBe('Garage printer');
+		expect(() =>
+			printingAction(db, id, 'owner', { action: 'start', slugs: [slug], printer: 5 })
+		).toThrow(ApiError);
+		const runId = addRun(db, id, 'owner', {
+			plateNumber: null,
+			partSlug: slug,
+			date: '2026-01-02',
+			result: 'Success',
+			grams: 1,
+			hours: 1,
+			printer: 'Garage printer',
+			note: ''
+		});
+		updateRun(db, id, 'owner', runId, { printer: null });
+		expect(loadBuildView(db, id, 'owner')!.runs.find((r) => r.id === runId)!.printer).toBeNull();
+	});
+
 	it('marks plate parts Printed after the required successful runs', () => {
 		const id = mk();
 		const v0 = loadBuildView(db, id, 'owner')!;

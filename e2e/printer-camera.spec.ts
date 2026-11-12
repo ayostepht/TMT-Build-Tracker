@@ -222,9 +222,9 @@ test('printer settings: camera override, auto default placeholder, test preview,
 	const id = ((await made.json()).printer as { id: string }).id;
 
 	// Default (no override): the Elegoo address is what the placeholder shows.
-	await page.goto(`${chapterUrl}/printers`);
+	await page.goto(`${chapterUrl}/integrations`);
 	await page.waitForLoadState('networkidle');
-	await expect(page.getByTestId('printer-card')).toBeVisible();
+	await expect(page.getByTestId('printer-row')).toBeVisible();
 	await page.getByRole('button', { name: 'Edit' }).first().click();
 	const url = page.getByTestId('pf-camera-url');
 	await expect(url).toHaveAttribute('placeholder', 'http://127.0.0.1:3031/video');
@@ -280,7 +280,7 @@ test('printer settings: camera override, auto default placeholder, test preview,
 
 	// Bambu: not supported, said in the form.
 	await page.getByTestId('add-printer').click();
-	await page.getByTestId('pf-kind').selectOption('bambu-lan');
+	await page.getByTestId('option-bambu-lan').click();
 	await expect(page.getByTestId('pf-camera-unsupported')).toContainText('not supported');
 	await expect(page.getByTestId('pf-camera-url')).toHaveCount(0);
 });

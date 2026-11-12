@@ -27,6 +27,7 @@
 			<tr>
 				<th>Date</th><th>Result</th>
 				{#if colorOf}<th>Color</th>{/if}
+				{#if runs.some((r) => r.printer)}<th>Printer</th>{/if}
 				<th>g</th><th>hrs</th><th>Note</th><th><span class="sr-only">Actions</span></th>
 			</tr>
 		</thead>
@@ -36,6 +37,7 @@
 					<td class="num">{r.date}</td>
 					<td>{r.result}</td>
 					{#if colorOf}<td>{colorOf(r)}</td>{/if}
+					{#if runs.some((x) => x.printer)}<td data-testid="run-printer">{r.printer ?? ''}</td>{/if}
 					<td class="num" title={scopeOf?.(r) ? 'plate total' : undefined}>{r.grams ?? ''}</td>
 					<td class="num">{r.hours ?? ''}</td>
 					<td

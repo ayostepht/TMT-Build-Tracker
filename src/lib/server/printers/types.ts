@@ -91,6 +91,48 @@ export class HostileGuard {
 	}
 }
 
+/** A WebSocket that has not opened after this long is abandoned and retried on the usual backoff. */
+export const CONNECT_TIMEOUT_MS = 10_000;
+
+/**
+ * Most messages and characters one printer socket may deliver in any second before it is closed
+ * as flooding (real printers send a handful of small messages a second). The runtime's own frame
+ * limit (128 MiB in Node 22's undici) is applied only after a whole message is buffered, so this
+ * budget and `MAX_REMOTE_MESSAGE_BYTES` are what bound a hostile peer from the first message on.
+ */
+export const SOCKET_MAX_MESSAGES_PER_SEC = 100;
+export const SOCKET_MAX_BYTES_PER_SEC = 2 * 1024 * 1024;
+/**
+ * Through a link the socket is closed only after this much silence (status still goes "offline"
+ * at the adapter's usual stale time): an idle printer may push rarely, and closing early would
+ * make the socket reconnect in a loop and the status flap.
+ */
+export const LINK_SILENT_CLOSE_MS = 120_000;
+export const FLOODED_MESSAGE = 'The printer sent too much data';
+
+/** Per-socket receive budget in one-second windows. `take(n)` is false once the window is spent. */
+export class MessageBudget {
+	private start = 0;
+	private msgs = 0;
+	private bytes = 0;
+	constructor(
+		private now: () => number = Date.now,
+		private maxMsgs = SOCKET_MAX_MESSAGES_PER_SEC,
+		private maxBytes = SOCKET_MAX_BYTES_PER_SEC
+	) {}
+	take(size: number): boolean {
+		const t = this.now();
+		if (t - this.start >= 1000) {
+			this.start = t;
+			this.msgs = 0;
+			this.bytes = 0;
+		}
+		this.msgs++;
+		this.bytes += size;
+		return this.msgs <= this.maxMsgs && this.bytes <= this.maxBytes;
+	}
+}
+
 /** Shared-link (third-party relay) reconnects: slower, so a relay that hangs up is not hammered. */
 export const linkBackoff = (attempt: number): number => backoff(attempt, 10_000, 300_000);
 

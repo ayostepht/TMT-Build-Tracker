@@ -193,8 +193,10 @@ describe('shared link storage', () => {
 		expect(() =>
 			createPrinter(db, 'o', 'u1', { name: 'x', kind: 'elegoo-sdcp', host: '' })
 		).toThrow();
-		// a link on a printer type that cannot use it is dropped, and then there is no address
-		expect(() => createPrinter(db, 'o', 'u1', body({ kind: 'moonraker' }))).toThrow(/address/i);
+		// a printer type that cannot use a link says so (Bambu LAN is MQTT, not a web link)
+		expect(() => createPrinter(db, 'o', 'u1', body({ kind: 'bambu-lan' }))).toThrow(
+			/Bambu Lab printers cannot be reached through an OctoEverywhere link/
+		);
 	});
 
 	it('keeps the link on edit, drops a custom camera address, and clears on request', () => {
@@ -306,8 +308,8 @@ describe('credential hygiene (review findings)', () => {
 			configFromInput(db, 'o', { id: row.id, kind: 'elegoo-sdcp', secrets: { shareLink: '' } })
 		).toThrow(/address/i);
 		expect(() =>
-			configFromInput(db, 'o', { kind: 'moonraker', secrets: { shareLink: LINK } })
-		).toThrow(/address/i);
+			configFromInput(db, 'o', { kind: 'bambu-lan', secrets: { shareLink: LINK } })
+		).toThrow(/Bambu Lab/);
 		expect(configFromInput(db, 'o', { id: row.id, kind: 'elegoo-sdcp' }).secrets.shareLink).toBe(
 			LINK
 		);

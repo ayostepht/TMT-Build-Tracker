@@ -1,5 +1,5 @@
 import { cameraSupported, checkCameraUrl } from '#lib/printers/camera-url.ts';
-import { shareLinkOf } from '#lib/printers/share-link.ts';
+import { shareLinkFor } from '#lib/printers/share-link.ts';
 import { ApiError, requireEditor } from '#lib/server/access.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
@@ -7,6 +7,12 @@ import { CameraError, grabFrame } from '#lib/server/printers/camera.ts';
 import { testEnabler } from '#lib/server/printers/camera-access.ts';
 import { resolveCameraSource } from '#lib/server/printers/camera-source.ts';
 import { resolveAllowed } from '#lib/server/printers/outbound.ts';
+import {
+	HOSTED_CAMERA_FAILURE,
+	limitTests,
+	uniformHostedFailure
+} from '#lib/server/printers/test-limit.ts';
+import { isPublicMode } from '#lib/server/config.ts';
 import { configFromInput } from '#lib/server/printers/store.ts';
 import type { RequestHandler } from './$types';
 
@@ -23,11 +29,16 @@ export const POST: RequestHandler = (event) =>
 		const org = typeof body?.organizationId === 'string' ? body.organizationId : '';
 		if (!org) throw new ApiError(400, 'organizationId is required');
 		requireEditor(db, org, userId);
+		limitTests(userId);
 		const cfg = configFromInput(db, org, body);
 		// Refused in public mode / for a non-local address, before any request. Through an
 		// OctoEverywhere link the destination is the link's host (a validated public address).
-		const link = cfg.kind === 'elegoo-sdcp' ? shareLinkOf(cfg.secrets) : null;
-		await resolveAllowed(link ? link.host : cfg.host, undefined, { allowShareLink: !!link });
+		if (cfg.kind === 'manual')
+			return { works: false, message: 'This printer is not connected, so it has no camera.' };
+		const link = shareLinkFor(cfg.kind, cfg.secrets);
+		await uniformHostedFailure(() =>
+			resolveAllowed(link ? link.host : cfg.host, undefined, { allowShareLink: !!link })
+		);
 		if (!cameraSupported(cfg.kind))
 			return { works: false, message: 'This printer type has no camera support.' };
 		// With an OctoEverywhere link the camera address comes from the link; a typed one is ignored.
@@ -44,7 +55,12 @@ export const POST: RequestHandler = (event) =>
 			cameraEnabled: true,
 			secrets: cfg.secrets
 		});
-		if (!src) return { works: false, message: 'No camera found for this printer.' };
+		const hosted = isPublicMode();
+		if (!src)
+			return {
+				works: false,
+				message: hosted ? HOSTED_CAMERA_FAILURE : 'No camera found for this printer.'
+			};
 		try {
 			const jpg = await grabFrame(src, {}, testEnabler(cfg));
 			return {
@@ -53,6 +69,7 @@ export const POST: RequestHandler = (event) =>
 				origin: src.origin
 			};
 		} catch (e) {
+			if (hosted) return { works: false, message: HOSTED_CAMERA_FAILURE };
 			return { works: false, message: e instanceof CameraError ? e.message : 'Camera test failed' };
 		}
 	});

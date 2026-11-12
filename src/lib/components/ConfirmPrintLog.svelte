@@ -9,6 +9,8 @@
 	let { job, ondone }: { job: PrinterJobView; ondone: () => Promise<void> | void } = $props();
 	const ctx = getBuildCtx();
 
+	const roundGrams = (g: number | null | undefined) =>
+		g == null || !Number.isFinite(g) ? '' : String(Math.round(g * 100) / 100);
 	// Prefilled once from the job; the user edits from there.
 	const total = untrack(() =>
 		plateRunGrams(ctx.view, job.plateNumber ?? 0, job.partSlugs ?? undefined)
@@ -16,7 +18,7 @@
 	const init = untrack(() => ({
 		result: job.status === 'done' ? 'Success' : 'Failed',
 		// A finished print used its plate's grams; one that stopped part-way only an estimate of them.
-		grams: String((job.status === 'done' ? total : progressGrams(total, job.progress)) ?? ''),
+		grams: roundGrams(job.status === 'done' ? total : progressGrams(total, job.progress)),
 		hours:
 			job.startedAt && job.finishedAt
 				? String(
@@ -78,7 +80,7 @@
 				<input
 					type="number"
 					min="0"
-					step="1"
+					step="any"
 					inputmode="decimal"
 					bind:value={grams}
 					placeholder={job.status === 'done' ? 'g' : 'optional'}

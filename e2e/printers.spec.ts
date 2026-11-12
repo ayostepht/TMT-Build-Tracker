@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { chooseStatus } from './status-helpers';
+import { gotoIntegrations, openElegooForm } from './integrations-helpers';
 import { createBuild, openNav, ownerWithBuild, signUp, startBuild, uniqueEmail } from './helpers';
 
 const SHOTS = 'data/shots-m7';
@@ -61,11 +62,15 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { chapterUrl, buildId } = await ownerWithBuild(page, 'printers');
 
-	// Printers page and the add form.
+	// The Printers view has no add form: its empty state leads to Integrations, where printers are added.
 	await page.goto(`${chapterUrl}/printers`);
 	await page.waitForLoadState('networkidle');
 	await expect(page.getByRole('heading', { name: 'Printers', level: 2 })).toBeVisible();
-	await page.getByTestId('add-printer').click();
+	await expect(page.getByTestId('printers-empty')).toBeVisible();
+	await expect(page.getByTestId('add-printer')).toHaveCount(0);
+	await page.getByTestId('printers-manage').first().click();
+	await expect(page).toHaveURL(/\/integrations$/);
+	await openElegooForm(page);
 	await page.getByLabel('Name', { exact: true }).fill('Shop Centauri');
 	await page.getByTestId('pf-host').fill('127.0.0.1');
 	await page.getByTestId('pf-port').fill(String(mock.port));
@@ -76,6 +81,9 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	await expect(page.getByTestId('test-result')).toContainText('Connected', { timeout: 20_000 });
 	await expect(page.getByTestId('test-result').getByTestId('printer-state')).toHaveText('Idle');
 	await page.getByTestId('pf-save').click();
+	await expect(page.getByTestId('printer-row')).toContainText('Shop Centauri');
+	await expect(page.getByTestId('row-connection')).toHaveText('Elegoo · on your network');
+	await page.goto(`${chapterUrl}/printers`);
 	const card = page.getByTestId('printer-card').first();
 	await expect(card).toContainText('Shop Centauri');
 	await expect(card.getByTestId('printer-state')).toHaveText('Idle', { timeout: 20_000 });
@@ -162,16 +170,16 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	});
 
 	// Remove the printer again (team-level cleanup).
-	await page.goto(`${chapterUrl}/printers`);
-	await page.getByRole('button', { name: 'Remove…' }).click();
-	// The inline confirm takes focus (Cancel first); Escape cancels and focus returns to Remove….
-	await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+	await gotoIntegrations(page, chapterUrl);
+	await page.getByTestId('remove-printer').click();
+	// The dialog opens with Cancel focused; Escape cancels and focus returns to Remove….
+	await expect(page.getByTestId('ask-cancel')).toBeFocused();
 	await page.keyboard.press('Escape');
-	await expect(page.getByRole('button', { name: 'Remove for good' })).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Remove…' })).toBeFocused();
-	await page.getByRole('button', { name: 'Remove…' }).click();
-	await page.getByRole('button', { name: 'Remove for good' }).click();
-	await expect(page.getByTestId('printer-card')).toHaveCount(0);
+	await expect(page.getByTestId('ask-dialog')).toHaveCount(0);
+	await expect(page.getByTestId('remove-printer')).toBeFocused();
+	await page.getByTestId('remove-printer').click();
+	await page.getByTestId('ask-confirm').click();
+	await expect(page.getByTestId('printer-row')).toHaveCount(0);
 });
 
 test('spoolman: link a spool to a filament, see it on the tiles, grams deducted on a logged run', async ({
@@ -248,28 +256,32 @@ async function orgId(page: import('@playwright/test').Page): Promise<string> {
 	return orgs.find((o) => !o.metadata?.personal)?.id ?? orgs[0].id;
 }
 
-test('plate layout picker lists the workspace printers first and can add a new one', async ({
+test('plate layout picker lists the workspace printers first; adding one is on Integrations', async ({
 	page
 }) => {
 	test.setTimeout(120_000);
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { chapterUrl, buildId } = await ownerWithBuild(page, 'picker-printers');
 
-	// No printer yet: only "New printer…" (and a hint). Add one inline from the Files tab.
+	// No printer yet: the picker offers none and points to Integrations, where one is added.
 	await page.goto(`/builds/${buildId}/files`);
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
-	const sel = page.getByTestId('team-printer');
-	await expect(sel.locator('option')).toContainText(['No printers added yet', 'New printer…']);
-	await sel.selectOption({ label: 'New printer…' });
-	const dlg = page.getByTestId('new-printer-dialog');
-	await expect(dlg).toBeVisible();
-	await dlg.getByLabel('Name', { exact: true }).fill('Bench Centauri');
-	await dlg.getByTestId('pf-host').fill('127.0.0.1');
-	await dlg.getByTestId('pf-port').fill(String(mock.port));
-	await dlg.getByLabel('Model (optional)').selectOption({ label: 'Centauri Carbon' });
-	await dlg.getByTestId('pf-save').click();
-	await expect(dlg).toBeHidden();
+	let sel = page.getByTestId('team-printer');
+	await expect(sel.locator('option')).toHaveText(['No printers added yet']);
+	await page.getByTestId('add-printer-hint').getByRole('link').click();
+	await expect(page).toHaveURL(/\/integrations$/);
+	await openElegooForm(page);
+	await page.getByLabel('Name', { exact: true }).fill('Bench Centauri');
+	await page.getByTestId('pf-host').fill('127.0.0.1');
+	await page.getByTestId('pf-port').fill(String(mock.port));
+	await page.getByLabel('Model (optional)').selectOption({ label: 'Centauri Carbon' });
+	await page.getByTestId('pf-save').click();
+	await expect(page.getByTestId('printer-row')).toContainText('Bench Centauri');
+	await page.goto(`/builds/${buildId}/files`);
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
+	sel = page.getByTestId('team-printer');
 	// Added to the team AND selected for this build.
 	await expect(sel.locator('option:checked')).toContainText('Bench Centauri');
 	await expect(sel.locator('option:checked')).toContainText('256 × 256');
@@ -353,16 +365,21 @@ test('top nav Printers reaches the printers page from a build; a personal worksp
 	await page.getByTestId('manage-printers').click();
 	await expect(page).toHaveURL(/\/printers$/);
 
-	// A solo maker adds a printer without creating a chapter.
+	// A solo maker adds a printer without creating a chapter: Printers leads to Integrations.
 	await page.waitForLoadState('networkidle');
-	await page.getByTestId('add-printer').click();
+	await page.getByTestId('printers-manage').first().click();
+	await expect(page).toHaveURL(/\/integrations$/);
+	await openElegooForm(page);
 	await page.getByLabel('Name', { exact: true }).fill('Solo Centauri');
 	await page.getByTestId('pf-host').fill('127.0.0.1');
 	await page.getByTestId('pf-port').fill(String(mock.port));
 	await page.getByLabel('Model (optional)').selectOption({ label: 'Centauri Carbon' });
 	await page.getByTestId('pf-save').click();
+	await expect(page.getByTestId('printer-row').first()).toContainText('Solo Centauri');
+	const tabs = page.getByRole('navigation', { name: 'Chapter sections' });
+	await tabs.getByRole('link', { name: 'Printers', exact: true }).click();
 	await expect(page.getByTestId('printer-card').first()).toContainText('Solo Centauri');
-	await page.getByRole('link', { name: 'Integrations', exact: true }).click();
+	await tabs.getByRole('link', { name: 'Integrations', exact: true }).click();
 	await expect(page.getByTestId('autolog')).toBeVisible();
 });
 
@@ -635,7 +652,7 @@ test('Now printing shows the live printer box and camera tile at 390 and 1440, a
 	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
 });
 
-test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Take off printer brings the chooser back', async ({
+test('unlinked print: chooser; "Start on <printer>" before the print starts turns it into a confirm; Take off printer brings the chooser back', async ({
 	page
 }) => {
 	test.setTimeout(150_000);
@@ -715,6 +732,80 @@ test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Tak
 	idle();
 });
 
+test('"Where is it printing?" with a print already running links it to the plate at once; no confirm', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { chapterUrl, buildId } = await ownerWithBuild(page, 'onestep');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Onestep Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	const printerId = ((await created.json()).printer as { id: string }).id;
+	const idle = () => mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	idle();
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+
+	// The printer is already running a file the app cannot match to a plate: an unlinked job.
+	mock.printing('benchy.gcode', 8);
+	await expect(page.getByTestId('link-plate')).toBeVisible({ timeout: 20_000 });
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	const badge = page.locator('.group-head').getByTestId('plate-status').first();
+	await chooseStatus(badge, 'Printing');
+	const dlg = page.getByTestId('where-printing');
+	await expect(dlg).toBeVisible();
+	// The dialog says what the printer is printing now.
+	await expect(dlg.getByTestId(`where-job-${printerId}`)).toContainText(
+		'Printing now: benchy.gcode'
+	);
+	await dlg.getByTestId('where-confirm').click();
+	await expect(dlg).toBeHidden();
+
+	// One step: the job is linked straight away, a toast says so, and no confirmation follows.
+	const toast = page
+		.locator('.toasts')
+		.filter({ hasText: /Linked Onestep Centauri.s print to plate \d+/ });
+	await expect(toast).toBeVisible({ timeout: 15_000 });
+	const plate = Number((await toast.innerText()).match(/plate (\d+)/)![1]);
+	await expect(page.getByTestId('expected-confirm')).toHaveCount(0);
+	await expect
+		.poll(
+			async () =>
+				(
+					(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+						jobs: { buildId: string | null; plateNumber: number | null; fileName: string }[];
+					}
+				).jobs.find((j) => j.fileName === 'benchy.gcode')?.plateNumber,
+			{ timeout: 15_000 }
+		)
+		.toBe(plate);
+	await page.goto(`/builds/${buildId}`);
+	await expect(page.getByTestId('printer-live')).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByTestId('expected-confirm')).toHaveCount(0);
+
+	// The Printers page lists the job as linked to that plate.
+	await page.goto(`${chapterUrl}/printers`);
+	const row = page.getByTestId('job-list').locator('li').filter({ hasText: 'benchy.gcode' });
+	await expect(row.getByRole('link', { name: `Plate ${plate}` })).toBeVisible({ timeout: 15_000 });
+	await expect(row).not.toContainText('Not linked to a plate');
+	idle();
+});
+
 test('Printers page: a running unlinked job can be linked there; Stop monitoring says what it does', async ({
 	page
 }) => {
@@ -768,8 +859,9 @@ test('Printers page: a running unlinked job can be linked there; Stop monitoring
 
 	// Monitoring wording: the print is not paused, only the app stops watching.
 	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	await gotoIntegrations(page, chapterUrl);
 	await page.getByRole('button', { name: 'Stop monitoring' }).click();
-	await expect(page.getByTestId('printer-state')).toHaveText('Monitoring stopped');
+	await expect(page.getByTestId('row-state')).toHaveText('Monitoring stopped');
 	await page.screenshot({ path: `${SHOTS_PP}/printer-monitoring-stopped-390-light.png` });
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.screenshot({ path: `${SHOTS_PP}/printer-monitoring-stopped-390-dark.png` });

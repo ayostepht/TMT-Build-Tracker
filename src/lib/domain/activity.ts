@@ -137,7 +137,9 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			return `${who} updated ${part(p.slug)}${bits.length ? ` (${list(bits)})` : ''}`;
 		}
 		case 'printing.start':
-			return `${who} put ${parts(p.slugs)} on the printer`;
+			return str(p.printer)
+				? `${who} put ${parts(p.slugs)} on ${str(p.printer)}`
+				: `${who} put ${parts(p.slugs)} on the printer`;
 		case 'printing.stop':
 			return `${who} took ${parts(p.slugs)} off the printer${num(p.unlinkedJobs) ? '; the running print is no longer linked to it' : ''}`;
 		case 'printing.setStart':
@@ -171,6 +173,7 @@ function describeMarked(a: ActivityItem, view: Names): string {
 				if ('newPartSlug' in p) bits.push(`the part to ${part(p.newPartSlug)}`);
 				if ('grams' in p) bits.push('the grams');
 				if ('hours' in p) bits.push('the hours');
+				if ('printer' in p) bits.push('the printer');
 				if ('note' in p) bits.push('the note');
 				return `${who} edited a print log of ${target}${bits.length ? ` (changed ${list(bits)})` : ''}${recomputedText(p.recomputed, part)}`;
 			}
@@ -178,7 +181,8 @@ function describeMarked(a: ActivityItem, view: Names): string {
 				return `${who} deleted a ${adj} print of ${target} from the log${recomputedText(p.recomputed, part)}`;
 			let grams = num(p.grams);
 			if (grams === null) grams = view.runs.find((r) => r.id === p.runId)?.grams ?? null;
-			return `${who} logged a ${adj} print of ${target}${grams !== null ? ` (${fmt(grams)} g)` : ''}`;
+			const on = str(p.printer);
+			return `${who} logged a ${adj} print of ${target}${on ? ` on ${on}` : ''}${grams !== null ? ` (${fmt(grams)} g)` : ''}`;
 		}
 		case 'plate.slicer': {
 			const n = num(p.number);
@@ -343,4 +347,32 @@ function describeMarked(a: ActivityItem, view: Names): string {
 
 function photoKind(v: unknown): string {
 	return v === 'finished' ? 'finished-chair' : v === 'handoff' ? 'handoff' : 'progress';
+}
+
+/**
+ * The printer the given parts were last put on ("Where is it printing?"), read from the newest
+ * `printing.start` activity that covers any of them; a later `printing.stop` or logged run on
+ * them ends it. Null when unknown. The activity list holds the newest 50 rows.
+ */
+export function startedOnPrinter(
+	view: Pick<BuildView, 'activity'>,
+	slugs: readonly string[],
+	plateNumber: number | null = null
+): string | null {
+	for (const a of view.activity) {
+		const p = (a.payload ?? {}) as Obj;
+		if (a.kind === 'run.add' || a.kind === 'run.undo') {
+			const covered = [p.partSlug, ...(Array.isArray(p.partSlugs) ? p.partSlugs : [])];
+			if (plateNumber !== null && num(p.plateNumber) === plateNumber) return null;
+			if (covered.some((s) => typeof s === 'string' && slugs.includes(s))) return null;
+			continue;
+		}
+		if (a.kind !== 'printing.start' && a.kind !== 'printing.stop') continue;
+		const on = Array.isArray(p.slugs)
+			? p.slugs.filter((s): s is string => typeof s === 'string')
+			: [];
+		if (!on.some((s) => slugs.includes(s))) continue;
+		return a.kind === 'printing.start' ? str(p.printer) : null;
+	}
+	return null;
 }

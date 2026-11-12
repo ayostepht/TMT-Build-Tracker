@@ -20,6 +20,7 @@ export const GET: RequestHandler = (event) =>
 		return {
 			workspaces: teams.map((t) => ({
 				id: t.id,
+				slug: t.slug,
 				name: t.personal ? 'My builds' : t.name,
 				personal: t.personal,
 				canEdit: t.role !== 'viewer',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeActivity, describeActivitySegments } from './activity.ts';
+import { describeActivity, describeActivitySegments, startedOnPrinter } from './activity.ts';
 import { filamentLabel } from './labels.ts';
 import { makeView } from './fixtures.ts';
 import type { ActivityItem } from './types.ts';
@@ -59,6 +59,52 @@ describe('describeActivity', () => {
 			`Steph updated ${part.name} (assigned it to Sam)`
 		);
 		expect(say('part.update', { slug: part.slug, comps: true })).toContain('ticked off');
+	});
+	it('names the printer on a start and on a logged run', () => {
+		expect(say('printing.start', { slugs: [part.slug], printer: 'Garage printer' })).toBe(
+			`Steph put ${part.name} on Garage printer`
+		);
+		expect(
+			say('run.add', { plateNumber: 3, result: 'Success', printer: 'Garage printer', grams: 10 })
+		).toBe('Steph logged a successful print of plate 3 on Garage printer (10 g)');
+	});
+	it('startedOnPrinter reads the newest start that covers the parts', () => {
+		const at = (kind: string, payload: Record<string, unknown>): ActivityItem => ({
+			...act(kind, payload),
+			id: kind + JSON.stringify(payload)
+		});
+		const v = (...rows: ActivityItem[]) => ({ activity: rows }); // newest first
+		const s = [part.slug];
+		expect(startedOnPrinter(v(at('printing.start', { slugs: s, printer: 'A' })), s)).toBe('A');
+		expect(startedOnPrinter(v(at('printing.start', { slugs: s })), s)).toBeNull();
+		expect(
+			startedOnPrinter(v(at('printing.start', { slugs: [part2.slug], printer: 'A' })), s)
+		).toBeNull();
+		expect(
+			startedOnPrinter(
+				v(at('printing.stop', { slugs: s }), at('printing.start', { slugs: s, printer: 'A' })),
+				s
+			)
+		).toBeNull();
+		expect(
+			startedOnPrinter(
+				v(
+					at('run.add', { plateNumber: 2, partSlug: null, partSlugs: null }),
+					at('printing.start', { slugs: s, printer: 'A' })
+				),
+				s,
+				2
+			)
+		).toBeNull();
+		expect(
+			startedOnPrinter(
+				v(
+					at('printing.start', { slugs: s, printer: 'B' }),
+					at('printing.start', { slugs: s, printer: 'A' })
+				),
+				s
+			)
+		).toBe('B');
 	});
 	it('printing actions', () => {
 		const slugs = [part.slug, part2.slug];

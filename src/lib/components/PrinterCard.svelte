@@ -15,6 +15,7 @@
 		printer,
 		status = undefined,
 		compact = false,
+		manageHref = undefined,
 		actions
 	}: {
 		printer: Pick<PrinterPublic, 'name' | 'kind' | 'enabled' | 'lastSeenAt' | 'status'> & {
@@ -22,12 +23,20 @@
 		};
 		status?: PrinterStatus | null;
 		compact?: boolean;
+		/** Editors: where this printer is set up (the Integrations page); shown as a small "Manage" link. */
+		manageHref?: string;
 		actions?: Snippet;
 	} = $props();
 
 	const s = $derived(status === undefined ? printer.status : status);
+	/** A printer that is not connected: never contacted, so never "offline". */
+	const manual = $derived(printer.kind === 'manual');
 	const state = $derived(
-		!printer.enabled || printer.blocked ? 'disabled' : (s?.state ?? 'connecting')
+		manual
+			? 'manual'
+			: !printer.enabled || printer.blocked
+				? 'disabled'
+				: (s?.state ?? 'connecting')
 	);
 	const LABEL: Record<string, string> = {
 		idle: 'Idle',
@@ -38,6 +47,7 @@
 		offline: 'Offline',
 		error: 'Error',
 		disabled: 'Monitoring stopped',
+		manual: 'Not connected',
 		connecting: 'Connecting…'
 	};
 	const TONE: Record<string, string> = {
@@ -62,14 +72,21 @@
 	<header>
 		<div>
 			<h3>{printer.name}</h3>
-			<span class="kind">{PRINTER_KIND_INFO[printer.kind].label}</span>
+			{#if !manual}<span class="kind">{PRINTER_KIND_INFO[printer.kind].label}</span>{/if}
 		</div>
 		<span class="ds-badge ds-badge--sm {TONE[state] ?? ''}" data-testid="printer-state"
 			>{LABEL[state]}</span
 		>
 	</header>
+	{#if manual}
+		<p class="msg" data-testid="printer-manual">
+			The app does not contact this printer. Prints on it are logged by hand.
+		</p>
+	{/if}
 
-	{#if printer.blocked}
+	{#if manual}
+		<!-- no live block -->
+	{:else if printer.blocked}
 		<p class="msg" data-testid="printer-blocked">{printer.blocked}</p>
 	{:else if s && (s.state === 'printing' || s.state === 'paused' || s.state === 'done')}
 		<div class="prog" data-testid="printer-progress">
@@ -123,7 +140,12 @@
 	{#if !s && printer.lastSeenAt && !compact}<p class="msg">
 			Last seen {new Date(printer.lastSeenAt).toLocaleString()}
 		</p>{/if}
-	{#if actions}<footer>{@render actions()}</footer>{/if}
+	{#if actions || manageHref}<footer>
+			{#if actions}{@render actions()}{/if}
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+			{#if manageHref}<a class="pc-manage" href={manageHref} data-testid="printer-manage">Manage</a
+				>{/if}
+		</footer>{/if}
 </article>
 
 <style>
@@ -221,6 +243,18 @@
 		margin: 0;
 		font-size: var(--fs-sm);
 		color: var(--muted);
+	}
+	.pc-manage {
+		display: inline-flex;
+		align-items: center;
+		min-height: 32px;
+		font-size: var(--fs-sm);
+		margin-left: auto;
+	}
+	@media (pointer: coarse) {
+		.pc-manage {
+			min-height: 44px;
+		}
 	}
 	footer {
 		display: flex;

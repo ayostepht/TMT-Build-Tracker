@@ -1,5 +1,6 @@
 /**
- * OctoEverywhere shared-connection links for Elegoo printers. Browser-safe, no Node imports.
+ * OctoEverywhere shared-connection links (Elegoo, Klipper/Moonraker, OctoPrint). Browser-safe,
+ * no Node imports.
  *
  * The link (`https://shared-<token>.octoeverywhere.com`) is a secret: anyone holding it can
  * reach the printer through OctoEverywhere. It is stored encrypted next to the other printer
@@ -10,6 +11,11 @@
 
 /** Secret-field key for the shared link inside the encrypted printer secrets. */
 export const SHARE_LINK_KEY = 'shareLink';
+
+/** Printer kinds that can be reached through a shared link (Bambu LAN is MQTT/TLS, which a web link cannot carry). */
+export const SHARE_LINK_KINDS = ['elegoo-sdcp', 'moonraker', 'octoprint'] as const;
+export const supportsShareLink = (kind: string): boolean =>
+	(SHARE_LINK_KINDS as readonly string[]).includes(kind);
 
 /** Stored in `printers.host` (not secret, shown in the UI) when the printer is reached by link. */
 export const SHARE_LINK_HOST_PLACEHOLDER = 'octoeverywhere';
@@ -79,3 +85,15 @@ export const shareLinkSocketUrl = (origin: string) => `wss://${new URL(origin).h
 
 /** Camera URL through the link: OctoEverywhere serves the printer's MJPEG stream at `/video`. */
 export const shareLinkCameraUrl = (origin: string) => `${origin}/video`;
+
+/** The link of a printer of `kind`: null for kinds that cannot use one, or when none is set. */
+export function shareLinkFor(
+	kind: string,
+	secrets: Record<string, string> | undefined
+): { origin: string; host: string } | null {
+	return supportsShareLink(kind) ? shareLinkOf(secrets) : null;
+}
+
+/** An https URL on the link host for an API path (Moonraker and OctoPrint requests through the link). */
+export const shareLinkUrl = (origin: string, path: string) =>
+	`${origin}${path.startsWith('/') ? path : `/${path}`}`;

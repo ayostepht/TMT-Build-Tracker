@@ -293,6 +293,7 @@ test.describe('touch targets', () => {
 		await check('files', `/builds/${buildId}/files`);
 		await check('settings', `/builds/${buildId}/settings`);
 		await check('printers', `${new URL(chapterUrl).pathname}/printers`);
+		await check('integrations', `${new URL(chapterUrl).pathname}/integrations`);
 		await check('account', '/account');
 		expect(offenders, `.btn under 44 px:\n${offenders.join('\n')}`).toEqual([]);
 	});

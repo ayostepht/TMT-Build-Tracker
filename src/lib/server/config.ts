@@ -280,6 +280,9 @@ export function bootProblems(): string[] {
 	guard(() => trustedProxy());
 	guard(() => publicUrl());
 	guard(() => quotas());
+	guard(() => linkPrintersPerWorkspace());
+	guard(() => linkPrintersTotal());
+	guard(() => manualPrintersPerWorkspace());
 	guard(() => minFreeDiskBytes());
 	guard(() => writeRateVars());
 	if (mode === 'public') problems.push(...validatePublicMode());
@@ -495,6 +498,33 @@ export function quotas(): Quotas {
 	const userMb = quotaValue(QUOTA_UPLOAD_USER_VAR, pub ? QUOTA_UPLOAD_USER_PUBLIC_MB : null);
 	out.uploadBytesPerUser = userMb === null ? null : userMb * 1024 * 1024;
 	return out;
+}
+
+/**
+ * Printers one workspace may have that are reached through an OctoEverywhere shared link
+ * (`QUOTA_LINK_PRINTERS_PER_WORKSPACE`, digits or `off`). Default 3 in public mode (each one is a
+ * long-lived connection from this server to a third party), no limit self-hosted. Kept apart from
+ * `quotas()` on purpose: it is a printer-store rule, enforced in `printers/store.ts`.
+ */
+export function linkPrintersPerWorkspace(): number | null {
+	return quotaValue('QUOTA_LINK_PRINTERS_PER_WORKSPACE', isPublicMode() ? 3 : null);
+}
+
+/**
+ * Link printers on the whole instance (`QUOTA_LINK_PRINTERS_TOTAL`, digits or `off`): every one is
+ * a long-lived connection from this server to a third party. Default 200 in public mode, no limit
+ * self-hosted. Enforced in `printers/store.ts` with the per-workspace cap.
+ */
+export function linkPrintersTotal(): number | null {
+	return quotaValue('QUOTA_LINK_PRINTERS_TOTAL', isPublicMode() ? 200 : null);
+}
+
+/**
+ * Not-connected (manual) printers per workspace (`QUOTA_MANUAL_PRINTERS_PER_WORKSPACE`, digits or
+ * `off`): they cost no connection, only rows. Default 10 in public mode, no limit self-hosted.
+ */
+export function manualPrintersPerWorkspace(): number | null {
+	return quotaValue('QUOTA_MANUAL_PRINTERS_PER_WORKSPACE', isPublicMode() ? 10 : null);
 }
 
 /** Validates `WRITE_RATE_PER_MIN` and `WRITE_RATE_BURST` (digits or `off`) at boot; `write-rate.ts` does the parsing for use. */

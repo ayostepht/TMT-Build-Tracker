@@ -152,11 +152,17 @@ export class BuildCtx {
 	}
 
 	/** "Start printing": mark these parts Printing (optimistic, Undo toast). */
-	async startParts(slugs: string[], label = this.#nameOf(slugs)): Promise<boolean> {
+	async startParts(
+		slugs: string[],
+		label = this.#nameOf(slugs),
+		printer?: string
+	): Promise<boolean> {
 		const patches = startPrinting(this.view, slugs, new SvelteDate());
 		if (!patches.length) return true;
 		const before = snapshotParts(this.view, slugs);
-		const ok = await this.act(() => printing(this.id, { action: 'start', slugs }), { patches });
+		const ok = await this.act(() => printing(this.id, { action: 'start', slugs, printer }), {
+			patches
+		});
 		if (ok) this.#offerUndo(`Started ${label}`, before);
 		return ok;
 	}

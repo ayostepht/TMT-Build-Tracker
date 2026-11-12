@@ -5,6 +5,7 @@
 	const SECTIONS = [
 		{ id: 'getting-started', label: 'Getting started' },
 		{ id: 'printing-day', label: 'Printing day' },
+		{ id: 'connect-printer', label: 'Connect a printer' },
 		{ id: 'glossary', label: 'Glossary' },
 		{ id: 'faq', label: 'FAQ' }
 	];
@@ -84,9 +85,10 @@
 			<li>
 				<b>Start.</b> Tap the plate's status badge (it says <b>To print</b> at first) and choose
 				<b>Printing</b>. If a printer is connected, you are asked <b>Where is it printing?</b>: pick
-				the printer and the app follows its job, or pick <b>Not on a connected printer</b>. This
-				only marks the plate's parts <b>Printing</b> and starts the clock. Start the print at the printer
-				itself: the Build Tracker never sends a print to it.
+				the printer and the app follows its job, or pick <b>Not on a connected printer</b> (see
+				<a href="#connect-printer">Connect a printer</a>). This only marks the plate's parts
+				<b>Printing</b> and starts the clock. Start the print at the printer itself: the Build Tracker
+				never sends a print to it.
 			</li>
 			<li>
 				<b>Log the result.</b> When the plate comes off, tap its badge and choose <b>Printed</b>.
@@ -145,6 +147,47 @@
 			</li>
 		</ul>
 		<p class="muted">Printers are watched, never controlled. See the FAQ.</p>
+	</section>
+
+	<section class="ds-card help-section" id="connect-printer" aria-labelledby="h-connect">
+		<h2 id="h-connect">Connect a printer</h2>
+		<p>
+			Connecting a printer is optional. With one connected you see live progress next to the plate,
+			the print that is running is linked to its plate for you, and, if you switch it on, finished
+			prints are logged automatically. The app only reads from a printer: it never starts, stops,
+			pauses or moves one (the single exception is turning the camera on).
+		</p>
+		<p>
+			Do it in your workspace under <b>Integrations</b> → <b>Add a printer</b>. The page lists the
+			ways to connect and tells you the steps for each:
+		</p>
+		<ul class="help-list">
+			<li>
+				<b>Elegoo on your network</b>: Elegoo printers such as the Centauri Carbon, straight over
+				your home or shop network, with status and camera. In regular use.
+			</li>
+			<li>
+				<b>OctoEverywhere link</b>: paste an OctoEverywhere shared link for an Elegoo, Klipper or
+				OctoPrint printer, so the app can see it from anywhere. In regular use for Elegoo; Klipper
+				and OctoPrint through a link are new.
+			</li>
+			<li>
+				<b>Klipper (Moonraker)</b> and <b>OctoPrint</b>: printers running those, over your network.
+				New, so tell us if something is off.
+			</li>
+			<li>
+				<b>Bambu Lab (LAN mode)</b>: Bambu printers in LAN mode, status only, no camera. New.
+			</li>
+			<li>
+				<b>Not connected</b>: just a name for a printer the app cannot reach. Pick it when logging a
+				print so the history says which printer was used, and log the result by hand.
+			</li>
+		</ul>
+		<p class="muted">
+			A hosted site cannot reach a printer's address on your own network, so there you can use an
+			OctoEverywhere link (which works from anywhere) or a not-connected printer. A copy you run
+			yourself can use all of them, and Spoolman as well.
+		</p>
 	</section>
 
 	<section class="ds-card help-section" id="glossary" aria-labelledby="h-gloss">

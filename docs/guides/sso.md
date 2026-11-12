@@ -52,7 +52,7 @@ With SSO there is no app password to reset. For password accounts see [Backup an
 
 ## Google and GitHub (public mode)
 
-This is for a hosted public instance (`TMT_MODE=public`), not for a home install. In public mode sign-in is only with Google and GitHub: no passwords, and the generic `OIDC_*` variables are refused. Emails must be verified by the provider, and printers and Spoolman are not available.
+This is for a hosted public instance (`TMT_MODE=public`), not for a home install. In public mode sign-in is only with Google and GitHub: no passwords, and the generic `OIDC_*` variables are refused. Emails must be verified by the provider, printers on your own network and Spoolman are not available (printers reached through an OctoEverywhere link and printers that are not connected are; see [Printers](printers.md#hosted-or-self-hosted)).
 
 | Variable                                   | Meaning                                                                                                              |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |

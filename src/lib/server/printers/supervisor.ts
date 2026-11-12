@@ -5,6 +5,7 @@
  */
 import { eq } from 'drizzle-orm';
 import type { PrinterStatus } from '#lib/printers/status.ts';
+import { shareLinkFor } from '#lib/printers/share-link.ts';
 import { isPublicMode } from '../config';
 import type { Db } from '../db';
 import { printers } from '../db/schema';
@@ -47,11 +48,13 @@ export class Supervisor {
 	}
 
 	private connect(printerId: string): void {
-		if (isPublicMode()) return; // hosted site: no printer connection is ever started
 		if (this.conns.has(printerId)) return;
 		const row = this.db.select().from(printers).where(eq(printers.id, printerId)).get();
 		if (!row) return;
+		if (row.kind === 'manual') return; // not connected: nothing to dial, ever
 		const cfg = toConfig(row);
+		// Hosted site: only a printer on an OctoEverywhere link is ever connected.
+		if (isPublicMode() && !shareLinkFor(cfg.kind, cfg.secrets)) return;
 		let handle: AdapterHandle;
 		try {
 			handle = this.adapters[cfg.kind](cfg);
@@ -162,7 +165,14 @@ export async function testConnection(
 	timeoutMs = 8000,
 	adapters: Record<PrinterKind, ConnectFn> = defaultAdapters
 ): Promise<{ ok: boolean; status: PrinterStatus | null; message?: string }> {
-	if (isPublicMode()) return { ok: false, status: null, message: PUBLIC_MODE_MESSAGE };
+	if (cfg.kind === 'manual')
+		return {
+			ok: false,
+			status: null,
+			message: 'This printer is not connected, so there is nothing to test.'
+		};
+	if (isPublicMode() && !shareLinkFor(cfg.kind, cfg.secrets))
+		return { ok: false, status: null, message: PUBLIC_MODE_MESSAGE };
 	return new Promise((resolve) => {
 		let last: PrinterStatus | null = null;
 		let handle: AdapterHandle | null = null;

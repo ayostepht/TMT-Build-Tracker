@@ -43,62 +43,22 @@ test('Setup Files step and Files tab picker: bed presets, light and dark, phone 
 	await expect(page.getByTestId('arrange-bed-panel')).toHaveCount(0);
 });
 
-test('New printer dialog is a real modal: focus in, Tab trapped, Escape closes, focus restored', async ({
+test('the picker has no inline add form: a line leads to the workspace Integrations page', async ({
 	page
 }) => {
 	test.setTimeout(120_000);
-	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.setViewportSize({ width: 390, height: 844 });
 	const { buildId } = await ownerWithBuild(page, 'newprinter');
 	await page.goto(`/builds/${buildId}/files`);
 	await page.waitForLoadState('networkidle');
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	const sel = page.getByTestId('team-printer');
-	await sel.focus();
-	await sel.selectOption({ label: 'New printer…' });
-	const dlg = page.getByRole('dialog', { name: 'New printer' });
-	await expect(dlg).toBeVisible();
-	await expect(dlg.locator(':focus')).toHaveCount(1);
-	for (let i = 0; i < 8; i++) {
-		await page.keyboard.press('Tab');
-		await expect(dlg.locator(':focus')).toHaveCount(1);
-	}
-	for (let i = 0; i < 8; i++) {
-		await page.keyboard.press('Shift+Tab');
-		await expect(dlg.locator(':focus')).toHaveCount(1);
-	}
-	await page.keyboard.press('Escape');
-	await expect(dlg).toBeHidden();
-	await expect(sel).toBeFocused();
-});
-
-test('New printer dialog: Cancel and a successful save both leave focus on the printer select', async ({
-	page
-}) => {
-	test.setTimeout(120_000);
-	await page.setViewportSize({ width: 1280, height: 800 });
-	const { buildId } = await ownerWithBuild(page, 'newprinterfocus');
-	await page.goto(`/builds/${buildId}/files`);
-	await page.waitForLoadState('networkidle');
-	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
-	const sel = page.getByTestId('team-printer');
-	const dlg = page.getByRole('dialog', { name: 'New printer' });
-
-	await sel.focus(); // selectOption alone does not focus the select, as a real click would
-	await sel.selectOption({ label: 'New printer…' });
-	await expect(dlg).toBeVisible();
-	await dlg.getByRole('button', { name: 'Cancel' }).click();
-	await expect(dlg).toBeHidden();
-	await expect(sel).toBeFocused();
-
-	await sel.focus(); // selectOption alone does not focus the select, as a real click would
-	await sel.selectOption({ label: 'New printer…' });
-	await expect(dlg).toBeVisible();
-	await dlg.getByLabel('Name', { exact: true }).fill('Focus Centauri');
-	await dlg.getByTestId('pf-host').fill('127.0.0.1');
-	await dlg.getByTestId('pf-port').fill('3030');
-	await dlg.getByLabel('Model (optional)').selectOption({ label: 'Centauri Carbon' });
-	await dlg.getByTestId('pf-save').click();
-	await expect(dlg).toBeHidden();
-	await expect(sel.locator('option:checked')).toContainText('Focus Centauri');
-	await expect(sel).toBeFocused();
+	await expect(sel.locator('option')).toHaveText(['No printers added yet']);
+	await expect(page.getByTestId('new-printer-dialog')).toHaveCount(0);
+	const hint = page.getByTestId('add-printer-hint');
+	await expect(hint).toContainText('Add a printer on the Integrations page');
+	expect(await noOverflow(page)).toBeLessThanOrEqual(0);
+	await hint.getByRole('link').click();
+	await expect(page).toHaveURL(/\/teams\/[^/]+\/integrations$/);
+	await expect(page.getByTestId('add-printer')).toBeVisible();
 });

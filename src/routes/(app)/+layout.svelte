@@ -172,7 +172,9 @@
 
 <div class="wrap shell" class:has-tabs={!!current && !onSetup}>
 	<header class="topbar" bind:this={topbar} onfocusout={onTopbarFocusOut}>
-		<a class="brand shell-brand" href={resolve('/(app)')}><AppMark />TMT Build Tracker</a>
+		<a class="brand shell-brand" href={resolve('/(app)')}
+			><AppMark /><span class="brand-text">TMT Build Tracker</span></a
+		>
 		<div class="chapter-slot">
 			{#if showSwitcher}
 				<label class="chapter">
@@ -272,14 +274,16 @@
 					aria-current={page.url.pathname.startsWith('/designs') ? 'page' : undefined}>Designs</a
 				>
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
-				{#if printersHref && !data.publicMode}
+				{#if printersHref}
 					<a
 						class="navlink"
 						href={printersHref}
 						data-testid="nav-printers"
 						aria-current={page.url.pathname === printersHref ? 'page' : undefined}
 						>Printers{#if printingCount}<span class="live" data-testid="nav-printing"
-								><span class="live-dot" aria-hidden="true"></span>{printingCount} printing</span
+								><span class="live-dot" aria-hidden="true"></span><span class="live-n"
+									>{printingCount}</span
+								><span class="live-txt">&nbsp;printing</span></span
 							>{/if}</a
 					>
 				{/if}
@@ -290,7 +294,7 @@
 					aria-current={page.url.pathname === '/help' ? 'page' : undefined}>Help</a
 				>
 			</nav>
-			{#if workspace && (membersHref || !data.publicMode)}
+			{#if workspace}
 				<div class="menu-wrap ws-settings">
 					<button
 						type="button"
@@ -300,7 +304,8 @@
 						data-menu="settings"
 						data-testid="workspace-settings-menu"
 						onclick={() => toggle('settings')}
-						>{workspace.personal ? 'My builds' : 'Chapter'} settings
+						><span class="ws-long">{workspace.personal ? 'My builds' : 'Chapter'} settings</span
+						><span class="ws-short" aria-hidden="true">Settings</span>
 						<span aria-hidden="true">▾</span></button
 					>
 					{#if open === 'settings'}
@@ -309,9 +314,7 @@
 							{#if membersHref}
 								<a href={membersHref} data-testid="ws-members">Members</a>
 							{/if}
-							{#if !data.publicMode}
-								<a href={integrationsHref} data-testid="ws-integrations">Integrations</a>
-							{/if}
+							<a href={integrationsHref} data-testid="ws-integrations">Integrations</a>
 						</div>
 					{/if}
 				</div>
@@ -632,6 +635,9 @@
 		align-items: center;
 		order: 9;
 	}
+	.ws-short {
+		display: none;
+	}
 	.phone-only {
 		display: none !important;
 	}
@@ -639,14 +645,97 @@
 		max-width: 170px;
 	}
 
-	/* Mid widths: shorten the chapter select and the account name so the bar stays one row. */
-	@media (min-width: 761px) and (max-width: 1100px) {
+	/* Desktop: the bar sits in a max-width container, so the fit rules follow the bar's own width
+	   (a container query), not the viewport. The chapter select and the account name take the
+	   spare room (up to 220 / 160 px) and shrink with ellipsis only as far as the row needs.
+	   Order of giving way: the "n printing" text shrinks to a dot and a count (the full text stays
+	   in the accessible name), then the names shrink, then "Chapter settings" becomes "Settings",
+	   then the wordmark goes (the mark stays). */
+	.topbar {
+		container: topbar / inline-size;
+	}
+	@media (min-width: 761px) {
+		.shell-brand,
+		.main,
+		.ws-settings {
+			flex-shrink: 0;
+		}
+		/* Small flex-basis (the minimum), grows into spare room: wrapping goes by the basis. */
+		.chapter-slot {
+			flex: 3 1 100px;
+			max-width: 220px;
+		}
+		.chapter {
+			display: flex;
+			justify-content: flex-end;
+			min-width: 0;
+		}
 		.chapter select {
-			max-width: 130px;
+			max-width: 100%;
+			min-width: 0;
 			text-overflow: ellipsis;
 		}
+		.acct-wrap {
+			flex: 1 1 104px;
+			max-width: 200px;
+			min-width: 0;
+			display: flex;
+			justify-content: flex-end;
+		}
+		.acct {
+			max-width: 100%;
+			min-width: 0;
+		}
 		.acct .who-name {
-			max-width: 96px;
+			min-width: 0;
+			max-width: 160px;
+		}
+		@container topbar (max-width: 1120px) {
+			.live-txt {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+			}
+		}
+		@container topbar (max-width: 1040px) {
+			.ws-long {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+			}
+			.ws-short {
+				display: inline;
+			}
+		}
+		@container topbar (max-width: 990px) {
+			.brand-text {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+			}
+		}
+		@container topbar (max-width: 780px) {
+			.topbar {
+				gap: 6px 6px;
+			}
+			.main {
+				gap: 6px 2px;
+			}
+			.chapter-slot {
+				flex-basis: 84px;
+			}
+			.acct-wrap {
+				flex-basis: 88px;
+			}
 		}
 	}
 

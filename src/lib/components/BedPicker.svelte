@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { listMyPrinters, type PrinterWorkspace } from '#lib/client/api.ts';
 	import { catalogPrinter } from '#lib/printers/catalog.ts';
 	import type { PrinterPublic } from '#lib/printers/status.ts';
@@ -13,7 +14,6 @@
 		printerFromCatalog
 	} from '#lib/printers/printer.ts';
 	import PrinterPicker from './PrinterPicker.svelte';
-	import PrinterForm from './PrinterForm.svelte';
 
 	/**
 	 * Pick the bed a build is planned for: a standard size in one tap, a custom size, or a
@@ -155,12 +155,11 @@
 	const presetIdx = $derived(mode === 'preset' ? presetOf(bedX, bedY) : -1);
 
 	// Printers of every workspace the user belongs to ("Your printers"), the build's own first.
-	const NEW_PRINTER = '__new__';
 	let groups = $state<PrinterWorkspace[]>([]);
-	let adding = $state(false);
 	let touched = false;
 	const team = $derived(groups.flatMap((g) => g.printers));
-	const canAddPrinter = $derived(groups.find((g) => g.id === orgId)?.canEdit ?? false);
+	/** Adding a printer happens on the workspace's Integrations page (editors only). */
+	const integrationsSlug = $derived(groups.find((g) => g.id === orgId && g.canEdit)?.slug ?? '');
 	const usable = $derived(team.filter((t) => catalogPrinter(t.catalogId)));
 	const teamSel = $derived(
 		mode === 'printer' && picked
@@ -172,7 +171,7 @@
 		const state = t.status?.state ? ` · ${t.status.state}` : '';
 		return c
 			? `${t.name} · ${c.brand} ${c.model} · ${bedLabel(c.bedX, c.bedY)}${state}`
-			: `${t.name} (set its model on the Printers page to use its bed)`;
+			: `${t.name} (choose its model on the Integrations page to use its bed)`;
 	};
 	async function loadTeam(): Promise<PrinterPublic[]> {
 		if (!orgId) return [];
@@ -195,50 +194,13 @@
 		emit(p);
 	}
 	function onTeamSelect(v: string) {
-		if (v === NEW_PRINTER) adding = true;
-		else if (v) pickTeam(v);
-	}
-	async function added() {
-		const before = new Set(team.map((t) => t.id));
-		adding = false;
-		const now = await loadTeam();
-		const fresh = now.find((t) => !before.has(t.id));
-		if (!fresh) return;
-		if (catalogPrinter(fresh.catalogId)) pickTeam(fresh.id);
-		else error = `${fresh.name} was added. Choose its model on the Printers page to use its bed.`;
+		if (v) pickTeam(v);
 	}
 	onMount(async () => {
 		const list = await loadTeam();
 		const ok = list.filter((t) => t.organizationId === orgId && catalogPrinter(t.catalogId));
 		if (preselectSingle && !touched && ok.length === 1 && !current?.catalogId) pickTeam(ok[0].id);
 	});
-	/**
-	 * Moves the dialog to <body> (the picker may sit inside a form, and PrinterForm is a form too)
-	 * and opens it as a modal: the browser gives focus trapping, an inert page, Escape and focus
-	 * restore. Closing by Cancel or a successful add unmounts the dialog, which gets no native
-	 * restore, so the opener is remembered and refocused on destroy (only if focus was lost).
-	 */
-	function modal(node: HTMLDialogElement) {
-		const active = document.activeElement;
-		const opener = active instanceof HTMLElement && active !== document.body ? active : null;
-		document.body.appendChild(node);
-		node.showModal();
-		return {
-			destroy() {
-				if (node.open) node.close();
-				node.remove();
-				// Give focus back unless something outside the dialog already took it on purpose.
-				const restore = () => {
-					const a = document.activeElement;
-					const lost = !a || a === document.body || node.contains(a);
-					if (lost && opener?.isConnected) opener.focus({ preventScroll: true });
-				};
-				restore();
-				// The opener may be re-rendered a tick later (e.g. after the printer list reloads).
-				setTimeout(restore, 0);
-			}
-		};
-	}
 </script>
 
 <div class="bed-picker" data-testid="bed-picker">
@@ -262,13 +224,18 @@
 						{/each}
 					</optgroup>
 				{/each}
-				{#if canAddPrinter}<option value={NEW_PRINTER}>New printer…</option>{/if}
 			</select>
 			<span class="hint"
-				>Printers from the Printers page of all your chapters and My builds. Or pick a standard bed
-				size below.</span
+				>Printers from all your chapters and My builds. Or pick a standard bed size below.</span
 			>
 		</label>
+		{#if integrationsSlug}
+			<p class="hint" data-testid="add-printer-hint">
+				<a href={resolve('/(app)/teams/[slug]/integrations', { slug: integrationsSlug })}
+					>Add a printer on the Integrations page</a
+				>
+			</p>
+		{/if}
 	{/if}
 	<div class="presets" role="group" aria-label="Bed size">
 		{#each BED_PRESETS as p, i (p.x + 'x' + p.y)}
@@ -444,18 +411,6 @@
 	{/if}
 </div>
 
-{#if adding}
-	<dialog
-		use:modal
-		class="ds-modal np-dialog"
-		aria-label="New printer"
-		data-testid="new-printer-dialog"
-		onclose={() => (adding = false)}
-	>
-		<PrinterForm org={orgId} ondone={added} oncancel={() => (adding = false)} />
-	</dialog>
-{/if}
-
 <style>
 	.adv {
 		margin-top: var(--sp-4);
@@ -542,15 +497,6 @@
 	}
 	.num-field input {
 		max-width: 140px;
-	}
-	.np-dialog {
-		width: min(640px, calc(100vw - 32px));
-	}
-	/* The form is a card: inside the dialog the dialog is the surface */
-	.np-dialog :global(.pf) {
-		border: 0;
-		border-radius: 0;
-		background: transparent;
 	}
 	.hint {
 		margin: 0;

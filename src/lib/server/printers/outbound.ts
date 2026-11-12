@@ -2,15 +2,16 @@
  * The outbound-connection guard. EVERYTHING the server connects to on a user's say-so (printer
  * adapters, cameras, discovery, connection tests, Spoolman) goes through here.
  *
- *  - Public mode (`TMT_MODE=public`): refused before any network activity (no DNS either).
+ *  - Public mode (`TMT_MODE=public`): refused before any network activity (no DNS either), except
+ *    an OctoEverywhere shared-link host on a call that passes `allowShareLink`.
  *  - Self-hosted: the host is resolved once (all A/AAAA records), EVERY answer must be on the
  *    owner's own network (`classifyAddress`), and the connection goes to the validated IP
  *    literal, so a second DNS answer cannot differ (DNS rebinding).
  *  - HTTP never follows redirects: `guardedFetch` hands every 3xx back and callers treat it as
  *    a failure. API keys are therefore only ever sent to the validated host.
  *
- *  - The ONE public destination, opt-in per call (`allowShareLink`, default false; only the Elegoo
- *    link paths pass it): an OctoEverywhere shared-link host (`isShareLinkHost`). Its
+ *  - The ONE public destination, opt-in per call (`allowShareLink`, default false; only the
+ *    shared-link paths of Elegoo, Klipper and OctoPrint pass it): an OctoEverywhere shared-link host (`isShareLinkHost`). Its
  *    name is resolved like any other, but EVERY answer must be a global unicast address (the
  *    inverse of the private-range rule: a link name that points inward is refused), and it is
  *    reached over https on the default port only.
@@ -47,9 +48,14 @@ export class OutboundError extends ApiError {
 	}
 }
 
-/** Throws the public-mode refusal. Call before any network activity or DNS lookup. */
-export function assertOutboundAllowed(): void {
-	if (isPublicMode()) throw new OutboundError(PUBLIC_MODE_MESSAGE, 403, 'public');
+/**
+ * Throws the public-mode refusal. Call before any network activity or DNS lookup. Only a caller
+ * that is about to use an OctoEverywhere shared link passes `allowShareLink`; `resolveAllowed`
+ * then still refuses every host that is not a share-link host.
+ */
+export function assertOutboundAllowed(opts: { allowShareLink?: boolean } = {}): void {
+	if (isPublicMode() && !opts.allowShareLink)
+		throw new OutboundError(PUBLIC_MODE_MESSAGE, 403, 'public');
 }
 
 /** Resolves a host name to every address it has (A and AAAA). Replaceable for tests. */
@@ -144,9 +150,12 @@ export async function resolveAllowed(
 	r: Resolver = resolver,
 	opts: { allowShareLink?: boolean } = {}
 ): Promise<ResolvedTarget> {
-	assertOutboundAllowed();
+	assertOutboundAllowed({ allowShareLink: opts.allowShareLink });
 	const host = cleanHost(rawHost);
 	if (!host) throw new OutboundError('Enter the printer address.');
+	// Hosted site: the shared-link host is the only destination, whatever else the caller passes.
+	if (isPublicMode() && !isShareLinkHost(host))
+		throw new OutboundError(PUBLIC_MODE_MESSAGE, 403, 'public');
 	if (isIpLiteral(host)) {
 		const v = classifyAddress(host);
 		if (!v.ok) throw new OutboundError(refusedMessage(v, rawHost));
@@ -241,7 +250,7 @@ const BAD_STATUS_MESSAGE = 'The device sent an invalid answer.';
 const NULL_BODY = new Set([101, 204, 205, 304]);
 
 type FetchInit = Parameters<typeof fetch>[1] & {
-	/** Elegoo OctoEverywhere link paths only: lets a share-link host through (public, https:443). */
+	/** OctoEverywhere link paths only (Elegoo, Klipper, OctoPrint): lets a share-link host through (public, https:443). */
 	allowShareLink?: boolean;
 };
 
@@ -255,7 +264,7 @@ export async function guardedFetch(
 	init: FetchInit = {}
 ): Promise<Response> {
 	const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
-	assertOutboundAllowed();
+	assertOutboundAllowed({ allowShareLink: init?.allowShareLink === true });
 	if (url.protocol !== 'http:' && url.protocol !== 'https:')
 		throw new OutboundError('The address must start with http:// or https://', 400, 'protocol');
 	const allowShareLink = init?.allowShareLink === true;
