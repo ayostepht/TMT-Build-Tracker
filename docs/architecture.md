@@ -364,6 +364,15 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Kit and startup (`kit-and-startup`)
 
+- Migrations: one baseline, `drizzle/0000_red_apocalypse.sql` (the 14 earlier migrations
+  were squashed on 2026-11-11). `runMigrations` (`db/index.ts`) first calls
+  `upgradeLegacyChain` (`db/baseline-upgrade.ts`): a database at the complete old chain
+  (14 journal rows, hashes in `LEGACY_CHAIN`) is brought to the baseline in one
+  transaction (tables whose stored SQL differs from the baseline beyond whitespace are
+  rebuilt, the journal is replaced by the baseline row, one log line names the rebuilt
+  tables). A partial or unknown chain makes startup refuse and leaves the file untouched.
+  New migrations are added after the baseline as usual. Old-chain fixtures for the tests:
+  `db/fixtures/legacy-chain/`.
 - Startup order: migrations, then `cleanupAuthDataAtStartup` (`server/auth-cleanup.ts`:
   idempotent, one transaction, clears `session.ip_address` and unused account tokens, logs
   one counts-only line only when something changed), then seeding and the kit pack.
@@ -396,7 +405,7 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   Dockerfile `COPY` names a file that is not in the repo.
 - Startup: migrate, seed, `failStaleModelJobs`, `sweepImportsDir` (`imports-sweep.ts`:
   temp uploads and scratch folders older than 1 h that no queued job needs). Schema:
-  `site_admin` (migration 0013).
+  `site_admin`.
 
 ## App shell (`app-shell`)
 
