@@ -10,7 +10,35 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **r48 is live** (c64d852, deployed 2026-11-12 from main 1e18c6c; UI and two small server
+0. **r49 is committed (45dce51), gated, NOT yet approved for deploy**: the maintainer is
+   reviewing it in the local preview. Do not deploy until this says "r49 ready to deploy".
+   Contents: Integrations page as the one place to add, edit and remove printers (grouped
+   chooser, setup steps per option from `setup-steps.ts`, auto-log, Spoolman card); Printers
+   tab is status only; OctoEverywhere links for Klipper and OctoPrint as well as Elegoo
+   (Bambu LAN cannot); printer kind `manual` (not connected) usable in "Where is it
+   printing?" and on the log sheet, printer name stored on runs and in the start activity;
+   hosted mode admits link and manual printers only (caps `QUOTA_LINK_PRINTERS_PER_WORKSPACE`
+   3, `QUOTA_LINK_PRINTERS_TOTAL` 200, `QUOTA_MANUAL_PRINTERS_PER_WORKSPACE` 10; handshake,
+   silence and receive limits on sockets; rate-limited test routes); one-step link when the
+   chosen printer is already printing; log sheet takes decimal grams and shows refusals
+   (fixes the r48 check failure); between-runs parts no longer show the plate as Printing;
+   container-query top bar; Help "Connect a printer"; guides updated. Gate: check, lint,
+   1536 unit tests, build, full e2e 208 passed; two security reviews, no high findings.
+   **Blocker for running a hosted site with link printers (not for self-hosted, not for
+   making the repo public):** Node's built-in WebSocket buffers one message up to about
+   128 MiB before our limits see it; fix = dial link printers with the `ws` package
+   (`maxPayload` about 1 MiB). Adds a dependency, so it runs alone: planned as r50
+   [printers]. Until then a hosted site should set `QUOTA_LINK_PRINTERS_PER_WORKSPACE=0`.
+   Other open items from r49: duplicate-link check needs a `link_hash` column (schema
+   change, ask the maintainer); `MessageBudget` counts characters, not bytes; Klipper and
+   OctoPrint through a link, and every hosted-mode path, are unproven on real hardware; on
+   deploy, watch the maintainer's live Elegoo link for reconnect flapping (link sockets now
+   close after 120 s of silence); retake the README screenshots that show the old Finish
+   and log button and printers page (use `npm run preview:demo`); the incident on
+   2026-11-12 where a new unit test sent one SDCP discovery broadcast on the Mac's LAN is
+   fixed (test sets public mode first) and no other printers unit test can reach the
+   network (security-reviewer, sampled).
+1. **r48 is live** (c64d852, deployed 2026-11-12 from main 1e18c6c; UI and two small server
    changes, no migration; rollback: tag `r47` as `test`, no restore needed). Rehearsal clean;
    checks on a copy of the live data: 8 of 10 pass, 1 failed, 1 open question (see "r48
    checks" under open items). The
@@ -27,19 +55,10 @@ done. Keep it under ~150 lines.
    question for the maintainer: single-part plates show the status on plate and part.
    Workflow from now on (maintainer, 2026-11-12): before every Unraid deploy, start the
    local preview and let the maintainer review there first.
-   **Next: r49 Integrations** (maintainer's design, 2026-11-12): Integrations is the one
-   place to add or change connections, each with setup steps and a "works hosted / needs
-   your own network" label; the Printers page only lists printers that exist (empty state
-   and a Manage link point to Integrations; the per-workspace Printers tab goes away);
-   OctoEverywhere becomes a vendor-neutral option (today only Elegoo works through a link:
-   build Klipper and OctoPrint through a link, confirm whether Bambu LAN can work at all);
-   a manual printer with a name and no address for hand logging (check whether a schema
-   change is needed and tell the maintainer first); hosted mode (`TMT_MODE=public`) allows
-   OctoEverywhere links only (revisits the "no printers in public mode" rule with the
-   maintainer's yes; needs `security-reviewer`); a quiet "Connect a printer" hint on Print
-   and Files when none is connected; Help section. Later ideas, not started: PrusaLink /
-   Prusa Connect, finish notifications (ntfy, Discord, Home Assistant); avoid Bambu cloud.
-1. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
+   Later ideas, not started: OctoEverywhere for more printer types as they prove out,
+   PrusaLink / Prusa Connect, finish notifications (ntfy, Discord, Home Assistant); avoid
+   Bambu cloud.
+2. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
    `test`, no restore needed). Rehearsal clean (no upgrade line, journal still the
    baseline row, row counts equal). All 8 r47 checks passed on a copy of the live data with
    the simulated printer (shots in `data/r47-check/shots/` on Unraid). Seen during the
@@ -59,22 +78,22 @@ done. Keep it under ~150 lines.
    README captions updated. Gated on the Mac: check, lint, 1463 unit tests, build, full
    e2e once (2 failures, both fixed) and the affected specs again (56 passed). Docker
    build is left for Unraid. The maintainer has not seen it yet: wait for their review.
-2. **r46 is live** (cfe1c61, 2026-11-12): the migration squash; the test copy was upgraded
+3. **r46 is live** (cfe1c61, 2026-11-12): the migration squash; the test copy was upgraded
    to the single baseline with every check clean (see CHANGELOG). The maintainer checked
    their build afterwards. Rollback: `tmt-build-tracker:r45` + `tmt-backup-pre-r46.db`.
    A real OIDC (Authentik) sign-in is a 1.0 checklist item: the r45 token handling is only
    unit-tested and the maintainer will test it before `v1.0.0`.
-3. **Going public** (r46 is live, so this is next once the maintainer has reviewed r47): the pre-public scan of all 135
+4. **Going public** (r46 is live, so this is next once the maintainer has reviewed r47): the pre-public scan of all 135
    commits found no credentials or personal data (pattern search; no gitleaks installed).
    The same day: make the `ghcr.io` package public, update the README's "Image access"
    caveat, set `CI_FULL=true`, require approval for outside collaborators' workflow runs,
    branch protection (`test` + `e2e`), private vulnerability reporting, link the changelog
    from `/about`. CI is in private-repo mode until then and the account is out of Actions
    minutes (GHCR has no image after 578eb84; the test copy is built locally).
-4. **Stage 5** leftovers (Next steps 1): Unraid Community Apps template, `v1.0.0`. README
+5. **Stage 5** leftovers (Next steps 1): Unraid Community Apps template, `v1.0.0`. README
    screenshots are done (`docs/images/`, throwaway r45 instance with invented data and the
    SDCP mock; the re-shoot scripts were deleted with the scratch, so a re-shoot starts over).
-5. Wait for (or ask about) the maintainer's phone checks below, then act on them.
+6. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
 

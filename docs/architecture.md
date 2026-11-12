@@ -247,6 +247,28 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `safeError` masks share-link hosts. Live-probed read-only: the CC sends `PrintInfo.Status`
   20 while printing (OctoEverywhere shows it as "Bed Leveling", 0%).
 
+- **r49 connections.** Options live in `src/lib/printers/connection-options.ts`
+  (`GET /api/printers/options` returns `{ hosted, connectionOptions[] }`); setup text in
+  `setup-steps.ts`; chooser grouping and labels in `integrations-view.ts`. Printers are
+  added and edited only on the workspace Integrations page (`IntegrationPrinters`,
+  `PrinterForm` with an `option`); `/teams/[slug]/printers` is the status view.
+  `PrinterPublic.connection` is `lan | link | manual`. Shared links work for Elegoo,
+  Klipper (https and wss to the link host, `/access/oneshot_token`) and OctoPrint (polled:
+  10 s active, 30 s idle, through pinned requests); Bambu LAN cannot use a link. Kind
+  `manual` (host placeholder `manual`) is never dialled; `expect` returns
+  `{ manual: true, printer }`. In `TMT_MODE=public` the guard admits only a share-link
+  host on calls with `allowShareLink` (https, default port, global-unicast answers);
+  discovery, Spoolman, LAN addresses and custom camera URLs stay refused. Caps in the
+  store transaction: link printers per workspace and per instance, manual per workspace
+  (`config.ts`). Sockets (Klipper, Elegoo): 10 s handshake timeout, silence close (LAN 45 s
+  / 20 s, link 120 s, `LINK_SILENT_CLOSE_MS`), `MessageBudget` (100 messages and 2 MiB per
+  second, 1 MiB per message before parsing), `linkBackoff` for links. The runtime still
+  buffers one message up to about 128 MiB (see STATUS). Test routes: `test-limit.ts`, 10
+  per minute per user, uniform failures on a hosted site. Remote camera lists capped at 4.
+  Tracking: `printing.start` carries an optional `printer` name in its activity payload;
+  `startedOnPrinter` (`domain/activity.ts`) prefills the log sheet; `StartOnPrinter`
+  links a running unlinked job at once; `betweenRuns` (`domain/actions.ts`) marks a part
+  waiting for its next run.
 - **Outbound guard** (`server/printers/outbound.ts`): every printer, camera, discovery and
   Spoolman connection goes through `assertOutboundAllowed` / `resolveAllowed` /
   `guardedFetch`: refused entirely in `TMT_MODE=public`; otherwise private ranges only, DNS
