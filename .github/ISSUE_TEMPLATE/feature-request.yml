@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest something that would help you build a MakeGood TMT chair.
+title: 'Feature: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a volunteer project for makers printing MakeGood TMT chairs. Requests that help more makers or chapters get further are the easiest to take on. Please keep it to one request per issue.
+
+        Do not paste OctoEverywhere links, API keys, access codes or serial numbers.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: The problem or situation, in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Your idea for how the app could do it.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How do you work around it today?
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Who is it for?
+      options:
+        - A single maker
+        - A chapter or team
+        - Someone running a hosted site
+        - Other
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Your printer or slicer, screenshots, links to examples.

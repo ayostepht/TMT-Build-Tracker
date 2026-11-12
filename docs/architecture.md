@@ -395,6 +395,16 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   tables). A partial or unknown chain makes startup refuse and leaves the file untouched.
   New migrations are added after the baseline as usual. Old-chain fixtures for the tests:
   `db/fixtures/legacy-chain/`.
+- Release upgrade guard: `src/lib/server/db/upgrade-from-release.test.ts` runs for every
+  folder under `src/lib/server/db/fixtures/v*/` (frozen `schema.sql`, `data.sql` with
+  invented rows in every data table, `meta.json` with the journal, row counts and spot
+  checks). It applies the release's schema and data, runs `runMigrations`, and checks that
+  no row, column or table was lost, the schema equals a fresh install's, a second run is a
+  no-op, and the startup steps that need no network (`cleanupAuthDataAtStartup`,
+  `seedTemplates`, `backfillBuildParts`, `repairTwinPlates`, `failStaleModelJobs`) leave
+  the data alone. A second test fails when a released migration's file hash or journal
+  entry changes. Released migrations are frozen: add a new one; each release adds a new
+  fixture folder and never edits an old one.
 - Startup order: migrations, then `cleanupAuthDataAtStartup` (`server/auth-cleanup.ts`:
   idempotent, one transaction, clears `session.ip_address` and unused account tokens, logs
   one counts-only line only when something changed), then seeding and the kit pack.
@@ -540,12 +550,16 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - Version: `src/lib/version.ts` (`APP_VERSION`, the `version` field of `package.json`, inlined
   at build time) is the one source, shown on `/about` and returned by `/api/health` as
   `{ ok: true, version }` (503 stays `{ ok: false }`).
-- CI (`.github/workflows/docker.yml`, jobs `test`, `e2e`, `image`): while the repo is
-  private, pushes to `main` and PRs run `test` only, docs-only pushes run nothing, `e2e`
-  and `image` run on `v*` tags and manual runs (`publish` input); `latest` moves only on a
-  non-prerelease tag. The repository variable `CI_FULL=true` restores e2e on every push
-  and PR and the image (with `latest`) on every push to `main`. One run per ref; tag and
-  manual runs are never cancelled.
+- CI (`.github/workflows/docker.yml`, jobs `test`, `e2e`, `image`; top-level permissions
+  are read-only, only `image` has `packages: write`): `test` always runs; `e2e` runs on
+  `v*` tags, manual runs and, with the repository variable `CI_FULL=true`, on every push
+  and pull request; `image` needs both and runs on pushes and manual runs with `publish`,
+  never on pull requests. Tags published: a release tag `vX.Y.Z` gives `latest`, `X.Y.Z`,
+  `X.Y`; a pre-release tag (with `-`) only its full version; `main` gives `edge`; every
+  build also `sha-<short>`. Without `CI_FULL` a push to `main` publishes nothing. One run
+  per ref; tag and manual runs are never cancelled. Issue forms live in
+  `.github/ISSUE_TEMPLATE/` (bug, feature request, install or docs feedback, printer
+  connection report; the app's Experimental note links to the last).
 
 - Docs for operators: `README.md` holds only the intro, the Docker quick start and a guide
   list; everything else lives in `docs/guides/*.md` (unraid, reverse-proxy, sso,

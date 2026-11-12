@@ -1,0 +1,337 @@
+{
+	"_comment": "FROZEN with the 0.9.0 release: never edit; add a new fixtures/v<next>/ folder for later releases. `journal` is the migration chain a 0.9.0 install has applied (tag, sha256 of the .sql text, journal `when`); `counts` are the rows data.sql inserts per table; `spot` are values checked by primary key after the upgrade.",
+	"version": "0.9.0",
+	"journal": [
+		{
+			"tag": "0000_red_apocalypse",
+			"hash": "66213dfa22226ff553c3564e2f09a9848a2d7622c808c5dba1b1e3a2286c8350",
+			"when": 1794448473022
+		}
+	],
+	"counts": {
+		"account": 3,
+		"activity": 5,
+		"build_assembly": 2,
+		"build_filaments": 2,
+		"build_handoff": 1,
+		"build_part_profiles": 1,
+		"build_parts": 5,
+		"build_photos": 2,
+		"build_plates": 2,
+		"build_uploads": 1,
+		"builds": 2,
+		"color_designs": 1,
+		"custom_filaments": 1,
+		"invitation": 1,
+		"member": 4,
+		"organization": 2,
+		"organization_settings": 1,
+		"print_runs": 3,
+		"printer_jobs": 3,
+		"printers": 6,
+		"session": 2,
+		"site_admin": 1,
+		"template_assembly_steps": 2,
+		"template_filament_roles": 3,
+		"template_guide_pages": 1,
+		"template_hardware": 2,
+		"template_model_jobs": 1,
+		"template_models": 1,
+		"template_part_placements": 2,
+		"template_parts": 5,
+		"template_plate_layouts": 1,
+		"template_plates": 2,
+		"template_print_geometry": 1,
+		"templates": 2,
+		"user": 3,
+		"verification": 1
+	},
+	"spot": [
+		{
+			"table": "user",
+			"pk": { "id": "u-owner" },
+			"values": { "name": "Demo Owner", "email": "owner@example.com", "email_verified": 1 }
+		},
+		{
+			"table": "account",
+			"pk": { "id": "acc-owner" },
+			"values": { "provider_id": "credential", "password": "dummy-password-hash-owner" }
+		},
+		{
+			"table": "account",
+			"pk": { "id": "acc-viewer" },
+			"values": { "provider_id": "oidc", "id_token": "demo-id-token", "scope": "openid email" }
+		},
+		{
+			"table": "session",
+			"pk": { "id": "ses-owner" },
+			"values": { "token": "demo-session-token-owner", "active_organization_id": "org-demo" }
+		},
+		{
+			"table": "verification",
+			"pk": { "id": "ver-1" },
+			"values": { "identifier": "demo-identifier", "value": "demo-value" }
+		},
+		{
+			"table": "organization",
+			"pk": { "id": "org-solo" },
+			"values": {
+				"name": "Demo Personal",
+				"slug": "demo-personal",
+				"metadata": "{\"personal\":true}"
+			}
+		},
+		{
+			"table": "member",
+			"pk": { "id": "mem-2" },
+			"values": { "user_id": "u-editor", "role": "admin" }
+		},
+		{
+			"table": "invitation",
+			"pk": { "id": "inv-1" },
+			"values": { "email": "invitee@example.com", "status": "pending" }
+		},
+		{
+			"table": "organization_settings",
+			"pk": { "organization_id": "org-demo" },
+			"values": { "spoolman_auto_deduct": 1, "settings": "{\"demo\":true}" }
+		},
+		{
+			"table": "site_admin",
+			"pk": { "user_id": "u-owner" },
+			"values": { "granted_at": 1790000000000 }
+		},
+		{
+			"table": "templates",
+			"pk": { "id": "tpl-copy" },
+			"values": {
+				"slug": "demo-chair-team-copy",
+				"owner_org_id": "org-demo",
+				"base_template_id": "tpl-demo"
+			}
+		},
+		{
+			"table": "template_parts",
+			"pk": { "template_id": "tpl-demo", "slug": "demo-leg" },
+			"values": {
+				"qty": 4,
+				"symmetry_group": "legs",
+				"components": "[\"a\",\"b\"]",
+				"bom_grams": 40
+			}
+		},
+		{
+			"table": "template_filament_roles",
+			"pk": { "template_id": "tpl-demo", "key": "tire" },
+			"values": { "tpu": 1, "recommended_spools": 1 }
+		},
+		{
+			"table": "template_plates",
+			"pk": { "template_id": "tpl-demo", "number": 2 },
+			"values": { "runs": 2, "per_part_runs": 1, "run_note": "Run twice" }
+		},
+		{
+			"table": "template_plate_layouts",
+			"pk": { "template_id": "tpl-demo", "key": "default" },
+			"values": { "is_default": 1 }
+		},
+		{
+			"table": "template_assembly_steps",
+			"pk": { "template_id": "tpl-demo", "key": "step-2" },
+			"values": { "when": "{\"group\":\"wheels\",\"option\":\"large\"}" }
+		},
+		{
+			"table": "template_guide_pages",
+			"pk": { "template_id": "tpl-demo", "page": 1 },
+			"values": { "title": "Demo page" }
+		},
+		{
+			"table": "template_hardware",
+			"pk": { "template_id": "tpl-demo", "name": "Demo bolt" },
+			"values": { "qty": 8, "note": "M5" }
+		},
+		{
+			"table": "template_part_placements",
+			"pk": { "template_id": "tpl-demo", "slug": "demo-leg" },
+			"values": { "placed": 0, "updated_by": null }
+		},
+		{
+			"table": "template_print_geometry",
+			"pk": { "template_id": "tpl-demo", "slug": "demo-seat" },
+			"values": { "height": 12.5, "tris": 1234 }
+		},
+		{
+			"table": "template_models",
+			"pk": { "template_id": "tpl-demo" },
+			"values": { "glb_path": "demo/model.glb", "version": "demo-1" }
+		},
+		{
+			"table": "template_model_jobs",
+			"pk": { "id": "job-model-1" },
+			"values": { "status": "done", "progress": 100 }
+		},
+		{
+			"table": "color_designs",
+			"pk": { "id": "des-1" },
+			"values": {
+				"slug": "demo-design",
+				"is_public": 1,
+				"part_roles": "{\"demo-seat\":\"primary\"}"
+			}
+		},
+		{
+			"table": "custom_filaments",
+			"pk": { "id": "cf-1" },
+			"values": { "brand": "Demo Brand", "hex": "#008080", "finish": "matte" }
+		},
+		{
+			"table": "printers",
+			"pk": { "id": "prn-manual" },
+			"values": { "kind": "manual", "host": "manual", "secret_enc": null }
+		},
+		{
+			"table": "printers",
+			"pk": { "id": "prn-link" },
+			"values": {
+				"kind": "elegoo-sdcp",
+				"host": "octoeverywhere",
+				"secret_enc": "v1:DUMMYSECRET+placeholder/not-decryptable=",
+				"last_status": "{\"state\":\"idle\"}"
+			}
+		},
+		{
+			"table": "printers",
+			"pk": { "id": "prn-moon" },
+			"values": { "kind": "moonraker", "port": 7125, "enabled": 0, "camera_enabled": 0 }
+		},
+		{
+			"table": "builds",
+			"pk": { "id": "bld-1" },
+			"values": {
+				"name": "Demo Build",
+				"phase": "print",
+				"variant_choices": "{\"wheels\":\"large\"}",
+				"kind": "build",
+				"created_by": "u-owner"
+			}
+		},
+		{
+			"table": "builds",
+			"pk": { "id": "bld-2" },
+			"values": { "kind": "draft", "setup_step": 2, "template_id": "tpl-copy" }
+		},
+		{
+			"table": "build_parts",
+			"pk": { "build_id": "bld-1", "part_slug": "demo-seat" },
+			"values": { "status": "Printed", "printed_on": "2026-12-01", "assignee_user_id": "u-owner" }
+		},
+		{
+			"table": "build_parts",
+			"pk": { "build_id": "bld-1", "part_slug": "demo-back" },
+			"values": { "status": "Printing", "started_at": 1790006300000, "run_est_seconds": 36000 }
+		},
+		{
+			"table": "build_parts",
+			"pk": { "build_id": "bld-1", "part_slug": "demo-leg" },
+			"values": { "status": "Reprint", "comps": "{\"a\":true,\"b\":false}" }
+		},
+		{
+			"table": "build_parts",
+			"pk": { "build_id": "bld-1", "part_slug": "demo-tire" },
+			"values": { "status": "To print" }
+		},
+		{
+			"table": "build_filaments",
+			"pk": { "build_id": "bld-1", "role_key": "primary" },
+			"values": { "spools": 1.5, "spoolman_spool_id": 42, "hex": "#336699" }
+		},
+		{
+			"table": "build_plates",
+			"pk": { "build_id": "bld-1", "number": 2 },
+			"values": {
+				"runs": 2,
+				"source": "upload",
+				"manual_est_seconds": 17000,
+				"arrangement": "{\"parts\":[]}"
+			}
+		},
+		{
+			"table": "build_part_profiles",
+			"pk": { "build_id": "bld-1", "part_slug": "demo-seat" },
+			"values": { "seconds_per_copy": 3600.5, "grams_by_role": "{\"primary\":120.5}" }
+		},
+		{
+			"table": "build_uploads",
+			"pk": { "id": "up-1" },
+			"values": { "file_name": "demo.3mf", "size": 4096, "status": "parsed" }
+		},
+		{
+			"table": "build_photos",
+			"pk": { "id": "ph-1" },
+			"values": { "path": "demo/ph-1.jpg", "caption": "Demo caption", "width": 800 }
+		},
+		{
+			"table": "build_assembly",
+			"pk": { "build_id": "bld-1", "item_key": "step-1:0" },
+			"values": { "done": 1, "note": "Demo note", "done_by": "u-editor" }
+		},
+		{
+			"table": "build_handoff",
+			"pk": { "build_id": "bld-1" },
+			"values": {
+				"recipient_name": "Demo Recipient",
+				"safety_checked": 1,
+				"contact": "recipient@example.com"
+			}
+		},
+		{
+			"table": "print_runs",
+			"pk": { "id": "run-1" },
+			"values": { "result": "Success", "grams": 205.5, "plate_number": 1 }
+		},
+		{
+			"table": "print_runs",
+			"pk": { "id": "run-2" },
+			"values": {
+				"result": "Failed",
+				"part_slug": "demo-leg",
+				"note": "Warped, demo note",
+				"grams": 12.25
+			}
+		},
+		{
+			"table": "print_runs",
+			"pk": { "id": "run-3" },
+			"values": { "result": "Partial", "user_id": null }
+		},
+		{
+			"table": "printer_jobs",
+			"pk": { "id": "pj-1" },
+			"values": {
+				"printer_id": "prn-elegoo",
+				"build_id": "bld-1",
+				"run_id": "run-1",
+				"status": "done"
+			}
+		},
+		{
+			"table": "printer_jobs",
+			"pk": { "id": "pj-2" },
+			"values": { "printer_id": "prn-link", "build_id": null, "status": "failed", "progress": 0.25 }
+		},
+		{
+			"table": "activity",
+			"pk": { "id": "act-3" },
+			"values": {
+				"kind": "build.import",
+				"user_id": null,
+				"payload": "{\"parts\":4,\"runs\":3,\"replaced\":true}"
+			}
+		},
+		{
+			"table": "activity",
+			"pk": { "id": "act-2" },
+			"values": { "kind": "run.add", "user_id": "u-editor" }
+		}
+	]
+}

@@ -3,8 +3,12 @@ name: docker
 # Default mode (repository variable CI_FULL unset): a push to main or a pull request runs only
 # `test` (~4 min). `e2e` and `image` run on `v*` tags and on manual runs (Actions > docker >
 # Run workflow). Set the repository variable CI_FULL=true (Settings > Secrets and variables >
-# Actions > Variables) and e2e runs on every push and PR, image on every push to main (and
-# `latest` follows main). Delete the variable to go back.
+# Actions > Variables) and e2e runs on every push and PR, image on every push to main.
+# Delete the variable to go back.
+# Image tags: `latest`, `X.Y.Z` and `X.Y` only for a release tag `vX.Y.Z` (no `-` in it); a
+# pre-release tag (`vX.Y.Z-rc.1`) publishes only its full version; `edge` is the current main
+# (push to main, or a manual run from main); `sha-<short>` on every published build.
+# Pull requests never publish: the image job does not run for them.
 on:
   push:
     branches: [main]
@@ -20,9 +24,13 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Publish the image to ghcr.io after test and e2e pass (a run from main tags it sha-<short> only; latest is set by v* tags)'
+        description: 'Publish the image to ghcr.io after test and e2e pass (a run from main tags it edge and sha-<short>, from another branch sha-<short> only; latest and version tags come only from v* tags)'
         type: boolean
         default: true
+
+# Every job is read-only by default; only the `image` job adds packages: write.
+permissions:
+  contents: read
 
 # One run per ref; a newer push or PR update cancels the older one. Tag runs and manual runs
 # are never cancelled (manual runs get their own group so they do not queue behind pushes).
@@ -114,9 +122,10 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=raw,value=latest,enable=${{ (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')) || (github.ref == 'refs/heads/main' && vars.CI_FULL == 'true') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
             type=sha
       - uses: docker/build-push-action@v7
         with:

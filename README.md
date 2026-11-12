@@ -2,7 +2,7 @@
 
 A self-hostable web app for makers 3D-printing the MakeGood 3D TMT (toddler mobility trainer) chair. Teams ("chapters") plan, print, assemble and hand off builds together: parts and print plates, filament colors, print logs, a 3D color designer, 3MF export for your slicer, and optional read-only printer status. It has accounts, chapters and roles, and it is made for makers who can run a Docker container, not for developers.
 
-> **Status:** 0.9 pre-release, in public testing. Data formats are stable, but details may change before 1.0.0. The Klipper, OctoPrint and Bambu Lab printer connections have not been run against real printers yet. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest`. See [Feedback and beta testing](#feedback-and-beta-testing) for how to help.
+> **Status:** 0.9 pre-release, in public testing. Data formats are stable, but details may change before 1.0.0. The Klipper, OctoPrint and Bambu Lab printer connections have not been run against real printers yet. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` (the newest release). See [Feedback and beta testing](#feedback-and-beta-testing) for how to help.
 
 ## Screenshots
 
@@ -38,7 +38,7 @@ The git repository itself contains only data about the kit (part names, settings
 
 ## Quick start (about 5 minutes)
 
-You need an always-on machine with Docker (a NAS, a mini PC or a desktop; the image is published for x86-64 and arm64; only x86-64 has been run by the project, so arm64 reports are welcome). On Unraid use the [Unraid guide](docs/guides/unraid.md) instead. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` needs no login. Tags: `latest` (the newest build), `0.9.0` and `0.9` (release tags `v0.9.0`), and `sha-<short commit>` (every published build). You can also build it from source with `docker build -t tmt-build-tracker .` (see [CONTRIBUTING.md](CONTRIBUTING.md)). Allow about 0.5 GB of disk for the image and about 150 MB for the data folder (the installed kit pack).
+You need an always-on machine with Docker (a NAS, a mini PC or a desktop; the image is published for x86-64 and arm64; only x86-64 has been run by the project, so arm64 reports are welcome). On Unraid use the [Unraid guide](docs/guides/unraid.md) instead. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` needs no login. Tags: `latest` is the newest release; `0.9.0` and `0.9` are specific releases (git tag `v0.9.0`); `edge` is the current `main` branch, for people who want to test unreleased changes and accept that it can break (back up first, and do not expect to go back from `edge` to an older release without restoring that backup if a migration ran); `sha-<short commit>` is one exact build. You can also build it from source with `docker build -t tmt-build-tracker .` (see [CONTRIBUTING.md](CONTRIBUTING.md)). Allow about 0.5 GB of disk for the image and about 150 MB for the data folder (the installed kit pack).
 
 ### 1. Prepare a data folder and a secret
 
@@ -114,7 +114,7 @@ This is a pre-release (0.9): your data and its formats are stable, but details m
 - Klipper (Moonraker), OctoPrint and Bambu Lab connections, which are marked Experimental in the app because they have not been run against real printers yet.
 - Using the app on phones other than an iPhone.
 
-To report, use one of the issue forms on [GitHub](https://github.com/ayostepht/TMT-Build-Tracker/issues/new/choose): a [printer connection report](https://github.com/ayostepht/TMT-Build-Tracker/issues/new?template=printer-report.yml) (also welcome when everything worked), a bug report, or install or docs feedback. Never paste an OctoEverywhere link, API key, access code or serial number. Security problems go through [SECURITY.md](SECURITY.md), not an issue.
+To report, use one of the issue forms on [GitHub](https://github.com/ayostepht/TMT-Build-Tracker/issues/new/choose): a [printer connection report](https://github.com/ayostepht/TMT-Build-Tracker/issues/new?template=printer-report.yml) (also welcome when everything worked), a bug report, install or docs feedback, or a feature request. Never paste an OctoEverywhere link, API key, access code or serial number. Security problems go through [SECURITY.md](SECURITY.md), not an issue.
 
 ## Development
 

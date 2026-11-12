@@ -104,7 +104,7 @@ Bridge networking can reach printers on your LAN by IP address (the app only mak
 
 ## Updating
 
-With the `latest` tag: Docker tab, **Check for Updates**, then **apply update** next to the container (or the container menu, **Force update**). Unraid pulls the new image and recreates the container with your settings. Database migrations run automatically at start and are not reversible, so take a backup first (below). If the update ends in an `unauthorized` error see [Image access](../../README.md#image-access). The CA Auto Update Applications plugin can update it on a schedule. To stay on a fixed version change the Repository to a release tag such as `ghcr.io/ayostepht/tmt-build-tracker:1.2.3`. The general upgrade routine is in [Backup and upgrade](backup-and-upgrade.md).
+With the `latest` tag (always the newest release): Docker tab, **Check for Updates**, then **apply update** next to the container (or the container menu, **Force update**). Unraid pulls the new image and recreates the container with your settings. Database migrations run automatically at start and are not reversible, so take a backup first (below). If the update ends in an `unauthorized` error see [Image access](../../README.md#image-access). The CA Auto Update Applications plugin can update it on a schedule. To stay on a fixed version change the Repository to a release tag such as `ghcr.io/ayostepht/tmt-build-tracker:0.9.0`. The `edge` tag is the current `main` branch for testing unreleased changes: it can break, take a backup first, and do not expect to move back to an older release without restoring it if a migration ran. The general upgrade routine is in [Backup and upgrade](backup-and-upgrade.md).
 
 ## Backups
 
