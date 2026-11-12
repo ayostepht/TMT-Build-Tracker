@@ -10,8 +10,11 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **r49 is committed (45dce51), gated, NOT yet approved for deploy**: the maintainer is
-   reviewing it in the local preview. Do not deploy until this says "r49 ready to deploy".
+0. **r49 ready to deploy: ca4d9c1** (no migration). The maintainer reviewed it in the local
+   preview on 2026-11-12 ("everything else looks good!"); the chooser was then compacted to
+   single rows with one Experimental note, as they asked, and re-gated. Decision
+   (maintainer): their own printer goes on a hosted instance through its OctoEverywhere
+   link; no admin exception for local addresses in public mode.
    Contents: Integrations page as the one place to add, edit and remove printers (grouped
    chooser, setup steps per option from `setup-steps.ts`, auto-log, Spoolman card); Printers
    tab is status only; OctoEverywhere links for Klipper and OctoPrint as well as Elegoo
