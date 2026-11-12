@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-11 (audit Stages 1-4 done and deployed: test copy on r44 = 6ce39e3,
-which also carries the first Stage 5 slice. Stage 5 in progress)._
+_Last updated: 2026-11-11 (test copy on r44 = 6ce39e3. r45 = b9ea636 is on `main`, gated on
+the full suite, approved and waiting for the Unraid deploy. Stage 5 in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -10,25 +10,31 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **Deploy r45 from Unraid when the maintainer says so** (not asked yet). On `main` since
-   r44: `/privacy` and `/terms`, the build guide link, landing navigation, the Files tab
-   heading fix, tracking card button alignment, version 0.9.0 in About and `/api/health`.
-   No schema or startup change.
-2. **Stage 5** (see Next steps 1 for done and left). Next slices: README screenshots (the
-   test copy has real data; the plate arranger shot needs an arranged layout),
-   Unraid Community Apps template.
-3. CI runs in private-repo mode (`.github/workflows/docker.yml`): pushes to `main` and PRs
-   run only `test`, docs-only pushes run nothing, `e2e` and `image` run on `v*` tags and
-   manual runs. Untested on GitHub: the account is out of Actions minutes (every job fails
-   in seconds on billing), so GHCR has no image after 578eb84 and the test copy is built
-   locally. After the repo is public: set the repository variable `CI_FULL=true`, require
-   approval for outside collaborators' workflow runs, then branch protection.
-4. Maintainer decisions pending: keep or delete the kit pack 1.0.0 release asset
-   (recommended: keep until 1.0 is tagged); migration squash (needs a journal reset on the
-   test copy); theme toggle; TypeScript 7 (Dependabot PR #11, fails check); making the repo
-   public (then turn on branch protection at once; Dependabot is otherwise tidy); whether
-   to switch the test build to "Arrange for my bed" (needed to see the plate view toggle and
-   "rotated N°" badge live; converts its 13 print logs to part logs).
+1. **r45 ready to deploy: b9ea636** (maintainer approved 2026-11-11; docs-only commits
+   after it are fine). On `main` since r44: `/privacy` and `/terms`, the build guide link,
+   landing navigation, the Files tab heading fix, tracking card buttons, version 0.9.0 in
+   About and `/api/health`, destructive dialogs open on Cancel and all dialogs return
+   focus, the design studio a11y pass, 44 px buttons on touch, `--field-line` borders, the
+   designer's Options at the top of the Parts tab, no stored SSO tokens or session IPs.
+   **Startup changed** (no schema change): a one-off idempotent cleanup runs after
+   migrations (`auth-cleanup.ts`). The rehearsal must check: `user`, `session` and
+   `account` row counts unchanged; the "auth cleanup" log line once on the first start and
+   not on a restart; every `session.ip_address` empty; no account with an access or
+   refresh token or expiry; `id_token` only on `provider_id = 'oidc'` rows; `password`,
+   `scope`, `provider_id`, `account_id`, `user_id` unchanged; an empty `/data` starts
+   without the line. After the swap the maintainer signs in once with each method they use.
+2. **Migration squash, as r46** (maintainer approved 2026-11-11; must land before anyone
+   else installs the app). Needs a journal reset on the test copy and its own rehearsal;
+   would also fix `templates.owner_org_id` lacking ON DELETE CASCADE [kit-and-startup].
+3. **Going public** (maintainer will flip it after r46): the pre-public scan of all 135
+   commits found no credentials or personal data (pattern search; no gitleaks installed).
+   The same day: make the `ghcr.io` package public, update the README's "Image access"
+   caveat, set `CI_FULL=true`, require approval for outside collaborators' workflow runs,
+   branch protection (`test` + `e2e`), private vulnerability reporting, link the changelog
+   from `/about`. CI is in private-repo mode until then and the account is out of Actions
+   minutes (GHCR has no image after 578eb84; the test copy is built locally).
+4. **Stage 5** leftovers (Next steps 1): README screenshots (on a throwaway instance with
+   invented data, never the live copy), Unraid Community Apps template, `v1.0.0`.
 5. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
@@ -62,16 +68,13 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
-- (2026-11-11) Read `/privacy` and `/terms` (text written for you, on `main`, not deployed).
-  Open questions: is "independent project, not made, endorsed or run by MakeGood, not
-  affiliated" right; "for adult makers" and the advice on children's details and photos;
-  keep storing session IP addresses (auth library default) or turn that off; turn on
-  encryption of the stored SSO provider tokens (`encryptOAuthTokens`, recommended; needs a
-  check against existing sign-ins on the test copy).
-- (2026-11-11) Landing navigation (on `main`, not deployed): a build's name can now be a
-  button up to three times (quick row, its card, the Builds list). Keep the quick row, or
-  drop it and keep the card buttons?
-- (2026-11-11) GitHub billing: check Settings → Billing and plans → Actions usage.
+- (2026-11-11) After r45: sign in once with each method in use (password, Authentik) and
+  say whether the landing quick row of build buttons stays (it repeats the build name
+  that is also on each card).
+- Delete on Unraid? `data/cf-run-r1`, `data/cf-run-r2`, `link-sweep/`, `mobile-perf/`,
+  `cam-fix/`, loose `shoot-*.mjs` / `*-run.sh`, and the old `tmt-backup-pre-r10..r37.db`
+  backups. Stale remote branches (`ci/e2e-container`, `feat/octoeverywhere-share-link`,
+  `fix/*`, `hotfix/*`): delete before going public?
 
 - (2026-11-11) Keep or delete the GitHub release asset for kit pack 1.0.0 (no longer baked
   into the image)? (The 21-plate re-check after the re-orientation removal passed on r42.)
@@ -97,11 +100,8 @@ Route each to the agent named in brackets.
 
 - **Design studio** [design-studio-ui]: a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
-  over: eight field rules in `app.css` still border with `--line` (`.chapter select`,
-  `.spools input`, `.tog select`, `.logform select`, `.slicer-in input`, `.now-lab input`,
-  `.fil-edit label.field input`, `.detail select`), `.btn` is 29 px high on touch tablets
-  and 40 px on phones (raise to 44 px on coarse pointers app-wide? maintainer's call); Options section placement at the bottom of the Parts tab (audit M6, needs a layout
-  decision from the maintainer); "MakeGood · CC0" credit wraps over the chair at 360 px;
+  over: class-only field styles in components were not audited for `--line` borders;
+  adjacent `.pill-link` hit bands can overlap on touch; "MakeGood · CC0" credit wraps over the chair at 360 px;
   `share/ApplyDesign` uses raw fetch (add `listDesigns` to `client/api.ts`);
   `editableTargets` lacks `kind` (can't tell builds from drafts); no "start a draft from
   this design"; draft cards have no 3D snapshot. Not yet raised with the maintainer: a
@@ -241,6 +241,16 @@ Route each to the agent named in brackets.
   line under Unreleased; `docs/dev/CHANGELOG.md` stays the internal deploy history.
 - `--field-line` is the border token for form fields (3:1); `--line` is for cards and
   dividers only (2026-11-11).
+- **Auth data** (2026-11-11): provider access and refresh tokens are not stored (account
+  hooks null them; generic OIDC keeps its ID token for sign-out at the provider); sessions
+  store no IP address (`disableIpTracking` is not used: it would switch off the rate
+  limiter). `/privacy` states both: any change to what is stored must update it.
+- Decided 2026-11-11: no theme toggle (device setting); TypeScript 7 deferred until after
+  1.0 (Dependabot ignores the major); a printer on an OctoEverywhere link keeps no LAN
+  fallback; the four converting/replacing confirmations stay confirm-first; kit pack 1.0.0
+  asset stays until 1.0 is tagged; the maintainer's real build is not re-arranged for a
+  visual check; buttons are 44 px on every touch device; field borders use `--field-line`
+  app-wide.
 - Git history is kept as is when the repo goes public (private-range LAN addresses in old
   commits are accepted; no rewrite). Branch protection (no force push, no deletion,
   required `test` + `e2e`) is set the moment the repo is public: GitHub refuses it on a
@@ -281,7 +291,7 @@ also fix `templates.owner_org_id` lacking ON DELETE CASCADE); theme toggle; Type
    Builds list). Specs: `help-about`, `legal`, `landing`. Not verified: the Caddy and
    Traefik sections against real proxies; the quick start run by a stranger (the image is
    still private); arm64. Package is `tmt-build-tracker` 0.9.0 with
-   `engines` (Node >=22.12 <23); `src/lib/version.ts` feeds About and `/api/health`
+   `engines` (Node >=22.12; 22 is the tested version, 25 fails the build); `src/lib/version.ts` feeds About and `/api/health`
    (`{ ok, version }`); the 1.0.0 bump comes with the tag. Left: README screenshots (phone
    Now card, plate arranger, 3D designer, printer card), `v1.0.0` (rename `[Unreleased]` in the root `CHANGELOG.md` to
    `[1.0.0] - date`, drop its pre-release wording, check it matches `package.json`), e2e gating the image, an e2e run with a

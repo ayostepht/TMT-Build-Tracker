@@ -332,6 +332,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   it on unmount when it is still connected and focus was lost. Other native dialogs
   (photo lightbox, guide viewer, New-printer dialog, upload sheet) do the same;
   `rememberOpener(fallback?)` in `client/focus.ts` is the shared helper. Design studio
+  The Parts tab opens with the Options disclosure (`design-options`, collapsed, summary of
+  the chosen variants), then "Find a part" and the list; the wizard's Colors step shares
+  it. `app.css` ends with a `(pointer: coarse)` block: `.btn` at least 44 px, `.pill-link`
+  a 44 px hit band.
   a11y: `DesignWorkspace` announces slot and part color changes in a `design-announce`
   status region; 44 px targets are `pointer: coarse` blocks in `SwatchPicker`, `PartList`,
   `PartSheet` and `DesignWorkspace`; the contrast guard is `domain/design-tokens.test.ts`.
@@ -359,6 +363,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   UI `FilamentPicker.svelte`. `POPULAR_BRANDS` starts with Schoolhouse Spools.
 
 ## Kit and startup (`kit-and-startup`)
+
+- Startup order: migrations, then `cleanupAuthDataAtStartup` (`server/auth-cleanup.ts`:
+  idempotent, one transaction, clears `session.ip_address` and unused account tokens, logs
+  one counts-only line only when something changed), then seeding and the kit pack.
 
 - Kit pack format, env (`KITPACK_DIR`, `KITPACK_URL`, `KITPACK_DOWNLOAD=off`) and how to
   build one: `docs/kit-pack.md`. Seed data contract: `src/lib/server/seed/README.md`.
@@ -448,6 +456,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   account menu carries the Help link (`help-link`); About is reached from Help. Help quotes
   UI labels and tracking behaviour verbatim: when a label or a rule in `domain/actions.ts`,
   `pace.ts` or `NowCard` changes, re-check the copy. Spec: `e2e/help-about.spec.ts`.
+- **Auth data kept**: `auth.ts` nulls provider access and refresh tokens, their expiries
+  and scope on every account write (`unusedTokensCleared` in the account create/update
+  hooks; generic OIDC keeps `idToken`, which the library passes as `id_token_hint` at
+  sign-out), keeps `encryptOAuthTokens` as a backstop, and blanks `ipAddress` in the
+  session create hook. Never use `disableIpTracking`: it disables the IP-keyed rate limiter.
 - **Privacy and Terms**: `/privacy` and `/terms` sit outside `(app)` (readable signed out),
   share `components/LegalPage.svelte`, and their loads return only `{ publicMode, signedIn }`
   with `cache-control: private, no-cache`. Linked from login, signup, Help and About
