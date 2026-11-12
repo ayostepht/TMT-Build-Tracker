@@ -78,6 +78,8 @@ docker run --rm -v "$PWD":/app -w /app mcr.microsoft.com/playwright:v<version>-n
 
 ## Contributing
 
+Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 - Open an issue first for anything beyond a small fix, so the idea can be discussed before you spend time on it (the issue forms include a feature request).
 - Changes come as pull requests against `main`. CI must pass: `test` and `e2e`. Workflow runs for a first-time contributor wait for a maintainer's approval.
 - A database schema change comes with its generated migration and must upgrade an existing 0.9 database; the upgrade test checks this.
