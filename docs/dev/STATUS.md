@@ -10,8 +10,15 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **r47 ready to deploy: 0245ca8** (UI only, no migration; maintainer approved the deploy
-   and wrote the Unraid prompt on 2026-11-12). From the maintainer's r45 phone review:
+1. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
+   `test`, no restore needed). Rehearsal clean (no upgrade line, journal still the
+   baseline row, row counts equal). All 8 r47 checks passed on a copy of the live data with
+   the simulated printer (shots in `data/r47-check/shots/` on Unraid). Seen during the
+   checks, not fixed: saving Settings → Build details logs "cleared the recipient, cleared
+   the hospital and cleared the delivery date" when those fields were already empty
+   [build-state]; the landing's "Want to build with others?" card has no gap under Next up
+   [app-shell]; desktop Overview spools values look faint grey [app-shell]. What r47 is,
+   from the maintainer's r45 phone review:
    landing lists Builds first as compact rows (pill row removed; build name in the Now
    printing / Next up cards is a small link); with a printer connected the main start is
    "Printing on <printer>" with a helper line and the plain start reads "Not on a

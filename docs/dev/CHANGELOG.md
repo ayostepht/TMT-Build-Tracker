@@ -7,6 +7,12 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r47** (0245ca8, from main c47ecca): UI only, from the maintainer's r45 phone review:
+  builds-first landing, "Printing on <printer>" as the main start with a printer
+  connected, Options as the designer's first tab, picker filters wrap on the phone,
+  account-menu About and a footer, compact Overview filaments, 44 px Print tab buttons.
+  Rehearsal clean (no upgrade line, row counts equal); 8 UI checks passed on a copy of
+  the live data with the simulated printer.
 - **r46** (cfe1c61, from main 2185ff4): migration squash. The 14 migrations become one
   baseline; a database at the full old chain is upgraded at startup in one transaction
   (7 tables rebuilt, journal 14 → 1), anything else refuses to start. Adds ON DELETE
