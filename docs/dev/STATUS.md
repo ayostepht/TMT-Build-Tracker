@@ -10,7 +10,32 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **r49 is live** (ca4d9c1, 2026-11-12, main bec473e; no migration; rollback: tag `r48` as `test`, no restore; rehearsal clean, all 10 checks passed, live link 0 reconnects in 15 min). The maintainer reviewed it in the local
+0. **r50 ready to deploy: e4584d5** (no migration; adds the runtime dependency `ws`, so
+   the image build must run `npm ci` cleanly). Contents: every printer WebSocket goes
+   through `ws-client.ts` (1 MiB `maxPayload`, no compression, no redirects, handshake
+   timeout); OctoEverywhere link sockets are pinned to the validated address. This closes
+   the hosted-mode memory finding and the "not pinned" caveat (security-reviewer,
+   2026-11-12: nothing in the code blocks a hosted launch; hosted paths are still unproven
+   on real hardware). Also: taking the next run of a multi-run part off the printer keeps
+   the plate at Partly printed; grams fields reject non-numeric text and accept a decimal
+   comma; GitHub issue forms and a README "Feedback and beta testing" section; README
+   screenshots retaken from the preview (`scripts/preview/readme-shots.mjs`); the in-app
+   Experimental note opens the printer report form. Gate: check, lint, 1557 unit tests,
+   build and production start, full e2e (207 passed, 3 spec-only failures fixed and
+   re-run). Docker build is left for Unraid. The maintainer skipped a preview review for
+   r50 (changes are under the hood).
+   **Then going public (0.9 pre-release).** History decision (maintainer, 2026-11-12):
+   publish the history as is. The maintainer's two LAN addresses appear in old commits
+   (removed from the tree since) and the build name "Columbus #4691" is in seeds and tests;
+   both accepted as public, no rewrite. On the day: the maintainer makes the repo and the
+   `ghcr.io` package public; then set `CI_FULL=true`, run the workflow so the image is
+   published, branch protection (`test` + `e2e`), approval for outside collaborators'
+   workflow runs, private vulnerability reporting, create the `printer-report` and
+   `documentation` labels, update the README "Image access" and "While the repository is
+   private" sentences, link the changelog from `/about`, check the issue forms render and
+   the guide anchors resolve on GitHub. The maintainer will then invite beta testers on the
+   MakeGood TMT forum (Docker/self-hosting, ideally Klipper, OctoPrint or Bambu).
+1. **r49 is live** (ca4d9c1, 2026-11-12, main bec473e; no migration; rollback: tag `r48` as `test`, no restore; rehearsal clean, all 10 checks passed, live link 0 reconnects in 15 min). The maintainer reviewed it in the local
    preview on 2026-11-12 ("everything else looks good!"); the chooser was then compacted to
    single rows with one Experimental note, as they asked, and re-gated. Decision
    (maintainer): their own printer goes on a hosted instance through its OctoEverywhere
@@ -27,13 +52,8 @@ done. Keep it under ~150 lines.
    (fixes the r48 check failure); between-runs parts no longer show the plate as Printing;
    container-query top bar; Help "Connect a printer"; guides updated. Gate: check, lint,
    1536 unit tests, build, full e2e 208 passed; two security reviews, no high findings.
-   **Blocker for running a hosted site with link printers (not for self-hosted, not for
-   making the repo public):** Node's built-in WebSocket buffers one message up to about
-   128 MiB before our limits see it; fix = dial link printers with the `ws` package
-   (`maxPayload` about 1 MiB). Adds a dependency, so it runs alone: planned as r50
-   [printers]. Until then a hosted site should set `QUOTA_LINK_PRINTERS_PER_WORKSPACE=0`.
    Other open items from r49: duplicate-link check needs a `link_hash` column (schema
-   change, ask the maintainer); `MessageBudget` counts characters, not bytes; Klipper and
+   change, ask the maintainer); Klipper and
    OctoPrint through a link, and every hosted-mode path, are unproven on real hardware; on
    deploy, watch the maintainer's live Elegoo link for reconnect flapping (link sockets now
    close after 120 s of silence); retake the README screenshots that show the old Finish
@@ -41,7 +61,7 @@ done. Keep it under ~150 lines.
    2026-11-12 where a new unit test sent one SDCP discovery broadcast on the Mac's LAN is
    fixed (test sets public mode first) and no other printers unit test can reach the
    network (security-reviewer, sampled).
-1. **r48 is live** (c64d852, deployed 2026-11-12 from main 1e18c6c; UI and two small server
+2. **r48 is live** (c64d852, deployed 2026-11-12 from main 1e18c6c; UI and two small server
    changes, no migration; rollback: tag `r47` as `test`, no restore needed). Rehearsal clean;
    checks on a copy of the live data: 8 of 10 pass, 1 failed, 1 open question (see "r48
    checks" under open items). The
@@ -61,7 +81,7 @@ done. Keep it under ~150 lines.
    Later ideas, not started: OctoEverywhere for more printer types as they prove out,
    PrusaLink / Prusa Connect, finish notifications (ntfy, Discord, Home Assistant); avoid
    Bambu cloud.
-2. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
+3. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
    `test`, no restore needed). Rehearsal clean (no upgrade line, journal still the
    baseline row, row counts equal). All 8 r47 checks passed on a copy of the live data with
    the simulated printer (shots in `data/r47-check/shots/` on Unraid). Seen during the
@@ -81,22 +101,22 @@ done. Keep it under ~150 lines.
    README captions updated. Gated on the Mac: check, lint, 1463 unit tests, build, full
    e2e once (2 failures, both fixed) and the affected specs again (56 passed). Docker
    build is left for Unraid. The maintainer has not seen it yet: wait for their review.
-3. **r46 is live** (cfe1c61, 2026-11-12): the migration squash; the test copy was upgraded
+4. **r46 is live** (cfe1c61, 2026-11-12): the migration squash; the test copy was upgraded
    to the single baseline with every check clean (see CHANGELOG). The maintainer checked
    their build afterwards. Rollback: `tmt-build-tracker:r45` + `tmt-backup-pre-r46.db`.
    A real OIDC (Authentik) sign-in is a 1.0 checklist item: the r45 token handling is only
    unit-tested and the maintainer will test it before `v1.0.0`.
-4. **Going public** (r46 is live, so this is next once the maintainer has reviewed r47): the pre-public scan of all 135
+5. **Going public** (r46 is live, so this is next once the maintainer has reviewed r47): the pre-public scan of all 135
    commits found no credentials or personal data (pattern search; no gitleaks installed).
    The same day: make the `ghcr.io` package public, update the README's "Image access"
    caveat, set `CI_FULL=true`, require approval for outside collaborators' workflow runs,
    branch protection (`test` + `e2e`), private vulnerability reporting, link the changelog
    from `/about`. CI is in private-repo mode until then and the account is out of Actions
    minutes (GHCR has no image after 578eb84; the test copy is built locally).
-5. **Stage 5** leftovers (Next steps 1): Unraid Community Apps template, `v1.0.0`. README
+6. **Stage 5** leftovers (Next steps 1): Unraid Community Apps template, `v1.0.0`. README
    screenshots are done (`docs/images/`, throwaway r45 instance with invented data and the
    SDCP mock; the re-shoot scripts were deleted with the scratch, so a re-shoot starts over).
-6. Wait for (or ask about) the maintainer's phone checks below, then act on them.
+7. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
 
@@ -245,8 +265,7 @@ Route each to the agent named in brackets.
   upload; `templates.owner_org_id` has its ON DELETE CASCADE since r46, so the
   `deleteOwnedTemplates` workaround in `account.ts` can be simplified [app-shell]; chapter delete runs our cleanup just before Better Auth's own delete,
   not in one transaction; activity is pruned to the newest 5000 rows per build; write-rate and slot state is per process (single process
-  only); an OctoEverywhere link's status socket (wss) has its address checked as public right
-  before each dial but is not pinned (the camera path is pinned).
+  only).
   Accepted on self-hosted installs: unverified emails, so an `ADMIN_EMAILS` address is
   admin for whoever registers it first.
 - **Screenshots never taken**: multi-run log-plate flow; palette locks
