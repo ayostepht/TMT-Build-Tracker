@@ -7,6 +7,12 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r50** (e4584d5, from main 9ed6906): every printer WebSocket through `ws` (1 MiB limit, no
+  compression or redirects, handshake timeout; link sockets pinned to the validated
+  address); Partly printed kept when a next run is taken off; grams reject text and accept a
+  decimal comma; printer report issue form. No migration; `npm ci` clean, ws 8.22.1 in the
+  pruned image; rehearsal clean. Live Elegoo link: connected 3 s after start, one socket,
+  0 reconnects in 20 min while printing. 5 checks passed.
 - **r49** (ca4d9c1, from main bec473e): Integrations is the one place to add, edit and remove
   printers (compact chooser, setup steps, auto-log, Spoolman); OctoEverywhere links for
   Klipper and OctoPrint; "Not connected" printers; one-step link when the chosen printer is

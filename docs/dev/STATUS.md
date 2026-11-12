@@ -10,7 +10,7 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **r50 ready to deploy: e4584d5** (no migration; adds the runtime dependency `ws`, so
+0. **r50 is live** (e4584d5, 2026-11-12, main 9ed6906; rollback: tag `r49` as `test`, no restore; rehearsal clean, all 5 checks passed, live link connected in 3 s, 0 reconnects in 20 min) (no migration; adds the runtime dependency `ws`, so
    the image build must run `npm ci` cleanly). Contents: every printer WebSocket goes
    through `ws-client.ts` (1 MiB `maxPayload`, no compression, no redirects, handshake
    timeout); OctoEverywhere link sockets are pinned to the validated address. This closes
