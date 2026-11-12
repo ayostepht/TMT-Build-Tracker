@@ -10,7 +10,7 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **r49 ready to deploy: ca4d9c1** (no migration). The maintainer reviewed it in the local
+0. **r49 is live** (ca4d9c1, 2026-11-12, main bec473e; no migration; rollback: tag `r48` as `test`, no restore; rehearsal clean, all 10 checks passed, live link 0 reconnects in 15 min). The maintainer reviewed it in the local
    preview on 2026-11-12 ("everything else looks good!"); the chooser was then compacted to
    single rows with one Experimental note, as they asked, and re-gated. Decision
    (maintainer): their own printer goes on a hosted instance through its OctoEverywhere

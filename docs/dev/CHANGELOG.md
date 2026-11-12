@@ -7,6 +7,12 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r49** (ca4d9c1, from main bec473e): Integrations is the one place to add, edit and remove
+  printers (compact chooser, setup steps, auto-log, Spoolman); OctoEverywhere links for
+  Klipper and OctoPrint; "Not connected" printers; one-step link when the chosen printer is
+  printing; log sheet takes decimal grams and shows refusals; socket handshake, receive and
+  silence limits. No migration; rehearsal clean (row counts equal). Live Elegoo link: one
+  socket, 0 reconnects and no status flap in 15 min while printing. 10 checks passed.
 - **r48** (c64d852, from main 1e18c6c): one status badge for plates and parts (Printing with
   a connected printer asks "Where is it printing?"), phone color picker layout, Help in the
   nav, Printers page hides unlinked prints behind a disclosure, build-details save logs only
