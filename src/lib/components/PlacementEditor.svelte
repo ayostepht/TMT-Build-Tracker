@@ -418,7 +418,7 @@
 	.pe-num input {
 		min-width: 0;
 		padding: 6px 8px;
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 		color: var(--ink);

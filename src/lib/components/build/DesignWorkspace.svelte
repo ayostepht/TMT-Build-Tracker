@@ -29,6 +29,16 @@
 		{ id: 'palettes', label: 'Palettes' },
 		{ id: 'parts', label: 'Parts' }
 	];
+	/** One-line summary of the chosen variants, shown on the collapsed Options row. */
+	const optionsSummary = $derived(
+		ctx.view.variantGroups
+			.map((g) => {
+				const key = ctx.view.variantChoices[g.key] ?? g.defaultOption;
+				return (g.options.find((o) => o.key === key) ?? g.options[0])?.name;
+			})
+			.filter(Boolean)
+			.join(' \u00b7 ')
+	);
 	let root = $state<HTMLElement>();
 	/** Desktop: height left below the workspace top edge (minus the wizard bar, or a small margin on the Design tab). */
 	let fill = $state('');
@@ -431,6 +441,29 @@
 			aria-labelledby="tab-parts"
 			hidden={tab !== 'parts'}
 		>
+			{#if ctx.view.variantGroups.length}
+				<!-- The variants change which parts exist and what the chair looks like, so they sit on
+				     top of the Parts tab as one collapsed row with the current choices as its summary. -->
+				<details class="dw-opts" data-testid="design-options">
+					<summary data-testid="design-options-summary">
+						<span class="dw-opts-k">Options</span>
+						<span class="dw-opts-v">{optionsSummary}</span>
+					</summary>
+					<div class="dw-opts-body">
+						<p class="muted">
+							Switching an option updates the 3D view, the part list and the totals.
+						</p>
+						<VariantChooser
+							groups={ctx.view.variantGroups}
+							choices={ctx.view.variantChoices}
+							partNames={Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name]))}
+							disabled={!ctx.canEdit}
+							onselect={(group, option) => ctx.act(() => setVariant(ctx.id, group, option))}
+						/>
+					</div>
+				</details>
+			{/if}
+
 			<PartList
 				view={live}
 				{selected}
@@ -442,22 +475,6 @@
 					if (selected) stage?.focus(slug);
 				}}
 			/>
-
-			{#if ctx.view.variantGroups.length}
-				<section class="ds-card" aria-label="Variant options">
-					<h2>Options</h2>
-					<p class="muted">
-						Switching an option updates the 3D view, the part list and the totals.
-					</p>
-					<VariantChooser
-						groups={ctx.view.variantGroups}
-						choices={ctx.view.variantChoices}
-						partNames={Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name]))}
-						disabled={!ctx.canEdit}
-						onselect={(group, option) => ctx.act(() => setVariant(ctx.id, group, option))}
-					/>
-				</section>
-			{/if}
 		</div>
 
 		{#if !embedded && tab !== 'palettes'}
@@ -546,9 +563,6 @@
 		flex-wrap: wrap;
 		gap: var(--sp-4);
 	}
-	h2 {
-		margin: 0;
-	}
 	.dw-tabs {
 		position: sticky;
 		top: calc(var(--stick, 0px) + var(--stageh) + 8px);
@@ -590,6 +604,71 @@
 	.prev.low {
 		top: 48px;
 		right: 8px;
+	}
+	/* Options: a collapsed one-row disclosure at the top of the Parts tab (44px on touch). */
+	.dw-opts {
+		border: 1px solid var(--line);
+		border-radius: var(--r-lg);
+		background: var(--card);
+		min-width: 0;
+	}
+	.dw-opts > summary {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-4);
+		min-height: 44px;
+		box-sizing: border-box;
+		padding: var(--sp-3) var(--sp-6);
+		cursor: pointer;
+		list-style: none;
+		min-width: 0;
+	}
+	.dw-opts > summary::-webkit-details-marker {
+		display: none;
+	}
+	.dw-opts > summary::after {
+		content: '';
+		flex: none;
+		margin-inline-start: auto;
+		width: 8px;
+		height: 8px;
+		border-right: 2px solid var(--muted);
+		border-bottom: 2px solid var(--muted);
+		transform: rotate(45deg);
+		transition: transform 0.12s ease;
+	}
+	.dw-opts[open] > summary::after {
+		transform: rotate(-135deg);
+	}
+	.dw-opts-k {
+		flex: none;
+		font-weight: 700;
+	}
+	.dw-opts-v {
+		flex: 1 1 0;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--muted);
+		font-size: var(--fs-md);
+	}
+	.dw-opts[open] .dw-opts-v {
+		display: none;
+	}
+	.dw-opts-body {
+		display: grid;
+		gap: var(--sp-5);
+		padding: 0 var(--sp-6) var(--sp-6);
+		min-width: 0;
+	}
+	.dw-opts-body p {
+		margin: 0;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.dw-opts > summary::after {
+			transition: none;
+		}
 	}
 	/* Sticky offsets for the parts list: just under the (sticky) tab bar. */
 	.partsTab {

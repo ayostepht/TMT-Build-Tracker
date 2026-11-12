@@ -65,6 +65,11 @@ test('new build walks the setup wizard: template, options, colors, files, export
 	await expect(page.getByText('Applied Fire Truck')).toBeVisible();
 	// Move a part between slots right here, then save-as-design is on offer too.
 	await page.getByRole('tab', { name: 'Parts' }).click();
+	// The embedded workspace has the collapsed Options row on top of the Parts tab too.
+	const opts = page.getByTestId('design-options');
+	await expect(opts).toBeVisible();
+	await expect(opts).not.toHaveAttribute('open', '');
+	await expect(page.getByTestId('design-options-summary')).toContainText('Cushions');
 	const wing = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	const wingBefore = await wing.innerText();
 	await wing.click();

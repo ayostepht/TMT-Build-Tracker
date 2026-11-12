@@ -790,7 +790,7 @@ a.pill-link {
 .chapter select {
 	padding: var(--sp-3) var(--sp-4);
 	border-radius: var(--r-md);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	background: var(--card);
 	font-size: var(--fs-md);
 	max-width: 100%;
@@ -957,7 +957,7 @@ a.pill-link {
 .spools input {
 	width: 68px;
 	padding: var(--sp-2) var(--sp-3);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--paper);
 	text-align: center;
@@ -1035,7 +1035,7 @@ a.pill-link {
 .tog select {
 	padding: var(--sp-2) var(--sp-3);
 	border-radius: var(--r-md);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	background: var(--card);
 }
 
@@ -1221,7 +1221,7 @@ a.pill-link {
 .logform select {
 	width: 100%;
 	padding: var(--sp-3) var(--sp-3);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--paper);
 	font-size: var(--fs-sm);
@@ -1261,7 +1261,7 @@ a.pill-link {
 .slicer-in input {
 	width: 74px;
 	padding: var(--sp-2) var(--sp-3);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--card);
 	font-size: var(--fs-sm);
@@ -1391,7 +1391,7 @@ a.pill-link {
 .now-lab input {
 	width: 100%;
 	padding: var(--sp-3) var(--sp-4);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--card);
 	font-size: var(--fs-md);
@@ -1499,13 +1499,13 @@ label.field select {
 	width: 44px;
 	height: 40px;
 	padding: var(--sp-1);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--paper);
 }
 .fil-edit label.field input {
 	padding: var(--sp-5) var(--sp-5);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--paper);
 	min-width: 0;
@@ -1602,7 +1602,7 @@ label.field select {
 }
 .detail select {
 	padding: var(--sp-3) var(--sp-4);
-	border: 1px solid var(--line);
+	border: 1px solid var(--field-line);
 	border-radius: var(--r-md);
 	background: var(--paper);
 	max-width: 100%;
@@ -1643,5 +1643,29 @@ label.field input[type='file'] {
 	/* The tab bar no longer pins under the header on phones, so the sticky Print toolbar sits at the top. */
 	:root:has(nav.tabs[data-bottom]) .toolbar {
 		top: 0;
+	}
+}
+
+/* ---- touch targets (design-studio-ui) ----
+   Every .btn variant is at least 44px high on touch screens at every width; desktop (fine
+   pointer) keeps its density. Last in the file so it wins over the phone-width 40px rules above.
+   .pill-link stays a compact badge to the eye and gets its 44px hit area from an ::after band
+   (badges sit in dense chip rows, a 44px visual pill would break them). */
+@media (pointer: coarse) {
+	.btn,
+	.btn.sm {
+		box-sizing: border-box;
+		min-height: 44px;
+	}
+	.pill-link {
+		position: relative;
+	}
+	.pill-link::after {
+		content: '';
+		position: absolute;
+		inset-inline: 0;
+		top: 50%;
+		height: 44px;
+		transform: translateY(-50%);
 	}
 }

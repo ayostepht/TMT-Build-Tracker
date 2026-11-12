@@ -7,6 +7,7 @@ import { seedTemplates } from './seed/run';
 import { startSupervisor } from './printers/supervisor';
 import { sweepImportsDir } from './imports-sweep';
 import { installKitPacks } from './kitpack/install';
+import { cleanupAuthDataAtStartup } from './auth-cleanup';
 
 let done = false;
 
@@ -15,6 +16,7 @@ export function startup(): void {
 	if (done) return;
 	const db = getDb();
 	runMigrations(db);
+	cleanupAuthDataAtStartup(db);
 	const { inserted, updated } = seedTemplates(db, templateSeeds);
 	if (inserted.length) console.log(`[tmt] seeded templates: ${inserted.join(', ')}`);
 	if (updated.length) console.log(`[tmt] updated templates: ${updated.join(', ')}`);

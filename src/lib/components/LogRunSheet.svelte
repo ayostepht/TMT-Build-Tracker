@@ -582,7 +582,7 @@
 		width: 100%;
 		min-width: 0;
 		padding: var(--sp-5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-lg);
 		background: var(--paper);
 		color: var(--ink);

@@ -246,3 +246,108 @@ test('build guide viewer: Close, Escape and a backdrop click return focus to the
 		await expect(opener).toBeFocused();
 	}
 });
+
+// Touch targets: on a coarse pointer every visible .btn is at least 44 px high; the desktop
+// density (fine pointer) is unchanged.
+type Small = { text: string; h: number };
+async function smallButtons(page: Page): Promise<Small[]> {
+	return page.evaluate(() =>
+		[...document.querySelectorAll<HTMLElement>('.btn')].flatMap((el) => {
+			const r = el.getBoundingClientRect();
+			const cs = getComputedStyle(el);
+			if (!r.width || !r.height || cs.visibility === 'hidden' || cs.display === 'none') return [];
+			if (r.height >= 44 - 0.5) return [];
+			const text = (el.innerText || el.getAttribute('aria-label') || el.tagName).trim();
+			return [{ text: text.replace(/\s+/g, ' ').slice(0, 40), h: Math.round(r.height * 10) / 10 }];
+		})
+	);
+}
+
+test.describe('touch targets', () => {
+	test.use({ hasTouch: true });
+
+	test('every visible .btn is at least 44 px high on touch, at 390 and 1024 px', async ({
+		page
+	}) => {
+		test.setTimeout(150_000);
+		const offenders: string[] = [];
+		const check = async (label: string, path: string) => {
+			for (const width of [390, 1024]) {
+				await page.setViewportSize({ width, height: 900 });
+				await page.goto(path);
+				await page.waitForLoadState('networkidle');
+				expect(
+					await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+					'touch context is a coarse pointer'
+				).toBe(true);
+				for (const b of await smallButtons(page))
+					offenders.push(`${label} @${width}: "${b.text}" ${b.h}px`);
+			}
+		};
+
+		// Landing is for signed-out visitors, so it goes first.
+		await check('landing', '/');
+		const { chapterUrl, buildId } = await ownerWithBuild(page, 'touch');
+		await check('overview', `/builds/${buildId}`);
+		await check('print', `/builds/${buildId}/print`);
+		await check('files', `/builds/${buildId}/files`);
+		await check('settings', `/builds/${buildId}/settings`);
+		await check('printers', `${new URL(chapterUrl).pathname}/printers`);
+		await check('account', '/account');
+		expect(offenders, `.btn under 44 px:\n${offenders.join('\n')}`).toEqual([]);
+	});
+});
+
+test('on a fine pointer at 1440 px a plain .btn stays under 44 px (desktop density)', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'fine');
+	await page.goto(`/builds/${buildId}/settings`);
+	await page.waitForLoadState('networkidle');
+	expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(false);
+	const small = await smallButtons(page);
+	expect(small.length, 'some visible .btn is below 44 px').toBeGreaterThan(0);
+});
+
+// Field borders use --field-line, not the card border --line, in both colour schemes.
+for (const scheme of ['light', 'dark'] as const) {
+	test(`form fields have their own border colour, not the card border (${scheme})`, async ({
+		page
+	}) => {
+		await page.emulateMedia({ colorScheme: scheme });
+		await page.setViewportSize({ width: 1440, height: 900 });
+		const { buildId } = await ownerWithBuild(page, `field-${scheme}`);
+		const colours = (loc: Locator) =>
+			loc.first().evaluate((el) => {
+				const probe = document.createElement('div');
+				probe.style.borderTop = '1px solid var(--line)';
+				document.body.append(probe);
+				const line = getComputedStyle(probe).borderTopColor;
+				probe.remove();
+				return { field: getComputedStyle(el).borderTopColor, line };
+			});
+
+		await page.goto(`/builds/${buildId}/settings`);
+		await page.waitForLoadState('networkidle');
+		const text = await colours(page.locator('main input:not([type]), main input[type="text"]'));
+		expect(text.field).not.toBe(text.line);
+
+		// The log sheet: a plate's select when the sheet has one, else its print-time field.
+		await page.goto(`/builds/${buildId}/print`);
+		await page.waitForLoadState('networkidle');
+		await page.getByLabel('Group by').selectOption('plate');
+		await page
+			.locator('.group-head')
+			.getByRole('button', { name: /^Log a print on plate \d+$/ })
+			.first()
+			.click();
+		const sheet = page.getByRole('dialog');
+		await expect(sheet).toBeVisible();
+		const sel = sheet.locator('select');
+		const sheetField = await colours(
+			(await sel.count()) ? sel : sheet.getByLabel('Total print time')
+		);
+		expect(sheetField.field).not.toBe(sheetField.line);
+	});
+}

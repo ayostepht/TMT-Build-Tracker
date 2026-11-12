@@ -410,3 +410,89 @@ test('Colors | Palettes | Parts tabs: arrow keys, Home and End move the selectio
 	await page.keyboard.press('Home');
 	await expect(tab('Colors')).toHaveAttribute('aria-selected', 'true');
 });
+
+/** The chosen option name of every variant group, read from the open radios. */
+async function chosenOptions(page: Page): Promise<string[]> {
+	return page
+		.getByTestId('design-options')
+		.locator('fieldset.vc-group')
+		.evaluateAll((groups) =>
+			groups.map((g) =>
+				(
+					g.querySelector('input[type="radio"]:checked')?.closest('label')?.querySelector('b')
+						?.textContent ?? ''
+				).trim()
+			)
+		);
+}
+
+test('design options: collapsed row above the part search, opens by click and keyboard, updates the part list', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'dopts');
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Parts' }).click();
+
+	const opts = page.getByTestId('design-options');
+	const summary = page.getByTestId('design-options-summary');
+	await expect(opts).toBeVisible();
+	await expect(opts).not.toHaveAttribute('open', '');
+
+	// Placed before "Find a part" in document order.
+	const before = await opts.evaluate((el) => {
+		const search = document.querySelector('[aria-label="Find a part"]');
+		return !!search && !!(el.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING);
+	});
+	expect(before).toBe(true);
+
+	// Opening by click shows the radios; the summary names one chosen option per group.
+	await summary.click();
+	await expect(opts).toHaveAttribute('open', '');
+	const radios = opts.getByRole('radio');
+	await expect(radios.first()).toBeVisible();
+	const chosen = await chosenOptions(page);
+	const groupCount = await opts.locator('fieldset.vc-group').count();
+	expect(groupCount).toBeGreaterThan(1);
+	expect(chosen).toHaveLength(groupCount);
+	expect(chosen.every(Boolean)).toBe(true);
+	await expect(summary).toContainText(chosen.join(' · '));
+
+	// Closed again by click, then Enter and Space on the focused summary toggle it.
+	await summary.click();
+	await expect(opts).not.toHaveAttribute('open', '');
+	await summary.focus();
+	await page.keyboard.press('Enter');
+	await expect(opts).toHaveAttribute('open', '');
+	await page.keyboard.press('Enter');
+	await expect(opts).not.toHaveAttribute('open', '');
+	await page.keyboard.press('Space');
+	await expect(opts).toHaveAttribute('open', '');
+	await expect(radios.first()).toBeVisible();
+
+	// Choosing the bucket seat updates the summary and swaps the seat parts in the list.
+	const seat = page.locator('[data-testid="part-row"][data-slug="bucket-seat"]');
+	await expect(seat).toHaveCount(0);
+	await expect(page.locator('[data-testid="part-row"][data-slug="cushion-top"]')).toHaveCount(1);
+	await opts.getByRole('radio', { name: /Foaming TPU bucket seat/ }).check();
+	await expect(seat).toHaveCount(1);
+	await expect(page.locator('[data-testid="part-row"][data-slug="cushion-top"]')).toHaveCount(0);
+	await expect(summary).toContainText('Foaming TPU bucket seat');
+	await expect(summary).not.toContainText('Cushions');
+	expect(await chosenOptions(page)).toContain('Foaming TPU bucket seat');
+});
+
+test.describe('design options on a phone', () => {
+	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+	test('the summary row is at least 44 px high', async ({ page }) => {
+		const { buildId } = await ownerWithBuild(page, 'dopts-t');
+		await page.goto(`/builds/${buildId}/design`);
+		await page.waitForLoadState('networkidle');
+		await page.getByRole('tab', { name: 'Parts' }).click();
+		const box = await page.getByTestId('design-options-summary').boundingBox();
+		expect(box!.height).toBeGreaterThanOrEqual(44 - 0.5);
+		await expect(page.getByTestId('design-options')).not.toHaveAttribute('open', '');
+	});
+});

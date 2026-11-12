@@ -116,7 +116,7 @@
 	}
 	.sel select {
 		padding: var(--sp-4);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 		max-width: 100%;

@@ -167,7 +167,7 @@
 	.ptb-tog select {
 		padding: var(--sp-2) var(--sp-3);
 		border-radius: var(--r-md);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		background: var(--card);
 		color: var(--ink);
 	}

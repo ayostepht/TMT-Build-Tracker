@@ -94,3 +94,15 @@ describe('theme tokens', () => {
 		});
 	}
 });
+
+describe('field borders', () => {
+	it('no input, select or textarea rule in app.css borders with var(--line)', () => {
+		const bad: string[] = [];
+		for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+			const selector = m[1].replace(/\/\*[\s\S]*?\*\//g, '').trim();
+			if (!/\b(input|select|textarea)\b/.test(selector)) continue;
+			if (/\bborder(-color)?\s*:[^;]*var\(--line\)/.test(m[2])) bad.push(selector);
+		}
+		expect(bad).toEqual([]);
+	});
+});

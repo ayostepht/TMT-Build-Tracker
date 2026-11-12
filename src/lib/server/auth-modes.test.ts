@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { handleOAuthUserInfo } from 'better-auth/oauth2';
+import { decryptOAuthToken, handleOAuthUserInfo, setTokenUtil } from 'better-auth/oauth2';
 import { eq } from 'drizzle-orm';
 import { createAuth, PASSWORD_PATHS, type Auth } from './auth';
 import {
@@ -503,6 +503,78 @@ describe('session hook and bootstrap guard', () => {
 			ctx.internalAdapter.createSession('u1', false, { activeOrganizationId: 'org-x' })
 		).rejects.toMatchObject({ body: { code: 'email_not_verified' } });
 		expect(db.select().from(sessionTable).all()).toHaveLength(0);
+	});
+
+	it('sessions never store the IP address, the user agent is kept', async () => {
+		const auth = createAuth(db);
+		await signUp(auth, 'Pat', 'pat@example.com');
+		const ctx = await auth.$context;
+		const [u] = db.select().from(user).all();
+		await ctx.internalAdapter.createSession(u.id, false, { activeOrganizationId: 'org-x' });
+		const rows = db.select().from(sessionTable).all();
+		expect(rows.length).toBeGreaterThan(0);
+		for (const r of rows) expect(r.ipAddress ?? '').toBe('');
+	});
+
+	it('provider tokens are not stored; only the OIDC id token is kept; credential keeps its hash', async () => {
+		const auth = createAuth(db);
+		const ctx = await auth.$context;
+		await signUp(auth, 'Pat', 'pat@example.com');
+		const full = {
+			accessToken: 'at',
+			refreshToken: 'rt',
+			idToken: 'idt',
+			accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+			refreshTokenExpiresAt: new Date(Date.now() + 3600_000),
+			scope: 'openid,email'
+		};
+		const login = async (providerId: string, id: string, email: string) => {
+			const c = {
+				context: ctx,
+				redirect: (u: string) => u,
+				request: undefined,
+				headers: new Headers()
+			};
+			return handleOAuthUserInfo(
+				c as never,
+				{
+					userInfo: { name: 'P', id, email, emailVerified: true },
+					account: { providerId, accountId: id, ...full },
+					callbackURL: '/'
+				} as never
+			);
+		};
+		const row = (p: string) => db.select().from(account).where(eq(account.providerId, p)).all()[0];
+		const nulls = (r: ReturnType<typeof row>) => [
+			r.accessToken,
+			r.refreshToken,
+			r.accessTokenExpiresAt,
+			r.refreshTokenExpiresAt,
+			r.scope
+		];
+		for (const [p, email] of [
+			['google', 'g@example.com'],
+			['github', 'h@example.com'],
+			['oidc', 'o@example.com']
+		]) {
+			expect((await login(p, `${p}-1`, email)).error).toBeNull();
+			// second sign-in takes the update path
+			expect((await login(p, `${p}-1`, email)).error).toBeNull();
+			const r = row(p);
+			expect(nulls(r).every((v) => v === null)).toBe(true);
+			expect(r.idToken).toBe(p === 'oidc' ? 'idt' : null);
+		}
+		const cred = row('credential');
+		expect(cred.password).toMatch(/\S{20,}/);
+	});
+
+	it('encryption stays on as a backstop: helpers encrypt, decrypt, and pass plaintext through', async () => {
+		const auth = createAuth(db);
+		const ctx = await auth.$context;
+		const enc = await setTokenUtil('plain-access-token', ctx as never);
+		expect(enc).not.toContain('plain-access-token');
+		expect(await decryptOAuthToken(enc!, ctx as never)).toBe('plain-access-token');
+		expect(await decryptOAuthToken('ya29.legacy-plain', ctx as never)).toBe('ya29.legacy-plain');
 	});
 
 	it('SIGNUP=closed: two simultaneous first sign-ups create one account', async () => {

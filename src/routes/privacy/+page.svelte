@@ -31,23 +31,22 @@
 		{#if data.publicMode}
 			<li>
 				You sign in with Google or GitHub. No password is stored. The app keeps a link to your
-				sign-in account, the address of your profile picture there (stored, not shown) and the
-				sign-in tokens and permissions the provider issues, unencrypted in its database. The app
-				does not use those tokens for anything else.
+				sign-in account and the address of your profile picture there (stored, not shown). It keeps
+				none of the provider's sign-in tokens.
 			</li>
 		{:else}
 			<li>
 				With a password, only a scrambled (hashed) copy is stored, never the password itself. If the
-				operator set up single sign-on, the app instead keeps a link to your sign-in account, the
-				address of your profile picture there (stored, not shown) and the sign-in tokens and
-				permissions the provider issues, unencrypted in its database. The app does not use those
-				tokens for anything else.
+				operator set up single sign-on, the app instead keeps a link to your sign-in account and the
+				address of your profile picture there (stored, not shown). It keeps none of the provider's
+				sign-in tokens except its ID token (a signed statement containing your name, email address
+				and provider account ID), used only to sign you out at the provider.
 			</li>
 		{/if}
 		<li>
 			Cookies are used only to keep you signed in. For each sign-in the server keeps a session
-			record: when it started and expires, the IP address and the browser identification (user
-			agent) of the device. A session ends 7 days after you last used the app. Signing out or
+			record: when it started and expires and the browser identification (user agent) of the device.
+			No IP address is stored. A session ends 7 days after you last used the app. Signing out or
 			deleting your account removes it.
 		</li>
 	</ul>

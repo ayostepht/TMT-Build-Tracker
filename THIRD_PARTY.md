@@ -71,7 +71,11 @@ any MakeGood data.
 700; Copyright The Barlow Project Authors), IBM Plex Sans (variable 400-600) and
 IBM Plex Mono (400, 500) (Copyright IBM Corp.), downloaded from Google Fonts so
 the app has no runtime dependency on it. All three are licensed under the SIL
-Open Font License 1.1 (<https://openfontlicense.org>).
+Open Font License 1.1 (<https://openfontlicense.org>). The licence texts ship next to the
+font files: [static/fonts/LICENSE-IBM-Plex.txt](static/fonts/LICENSE-IBM-Plex.txt) (copyright
+2017 IBM Corp., Reserved Font Name "Plex", from <https://github.com/IBM/plex>) and
+[static/fonts/LICENSE-Barlow.txt](static/fonts/LICENSE-Barlow.txt) (copyright 2017 The Barlow
+Project Authors, from <https://github.com/jpt/barlow>).
 
 ## MakeGood 3D TMT (kit pack)
 

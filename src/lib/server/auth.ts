@@ -39,6 +39,22 @@ import { ApiError } from './access';
 import { repointBuildsOffTemplates } from './builds/repoint';
 import { QuotaError, quotaLimit } from './quota';
 
+/** The account fields to overwrite with null; only keys the write actually carries (or all on create). */
+export function unusedTokensCleared(a: { providerId?: unknown } & Record<string, unknown>) {
+	const out: Record<string, null> = {};
+	const creating = 'accountId' in a;
+	for (const k of [
+		'accessToken',
+		'refreshToken',
+		'accessTokenExpiresAt',
+		'refreshTokenExpiresAt',
+		'scope'
+	])
+		if (creating || k in a) out[k] = null;
+	if (typeof a.providerId === 'string' && a.providerId !== 'oidc') out.idToken = null;
+	return out;
+}
+
 function sameOrigin(request?: Request): string[] {
 	if (!request) return [];
 	try {
@@ -149,7 +165,18 @@ export function createAuth(db: Db) {
 					}
 				: {})
 		},
+		// The app never reads the provider's access/refresh tokens; keep them encrypted at rest
+		// (XChaCha20-Poly1305 keyed from the auth secret). The id token is not covered by the option.
+		account: { encryptOAuthTokens: true },
 		databaseHooks: {
+			// Provider tokens are never used by the app, so none are stored. Only the generic OIDC id
+			// token is kept: sign-out passes it as id_token_hint to the provider's end-session endpoint.
+			// `null`, not undefined (undefined is dropped and the value would be stored). Updates carry
+			// providerId only on sign-in/link; without it the id token is left alone.
+			account: {
+				create: { before: async (a) => ({ data: unusedTokensCleared(a) }) },
+				update: { before: async (a) => ({ data: unusedTokensCleared(a) }) }
+			},
 			user: {
 				create: {
 					// Public: provider-verified email only. Self-hosted: the SIGNUP switch.
@@ -193,18 +220,22 @@ export function createAuth(db: Db) {
 									message: 'Your email address is not verified.'
 								});
 						}
-						if ((session as { activeOrganizationId?: string | null }).activeOrganizationId) return;
+						// The IP address is not stored on sessions (privacy). Not `advanced.ipAddress.
+						// disableIpTracking`: that also switches the IP-keyed rate limiter off.
+						const noIp = { ...session, ipAddress: '' };
+						if ((session as { activeOrganizationId?: string | null }).activeOrganizationId)
+							return { data: noIp };
 						// The user's after-create hook may not have run yet; ensure is idempotent.
 						const u = db
 							.select({ name: userTable.name, emailVerified: userTable.emailVerified })
 							.from(userTable)
 							.where(eq(userTable.id, session.userId))
 							.get();
-						if (!u) return;
+						if (!u) return { data: noIp };
 						const { id } = ensurePersonalWorkspace(db, { id: session.userId, name: u.name });
 						// Users who already belong to chapters keep their own default (see the app layout).
-						if (listTeams(db, session.userId).some((t) => !t.personal)) return;
-						return { data: { ...session, activeOrganizationId: id } };
+						if (listTeams(db, session.userId).some((t) => !t.personal)) return { data: noIp };
+						return { data: { ...noIp, activeOrganizationId: id } };
 					}
 				}
 			}

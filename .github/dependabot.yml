@@ -9,6 +9,10 @@ updates:
       # The project runs Node 22; the types must match the runtime major.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # TypeScript 7 upgrade is deferred until after 1.0 (maintainer, 2026-11-11;
+      # PR #11 closed). Remove this entry when the upgrade is scheduled.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
     groups:
       npm-minor-patch:
         update-types: [minor, patch]

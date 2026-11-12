@@ -666,7 +666,7 @@
 		width: 100%;
 		min-width: 0;
 		padding: 7px var(--sp-4);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--card);
 		color: var(--ink);

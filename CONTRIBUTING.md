@@ -13,7 +13,7 @@ Thanks for helping. TMT Build Tracker is a self-hostable web app for makers 3D-p
 
 ## Setup
 
-Requires **Node 22** (`.nvmrc` has `22`; with nvm run `nvm use`; `engines` in `package.json` asks for `>=22.12.0 <23`). The Docker image and CI use Node 22, and `better-sqlite3` is built for it. Other majors are not tested.
+Use **Node 22**: `.nvmrc` has `22` (with nvm run `nvm use`), and CI and the Docker image use 22, so it is the tested version. `engines` in `package.json` asks for `>=22.12.0` with no upper bound, so newer majors are allowed but untested. `better-sqlite3` is a native module built for the Node you install with. Known problem: Node 25 (Homebrew's current `node`) fails `npm run build` with `ERR_INVALID_ARG_VALUE` (seen 2026-11-11), so keep Node 22 first on your PATH. Node 24 has not been tried.
 
 ```bash
 git clone https://github.com/ayostepht/TMT-Build-Tracker.git

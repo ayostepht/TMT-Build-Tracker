@@ -178,7 +178,7 @@
 	}
 	.picker input {
 		padding: 9px var(--sp-5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--field-line);
 		border-radius: var(--r-md);
 		background: var(--paper);
 		font-size: var(--fs-base);
