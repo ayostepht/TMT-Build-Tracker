@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
 import { ownerWithBuild } from './helpers';
 import type { Page } from '@playwright/test';
+import { chooseStatus } from './status-helpers';
 
 /** Logs the first plate group on the Print tab; returns its number. */
 async function logFirstPlate(page: Page): Promise<string> {
@@ -77,7 +78,7 @@ test('A part name in the Activity feed opens its detail on the Print tab', async
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	const row = page.locator('.row[data-s="To print"]').first();
 	const slug = (await row.getAttribute('data-id')) as string;
-	await row.getByRole('button', { name: 'Printing', exact: true }).click();
+	await chooseStatus(row.getByTestId('part-status'), 'Printing');
 	await page.getByRole('link', { name: 'Overview' }).click();
 
 	await page.locator(`.activity a[href$="#part-${slug}"]`).first().click();

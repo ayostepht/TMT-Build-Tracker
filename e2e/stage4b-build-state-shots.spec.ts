@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild } from './helpers';
+import { chooseStatus } from './status-helpers';
 
 // Visual guard for the Stage 4 second wave (build-state components). Runs only with
 // STAGE4_SHOTS=before|after; files land in the gitignored .playwright-mcp/stage4b-build-state/.
@@ -22,12 +23,12 @@ test('stage 4b build-state screenshots', async ({ page }) => {
 		.click();
 	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();
-	await page
-		.getByRole('button', { name: /^Start printing plate \d+$/ })
-		.first()
-		.click();
+	await chooseStatus(
+		page.locator('[data-testid="plate-status"][data-status="To print"]').first(),
+		'Printing'
+	);
 	await expect(
-		page.getByRole('button', { name: /^Finish & log plate \d+$/ }).first()
+		page.locator('[data-testid="plate-status"][data-status="Printing"]').first()
 	).toBeVisible();
 	await page.getByTestId('plate-history-toggle').first().click();
 
@@ -57,10 +58,10 @@ test('stage 4b build-state screenshots', async ({ page }) => {
 				await page.getByRole('button', { name: 'Done' }).click();
 			}
 			// log sheet (quick, from the Finish button)
-			await page
-				.getByRole('button', { name: /^Finish & log plate \d+$/ })
-				.first()
-				.click();
+			await chooseStatus(
+				page.locator('[data-testid="plate-status"][data-status="Printing"]').first(),
+				'Printed'
+			);
 			await shot('log-sheet');
 			await page.keyboard.press('Escape');
 			// edit sheet and delete confirmation

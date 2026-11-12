@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
+import { chooseStatus } from './status-helpers';
 
 test('owner signs up, makes a chapter and build, and tracks a part to Printed', async ({
 	page
@@ -17,7 +18,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	const slug = (await first.getAttribute('data-id')) as string;
 	const name = (await first.locator('.pbtn').innerText()).trim();
 
-	await row(page, slug).getByRole('button', { name: 'Printing', exact: true }).click();
+	await chooseStatus(row(page, slug).getByTestId('part-status'), 'Printing');
 	await expect(row(page, slug)).toHaveAttribute('data-s', 'Printing');
 
 	await page.getByRole('link', { name: 'Overview' }).click();
@@ -28,7 +29,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	// Finishing opens the sheet with Success preselected (Save enabled); nothing is logged until saved.
 	const plateNo = ((await page.locator('.now-plate').first().innerText()).match(/Plate (\d+)/i) ??
 		[])[1];
-	await page.getByRole('button', { name: /Finish & log/ }).click();
+	await chooseStatus(page.getByTestId('now-card').getByTestId('plate-status'), 'Printed');
 	const sheet = page.getByRole('dialog');
 	const save = sheet.getByRole('button', { name: 'Save', exact: true });
 	await expect(sheet).toBeVisible();
@@ -85,7 +86,8 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await sheet.getByRole('button', { name: 'Success' }).click();
 	await save.click();
 	await expect(row(page, slug)).toHaveAttribute('data-s', 'Printed');
-	await expect(row(page, slug).locator('.part-seg button[aria-pressed="true"]')).toHaveText(
+	await expect(row(page, slug).getByTestId('part-status')).toHaveAttribute(
+		'data-status',
 		'Printed'
 	);
 

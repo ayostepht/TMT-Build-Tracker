@@ -47,6 +47,8 @@ interface Outcome {
 	kind: string;
 	payload?: Record<string, unknown>;
 	patches?: PartPatch[];
+	/** Nothing changed: write no activity row and emit no event. */
+	skip?: boolean;
 }
 
 function bad(msg: string): never {
@@ -112,6 +114,7 @@ export function mutateBuild(
 		const view = loadBuildView(tx, buildId, userId);
 		if (!view) throw new ApiError(404, 'Not found');
 		const o = fn(tx, view, now);
+		if (o.skip) return o;
 		if (access.kind === 'draft' && !draftAllows(o.kind))
 			throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 		if (o.patches?.length) applyPatches(tx, buildId, o.patches, now);
@@ -122,6 +125,7 @@ export function mutateBuild(
 		pruneActivity(tx, buildId);
 		return o;
 	});
+	if (out.skip) return;
 	publish(db, buildId, userId, out.kind, now);
 }
 
@@ -151,6 +155,13 @@ export function updateBuild(db: Db, buildId: string, userId: string, body: unkno
 			set.phase = body.phase as string;
 		}
 		if (!Object.keys(set).length) bad('Nothing to update');
+		// Only what really changed is saved and recorded: empty to empty (null vs '') is no change,
+		// and a form save with nothing changed writes no activity row.
+		const cur = view.build as unknown as Record<string, string | null | undefined>;
+		for (const k of Object.keys(set) as (keyof typeof set)[]) {
+			if (((set[k] as string | null) ?? null) === (cur[k] || null)) delete set[k];
+		}
+		if (!Object.keys(set).length) return { kind: 'build.update', skip: true };
 		tx.update(builds).set(set).where(eq(builds.id, buildId)).run();
 		return { kind: 'build.update', payload: set };
 	});

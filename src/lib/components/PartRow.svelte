@@ -9,15 +9,21 @@
 	import RunTable from './RunTable.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
 	import PlateControl from './PlateControl.svelte';
+	import StatusBadge from './StatusBadge.svelte';
+	import StartOnPrinter from './StartOnPrinter.svelte';
+	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 
 	let {
 		part,
 		focus = false,
-		justNow = false
+		justNow = false,
+		plateHeader = false
 	}: {
 		part: PartDef;
 		focus?: boolean;
 		/** Became Printed during this visit while Printed parts are hidden. */ justNow?: boolean;
+		/** The page shows this part's plate heading (with its own printer confirmation). */
+		plateHeader?: boolean;
 	} = $props();
 
 	const ctx = getBuildCtx();
@@ -33,6 +39,14 @@
 	const plate = $derived(plateOf(ctx.view, part.slug));
 	const doneComps = $derived(part.components.filter((_, i) => st?.comps[i]).length);
 	const log = $derived(partRuns(ctx.view, part.slug));
+	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
+	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
+	let where = $state(false);
+	// Printing: with a printer connected (and the part on a plate) ask where; else mark it directly.
+	function pickStatus(s: string) {
+		if (s === 'Printing' && hasPrinter && plate) where = true;
+		else void ctx.setPartStatus(part.slug, s as (typeof PART_STATUSES)[number]);
+	}
 
 	function scopeOf(r: PrintRun): string {
 		if (r.plateNumber == null) return '';
@@ -120,25 +134,34 @@
 				>
 			{/if}
 		</div>
-		<div class="ds-seg part-seg" role="group" aria-label="Status for {part.name}">
-			{#each PART_STATUSES as s (s)}
-				<button
-					type="button"
-					data-v={s}
-					aria-pressed={st?.status === s}
-					disabled={!ctx.canEdit}
-					onclick={() => st?.status !== s && ctx.setPartStatus(part.slug, s)}>{s}</button
-				>
-			{/each}
+		<div class="pr-actions">
+			<StatusBadge
+				label={part.name}
+				status={st?.status ?? 'To print'}
+				options={[...PART_STATUSES]}
+				interactive={ctx.canEdit}
+				onpick={pickStatus}
+				testid="part-status"
+				small
+			/>
+			<button
+				class="more pr-more"
+				type="button"
+				aria-expanded={open}
+				aria-label="Details for {part.name}"
+				onclick={() => (open = !open)}>{open ? '−' : '+'}</button
+			>
 		</div>
-		<button
-			class="more pr-more"
-			type="button"
-			aria-expanded={open}
-			aria-label="Details for {part.name}"
-			onclick={() => (open = !open)}>{open ? '−' : '+'}</button
-		>
 	</div>
+	{#if ctx.canEdit && plate}
+		<StartOnPrinter
+			bind:open={where}
+			slugs={[part.slug]}
+			plateNumber={plate.number}
+			label={part.name}
+			confirm={!open && !plateHeader}
+		/>
+	{/if}
 	{#if open}
 		<div class="detail">
 			<div>
@@ -256,34 +279,19 @@
 			min-height: 44px;
 			margin-block: -11px;
 		}
-		.part-seg > button {
-			min-height: 44px;
-		}
 		.pr-more {
 			width: 44px;
 			height: 44px;
 		}
 	}
-	/* Compact status control: four options on one line down to a 360 px phone. */
-	.part-seg > button {
-		padding: var(--sp-6) var(--sp-4);
-		font-size: var(--fs-sm);
-		white-space: nowrap;
+	/* Status badge and the details toggle share one cell: one line of height on a phone. */
+	.pr-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-4);
+		justify-self: end;
 	}
-	/* The current status is not shown by colour alone: the raised option also gets an underline. */
-	.part-seg > button[aria-pressed='true'] {
-		box-shadow:
-			var(--shadow-1),
-			inset 0 -2px 0 currentColor;
-	}
-	@media (max-width: 760px) {
-		.part-seg {
-			grid-column: 1 / -1;
-			order: 4;
-			display: grid;
-			width: 100%;
-		}
-	}
+
 	/* Part settings tags (was the global .set). */
 	.pset {
 		font: 500 var(--fs-xs) / 1 var(--f-mono);

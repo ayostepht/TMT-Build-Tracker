@@ -26,7 +26,7 @@ Keep at least one backup off the machine itself.
 
 ## Restoring
 
-Stop the container, put the data folder contents back (the container user must own them: `1000:1000` for the quick start, `99:100` on Unraid), and start the container. Start it with the same `BETTER_AUTH_SECRET`. If you only have a database copy such as `tmt-backup.db`, put it in the data folder as `tmt.db` and remove any old `tmt.db-wal` and `tmt.db-shm` next to it. That restores the data but not your uploads (photos, imported models), so restore `uploads/` as well whenever you have it. (Not tested: whether the standard kit reinstalls itself from the image on a database-only restore.)
+Stop the container, put the data folder contents back (the container user must own them: `1000:1000` for the quick start, `99:100` on Unraid), and start the container. Start it with the same `BETTER_AUTH_SECRET`. If you only have a database copy such as `tmt-backup.db`, put it in the data folder as `tmt.db` and remove any old `tmt.db-wal` and `tmt.db-shm` next to it. That restores the data but not your uploads (photos, imported models), so restore `uploads/` as well whenever you have it. If the standard kit's 3D model or print files are missing afterwards, see [Troubleshooting](troubleshooting.md). Restoring from a database copy alone has not been tried yet.
 
 ## Upgrading
 

@@ -20,6 +20,7 @@
 		"dev": "vite dev",
 		"build": "vite build && vite build -c vite.cli.config.ts && vite build -c vite.worker.config.ts",
 		"preview": "vite preview",
+		"preview:demo": "node scripts/preview-demo.mjs",
 		"start": "node --import ./scripts/proxy-origin.mjs build",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

@@ -182,21 +182,30 @@ test('sheets are labelled and give focus back; the status control is a keyboard 
 	await expect(page.getByRole('dialog', { name: 'Filter parts' })).toBeHidden();
 	await expect(filterBtn).toBeFocused();
 
-	// Status control: a labelled group, the current value exposed, operable with the keyboard,
-	// and the current value is marked by more than colour (an underline).
+	// Status badge: a menu button named by the part and its status (text, not colour alone),
+	// operable with the keyboard: open, arrow, Enter picks; Escape closes and returns focus.
 	const first = page.locator('.row').first();
-	const group = first.getByRole('group', { name: /^Status for / });
-	await expect(group.getByRole('button', { pressed: true })).toHaveCount(1);
-	await expect(group.getByRole('button', { name: 'To print', pressed: true })).toBeVisible();
-	const shadow = (name: string) =>
-		group
-			.getByRole('button', { name, exact: true })
-			.evaluate((el) => getComputedStyle(el).boxShadow);
-	expect(await shadow('To print')).not.toBe('none');
-	expect(await shadow('Printed')).toBe('none');
-	await group.getByRole('button', { name: 'Printing', exact: true }).focus();
+	const badge = first.getByTestId('part-status');
+	await expect(badge).toHaveAttribute('aria-haspopup', 'menu');
+	await expect(badge).toHaveAttribute('aria-expanded', 'false');
+	await expect(badge).toHaveAccessibleName(/ status: To print\. Change status$/);
+	await expect(badge).toHaveText(/To print/);
+	await badge.focus();
 	await page.keyboard.press('Enter');
-	await expect(group.getByRole('button', { name: 'Printing', pressed: true })).toBeVisible();
+	const menu = page.getByTestId('status-menu');
+	await expect(menu).toBeVisible();
+	await expect(badge).toHaveAttribute('aria-expanded', 'true');
+	await expect(menu.getByRole('menuitemradio', { name: 'To print', checked: true })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(menu).toBeHidden();
+	await expect(badge).toBeFocused();
+	await page.keyboard.press('Enter');
+	await page.keyboard.press('ArrowDown');
+	await expect(menu.getByRole('menuitemradio', { name: 'Printing' })).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(menu).toBeHidden();
+	await expect(badge).toHaveAttribute('data-status', 'Printing');
+	await expect(badge).toBeFocused();
 
 	// Log sheet: labelled, Escape returns focus to the button that opened it.
 	await first.getByRole('button', { name: /^Details for / }).click();

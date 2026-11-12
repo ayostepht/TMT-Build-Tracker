@@ -80,7 +80,7 @@ Project Authors, from <https://github.com/jpt/barlow>).
 ## MakeGood 3D TMT (kit pack)
 
 The 3D model and print files of the MakeGood 3D TMT (toddler mobility trainer) are by **MakeGood**,
-released as **Creative Commons Public Domain (CC0 1.0)** (confirmed by the maintainer from the
+released as **Creative Commons Public Domain (CC0 1.0)** (as stated on the
 model's MakerWorld page). Credit: 3D model and print files by MakeGood.
 
 They are not in this git repository. TMT Build Tracker converts them (STEP to a web 3D model, slicer

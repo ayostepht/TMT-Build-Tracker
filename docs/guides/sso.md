@@ -1,6 +1,6 @@
 # Single sign-on
 
-TMT Build Tracker can sign people in through any OpenID Connect (OIDC) provider, for example Authentik, Keycloak or Authelia. Only Authentik is written out step by step below; with another provider the same four values apply. (Not verified against any provider other than Authentik.)
+TMT Build Tracker can sign people in through any OpenID Connect (OIDC) provider, for example Authentik, Keycloak or Authelia. Only Authentik is written out step by step below; with another provider the same four values apply. Only Authentik has been tried so far.
 
 Single sign-on needs `PUBLIC_URL` set to the https address of the app (see [Reverse proxy](reverse-proxy.md)), because the redirect address is built from it.
 

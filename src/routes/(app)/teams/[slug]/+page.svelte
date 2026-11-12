@@ -56,7 +56,7 @@
 {/if}
 
 {#if data.team.personal}
-	<div class="card stack">
+	<div class="card stack landing-others">
 		<h2>Want to build with others?</h2>
 		<p class="muted">
 			Create a chapter and invite people, then move builds into it from the build's settings.
@@ -68,6 +68,10 @@
 {/if}
 
 <style>
+	/* Same section spacing as the headings above (.head-row): the card sat flush under Next up. */
+	.landing-others {
+		margin-top: 24px;
+	}
 	.head-row {
 		display: flex;
 		align-items: center;

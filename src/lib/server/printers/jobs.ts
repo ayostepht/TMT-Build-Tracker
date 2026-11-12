@@ -5,7 +5,7 @@
  * waiting for the user's "Confirm print log". All state lives in the database, so a restart
  * resumes the active job by file name (elapsed time starting over means a new run).
  */
-import { and, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { fileMentionsBuild, matchPlate, plateRunGrams } from '#lib/domain/printer-match.ts';
 import { jobNeverStarted, stopPrinting } from '#lib/domain/actions.ts';
 import { releaseUnstarted } from '#lib/domain/recompute.ts';
@@ -539,17 +539,30 @@ export function buildJobs(db: Db, buildId: string, orgId: string): PrinterJobVie
 		.filter((j) => j.status === 'printing' || j.status === 'paused' || j.pendingConfirm);
 }
 
-/** Jobs of a team's printers that nobody has linked to a plate yet (active ones first), plus recent history. */
-export function teamJobs(db: Db, orgId: string, limit = 15): PrinterJobView[] {
-	return db
-		.select({ job: printerJobs, name: printers.name })
-		.from(printerJobs)
-		.innerJoin(printers, eq(printers.id, printerJobs.printerId))
-		.where(eq(printers.organizationId, orgId))
-		.orderBy(desc(printerJobs.startedAt))
-		.limit(limit)
-		.all()
-		.map((r) => toJobView(r.job, r.name));
+/**
+ * The team's job history for the Printers page: the most recent jobs linked to a plate, plus
+ * unlinked ones (a running one is offered for linking; the rest sit behind "Other prints on
+ * this printer"). The client splits them with `splitTeamJobs`; nothing is deleted.
+ */
+export function teamJobs(db: Db, orgId: string, limit = 15, otherLimit = 30): PrinterJobView[] {
+	const rows = (linked: boolean, n: number) =>
+		db
+			.select({ job: printerJobs, name: printers.name })
+			.from(printerJobs)
+			.innerJoin(printers, eq(printers.id, printerJobs.printerId))
+			.where(
+				and(
+					eq(printers.organizationId, orgId),
+					linked ? isNotNull(printerJobs.buildId) : isNull(printerJobs.buildId)
+				)
+			)
+			.orderBy(desc(printerJobs.startedAt))
+			.limit(n)
+			.all()
+			.map((r) => toJobView(r.job, r.name));
+	return [...rows(true, limit), ...rows(false, otherLimit)].sort((a, b) =>
+		(b.startedAt ?? '').localeCompare(a.startedAt ?? '')
+	);
 }
 
 export function getJobForOrg(

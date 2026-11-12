@@ -344,7 +344,7 @@ test('swatch picker: search and selects are styled 16px, 44px-tall fields on a p
 		const fields = [
 			picker.getByLabel('Search colors'),
 			picker.getByLabel('Color family'),
-			picker.getByLabel('More brands')
+			picker.getByLabel('Brand', { exact: true })
 		];
 		for (const f of fields) {
 			await f.scrollIntoViewIfNeeded();
@@ -519,10 +519,11 @@ test.describe('design options on a phone', () => {
 		const r = await sheet.evaluate((el) => {
 			const sb = el.getBoundingClientRect();
 			const f = el.querySelector('.filters') as HTMLElement;
-			const items = [...f.querySelectorAll('select, label, button')].map((n) => {
-				const b = n.getBoundingClientRect();
-				return { l: b.left, r: b.right, h: b.height };
-			});
+			// Controls that are not shown (the brand chips on a phone) have no box.
+			const items = [...f.querySelectorAll('select, label, button')]
+				.map((n) => n.getBoundingClientRect())
+				.filter((b) => b.width > 0)
+				.map((b) => ({ l: b.left, r: b.right, h: b.height }));
 			const stage = document.querySelector('.stagecol')!.getBoundingClientRect();
 			const search = (
 				el.querySelector('input[type="search"]') as HTMLElement

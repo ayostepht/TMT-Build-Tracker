@@ -432,7 +432,7 @@
 						: `${hidden} hidden: silk, matte, other hardness, filled …`}
 				>
 					<input type="checkbox" bind:checked={allTypes} data-testid="show-all-types" /> All types{#if !allTypes}
-						<span class="muted">+{hidden}</span>{/if}
+						<span class="muted tog-n">+{hidden}</span>{/if}
 				</label>
 			{/if}
 			{#if groups.length || neutrals.length}
@@ -451,6 +451,30 @@
 					{#if neutrals.length}<option value="neutral"
 							>Whites, grays, blacks ({neutrals.length})</option
 						>{/if}
+				</select>
+			{/if}
+			<!-- Phones: one select instead of the chip rows (popular brands first, then the rest). -->
+			{#if brandList.length}
+				<select
+					class="brandsel"
+					aria-label="Brand"
+					data-testid="brand-select"
+					value={brands.length ? brands[0] : ''}
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						brands = v ? [v] : [];
+						cap = 480;
+					}}
+				>
+					<option value="">All brands</option>
+					<optgroup label="Popular">
+						{#each chipBrands as b (b)}<option value={b}>{b}</option>{/each}
+					</optgroup>
+					{#if moreBrands.length}
+						<optgroup label="More brands">
+							{#each moreBrands as b (b)}<option value={b}>{b}</option>{/each}
+						</optgroup>
+					{/if}
 				</select>
 			{/if}
 			<div class="chips brandchips" role="group" aria-label="Brands">
@@ -792,6 +816,9 @@
 	select {
 		max-width: 170px;
 	}
+	.brandsel {
+		display: none;
+	}
 	.fam {
 		max-width: 190px;
 	}
@@ -1037,22 +1064,45 @@
 	}
 	/* Phones: 44 px touch targets, a roomier swatch grid. */
 	@media (max-width: 899px) {
-		/* Filters wrap inside the panel instead of scrolling sideways. */
+		/* One filter row: types toggle, colors, brands. The brand chips are replaced by the Brand select. */
 		.filters {
-			flex-wrap: wrap;
+			flex-wrap: nowrap;
 			overflow: visible;
+			padding-bottom: 0;
 		}
 		.filters > * {
 			min-width: 0;
 			max-width: 100%;
 		}
-		.brandchips {
-			flex-wrap: wrap;
-			flex: 1 1 100%;
-		}
 		.filters > select {
-			flex: 1 1 140px;
-			max-width: 100%;
+			flex: 1 1 0;
+			max-width: none;
+			padding-inline: var(--sp-3);
+			text-overflow: ellipsis;
+		}
+		.filters > .sp-tog {
+			flex: none;
+			min-height: 44px;
+			padding-inline: var(--sp-4);
+		}
+		.tog-n {
+			display: none;
+		}
+		.brandsel {
+			display: block;
+		}
+		.brandchips {
+			display: none;
+		}
+		/* The card grows with its content and the page scrolls; nothing is clipped or overflows it. */
+		.sheet {
+			flex: none;
+			padding-bottom: var(--sp-5);
+		}
+		.body {
+			flex: none;
+			overflow: visible;
+			padding-bottom: 0;
 		}
 		.sw {
 			width: 44px;

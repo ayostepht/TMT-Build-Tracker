@@ -1,7 +1,8 @@
 import { expect, test } from './fixtures';
 import { ownerWithBuild, row } from './helpers';
+import { chooseStatus } from './status-helpers';
 
-test('Start printing works from the Print tab: plate grouping and part detail', async ({
+test('Marking Printing works from the Print tab: plate grouping and part detail', async ({
 	page
 }) => {
 	await ownerWithBuild(page);
@@ -14,11 +15,11 @@ test('Start printing works from the Print tab: plate grouping and part detail', 
 	await page.getByLabel('Group by').selectOption('plate');
 	const startable = page
 		.locator('.group-head')
-		.getByRole('button', { name: /^Start printing plate \d+$/ });
+		.locator('[data-testid="plate-status"][data-status="To print"]');
 	await expect(startable.first()).toBeVisible();
 	const label = (await startable.first().getAttribute('aria-label')) as string;
-	const plateNo = /\d+/.exec(label)![0];
-	await startable.first().click();
+	const plateNo = /Plate (\d+) status/.exec(label)![1];
+	await chooseStatus(startable.first(), 'Printing');
 	await expect(page.locator('.row[data-s="Printing"]').first()).toBeVisible();
 
 	await page.getByRole('link', { name: 'Overview' }).click();
@@ -29,7 +30,7 @@ test('Start printing works from the Print tab: plate grouping and part detail', 
 	// Start a second plate from its group.
 	await page.getByRole('link', { name: 'Print', exact: true }).click();
 	await expect(startable.first()).toBeVisible();
-	await startable.first().click();
+	await chooseStatus(startable.first(), 'Printing');
 	await expect.poll(() => page.locator('.row[data-s="Printing"]').count()).toBeGreaterThan(1);
 
 	// A part's detail offers its plate too.
@@ -38,11 +39,8 @@ test('Start printing works from the Print tab: plate grouping and part detail', 
 	await row(page, slug)
 		.getByRole('button', { name: /^Details for/ })
 		.click();
-	await expect(
-		row(page, slug).getByRole('button', { name: /^Start printing plate \d+$/ })
-	).toBeVisible();
-	await row(page, slug)
-		.getByRole('button', { name: /^Start printing plate \d+$/ })
-		.click();
+	const plateBadge = row(page, slug).getByTestId('plate-status');
+	await expect(plateBadge).toHaveAccessibleName(/^Plate \d+ status: To print\. Change status$/);
+	await chooseStatus(plateBadge, 'Printing');
 	await expect(row(page, slug)).toHaveAttribute('data-s', 'Printing');
 });

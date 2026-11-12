@@ -32,7 +32,8 @@ import {
 	expectOnPrinterJob,
 	linkJob,
 	pendingExpected,
-	processStatus
+	processStatus,
+	teamJobs
 } from './jobs';
 import { Supervisor } from './supervisor';
 import { createPrinter } from './store';
@@ -851,5 +852,56 @@ describe('cancelled or failed prints', () => {
 		expect(db.select().from(printRuns).all()).toHaveLength(1);
 		expect(partStatus('rims-1-4')).toBe('To print'); // run 1 of 2 won; not Printing now
 		expect(filamentUsed()).toBe(140);
+	});
+});
+
+describe('team job history keeps unlinked prints apart', () => {
+	it('never sends unlinked finished jobs to a build, and returns them separately for the team', () => {
+		processStatus(db, printerId, printing('Plate 1 - Handle Left.gcode', 5, 300), at(5));
+		processStatus(
+			db,
+			printerId,
+			{ state: 'done', progress: 100, fileName: 'Plate 1 - Handle Left.gcode' },
+			at(60)
+		);
+		processStatus(db, printerId, printing('benchy.gcode', 5, 300), at(70));
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 3, fileName: 'benchy.gcode' },
+			at(80)
+		);
+		processStatus(db, printerId, printing('vase.gcode', 5, 300), at(90));
+		const all = jobs();
+		const bench = all.find((j) => j.fileName === 'benchy.gcode')!;
+		const vase = all.find((j) => j.fileName === 'vase.gcode')!;
+		expect(bench.buildId).toBeNull();
+		expect(bench.status).toBe('cancelled');
+		// Build view: the linked job (waiting for its log) and the running unlinked one, never the finished unlinked one.
+		const ids = buildJobs(db, buildId, 'org1').map((j) => j.id);
+		expect(ids).toContain(vase.id);
+		expect(ids).not.toContain(bench.id);
+		// Team view still returns it (the Printers page puts it behind a disclosure).
+		expect(teamJobs(db, 'org1').map((j) => j.id)).toContain(bench.id);
+		// Nothing of another team.
+		expect(teamJobs(db, 'other-org')).toHaveLength(0);
+		// No activity rows mention the unlinked jobs.
+		expect(JSON.stringify(db.select().from(activity).all())).not.toContain('benchy');
+	});
+
+	it('a flood of unlinked jobs does not push linked ones out of the list', () => {
+		processStatus(db, printerId, printing('Plate 1 - Handle Left.gcode', 5, 300), at(5));
+		processStatus(db, printerId, { state: 'idle', progress: 100 } as PrinterStatus, at(30));
+		for (let i = 0; i < 20; i++) {
+			processStatus(db, printerId, printing(`junk${i}.gcode`, 5, 300), at(100 + i * 10));
+			processStatus(
+				db,
+				printerId,
+				{ state: 'idle', progress: 0 } as PrinterStatus,
+				at(105 + i * 10)
+			);
+		}
+		const t = teamJobs(db, 'org1');
+		expect(t.some((j) => j.buildId === buildId)).toBe(true);
 	});
 });

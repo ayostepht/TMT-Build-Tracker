@@ -160,3 +160,20 @@ export const fmtRemaining = (sec: number | undefined | null): string => {
 	const m = Math.floor((s % 3600) / 60);
 	return h ? `${h} h ${m} min` : `${m} min`;
 };
+
+/**
+ * Printers page job history: jobs linked to a plate (or running/paused right now, so they can be
+ * linked) are listed; older unlinked jobs go behind "Other prints on this printer".
+ */
+export function splitTeamJobs(jobs: PrinterJobView[]): {
+	shown: PrinterJobView[];
+	other: PrinterJobView[];
+} {
+	const shown: PrinterJobView[] = [];
+	const other: PrinterJobView[] = [];
+	for (const j of jobs) {
+		if (j.buildId || j.status === 'printing' || j.status === 'paused') shown.push(j);
+		else other.push(j);
+	}
+	return { shown, other };
+}

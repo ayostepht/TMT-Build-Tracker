@@ -13,6 +13,8 @@ The app reads status. It never moves, heats, pauses, stops or starts anything, a
 | OctoPrint           | HTTP `GET` requests (`/api/job`, `/api/printer`) with your API key.                                                                 |
 | Bambu Lab (LAN)     | Subscribes to the printer's report topic and publishes the `pushall` request, which only asks the printer to resend its full state. |
 
+The Elegoo connection (Centauri Carbon) is the one in regular use on a real printer. Klipper (Moonraker), OctoPrint and Bambu Lab LAN are newer and the project has not yet run them against real printers: please report problems in the [issue tracker](https://github.com/ayostepht/TMT-Build-Tracker/issues).
+
 These rules are enforced in code (`src/lib/server/printers/adapters/`); the Elegoo adapter refuses to build any other command.
 
 ## Network rules
@@ -37,7 +39,7 @@ Centauri Carbon and other printers that speak SDCP. Status comes over a WebSocke
 2. In the chapter's **Printers** tab add a printer of type **Elegoo (SDCP)** with that IP address. The mainboard ID is found automatically; fill it in only if status stays empty.
 3. For the camera, the app sends the one camera-on command (Cmd 386) and reads the stream. Without that command the printer's camera port answers "camera not ready".
 
-The printer allows only a few simultaneous connections (about five on the Centauri Carbon, from the adapter's notes; not checked against Elegoo's documentation). If other tools (Elegoo's app, Home Assistant) already use them up, status may fail to connect.
+The printer allows only a few simultaneous connections (about five on the Centauri Carbon; observed, not from Elegoo's documentation). If other tools (Elegoo's app, Home Assistant) already use them up, status may fail to connect.
 
 ### Through an OctoEverywhere shared link
 
@@ -47,11 +49,11 @@ If you already use OctoEverywhere with the printer, you can use its existing con
 - The link is a secret: anyone holding it can reach the printer through OctoEverywhere. It is stored encrypted and never shown again; the form offers **Remove link**.
 - Status uses the link's WebSocket (`wss://shared-<token>.octoeverywhere.com/websocket`) and the camera is the stream at `/video` on the same host.
 - This is the only public destination the app will ever connect to; the name must resolve to public addresses only.
-- How to create a shared link inside OctoEverywhere is not described here (not verified); see OctoEverywhere's own documentation.
+- How to create a shared link inside OctoEverywhere is described in OctoEverywhere's own documentation.
 
 ## Klipper (Moonraker)
 
-Moonraker's WebSocket on port 7125 (the default). Add the printer with its IP address. The API key is optional: leave it empty when Moonraker trusts your network (in Moonraker's configuration the machine running this app must be a trusted client; not verified against Moonraker's documentation), and enter it if Moonraker requires one. The camera address is taken from the webcam list Moonraker reports; you can set your own, which must be on the same address as the printer.
+Moonraker's WebSocket on port 7125 (the default). Add the printer with its IP address. The API key is optional: leave it empty when Moonraker trusts your network (in Moonraker's configuration the machine running this app must be a trusted client), and enter it if Moonraker requires one. The camera address is taken from the webcam list Moonraker reports; you can set your own, which must be on the same address as the printer.
 
 ## OctoPrint
 

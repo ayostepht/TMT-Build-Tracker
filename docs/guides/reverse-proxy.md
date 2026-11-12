@@ -4,7 +4,7 @@ You only need a proxy if you want an https address (`https://tmt.example.com`), 
 
 The examples use `tmt.example.com` as your address and `192.168.1.20:8420` as the host and port the container is published on. Replace both.
 
-> **Tested and untested.** The Nginx Proxy Manager section is the setup the maintainer runs. The Caddy and Traefik sections are minimal examples derived from how the app reads the request origin; they have **not** been tried against a real Caddy or Traefik yet. Corrections are welcome.
+> **Examples.** The Nginx Proxy Manager setup is the one the project runs. The Caddy and Traefik sections are minimal examples derived from how the app reads the request origin (see "How the app decides its address"); the project has not run them yet, so adapt them to your setup. Corrections are welcome.
 
 ## How the app decides its address
 
@@ -47,7 +47,7 @@ If the NPM container and this one share a custom Docker network you can forward 
 
 ## Caddy
 
-Caddy gets the certificate itself and, as far as we know, sets `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-For` on proxied requests by default. A `Caddyfile` entry:
+Caddy gets the certificate itself and should set `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-For` on proxied requests by default (not yet confirmed; check that they arrive). A `Caddyfile` entry:
 
 ```caddyfile
 tmt.example.com {
@@ -63,7 +63,7 @@ tmt.example.com {
 - `max_size` matches the image's `BODY_SIZE_LIMIT=1100M`. Caddy does not limit request bodies unless told to, so this line is optional; it only keeps the limits consistent.
 - `flush_interval -1` sends every chunk to the browser immediately, which the live-update stream needs.
 
-Then set `PUBLIC_URL=https://tmt.example.com` on the container. Not verified: Caddy's behaviour when it sits behind another proxy (it then does not trust the incoming forwarding headers unless `trusted_proxies` is configured).
+Then set `PUBLIC_URL=https://tmt.example.com` on the container. If Caddy sits behind another proxy, it should not trust the incoming forwarding headers unless `trusted_proxies` is configured (not yet confirmed).
 
 ## Traefik
 
@@ -87,7 +87,7 @@ services:
       - traefik.http.services.tmt.loadbalancer.server.port=3000
 ```
 
-Traefik forwards `Host` and sets `X-Forwarded-Proto` and `X-Forwarded-For` by default and does not limit request body size unless you add a `buffering` middleware. The container must share a Docker network with Traefik. Not verified: if large uploads are cut off after about a minute, look at the `respondingTimeouts` of the entry point in your Traefik configuration (some Traefik versions default to a 60-second read timeout); raise `readTimeout` there.
+Traefik should forward `Host` and set `X-Forwarded-Proto` and `X-Forwarded-For` by default and should not limit request body size unless you add a `buffering` middleware (not yet confirmed). The container must share a Docker network with Traefik. If large uploads are cut off after about a minute, check the `respondingTimeouts` of the entry point in your Traefik configuration (some Traefik versions default to a 60-second read timeout); raise `readTimeout` there.
 
 `ADDRESS_HEADER` is set above only because Traefik is then the only way in. Remove that line if the container port is also reachable by other means (see the next section).
 

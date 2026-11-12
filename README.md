@@ -2,11 +2,9 @@
 
 A self-hostable web app for makers 3D-printing the MakeGood 3D TMT (toddler mobility trainer) chair. Teams ("chapters") plan, print, assemble and hand off builds together: parts and print plates, filament colors, print logs, a 3D color designer, 3MF export for your slicer, and optional read-only printer status. It has accounts, chapters and roles, and it is made for makers who can run a Docker container, not for developers.
 
-> **Status:** pre-release. All features are built and running on a test copy; the public release (public repository and container package) is still to come. Until then see [Image access](#image-access).
+> **Status:** pre-release. The public release (public repository and container package) is still to come. Until then see [Image access](#image-access).
 
 ## Screenshots
-
-Taken on a throwaway instance with invented demo data. In the order a build happens:
 
 ![The color designer: a 3D toddler chair in red, white and yellow, next to a list of color slots, each with its filament and the weight it needs](docs/images/screenshot-color-designer.png)
 
@@ -24,7 +22,7 @@ On your phone at the printer: the plate that is printing, how long it has run an
 
 ![A printers page with one printer card showing a Printing badge, a progress bar at 42 percent, layer 168 of 400, time left and temperatures](docs/images/screenshot-printer-card.png)
 
-Optional: connect an Elegoo printer to see its progress, layer and temperatures next to each plate (shown here with a simulated printer). The app only reads from printers; it never starts, stops, pauses or moves them.
+Optional: connect a printer (Elegoo, Klipper with Moonraker, OctoPrint or Bambu Lab in LAN mode) to see its status, progress and temperatures next to each plate. The app only reads from printers; it never starts, stops, pauses or moves them.
 
 ## MakeGood files and credit
 

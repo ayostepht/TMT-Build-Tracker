@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { ownerWithBuild } from './helpers';
+import { chooseStatus } from './status-helpers';
 
 // Screenshots + content-share measurement for the Print tab and the Now card. Off unless
 // STAGE2_SHOTS=1 (files land in a gitignored folder).
@@ -18,12 +19,12 @@ test('Print tab and Now card screenshots; content share at 390 x 844', async ({ 
 	await logs.first().click();
 	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();
-	await page
-		.getByRole('button', { name: /^Start printing plate \d+$/ })
-		.first()
-		.click();
+	await chooseStatus(
+		page.locator('[data-testid="plate-status"][data-status="To print"]').first(),
+		'Printing'
+	);
 	await expect(
-		page.getByRole('button', { name: /^Finish & log plate \d+$/ }).first()
+		page.locator('[data-testid="plate-status"][data-status="Printing"]').first()
 	).toBeVisible();
 
 	// Plate just marked Printed stays visible (dimmed, marked) at both phone widths; toolbar must not wrap.
@@ -108,12 +109,12 @@ test('compact Now card on the landing and overflow of the full card at 360', asy
 	const { buildId, chapterUrl } = await ownerWithBuild(page, 'stage2c');
 	await page.goto(`/builds/${buildId}/print`);
 	await page.waitForLoadState('networkidle');
-	await page
-		.getByRole('button', { name: /^Start printing plate \d+$/ })
-		.first()
-		.click();
+	await chooseStatus(
+		page.locator('[data-testid="plate-status"][data-status="To print"]').first(),
+		'Printing'
+	);
 	await expect(
-		page.getByRole('button', { name: /^Finish & log plate \d+$/ }).first()
+		page.locator('[data-testid="plate-status"][data-status="Printing"]').first()
 	).toBeVisible();
 
 	for (const w of [360, 390]) {
@@ -121,7 +122,7 @@ test('compact Now card on the landing and overflow of the full card at 360', asy
 		await page.goto(chapterUrl);
 		await page.waitForLoadState('networkidle');
 		const card = page.getByTestId('landing-now-card').first();
-		await expect(card.getByRole('button', { name: /^Finish & log plate \d+$/ })).toBeVisible();
+		await expect(card.getByTestId('plate-status')).toBeVisible();
 		await expect(card.getByText('Slicer grams')).toHaveCount(0);
 		await expect(card.getByTestId('now-details')).toBeVisible();
 		const box = await card.boundingBox();

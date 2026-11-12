@@ -2,6 +2,7 @@ import { MockCamera } from '../src/lib/server/printers/mock-camera';
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { createBuild, ownerWithBuild } from './helpers';
+import { chooseStatus } from './status-helpers';
 
 // Visual guard for the Stage 4 second wave (printer components). Runs only with
 // STAGE4_SHOTS=before|after; files land in the gitignored .playwright-mcp/stage4b-printers/.
@@ -70,7 +71,11 @@ test('stage 4b printers screenshots', async ({ page, browser }) => {
 				const sent = page.waitForResponse(
 					(r) => /\/api\/printers\/[^/]+\/expect$/.test(r.url()) && r.request().method() === 'POST'
 				);
-				await page.getByTestId('start-on-printer').first().click();
+				await chooseStatus(
+					page.locator('.group-head').getByTestId('plate-status').first(),
+					'Printing'
+				);
+				await page.getByTestId('where-confirm').click();
 				expect((await sent).ok()).toBe(true);
 				await page.goto(`/builds/${id}`);
 				await page.waitForLoadState('networkidle');
@@ -88,7 +93,10 @@ test('stage 4b printers screenshots', async ({ page, browser }) => {
 				await page.getByTestId('camera-toggle').click();
 				await shot('overview-camera-collapsed');
 				await page.getByTestId('camera-toggle').click();
-				await page.getByRole('button', { name: 'Take off printer' }).click();
+				await chooseStatus(
+					page.getByTestId('now-card').getByTestId('plate-status').first(),
+					'To print'
+				);
 				await expect(page.getByTestId('link-plate')).toBeVisible({ timeout: 15_000 });
 				await shot('overview-unlinked');
 

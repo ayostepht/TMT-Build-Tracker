@@ -8,6 +8,7 @@ import {
 	startBuild,
 	uniqueEmail
 } from './helpers';
+import { chooseStatus } from './status-helpers';
 
 // Stage 2 landing: Now printing + Next up across the chapter's builds, with the shared start/log
 // control. Exit check: starting a plate and logging it done take <= 2 taps each from landing.
@@ -28,7 +29,7 @@ test('a new user sees what the app is for and one New build button', async ({ pa
 	await page.screenshot({ path: `${SHOTS}/landing-empty-${page.viewportSize()!.width}.png` });
 });
 
-test('start a plate in 1 tap and log it done in 2 taps, from the landing', async ({ page }) => {
+test('start a plate in 2 taps and log it done in 3 taps, from the landing', async ({ page }) => {
 	const { chapterUrl } = await ownerWithBuild(page, 'landing');
 	await page.goto(chapterUrl);
 	await settled(page);
@@ -39,9 +40,9 @@ test('start a plate in 1 tap and log it done in 2 taps, from the landing', async
 	const plate = await next.getAttribute('data-plate');
 	await page.screenshot({ path: `${SHOTS}/landing-next-${page.viewportSize()!.width}.png` });
 
-	// Tap 1: Start printing.
+	// Taps 1 and 2: the status badge, then Printing (no printer connected: no dialog).
 	let taps = 0;
-	await next.getByRole('button', { name: /^Start printing plate/ }).click();
+	await chooseStatus(next.getByTestId('plate-status'), 'Printing');
 	taps++;
 	const now = page.getByTestId('landing-now-card').first();
 	await expect(now).toContainText(`Plate ${plate}`);
@@ -51,26 +52,25 @@ test('start a plate in 1 tap and log it done in 2 taps, from the landing', async
 	await expect(page.getByTestId('next-up-card').first()).not.toHaveAttribute('data-plate', plate!);
 	await page.screenshot({ path: `${SHOTS}/landing-printing-${page.viewportSize()!.width}.png` });
 
-	// Taps 1 and 2: Finish & log (Success is preselected), Save.
+	// Taps 1 to 3: the status badge, Printed (Success is preselected), Save.
 	taps = 0;
-	await now.getByRole('button', { name: /^Finish & log plate/ }).click();
-	taps++;
+	await chooseStatus(now.getByTestId('plate-status'), 'Printed');
+	taps += 2;
 	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	taps++;
 	await expect(page.getByTestId('landing-now-card')).toHaveCount(0);
 	console.log(`TAPS finish=${taps}`);
-	expect(taps).toBeLessThanOrEqual(2);
+	expect(taps).toBeLessThanOrEqual(3);
 });
 
 test('a viewer sees status but no controls', async ({ page, browser }) => {
 	const { chapterUrl } = await ownerWithBuild(page, 'landing-viewer');
 	await page.goto(chapterUrl);
 	await settled(page);
-	await page
-		.getByTestId('next-up-card')
-		.first()
-		.getByRole('button', { name: /^Start printing plate/ })
-		.click();
+	await chooseStatus(
+		page.getByTestId('next-up-card').first().getByTestId('plate-status'),
+		'Printing'
+	);
 	await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
 
 	const email = uniqueEmail('landing-viewer');
@@ -81,9 +81,11 @@ test('a viewer sees status but no controls', async ({ page, browser }) => {
 	await settled(vp);
 	await expect(vp.getByTestId('landing-now-card')).toHaveCount(1);
 	await expect(vp.getByTestId('next-up-card').first()).toBeVisible();
-	await expect(
-		vp.getByRole('button', { name: /Start printing|Finish & log|Take off/ })
-	).toHaveCount(0);
+	// A viewer sees the status as a plain badge: no menu button, no log action.
+	await expect(vp.getByRole('button', { name: /status:.*Change status|Log a print/ })).toHaveCount(
+		0
+	);
+	await expect(vp.getByTestId('plate-status').first()).toBeVisible();
 	await expect(vp.getByTestId('new-build')).toHaveCount(0);
 	await viewer.context.close();
 });
@@ -122,11 +124,10 @@ test('the landing opens few live streams and stays navigable', async ({ page }) 
 	await expect(page.getByTestId('next-up-card')).toHaveCount(6);
 	await expect(page.getByTestId('landing-more')).toContainText('All builds');
 	// Layout check with 6 builds, one of them printing (a compact Now card).
-	await page
-		.getByTestId('next-up-card')
-		.first()
-		.getByRole('button', { name: /^Start printing plate/ })
-		.click();
+	await chooseStatus(
+		page.getByTestId('next-up-card').first().getByTestId('plate-status'),
+		'Printing'
+	);
 	await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
 	for (const [w, h] of [
 		[390, 844],
@@ -177,11 +178,10 @@ test('the builds list is first, one tap to a build; build links in the cards lea
 	// With a plate printing, its Now printing card has the pill too.
 	await page.goto(chapterUrl);
 	await settled(page);
-	await page
-		.getByTestId('next-up-card')
-		.first()
-		.getByRole('button', { name: /^Start printing plate/ })
-		.click();
+	await chooseStatus(
+		page.getByTestId('next-up-card').first().getByTestId('plate-status'),
+		'Printing'
+	);
 	await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
 	const nowOpen = page.getByTestId('landing-now-card').getByTestId('landing-open-build');
 	await expect(nowOpen).toHaveAttribute('href', `/builds/${buildId}`);
@@ -245,11 +245,10 @@ for (const [label, name] of [
 		await page.goto(chapterUrl);
 		await settled(page);
 		// Print the plate of the long-named build, so its Now printing card is on the page.
-		await page
-			.getByTestId('next-up-card')
-			.filter({ hasText: name })
-			.getByRole('button', { name: /^Start printing plate/ })
-			.click();
+		await chooseStatus(
+			page.getByTestId('next-up-card').filter({ hasText: name }).getByTestId('plate-status'),
+			'Printing'
+		);
 		await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
 		await expect(page.getByTestId('build-card').first()).toBeVisible();
 		await expect(page.getByTestId('build-card')).toHaveCount(2);
@@ -278,11 +277,10 @@ test('screenshots: landing with something printing, and the empty state', async 
 	const { chapterUrl } = await ownerWithBuild(page, 'landing-shots');
 	await page.goto(chapterUrl);
 	await settled(page);
-	await page
-		.getByTestId('next-up-card')
-		.first()
-		.getByRole('button', { name: /^Start printing plate/ })
-		.click();
+	await chooseStatus(
+		page.getByTestId('next-up-card').first().getByTestId('plate-status'),
+		'Printing'
+	);
 	await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
 	for (const [w, h] of SIZES) {
 		for (const scheme of ['light', 'dark'] as const) {
@@ -338,29 +336,25 @@ test('tracking card actions: same row, at least 44 px high, not overlapping (pho
 			expect(sorted[i].x).toBeGreaterThanOrEqual(sorted[i - 1].x + sorted[i - 1].width - tol);
 	};
 
-	// Next up: Start printing, and Log a print… beside it.
+	// Next up: the status badge, and Log a print… beside it.
 	const next = page.getByTestId('next-up-card').first();
 	const nextBtns = [
-		next.getByRole('button', { name: /^Start printing plate/ }),
+		next.getByTestId('plate-status'),
 		next.getByRole('button', { name: /^Log a print on plate/ })
 	];
 	check(await boxes(nextBtns), true);
 
 	// Start a plate, then the Now card.
-	await nextBtns[0].click();
+	await chooseStatus(nextBtns[0], 'Printing');
 	const now = page.getByTestId('landing-now-card').first();
-	const nowBtns = [
-		now.getByRole('button', { name: /^Finish & log plate/ }),
-		now.getByRole('button', { name: /^Take off printer/ }),
-		now.getByTestId('now-details')
-	];
+	const nowBtns = [now.getByTestId('plate-status'), now.getByTestId('now-details')];
 	check(await boxes(nowBtns), true);
 
 	// The next plate that moved up keeps the same rules.
 	const next2 = page.getByTestId('next-up-card').first();
 	check(
 		await boxes([
-			next2.getByRole('button', { name: /^Start printing plate/ }),
+			next2.getByTestId('plate-status'),
 			next2.getByRole('button', { name: /^Log a print on plate/ })
 		]),
 		true

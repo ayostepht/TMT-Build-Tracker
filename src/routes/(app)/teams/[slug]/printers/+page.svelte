@@ -7,7 +7,7 @@
 	import PrinterCard from '#lib/components/PrinterCard.svelte';
 	import PrinterJobLink from '#lib/components/PrinterJobLink.svelte';
 	import PrinterForm from '#lib/components/PrinterForm.svelte';
-	import type { PrinterPublic } from '#lib/printers/status.ts';
+	import { splitTeamJobs, type PrinterJobView, type PrinterPublic } from '#lib/printers/status.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -56,6 +56,7 @@
 		editing = null;
 		void store.load();
 	};
+	const split = $derived(splitTeamJobs(store.jobs));
 	const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '');
 </script>
 
@@ -158,49 +159,66 @@
 		<p class="muted">Ask a chapter owner or editor to add printers.</p>
 	{/if}
 
-	{#if store.jobs.length}
+	{#snippet jobRow(j: PrinterJobView, older: boolean)}
+		<li class="ds-card ds-card--compact jobrow">
+			<div>
+				<b>{j.fileName || 'Unnamed print'}</b>
+				<div class="muted small">
+					{j.printerName} · {j.status}{j.progress != null ? ` · ${Math.round(j.progress)}%` : ''} · {when(
+						j.startedAt
+					)}
+				</div>
+				<div class="small">
+					{#if j.buildId && j.plateNumber != null}
+						<a class="pill-link" href={resolve('/(app)/builds/[id]', { id: j.buildId })}
+							>Plate {j.plateNumber}</a
+						>
+						{#if j.runId && j.runId !== 'dismissed'}<span class="muted">
+								· logged</span
+							>{:else if j.pendingConfirm}<span class="muted">
+								· waiting for your print log</span
+							>{/if}
+						{#if data.canEdit && (j.status === 'printing' || j.status === 'paused')}
+							<button class="btn ghost sm" type="button" onclick={() => unlink(j.id)}>Unlink</button
+							>
+						{/if}
+					{:else}
+						<span class="muted">Not linked to a plate</span>
+						{#if data.canEdit && (older || j.status === 'printing' || j.status === 'paused')}
+							<PrinterJobLink
+								job={j}
+								builds={store.builds}
+								exp={store.expected.find((e) => e.jobId === j.id)}
+								onlinked={() => store.load()}
+							/>
+						{/if}
+					{/if}
+				</div>
+			</div>
+		</li>
+	{/snippet}
+
+	{#if split.shown.length || split.other.length}
 		<h2>Recent prints</h2>
-		<ul class="tpl-list" data-testid="job-list">
-			{#each store.jobs as j (j.id)}
-				<li class="ds-card ds-card--compact jobrow">
-					<div>
-						<b>{j.fileName || 'Unnamed print'}</b>
-						<div class="muted small">
-							{j.printerName} · {j.status}{j.progress != null
-								? ` · ${Math.round(j.progress)}%`
-								: ''} · {when(j.startedAt)}
-						</div>
-						<div class="small">
-							{#if j.buildId && j.plateNumber != null}
-								<a class="pill-link" href={resolve('/(app)/builds/[id]', { id: j.buildId })}
-									>Plate {j.plateNumber}</a
-								>
-								{#if j.runId && j.runId !== 'dismissed'}<span class="muted">
-										· logged</span
-									>{:else if j.pendingConfirm}<span class="muted">
-										· waiting for your print log</span
-									>{/if}
-								{#if data.canEdit && (j.status === 'printing' || j.status === 'paused')}
-									<button class="btn ghost sm" type="button" onclick={() => unlink(j.id)}
-										>Unlink</button
-									>
-								{/if}
-							{:else}
-								<span class="muted">Not linked to a plate</span>
-								{#if data.canEdit && (j.status === 'printing' || j.status === 'paused')}
-									<PrinterJobLink
-										job={j}
-										builds={store.builds}
-										exp={store.expected.find((e) => e.jobId === j.id)}
-										onlinked={() => store.load()}
-									/>
-								{/if}
-							{/if}
-						</div>
-					</div>
-				</li>
-			{/each}
-		</ul>
+		{#if split.shown.length}
+			<ul class="tpl-list" data-testid="job-list">
+				{#each split.shown as j (j.id)}
+					{@render jobRow(j, false)}
+				{/each}
+			</ul>
+		{:else}
+			<p class="muted">No prints linked to a plate yet.</p>
+		{/if}
+		{#if split.other.length}
+			<details class="pr-other" data-testid="other-jobs">
+				<summary>Other prints on this printer ({split.other.length})</summary>
+				<ul class="tpl-list" data-testid="other-job-list">
+					{#each split.other as j (j.id)}
+						{@render jobRow(j, true)}
+					{/each}
+				</ul>
+			</details>
+		{/if}
 	{/if}
 </section>
 
@@ -216,6 +234,15 @@
 	}
 	.pr-page > p {
 		margin: 0;
+	}
+	.pr-other summary {
+		cursor: pointer;
+		color: var(--muted);
+		font-size: var(--fs-sm);
+		padding: var(--sp-3) 0;
+	}
+	.pr-other ul {
+		margin-top: var(--sp-4);
 	}
 	.pr-confirm {
 		display: flex;

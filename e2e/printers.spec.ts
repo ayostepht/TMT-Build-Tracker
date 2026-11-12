@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
+import { chooseStatus } from './status-helpers';
 import { createBuild, openNav, ownerWithBuild, signUp, startBuild, uniqueEmail } from './helpers';
 
 const SHOTS = 'data/shots-m7';
@@ -321,6 +322,8 @@ test('top nav Printers reaches the printers page from a build; a personal worksp
 		await page.screenshot({ path: `data/shots-nav/menu-account-${w}-light.png` });
 		await page.keyboard.press('Escape');
 	}
+	// The first Escape closed the submenu; a second one closes the phone panel itself.
+	await page.keyboard.press('Escape');
 	await page.setViewportSize({ width: 390, height: 844 });
 	const buildId = await createBuild(page, 'Solo chair');
 
@@ -675,14 +678,17 @@ test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Tak
 	const expectSent = page.waitForResponse(
 		(r) => /\/api\/printers\/[^/]+\/expect$/.test(r.url()) && r.request().method() === 'POST'
 	);
-	// With a printer connected the printer button is the primary start, the plain one is secondary.
-	const startBtn = page.getByTestId('start-on-printer').first();
-	await expect(startBtn).toHaveText('Printing on Confirm Centauri');
-	await expect(startBtn).toHaveClass(/primary/);
-	await expect(page.getByRole('button', { name: /^Start printing plate \d+$/ }).first()).toHaveText(
-		'Not on a connected printer'
-	);
-	await startBtn.click();
+	// With a printer connected, choosing Printing asks where; the first printer is preselected.
+	const badge = page.locator('.group-head').getByTestId('plate-status').first();
+	await expect(page.getByTestId('start-on-printer')).toHaveCount(0);
+	await chooseStatus(badge, 'Printing');
+	const dlg = page.getByTestId('where-printing');
+	await expect(dlg).toBeVisible();
+	await expect(dlg).toContainText('Confirm Centauri');
+	await expect(dlg).toContainText('Not on a connected printer');
+	await expect(dlg).toContainText('never sends a print');
+	await expect(dlg.locator('input[type="radio"]').first()).toBeChecked();
+	await dlg.getByTestId('where-confirm').click();
 	expect((await expectSent).ok()).toBe(true);
 	await page.goto(`/builds/${buildId}`);
 	await page.waitForLoadState('networkidle');
@@ -702,7 +708,7 @@ test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Tak
 	await expect(ask).toBeHidden();
 
 	// 3. Take off printer: the running job is unlinked and the chooser is back, no navigation.
-	await page.getByRole('button', { name: 'Take off printer' }).click();
+	await chooseStatus(page.getByTestId('now-card').getByTestId('plate-status').first(), 'To print');
 	await expect(page.getByTestId('link-plate')).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByTestId('printer-live')).toHaveCount(0);
 	await expect(page.getByTestId('expected-confirm')).toHaveCount(0);
@@ -774,4 +780,83 @@ test('Printers page: a running unlinked job can be linked there; Stop monitoring
 	await expect(page.getByRole('button', { name: 'Resume monitoring' })).toBeVisible();
 	await page.getByRole('button', { name: 'Resume monitoring' }).click();
 	await expect(page.getByRole('button', { name: 'Stop monitoring' })).toBeVisible();
+});
+
+test('status badge: Printing asks where (printer links, "Not on a connected printer" does not), part badge too; no printers, no dialog', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'badgewhere');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	const heads = page.locator('.group-head').getByTestId('plate-status');
+	const expects: string[] = [];
+	page.on('request', (r) => {
+		if (/\/api\/printers\/[^/]+\/expect$/.test(r.url()) && r.method() === 'POST')
+			expects.push(r.url());
+	});
+
+	// No enabled printer: no dialog, marked directly.
+	await chooseStatus(heads.first(), 'Printing');
+	await expect(heads.first()).toHaveAttribute('data-status', 'Printing');
+	await expect(page.getByTestId('where-printing')).toHaveCount(0);
+	// Back to To print through the menu (take off).
+	await chooseStatus(heads.first(), 'To print');
+	await expect(heads.first()).toHaveAttribute('data-status', 'To print');
+
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Badge Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	const printerId = ((await created.json()) as { id?: string }).id;
+	await page.reload();
+	await page.waitForLoadState('networkidle');
+
+	// Not on a connected printer: marked printing, nothing linked.
+	await heads.first().click();
+	await page.getByTestId('status-option-Printing').click();
+	const dlg = page.getByTestId('where-printing');
+	await expect(dlg).toBeVisible();
+	await expect(dlg.getByTestId('where-none')).toBeVisible();
+	if (printerId) await expect(dlg.getByTestId(`where-printer-${printerId}`)).toBeChecked();
+	await dlg.getByTestId('where-none').check();
+	await dlg.getByTestId('where-confirm').click();
+	await expect(dlg).toBeHidden();
+	await expect(heads.first()).toHaveAttribute('data-status', 'Printing');
+	expect(expects).toHaveLength(0);
+	// Focus is back on the badge that opened the dialog.
+	await expect(heads.first()).toBeFocused();
+
+	// Cancel changes nothing.
+	const second = heads.nth(1);
+	await second.click();
+	await page.getByTestId('status-option-Printing').click();
+	await page.getByTestId('where-printing').getByRole('button', { name: 'Cancel' }).click();
+	await expect(page.getByTestId('where-printing')).toBeHidden();
+	await expect(second).toHaveAttribute('data-status', 'To print');
+
+	// A part badge: Printing asks too; confirming with the printer links it.
+	const todo = page.locator('.row[data-s="To print"]').first();
+	const slug = (await todo.getAttribute('data-id')) as string;
+	const sent = page.waitForResponse(
+		(r) => /\/api\/printers\/[^/]+\/expect$/.test(r.url()) && r.request().method() === 'POST'
+	);
+	await chooseStatus(todo.getByTestId('part-status'), 'Printing');
+	await expect(page.getByTestId('where-printing')).toBeVisible();
+	await page.getByTestId('where-confirm').click();
+	expect((await sent).ok()).toBe(true);
+	await expect(page.locator(`.row[data-id="${slug}"]`)).toHaveAttribute('data-s', 'Printing');
 });

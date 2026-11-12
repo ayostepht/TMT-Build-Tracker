@@ -190,6 +190,7 @@
 						part={p}
 						focus={flash === `part-${p.slug}`}
 						justNow={curHide && justPrinted.has(p.slug)}
+						plateHeader={curBy === 'plate'}
 					/>
 				{/each}
 			</div>

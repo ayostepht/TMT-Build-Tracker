@@ -23,9 +23,12 @@ test('a viewer sees the build read-only and the API refuses their writes', async
 	const first = vp.locator('.row').first();
 	const slug = (await first.getAttribute('data-id')) as string;
 	const name = (await first.locator('.pbtn').innerText()).trim();
-	const buttons = first.getByRole('group', { name: /^Status for/ }).getByRole('button');
-	await expect(buttons).toHaveCount(4);
-	for (const b of await buttons.all()) await expect(b).toBeDisabled();
+	// A viewer sees the status as a plain badge: no button, no menu.
+	const badge = first.getByTestId('part-status');
+	await expect(badge).toBeVisible();
+	expect(await badge.evaluate((el) => el.tagName)).toBe('SPAN');
+	await expect(badge).toHaveAttribute('data-status', /.+/);
+	await expect(first.getByTestId('status-menu')).toHaveCount(0);
 
 	await first.getByRole('button', { name: `Details for ${name}` }).click();
 	await expect(first.getByText('Print log')).toBeVisible();

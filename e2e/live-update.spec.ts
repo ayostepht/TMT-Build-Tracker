@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { invite, joinViaInvite, ownerWithBuild, uniqueEmail, row } from './helpers';
+import { chooseStatus } from './status-helpers';
 
 test('an editor change shows up on the owner page without a reload', async ({ page, browser }) => {
 	const { chapterUrl, buildId } = await ownerWithBuild(page, 'live');
@@ -20,7 +21,7 @@ test('an editor change shows up on the owner page without a reload', async ({ pa
 	await editor.page.goto(`/builds/${buildId}/print`);
 	const first = editor.page.locator('.row').first();
 	const slug = (await first.getAttribute('data-id')) as string;
-	await row(editor.page, slug).getByRole('button', { name: 'Printing', exact: true }).click();
+	await chooseStatus(row(editor.page, slug).getByTestId('part-status'), 'Printing');
 	await expect(row(editor.page, slug)).toHaveAttribute('data-s', 'Printing');
 
 	await expect(header).toContainText('1 printing');

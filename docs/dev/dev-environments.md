@@ -125,3 +125,37 @@ Recurring maintainer steps: print geometry on the test copy is imported with
 `scripts/import-print-geometry.mjs` in this order: H profile, bucket seat, harness zip,
 the maintainer's re-targeted X/P/A project last. Real-iPhone checks. Approving deletion of
 agent scratch in `data/` (agents can't `rm`).
+
+## Local preview with sample data
+
+For reviewing changes on the Mac and a phone before anything goes to the Unraid test copy.
+Review only: invented data, a throwaway secret, never real data or real printers.
+
+```bash
+npm run preview:demo                 # keep the preview data, seed only if it is empty
+npm run preview:demo -- --fresh      # wipe data/preview/data and reseed
+npm run preview:demo -- --port 5300  # another port (default 5200)
+npm run preview:demo -- --no-build   # serve the earlier build copy, skip the build
+```
+
+- Needs Node 22 first on PATH. The build runs under `/opt/homebrew/bin/flock node_modules/.e2e.lock`
+  when flock exists (it waits while Playwright runs; without flock it builds unlocked and says so).
+  The build is copied to `data/preview/build`, so later builds and e2e runs do not disturb it.
+- Serves on `0.0.0.0:5200` (`TMT_MODE=selfhost`, no `PUBLIC_URL`, sign-up open), so plain http works
+  from a phone on the same Wi-Fi. The summary prints the local URL, the LAN URL (found at run time),
+  the sign-in (`demo.owner@example.com`, second member `demo.editor@example.com`, both with the password
+  printed in the summary) and what was seeded. It stays in the foreground; Ctrl+C stops the server
+  and the simulated printer. Port taken: it stops with a message.
+- Data lives only in `data/preview/data/` (gitignored); `--fresh` wipes only that folder. An existing
+  demo account means no seeding; the simulated printer is pointed at the new mock and its running print
+  is linked to the same plate again.
+- Seeded through the app's HTTP API (`scripts/preview/seed.mjs`): a chapter with an editor member, a
+  personal workspace, "Demo chair A" (colors, spool counts, plates arranged for the Elegoo Centauri
+  Carbon, about a third of the parts Printed with logged runs, one failed run so Reprint shows, one
+  plate Printing, a generated photo, a saved design), "Demo chair B" (fresh, in the setup wizard), a Studio
+  draft, and "Demo printer": the repo's `MockSdcp` on 127.0.0.1 (port+1) with one older unlinked job
+  and one running job linked to build A's Printing plate.
+- Kit pack: the pack listed in `kitpacks/index.json` is fetched once with `gh release download`
+  (sha256 and size checked) into `data/preview/kitpacks/`. Without `gh` access the preview still runs, prints
+  that the 3D model and plate geometry are missing, and wants the `.kitpack` file copied into that folder
+  (then restart). Nothing fetched can be committed (`data/`, `*.kitpack` are gitignored).

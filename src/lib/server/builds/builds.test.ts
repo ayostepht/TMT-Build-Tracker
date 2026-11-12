@@ -176,6 +176,31 @@ describe('mutations', () => {
 		});
 	});
 
+	it('build details record only fields that really changed', () => {
+		const id = mk();
+		const rows = () =>
+			db
+				.select()
+				.from(activity)
+				.where(eq(activity.buildId, id))
+				.all()
+				.filter((a) => a.kind === 'build.update');
+		// empty to empty ('' vs null) is no change: no activity row, nothing cleared
+		updateBuild(db, id, 'owner', { recipient: '', hospital: '  ', deliveryDate: null });
+		expect(rows()).toHaveLength(0);
+		// a real change records only that field
+		updateBuild(db, id, 'owner', { recipient: 'Sam', hospital: '', deliveryDate: null });
+		expect(rows()).toHaveLength(1);
+		expect(rows()[0].payload).toEqual({ recipient: 'Sam' });
+		// same value again: nothing new
+		updateBuild(db, id, 'owner', { recipient: 'Sam', name: 'Build A' });
+		expect(rows()).toHaveLength(1);
+		// really clearing it is recorded
+		updateBuild(db, id, 'owner', { recipient: '' });
+		expect(rows()).toHaveLength(2);
+		expect(rows()[1].payload).toEqual({ recipient: null });
+	});
+
 	it('filament spools accept fractions, round to 0.01 and reject bad values', () => {
 		const id = mk();
 		const spools = () =>

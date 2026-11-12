@@ -3,78 +3,74 @@
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import ExpectedConfirm from './ExpectedConfirm.svelte';
+	import WherePrinting from './WherePrinting.svelte';
 
 	/**
-	 * "Start printing on <printer>" for plates, shown when the team has printers connected.
-	 * It marks the parts as printing and tells the server which plate that printer's next job is.
-	 * (It does not send anything to the printer: start the print there.)
+	 * The "Where is it printing?" step behind choosing Printing on a plate or a part (the status
+	 * badge menus in PlateControl and PartRow open it with `open`). Confirming with a printer marks
+	 * the parts as printing and tells the server which plate that printer's next job is; "Not on a
+	 * connected printer" is the plain start (optimistic, with Undo). It never sends anything to the
+	 * printer: the print is started there. Without enabled printers callers skip this and start
+	 * directly (`hasPrinters` false).
+	 *
+	 * Also shows the "Confirm Plate N is printing on <printer>?" follow-up when that printer already
+	 * runs an unlinked job (`confirm`, one place per plate).
 	 */
 	let {
+		open = $bindable(false),
 		slugs,
 		plateNumber,
-		size = 'sm',
-		primary = true,
-		partName = null
+		label,
+		parts = [],
+		confirm = true
 	}: {
+		open?: boolean;
 		slugs: string[];
-		plateNumber: number;
-		size?: 'sm' | 'md';
-		/** The first printer's button is the primary action (false when Finish & log already is). */
-		primary?: boolean;
-		/** perPartRuns plates: the part (color) this run is for, named in the label. */
-		partName?: string | null;
+		plateNumber: number | null;
+		/** Undo-toast wording for the plain start ("plate 2", "Handle Right run, plate 13"). */
+		label?: string;
+		/** perPartRuns plates with several parts left: lets the dialog choose which one. */
+		parts?: { slug: string; name: string }[];
+		/** Show the printer-already-running confirmation here (false where another control does). */
+		confirm?: boolean;
 	} = $props();
 	const ctx = getBuildCtx();
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	$effect(() => store.acquire());
 	const list = $derived(store.printers.filter((p) => p.enabled));
 
-	async function go(printerId: string) {
+	async function go(printerId: string, which: string[]) {
 		await ctx.act(async () => {
-			await printing(ctx.id, { action: 'start', slugs });
+			await printing(ctx.id, { action: 'start', slugs: which });
 			// perPartRuns plates print one part (color) per job: tell the server which.
 			const perPart = ctx.view.plates.find((p) => p.number === plateNumber)?.perPartRuns;
-			await expectOnPrinter(printerId, ctx.id, plateNumber, perPart ? slugs : undefined);
+			await expectOnPrinter(printerId, ctx.id, plateNumber!, perPart ? which : undefined);
 		});
 		// If that printer already runs an unlinked job, the confirmation shows right here.
 		dismissed = false;
 		await store.load();
 	}
 
+	function done(printerId: string | null, slug: string | null) {
+		open = false;
+		const which = slug ? [slug] : slugs;
+		if (printerId && plateNumber != null) void go(printerId, which);
+		else void ctx.startParts(which, label);
+	}
+
 	let dismissed = $state(false);
 	const asking = $derived(
-		dismissed
+		dismissed || plateNumber == null
 			? []
 			: store.expected.filter((e) => e.buildId === ctx.id && e.plateNumber === plateNumber)
 	);
 </script>
 
-{#if ctx.canEdit && list.length}
-	{#each list as p, i (p.id)}
-		<button
-			class="btn{size === 'sm' ? ' sm' : ''}{primary && i === 0 ? ' primary' : ''}"
-			type="button"
-			title="Marks the plate as printing and links the next job from {p.name} to it"
-			data-testid="start-on-printer"
-			onclick={() => go(p.id)}>{partName ? `${partName}: ` : ''}Printing on {p.name}</button
-		>
-	{/each}
-	<span class="sop-help muted" data-testid="start-on-printer-help"
-		>Start the print at the printer. This marks the plate as printing and follows that printer's
-		job.</span
-	>
+{#if ctx.canEdit && open}
+	<WherePrinting printers={list} {parts} onconfirm={done} onclose={() => (open = false)} />
 {/if}
-{#if ctx.canEdit}
+{#if ctx.canEdit && confirm}
 	{#each asking as e (e.printerId)}
 		<ExpectedConfirm exp={e} onother={() => (dismissed = true)} />
 	{/each}
 {/if}
-
-<style>
-	.sop-help {
-		flex-basis: 100%;
-		font-size: var(--fs-sm, 13px);
-		line-height: 1.35;
-		max-width: 46ch;
-	}
-</style>

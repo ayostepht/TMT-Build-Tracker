@@ -11,6 +11,7 @@ import {
 	signUp,
 	uniqueEmail
 } from './helpers';
+import { chooseStatus } from './status-helpers';
 import type { Page } from '@playwright/test';
 
 // Phone shell (Stage 2): one-row top bar, one-line build header, bottom tab bar, error page,
@@ -242,7 +243,7 @@ test('screenshots: builds list, Overview, Print, error, toast', async ({ page })
 		await page.emulateMedia({ colorScheme: 'light' });
 		await page.goto(`/builds/${buildId}/print`);
 		await page.waitForLoadState('networkidle');
-		await page.getByRole('button', { name: 'Printed', exact: true }).first().click();
+		await chooseStatus(page.getByTestId('part-status').first(), 'Printed');
 		await expect(page.locator('.toast').first()).toBeVisible();
 		await page.screenshot({ path: `${SHOTS}/toast-${w}-light.png` });
 		await page.locator('.toast-x').first().click();
@@ -379,7 +380,7 @@ test.describe('toast on a phone', () => {
 		const { buildId } = await ownerWithBuild(page, 'toast');
 		await page.goto(`/builds/${buildId}/print`);
 		await page.waitForLoadState('networkidle');
-		await page.getByRole('button', { name: 'Printed', exact: true }).first().click();
+		await chooseStatus(page.getByTestId('part-status').first(), 'Printed');
 		const toast = page.locator('.toast').first();
 		await expect(toast).toBeVisible();
 		const m = await page.evaluate(() => {
@@ -513,4 +514,67 @@ test('Overview on desktop shows the spools field in every filament row', async (
 	for (let i = 0; i < n - 1; i++)
 		await expect(rows.nth(i).locator('input[type="number"]')).toBeVisible();
 	expect((await rows.first().boundingBox())!.height).toBeLessThanOrEqual(80);
+});
+
+test('Help is a top-level item after Printers on phones, 44px tall, current on /help', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await signUp(page, 'Help Nav', uniqueEmail('helpnav390'));
+	await openNav(page);
+	const labels = await page.locator('nav[aria-label="Main"] > a').allInnerTexts();
+	expect(labels.at(-1)).toBe('Help');
+	expect(labels.slice(-2, -1)[0]).toMatch(/^Printers/);
+	for (const link of await page.locator('nav[aria-label="Main"] .navlink').all())
+		expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	await expect(page.locator('#menu-account a', { hasText: /^(Help|About)$/ })).toHaveCount(0);
+	await page.getByTestId('help-link').click();
+	await expect(page).toHaveURL(/\/help$/);
+	await openNav(page);
+	await expect(page.getByTestId('help-link')).toHaveAttribute('aria-current', 'page');
+});
+
+for (const w of [1024, 1280]) {
+	test(`desktop top bar stays on one row at ${w}px with a long chapter name`, async ({ page }) => {
+		await page.setViewportSize({ width: w, height: 800 });
+		await signUp(page, 'Helpful Maker With Long Name', uniqueEmail(`helpfit${w}`));
+		await createChapter(page, 'Northern Valley Volunteers Chapter of Makers');
+		const bar = page.locator('header').first();
+		const boxes = await bar.evaluate((el) => {
+			const out: { t: string; top: number; bottom: number; left: number; right: number }[] = [];
+			for (const c of el.querySelectorAll('.navlink, .brand, .shell-brand, .chapter-slot')) {
+				const r = c.getBoundingClientRect();
+				if (r.width) out.push({ t: c.textContent!.trim().slice(0, 12), ...r.toJSON() });
+			}
+			return {
+				out,
+				h: el.getBoundingClientRect().height,
+				sw: document.documentElement.scrollWidth
+			};
+		});
+		expect(boxes.sw).toBeLessThanOrEqual(w);
+		const navTops = boxes.out.filter((b) => b.t !== '').map((b) => Math.round(b.top));
+		expect(Math.max(...navTops) - Math.min(...navTops)).toBeLessThanOrEqual(8);
+	});
+}
+
+test('r48 shell shots', async ({ page }) => {
+	test.skip(!process.env.R48_SHOTS, 'set R48_SHOTS=1');
+	const OUT = 'data/r48-shots-shell';
+	await signUp(page, 'Helpful Maker With Long Name', uniqueEmail('r48shots'));
+	await createChapter(page, 'Northern Valley Volunteers Chapter of Makers');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/builds');
+	await page.waitForLoadState('networkidle');
+	await openNav(page);
+	await page.screenshot({ path: `${OUT}/phone-menu-390.png` });
+	for (const w of [1024, 1280, 1440]) {
+		await page.setViewportSize({ width: w, height: 700 });
+		await page.goto('/help');
+		await page.waitForLoadState('networkidle');
+		await page.screenshot({
+			path: `${OUT}/topbar-${w}.png`,
+			clip: { x: 0, y: 0, width: w, height: 140 }
+		});
+	}
 });

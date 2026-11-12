@@ -33,31 +33,18 @@ for (const [width, height] of [
 	[1440, 900],
 	[390, 844]
 ] as const) {
-	test(`account menu Help link opens /help at ${width}px`, async ({ page }) => {
+	test(`top-level Help link opens /help at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width, height });
 		await signedIn(page, `helpmenu${width}`);
 		await openNav(page);
-		await page.getByTestId('account-menu').click();
 		await page.getByTestId('help-link').click();
+		await expect(page.getByTestId('help-link')).toHaveAttribute('aria-current', 'page');
 		await expect(page).toHaveURL(/\/help$/);
 		await expect(
 			page.getByRole('heading', { level: 1, name: 'How the Build Tracker works' })
 		).toBeVisible();
 	});
 }
-
-test('account menu has About after Help and opens /about', async ({ page }) => {
-	await page.setViewportSize({ width: 390, height: 844 });
-	await signedIn(page, 'aboutmenu');
-	await openNav(page);
-	await page.getByTestId('account-menu').click();
-	const items = page.locator('#menu-account a');
-	const labels = await items.allInnerTexts();
-	expect(labels.indexOf('About')).toBe(labels.indexOf('Help') + 1);
-	await page.getByTestId('about-link').click();
-	await expect(page).toHaveURL(/\/about$/);
-	await expect(page.getByTestId('app-footer')).toBeVisible();
-});
 
 test('login and signup have no app footer', async ({ page }) => {
 	await page.goto('/login');

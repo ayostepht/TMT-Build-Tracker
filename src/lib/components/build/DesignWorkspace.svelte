@@ -269,6 +269,7 @@
 <div
 	class="design"
 	class:embedded
+	class:pickopen={picker !== null}
 	bind:this={root}
 	data-testid="design-workspace"
 	style="--stick:{stick}px;--tabsh:{tabsH}px;{fill ? `--fill:${fill}` : ''}"
@@ -511,6 +512,15 @@
 	.design.embedded {
 		padding-bottom: calc(16px + var(--bottom-bar-h, 0px));
 	}
+	/* Phones: with the picker open the pinned chair shrinks to about 30% of the screen so the colors fit below it. */
+	.design.pickopen {
+		--stageh: clamp(170px, 30vh, 280px);
+	}
+	@media (prefers-reduced-motion: no-preference) and (max-width: 899px) {
+		.stagebox {
+			transition: height 0.2s ease;
+		}
+	}
 	/* Phones: the stage is pinned right under the page's tab bar while the panel scrolls beneath. */
 	.stagecol {
 		position: sticky;
@@ -632,13 +642,10 @@
 	.panel.picking > :global(:not(.pickhost)) {
 		display: none;
 	}
+	/* Phones: the card grows with its content and the page scrolls (no fixed height, nothing overflows it). */
 	.pickhost {
 		display: flex;
 		flex-direction: column;
-		height: max(
-			320px,
-			calc(100dvh - var(--stick, 0px) - var(--stageh) - 24px - var(--bottom-bar-h, 0px))
-		);
 		min-height: 0;
 		min-width: 0;
 		/* The page can scroll past the picker, so its last row is never behind the build's bottom tab bar. */
@@ -682,6 +689,7 @@
 		.panel > .pickhost {
 			flex: 1 1 auto;
 			height: auto;
+			margin-bottom: 0;
 		}
 		.panel.picking {
 			overflow: hidden;

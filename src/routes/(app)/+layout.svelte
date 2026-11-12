@@ -283,6 +283,12 @@
 							>{/if}</a
 					>
 				{/if}
+				<a
+					class="navlink"
+					href={resolve('/(app)/help')}
+					data-testid="help-link"
+					aria-current={page.url.pathname === '/help' ? 'page' : undefined}>Help</a
+				>
 			</nav>
 			{#if workspace && (membersHref || !data.publicMode)}
 				<div class="menu-wrap ws-settings">
@@ -319,7 +325,7 @@
 					data-menu="account"
 					data-testid="account-menu"
 					onclick={() => toggle('account')}
-					><span class="who-name">{data.user?.name ?? 'Account'}</span>
+					><span class="who-name" title={data.user?.name}>{data.user?.name ?? 'Account'}</span>
 					<span aria-hidden="true">▾</span></button
 				>
 				{#if open === 'account'}
@@ -332,8 +338,6 @@
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 							<a href={resolve('/(app)/admin/templates') + fromQuery}>Kit admin</a>
 						{/if}
-						<a href={resolve('/(app)/help')} data-testid="help-link">Help</a>
-						<a href={resolve('/(app)/about')} data-testid="about-link">About</a>
 						<a href={resolve('/(app)/account')} data-testid="account-link">Account</a>
 						<button type="button" onclick={signOut}>Sign out</button>
 					</div>
@@ -633,6 +637,17 @@
 	}
 	.chapter select {
 		max-width: 170px;
+	}
+
+	/* Mid widths: shorten the chapter select and the account name so the bar stays one row. */
+	@media (min-width: 761px) and (max-width: 1100px) {
+		.chapter select {
+			max-width: 130px;
+			text-overflow: ellipsis;
+		}
+		.acct .who-name {
+			max-width: 96px;
+		}
 	}
 
 	/* Phones: ONE row (brand, chapter, menu button); everything else sits in the menu panel. */

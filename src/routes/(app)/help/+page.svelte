@@ -82,15 +82,15 @@
 				<b>Now printing</b> and <b>Next up</b>). A plate is one print job on your bed.
 			</li>
 			<li>
-				<b>Start.</b> With no printer connected, press <b>Start printing</b> on the plate. With a
-				printer connected, press <b>Printing on</b> the printer's name instead; the app then also
-				follows that printer's job. If the plate is printing somewhere else, use
-				<b>Not on a connected printer</b>. Either way this only marks the plate's parts as
-				<b>Printing</b> and starts the clock. Start the print at the printer itself: the Build Tracker
-				never sends a print to it.
+				<b>Start.</b> Tap the plate's status badge (it says <b>To print</b> at first) and choose
+				<b>Printing</b>. If a printer is connected, you are asked <b>Where is it printing?</b>: pick
+				the printer and the app follows its job, or pick <b>Not on a connected printer</b>. This
+				only marks the plate's parts <b>Printing</b> and starts the clock. Start the print at the printer
+				itself: the Build Tracker never sends a print to it.
 			</li>
 			<li>
-				<b>Log the result.</b> When the plate comes off, press <b>Finish &amp; log</b>. Pick
+				<b>Log the result.</b> When the plate comes off, tap its badge and choose <b>Printed</b>.
+				Pick
 				<b>Success</b>, <b>Failed</b> or <b>Partial</b>, check the finish time, total print time and
 				filament used (grams), add notes if you like, and save. The log feeds the history and your
 				pace estimate.
@@ -104,10 +104,10 @@
 				can leave the grams empty (counted as 0 g).
 			</li>
 			<li>
-				<b>Undo.</b> Logging a print, starting a plate, <b>Take off printer</b> (stops the parts
-				printing without a log) and part status changes show a toast with <b>Undo</b>. A saved log
-				can be edited or deleted later; part statuses are recomputed from the history, unless you
-				tick
+				<b>Undo.</b> Logging a print, starting a plate, taking a plate off the printer (choose
+				<b>To print</b> on a printing plate; no log is made) and part status changes show a toast
+				with <b>Undo</b>. A saved log can be edited or deleted later; part statuses are recomputed
+				from the history, unless you tick
 				<b>Keep part statuses as they are</b> when deleting.
 			</li>
 		</ol>

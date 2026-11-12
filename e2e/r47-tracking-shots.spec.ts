@@ -53,7 +53,7 @@ test('print tab touch targets are >= 44px and the start pair reads clearly', asy
 		const row = page.locator('.row').first();
 		const heights = async () => ({
 			name: (await row.locator('.pbtn').boundingBox())!.height,
-			status: (await row.locator('.part-seg > button').first().boundingBox())!.height,
+			status: (await row.getByTestId('part-status').boundingBox())!.height,
 			more: (await row.locator('.more').boundingBox())!.height,
 			details: (await page.getByTestId('header-details').boundingBox())?.height ?? 99
 		});
@@ -76,17 +76,10 @@ test('print tab touch targets are >= 44px and the start pair reads clearly', asy
 		await page.goto(chapterUrl);
 		await page.waitForLoadState('networkidle');
 		const next = page.getByTestId('next-up-card').first();
-		const printerBtn = next.getByTestId('start-on-printer').first();
-		await expect(printerBtn).toHaveText('Printing on Shot CC1');
-		await expect(printerBtn).toHaveClass(/primary/);
-		const plain = next.getByRole('button', { name: /^Start printing plate/ });
-		await expect(plain).toHaveText('Not on a connected printer');
-		const hs = await Promise.all(
-			[printerBtn, plain].map(async (b) => (await b.boundingBox())!.height)
-		);
-		console.log('START HEIGHTS', hs);
-		expect(hs[0]).toBeGreaterThanOrEqual(44);
-		expect(hs[1]).toBeGreaterThanOrEqual(44);
+		// r48: one status badge replaces the printer / plain start pair; the r48 spec covers the dialog.
+		const badge = next.getByTestId('plate-status');
+		await expect(badge).toHaveText(/To print/);
+		expect((await badge.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 		await shots('printer');
 	} finally {
 		await sdcp.stop();
