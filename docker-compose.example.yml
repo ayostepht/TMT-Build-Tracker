@@ -6,6 +6,7 @@ services:
     container_name: tmt-build-tracker
     restart: unless-stopped
     ports:
+      # If port 3000 is already in use, change the first number (for example '3091:3000') and open that port.
       - '3000:3000'
     volumes:
       # The container runs as uid 1000 (node): sudo chown 1000:1000 ./data first.
