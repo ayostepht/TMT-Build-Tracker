@@ -10,15 +10,25 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **Migration squash, as r46** (maintainer approved 2026-11-11; must land before anyone
-   else installs the app). Built and waiting on a branch on the Mac: push it, `verifier`
-   gate, then record "r46 ready to deploy: <commit>" here. Replaces the 14 migrations with
-   one baseline; a database at the full old chain is upgraded at startup in one
-   transaction, anything else refuses to start. Needs its own rehearsal (journal 14 → 1,
-   schema dump equal to an empty-data install, row counts, FK and integrity checks); also
-   fixes `templates.owner_org_id` lacking ON DELETE CASCADE [kit-and-startup].
-2. **r45 is live** (b9ea636): the maintainer signs in once with each method they use
-   (password, Authentik). Rehearsal and live were clean (see CHANGELOG).
+1. **r46 ready to deploy: cfe1c61** (migration squash; maintainer approved 2026-11-11; must
+   land before anyone else installs the app). Replaces the 14 migrations with one baseline;
+   a database at the full old chain is upgraded at startup in one transaction, anything
+   else refuses to start and leaves the file untouched. Also adds the missing ON DELETE
+   CASCADE on `templates.owner_org_id`. Gated on the Mac (check, lint, 1463 unit tests,
+   build, full e2e 177 passed, independent old-chain upgrade and partial-chain refusal);
+   Docker build and the rehearsal on a copy of the real database are left for Unraid.
+   Rehearsal checks: journal 14 → 1 (hash `66213dfa…8350`, `created_at` 1794448473022),
+   one upgrade log line naming 7 rebuilt tables, whitespace-normalized `sqlite_master`
+   equal to an empty-data install, row counts unchanged, `foreign_key_check` empty,
+   `integrity_check` ok, no upgrade line on restart [kit-and-startup].
+2. **r45 is live** (b9ea636): password sign-in confirmed by the maintainer (2026-11-11).
+   They don't use Authentik yet: a real OIDC sign-in is a 1.0 checklist item (the r45
+   token handling is only unit-tested; maintainer will test before `v1.0.0`).
+   **r47 (UI, in progress on the Mac)** from the maintainer's r45 review: landing with the
+   Builds list first and no pill row; one clear start button when a printer is connected;
+   Options as the designer's first tab; picker filters wrap on the phone; About in the
+   menu plus a footer (Help, About, Privacy, Terms); README screenshot captions; compact
+   spool rows on the phone Overview; Print tab buttons 44 px on touch.
 3. **Going public** (maintainer will flip it after r46): the pre-public scan of all 135
    commits found no credentials or personal data (pattern search; no gitleaks installed).
    The same day: make the `ghcr.io` package public, update the README's "Image access"
