@@ -132,7 +132,7 @@
 			{/each}
 		</div>
 		<button
-			class="more"
+			class="more pr-more"
 			type="button"
 			aria-expanded={open}
 			aria-label="Details for {part.name}"
@@ -247,6 +247,23 @@
 </div>
 
 <style>
+	/* Touch sizes on phones (coarse pointer only, so desktop rows stay as tall as before). The part
+	   name keeps its font; its button grows to 44px and the negative margin cancels the extra height. */
+	@media (pointer: coarse) {
+		.pbtn {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
+			margin-block: -11px;
+		}
+		.part-seg > button {
+			min-height: 44px;
+		}
+		.pr-more {
+			width: 44px;
+			height: 44px;
+		}
+	}
 	/* Compact status control: four options on one line down to a 360 px phone. */
 	.part-seg > button {
 		padding: var(--sp-6) var(--sp-4);

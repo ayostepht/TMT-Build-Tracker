@@ -66,6 +66,7 @@ test('design tab: every keyboard stop is named, visibly focused and in reading o
 	const { buildId } = await ownerWithBuild(page, 'a11y');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 
 	const colors = await tabStops(page, '[data-testid="design-workspace"]');
 	expect(colors.length).toBeGreaterThan(5);
@@ -160,6 +161,7 @@ test('swatch picker: focus moves in, Escape closes it and focus returns to its o
 	const { buildId } = await ownerWithBuild(page, 'a11ye');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	const opener = page
 		.locator('li.slot[data-role="primary"]')
 		.getByRole('button', { name: /^Change filament for/ })
@@ -232,6 +234,7 @@ test('screen reader status: picking a swatch and moving a part are announced', a
 	const { buildId } = await ownerWithBuild(page, 'a11yannounce');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	const status = page.getByTestId('design-announce');
 	await expect(status).toHaveAttribute('role', 'status');
 	await expect(status).toHaveText('');
@@ -304,6 +307,7 @@ test('swatch picker: keyboard focus ring is a solid outline', async ({ page }) =
 	const { buildId } = await ownerWithBuild(page, 'a11yring');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	const picker = await openPrimaryPicker(page);
 	// Focus a swatch, then move with an arrow key so :focus-visible applies as for a keyboard user.
 	await picker.locator('button.sw').first().focus();
@@ -335,6 +339,7 @@ test('swatch picker: search and selects are styled 16px, 44px-tall fields on a p
 		const { buildId } = await ownerWithBuild(page, 'a11yfields');
 		await page.goto(`/builds/${buildId}/design`);
 		await page.waitForLoadState('networkidle');
+		await page.getByRole('tab', { name: 'Colors' }).click();
 		const picker = await openPrimaryPicker(page);
 		const fields = [
 			picker.getByLabel('Search colors'),
@@ -366,6 +371,7 @@ test('swatch picker: + Add opens the custom filament form', async ({ page }) => 
 	const { buildId } = await ownerWithBuild(page, 'a11yadd');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	const picker = await openPrimaryPicker(page);
 	await picker.getByRole('button', { name: 'Add a filament' }).click();
 	await expect(picker.getByRole('heading', { name: 'Add a filament' })).toBeVisible();
@@ -399,7 +405,12 @@ test('Colors | Palettes | Parts tabs: arrow keys, Home and End move the selectio
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
 	const tab = (n: string) => page.getByRole('tab', { name: n });
-	await tab('Colors').focus();
+	// A fresh build opens on Options, the first tab.
+	await expect(tab('Options')).toHaveAttribute('aria-selected', 'true');
+	await expect(page.getByRole('tab').first()).toHaveText('Options');
+	await tab('Options').focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(tab('Colors')).toHaveAttribute('aria-selected', 'true');
 	await page.keyboard.press('ArrowRight');
 	await expect(tab('Palettes')).toHaveAttribute('aria-selected', 'true');
 	await expect(tab('Palettes')).toBeFocused();
@@ -408,7 +419,9 @@ test('Colors | Palettes | Parts tabs: arrow keys, Home and End move the selectio
 	await page.keyboard.press('ArrowLeft');
 	await expect(tab('Palettes')).toHaveAttribute('aria-selected', 'true');
 	await page.keyboard.press('Home');
-	await expect(tab('Colors')).toHaveAttribute('aria-selected', 'true');
+	await expect(tab('Options')).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('ArrowLeft');
+	await expect(tab('Parts')).toHaveAttribute('aria-selected', 'true');
 });
 
 /** The chosen option name of every variant group, read from the open radios. */
@@ -426,30 +439,22 @@ async function chosenOptions(page: Page): Promise<string[]> {
 		);
 }
 
-test('design options: collapsed row above the part search, opens by click and keyboard, updates the part list', async ({
+test('design options: first tab, opens on it for a fresh build, controls update the part list', async ({
 	page
 }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const { buildId } = await ownerWithBuild(page, 'dopts');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
-	await page.getByRole('tab', { name: 'Parts' }).click();
 
 	const opts = page.getByTestId('design-options');
-	const summary = page.getByTestId('design-options-summary');
+	const optTab = page.getByTestId('design-tab-options');
+	await expect(page.getByRole('tab').first()).toHaveAttribute('data-testid', 'design-tab-options');
+	await expect(optTab).toHaveAttribute('aria-selected', 'true');
 	await expect(opts).toBeVisible();
-	await expect(opts).not.toHaveAttribute('open', '');
+	await expect(opts).toHaveAttribute('role', 'tabpanel');
+	await expect(page.locator('details[data-testid="design-options"]')).toHaveCount(0);
 
-	// Placed before "Find a part" in document order.
-	const before = await opts.evaluate((el) => {
-		const search = document.querySelector('[aria-label="Find a part"]');
-		return !!search && !!(el.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING);
-	});
-	expect(before).toBe(true);
-
-	// Opening by click shows the radios; the summary names one chosen option per group.
-	await summary.click();
-	await expect(opts).toHaveAttribute('open', '');
 	const radios = opts.getByRole('radio');
 	await expect(radios.first()).toBeVisible();
 	const chosen = await chosenOptions(page);
@@ -457,42 +462,90 @@ test('design options: collapsed row above the part search, opens by click and ke
 	expect(groupCount).toBeGreaterThan(1);
 	expect(chosen).toHaveLength(groupCount);
 	expect(chosen.every(Boolean)).toBe(true);
-	await expect(summary).toContainText(chosen.join(' · '));
 
-	// Closed again by click, then Enter and Space on the focused summary toggle it.
-	await summary.click();
-	await expect(opts).not.toHaveAttribute('open', '');
-	await summary.focus();
-	await page.keyboard.press('Enter');
-	await expect(opts).toHaveAttribute('open', '');
-	await page.keyboard.press('Enter');
-	await expect(opts).not.toHaveAttribute('open', '');
-	await page.keyboard.press('Space');
-	await expect(opts).toHaveAttribute('open', '');
-	await expect(radios.first()).toBeVisible();
-
-	// Choosing the bucket seat updates the summary and swaps the seat parts in the list.
-	const seat = page.locator('[data-testid="part-row"][data-slug="bucket-seat"]');
-	await expect(seat).toHaveCount(0);
-	await expect(page.locator('[data-testid="part-row"][data-slug="cushion-top"]')).toHaveCount(1);
+	// Choosing the bucket seat swaps the seat parts in the Parts tab, and announces nothing odd.
 	await opts.getByRole('radio', { name: /Foaming TPU bucket seat/ }).check();
-	await expect(seat).toHaveCount(1);
-	await expect(page.locator('[data-testid="part-row"][data-slug="cushion-top"]')).toHaveCount(0);
-	await expect(summary).toContainText('Foaming TPU bucket seat');
-	await expect(summary).not.toContainText('Cushions');
 	expect(await chosenOptions(page)).toContain('Foaming TPU bucket seat');
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(opts).toBeHidden();
+	await expect(page.locator('[data-testid="part-row"][data-slug="bucket-seat"]')).toHaveCount(1);
+	await expect(page.locator('[data-testid="part-row"][data-slug="cushion-top"]')).toHaveCount(0);
+
+	// After a change the designer no longer opens on Options.
+	await page.reload();
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByRole('tab', { name: 'Colors' })).toHaveAttribute('aria-selected', 'true');
+	await expect(page.getByRole('tab').first()).toHaveText('Options');
 });
 
 test.describe('design options on a phone', () => {
 	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-	test('the summary row is at least 44 px high', async ({ page }) => {
+	test('the four tabs fit the strip and the page does not scroll sideways', async ({ page }) => {
 		const { buildId } = await ownerWithBuild(page, 'dopts-t');
 		await page.goto(`/builds/${buildId}/design`);
 		await page.waitForLoadState('networkidle');
-		await page.getByRole('tab', { name: 'Parts' }).click();
-		const box = await page.getByTestId('design-options-summary').boundingBox();
-		expect(box!.height).toBeGreaterThanOrEqual(44 - 0.5);
-		await expect(page.getByTestId('design-options')).not.toHaveAttribute('open', '');
+		const strip = page.getByRole('tablist', { name: 'Design panel' });
+		await expect(page.getByRole('tab')).toHaveCount(4);
+		const m = await strip.evaluate((el) => ({
+			sw: el.scrollWidth,
+			cw: el.clientWidth,
+			page: document.documentElement.scrollWidth,
+			vw: window.innerWidth
+		}));
+		expect(m.sw).toBeLessThanOrEqual(m.cw + 1);
+		expect(m.page).toBeLessThanOrEqual(m.vw);
+		for (const t of await page.getByRole('tab').all()) {
+			const box = await t.boundingBox();
+			expect(box!.height).toBeGreaterThanOrEqual(44 - 0.5);
+		}
+	});
+
+	test('picker filters wrap inside the panel, none is clipped, and the top is not under the viewer', async ({
+		page
+	}) => {
+		const { buildId } = await ownerWithBuild(page, 'dpick-t');
+		await page.goto(`/builds/${buildId}/design`);
+		await page.waitForLoadState('networkidle');
+		await page.getByRole('tab', { name: 'Colors' }).click();
+		await page
+			.locator('li.slot[data-role="primary"]')
+			.getByRole('button', { name: /^Change filament for/ })
+			.first()
+			.click();
+		const sheet = page.getByTestId('swatch-picker');
+		await expect(sheet).toBeVisible();
+		await expect(sheet.getByLabel('Color family')).toBeVisible();
+		const r = await sheet.evaluate((el) => {
+			const sb = el.getBoundingClientRect();
+			const f = el.querySelector('.filters') as HTMLElement;
+			const items = [...f.querySelectorAll('select, label, button')].map((n) => {
+				const b = n.getBoundingClientRect();
+				return { l: b.left, r: b.right, h: b.height };
+			});
+			const stage = document.querySelector('.stagecol')!.getBoundingClientRect();
+			const search = (
+				el.querySelector('input[type="search"]') as HTMLElement
+			).getBoundingClientRect();
+			return {
+				left: sb.left,
+				right: sb.right,
+				items,
+				fScroll: f.scrollWidth - f.clientWidth,
+				stageBottom: stage.bottom,
+				searchTop: search.top,
+				page: document.documentElement.scrollWidth,
+				vw: window.innerWidth
+			};
+		});
+		expect(r.items.length).toBeGreaterThan(1);
+		for (const i of r.items) {
+			expect(i.r).toBeLessThanOrEqual(r.right + 0.5);
+			expect(i.l).toBeGreaterThanOrEqual(r.left - 0.5);
+			expect(i.h).toBeGreaterThanOrEqual(44 - 0.5);
+		}
+		expect(r.fScroll).toBeLessThanOrEqual(1);
+		expect(r.page).toBeLessThanOrEqual(r.vw);
+		expect(r.searchTop).toBeGreaterThanOrEqual(r.stageBottom - 0.5);
 	});
 });

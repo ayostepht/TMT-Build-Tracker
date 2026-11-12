@@ -675,7 +675,14 @@ test('unlinked print: chooser; "Start on <printer>" turns it into a confirm; Tak
 	const expectSent = page.waitForResponse(
 		(r) => /\/api\/printers\/[^/]+\/expect$/.test(r.url()) && r.request().method() === 'POST'
 	);
-	await page.getByTestId('start-on-printer').first().click();
+	// With a printer connected the printer button is the primary start, the plain one is secondary.
+	const startBtn = page.getByTestId('start-on-printer').first();
+	await expect(startBtn).toHaveText('Printing on Confirm Centauri');
+	await expect(startBtn).toHaveClass(/primary/);
+	await expect(page.getByRole('button', { name: /^Start printing plate \d+$/ }).first()).toHaveText(
+		'Not on a connected printer'
+	);
+	await startBtn.click();
 	expect((await expectSent).ok()).toBe(true);
 	await page.goto(`/builds/${buildId}`);
 	await page.waitForLoadState('networkidle');

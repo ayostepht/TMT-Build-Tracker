@@ -9,7 +9,7 @@
 	 * THE start / finish / log control for a plate, used on the Print tab (plate headings and part
 	 * detail), the Files tab (plate cards) and the Now printing card, so they read and behave alike:
 	 *
-	 *  - nothing on the printer: **Start printing** (+ "Start on <printer>"), then **Log a print…**
+	 *  - nothing on the printer: **Printing on <printer>** (primary, with a printer) or **Start printing** (none), plus "Not on a connected printer", then **Log a print…**
 	 *  - parts on the printer: **Finish & log** (log sheet, Success preselected) and **Take off printer**
 	 *
 	 * Start, Take off printer and per-part status changes are optimistic and offer Undo (see
@@ -31,6 +31,9 @@
 		alwaysLog?: boolean;
 	} = $props();
 	const ctx = getBuildCtx();
+	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
+	// With a printer connected the printer button is the main start; the plain one is the exception.
+	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
 	let open = $state(false);
 
 	const status = (s: string) => ctx.view.state[s]?.status;
@@ -89,24 +92,33 @@
 		{#if idle.length}
 			{#if plate.perPartRuns}
 				{#each idle as slug (slug)}
+					<StartOnPrinter
+						slugs={[slug]}
+						plateNumber={plate.number}
+						{size}
+						primary={!on.length}
+						partName={name(slug)}
+					/>
 					<button
-						class={cls}
-						class:primary={!on.length && idle.length === 1}
+						class="{cls}{hasPrinter ? ' ghost plc-text' : ''}"
+						class:primary={!hasPrinter && !on.length && idle.length === 1}
 						type="button"
 						aria-label="Start {name(slug)} run on plate {plate.number}"
 						onclick={() => ctx.startParts([slug], `${name(slug)} run, plate ${plate.number}`)}
-						>Start {name(slug)} run</button
+						>{hasPrinter
+							? `${name(slug)}: not on a connected printer`
+							: `Start ${name(slug)} run`}</button
 					>
-					<StartOnPrinter slugs={[slug]} plateNumber={plate.number} />
 				{/each}
 			{:else}
+				<StartOnPrinter slugs={idle} plateNumber={plate.number} {size} primary={!on.length} />
 				<button
-					class="{cls} primary"
+					class="{cls} {hasPrinter ? 'ghost plc-text' : 'primary'}"
 					type="button"
 					aria-label="Start printing plate {plate.number}"
-					onclick={() => ctx.startParts(idle, `plate ${plate.number}`)}>Start printing</button
+					onclick={() => ctx.startParts(idle, `plate ${plate.number}`)}
+					>{hasPrinter ? 'Not on a connected printer' : 'Start printing'}</button
 				>
-				<StartOnPrinter slugs={idle} plateNumber={plate.number} />
 			{/if}
 		{/if}
 		{#if !on.length && canLog}

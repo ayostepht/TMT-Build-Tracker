@@ -15,6 +15,8 @@ for (const w of [360, 390]) {
 					: Promise.resolve(undefined);
 			const { buildId } = await ownerWithBuild(page, `s2b${w}${scheme}`);
 			await page.goto(`/builds/${buildId}/design`);
+			await page.waitForLoadState('networkidle');
+			await page.getByRole('tab', { name: 'Colors' }).click();
 			const tabs = page.locator('nav.tabs[data-bottom] .tb-in');
 			await expect(tabs).toBeVisible();
 			const barTop = async () => (await tabs.boundingBox())!.y;

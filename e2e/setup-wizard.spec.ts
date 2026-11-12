@@ -50,6 +50,8 @@ test('new build walks the setup wizard: template, options, colors, files, export
 	// Step 2: options.
 	await expect(heading(page, 'Options')).toBeVisible();
 	await expect(page).toHaveURL(/step=2/);
+	// The wizard's own Options step shows the chosen option (the default, Cushions).
+	await expect(page.getByRole('radio', { name: /Cushions/ })).toBeChecked();
 	await page.getByTestId('wizard-next').click();
 
 	// Step 3: colors. The full design workspace is embedded (no link out to the Design tab).
@@ -58,6 +60,11 @@ test('new build walks the setup wizard: template, options, colors, files, export
 	await expect(page.getByTestId('design-workspace')).toBeVisible();
 	await expect(page.getByTestId('no-model').or(page.locator('canvas').first())).toBeVisible();
 	await page.waitForLoadState('networkidle');
+	// Options live in the wizard's own step, so the embedded designer has no Options tab and
+	// opens on Colors.
+	await expect(page.getByTestId('design-tab-options')).toHaveCount(0);
+	await expect(page.getByTestId('design-options')).toHaveCount(0);
+	await expect(page.getByRole('tab', { name: 'Colors' })).toHaveAttribute('aria-selected', 'true');
 	await page.getByRole('tab', { name: 'Palettes' }).click();
 	await page.getByTestId('readymade-toggle').locator('summary').click();
 	await page.locator('[data-palette="fire-truck"]').click();
@@ -65,11 +72,6 @@ test('new build walks the setup wizard: template, options, colors, files, export
 	await expect(page.getByText('Applied Fire Truck')).toBeVisible();
 	// Move a part between slots right here, then save-as-design is on offer too.
 	await page.getByRole('tab', { name: 'Parts' }).click();
-	// The embedded workspace has the collapsed Options row on top of the Parts tab too.
-	const opts = page.getByTestId('design-options');
-	await expect(opts).toBeVisible();
-	await expect(opts).not.toHaveAttribute('open', '');
-	await expect(page.getByTestId('design-options-summary')).toContainText('Cushions');
 	const wing = page.locator('[data-testid="part-row"][data-slug="wing-left"]');
 	const wingBefore = await wing.innerText();
 	await wing.click();

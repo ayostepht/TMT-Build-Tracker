@@ -91,12 +91,10 @@
 						{#each nowPrinting(c.view) as item (item.plate)}
 							<div class="lb-one" data-testid="landing-now-card">
 								<a
-									class="pill-link lb-open"
+									class="lb-open"
 									href={resolve('/(app)/builds/[id]', { id: c.id })}
 									data-testid="landing-open-build"
-									title={c.view.build.name}
-									><span class="lb-open-name">{c.view.build.name}</span>
-									<span class="btn-arrow" aria-hidden="true">→</span></a
+									title={c.view.build.name}>{c.view.build.name}</a
 								>
 								<NowCard {item} compact />
 							</div>
@@ -134,8 +132,8 @@
 <style>
 	.lb-root {
 		display: grid;
-		gap: 28px;
-		margin-top: 16px;
+		gap: 20px;
+		margin-top: 20px;
 	}
 	.lb {
 		display: grid;
@@ -158,20 +156,33 @@
 		gap: 6px;
 		min-width: 0;
 	}
+	/* Small heading-style link naming the build; the pad keeps a 44px tap band on phones. */
 	.lb-open {
 		justify-self: start;
 		max-width: 100%;
-		min-height: 44px;
-		padding-inline: 16px;
-		font-weight: 600;
-	}
-	.lb-open-name {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		font: 600 var(--fs-md) / 1.25 var(--f-head);
+		color: var(--ink);
+		text-decoration: underline;
+		text-decoration-color: var(--line);
+		text-underline-offset: 3px;
+	}
+	.lb-open:hover {
+		color: var(--accent);
+		text-decoration-color: var(--accent);
+	}
+	@media (pointer: coarse) {
+		.lb-open {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
+		}
 	}
 	.lb-empty {
 		margin: 0;
+		font-size: var(--fs-sm);
 	}
 </style>

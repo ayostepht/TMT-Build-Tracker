@@ -444,3 +444,73 @@ test('the app mark sits beside the name and the top bar stays one row at 360 px'
 		}
 	}
 });
+
+// r47: footer links and the compact Overview filament list.
+test.describe('footer and compact Overview (phone)', () => {
+	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+	test('footer links resolve and sit above the bottom tab bar', async ({ page }) => {
+		const { buildId } = await ownerWithBuild(page, 'footer');
+		await page.goto(`/builds/${buildId}`);
+		await page.waitForLoadState('networkidle');
+		const footer = page.getByTestId('app-footer');
+		await footer.scrollIntoViewIfNeeded();
+		await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+		for (const id of ['footer-help', 'footer-about', 'footer-privacy', 'footer-terms'])
+			await expect(page.getByTestId(id)).toBeVisible();
+		const m = await page.evaluate(() => ({
+			footerBottom: document.querySelector('[data-testid="app-footer"]')!.getBoundingClientRect()
+				.bottom,
+			barTop: document.querySelector('.tb-in')!.getBoundingClientRect().top,
+			linkH: document.querySelector('[data-testid="footer-help"]')!.getBoundingClientRect().height
+		}));
+		expect(m.footerBottom, 'footer is not under the tab bar').toBeLessThanOrEqual(m.barTop + 0.5);
+		expect(m.linkH).toBeGreaterThanOrEqual(44);
+		await page.getByTestId('footer-about').click();
+		await expect(page).toHaveURL(/\/about$/);
+		await page.goBack();
+		await page.getByTestId('footer-terms').click();
+		await expect(page).toHaveURL(/\/terms$/);
+	});
+
+	test('Overview: compact filament rows, spools field opens from the row and saves', async ({
+		page
+	}) => {
+		const { buildId } = await ownerWithBuild(page, 'ovspool');
+		await page.goto(`/builds/${buildId}`);
+		await page.waitForLoadState('networkidle');
+		const rows = page.getByTestId('filament-tile');
+		expect(await rows.count()).toBeGreaterThanOrEqual(2);
+		const first = rows.first();
+		expect((await first.boundingBox())!.height, 'about two lines').toBeLessThanOrEqual(92);
+		const o = await overflow(page);
+		expect(o.scroll).toBeLessThanOrEqual(o.client);
+		const toggle = first.getByRole('button');
+		await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+		await expect(first.locator('input[type="number"]')).toHaveCount(0);
+		await toggle.click();
+		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+		const field = first.locator('input[type="number"]');
+		await field.fill('7');
+		await field.blur();
+		await page.reload();
+		await page.waitForLoadState('networkidle');
+		await page.getByTestId('filament-tile').first().getByRole('button').click();
+		await expect(
+			page.getByTestId('filament-tile').first().locator('input[type="number"]')
+		).toHaveValue('7');
+	});
+});
+
+test('Overview on desktop shows the spools field in every filament row', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { buildId } = await ownerWithBuild(page, 'ovwide');
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+	const rows = page.getByTestId('filament-tile');
+	const n = await rows.count();
+	expect(n).toBeGreaterThanOrEqual(2);
+	for (let i = 0; i < n - 1; i++)
+		await expect(rows.nth(i).locator('input[type="number"]')).toBeVisible();
+	expect((await rows.first().boundingBox())!.height).toBeLessThanOrEqual(80);
+});

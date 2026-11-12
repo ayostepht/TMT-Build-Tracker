@@ -161,6 +161,8 @@ test('design tab: pick a catalog swatch for a slot, search, and add a slot from 
 }) => {
 	const { buildId } = await ownerWithBuild(page, 'swatch');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 
 	// Tap the slot's big swatch: the picker opens with real catalog colors.
 	const slot = page.locator('li.slot[data-role="primary"]');
@@ -220,6 +222,8 @@ test('design tab: the next step goes to Files, where the export lives', async ({
 test('the swatch picker hides types palettes never use until asked', async ({ page }) => {
 	const { buildId } = await ownerWithBuild(page, 'pickertypes');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	await page.getByRole('button', { name: 'Add a color' }).click();
 	await page.getByRole('button', { name: /^TPU/ }).click();
 	const picker = page.getByTestId('swatch-picker');
@@ -259,6 +263,8 @@ test('the swatch picker merges same-looking colors of other brands and lists the
 }) => {
 	const { buildId } = await ownerWithBuild(page, 'pickermerge');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	await page.getByRole('button', { name: 'Add a color' }).click();
 	await page.getByRole('button', { name: /^TPU/ }).click();
 	const picker = page.getByTestId('swatch-picker');

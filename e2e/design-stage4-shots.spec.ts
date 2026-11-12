@@ -34,6 +34,7 @@ test('stage 4 design-system screenshots', async ({ page }) => {
 			};
 			await page.goto(`/builds/${buildId}/design`);
 			await page.waitForLoadState('networkidle');
+			await page.getByRole('tab', { name: 'Colors' }).click();
 			await shot('design', true);
 			// swatch picker
 			await page

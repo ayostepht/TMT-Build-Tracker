@@ -35,6 +35,8 @@ test('apply a pre-made palette: matched filaments show on Overview, Undo restore
 }) => {
 	const { buildId } = await ownerWithBuild(page, 'palette');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	const original = await page
 		.locator('li.slot[data-role="primary"]')
 		.innerText()

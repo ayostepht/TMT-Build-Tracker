@@ -92,7 +92,11 @@
 			);
 		// Phones: don't pop the keyboard over the 3D view. Desktop: ready to type.
 		if (window.matchMedia('(min-width: 900px)').matches) searchEl?.focus();
-		else sheetEl?.focus();
+		else {
+			sheetEl?.focus({ preventScroll: true });
+			// Bring the panel's top (search + filters) just under the pinned viewer.
+			sheetEl?.scrollIntoView({ block: 'start' });
+		}
 		return () => {
 			void tick().then(() => {
 				if (opener?.isConnected && opener.offsetParent) opener.focus({ preventScroll: true });
@@ -707,6 +711,8 @@
 		border: 1px solid var(--line);
 		border-radius: var(--r-xl);
 		outline: none;
+		/* Phones: the viewer is pinned above the panel; keep the top clear of it when scrolled to. */
+		scroll-margin-top: calc(var(--stick, 0px) + var(--stageh, 0px) + var(--sp-4) + var(--sp-3));
 	}
 	header {
 		display: flex;
@@ -1031,6 +1037,23 @@
 	}
 	/* Phones: 44 px touch targets, a roomier swatch grid. */
 	@media (max-width: 899px) {
+		/* Filters wrap inside the panel instead of scrolling sideways. */
+		.filters {
+			flex-wrap: wrap;
+			overflow: visible;
+		}
+		.filters > * {
+			min-width: 0;
+			max-width: 100%;
+		}
+		.brandchips {
+			flex-wrap: wrap;
+			flex: 1 1 100%;
+		}
+		.filters > select {
+			flex: 1 1 140px;
+			max-width: 100%;
+		}
 		.sw {
 			width: 44px;
 			height: 44px;

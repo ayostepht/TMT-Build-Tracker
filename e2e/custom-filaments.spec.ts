@@ -10,6 +10,8 @@ test('custom filaments: add from the swatch picker, reuse on another build, edit
 
 	// Open the picker on the primary slot and add a filament.
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	await page
 		.locator('li.slot[data-role="primary"]')
 		.getByRole('button', { name: /^Change filament for/ })
@@ -39,6 +41,8 @@ test('custom filaments: add from the swatch picker, reuse on another build, edit
 
 	// Another build in the same workspace sees it.
 	await page.goto(`/builds/${other}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	await page
 		.locator('li.slot[data-role="primary"]')
 		.getByRole('button', { name: /^Change filament for/ })

@@ -193,6 +193,12 @@
 			color: var(--muted);
 			font: 600 var(--fs-sm)/1 var(--f-body);
 		}
+		@media (pointer: coarse) {
+			.bh-more {
+				min-height: 44px;
+				min-width: 44px;
+			}
+		}
 		.bh-more:hover {
 			background: var(--accent-soft);
 		}

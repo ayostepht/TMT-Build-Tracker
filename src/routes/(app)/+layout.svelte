@@ -333,6 +333,7 @@
 							<a href={resolve('/(app)/admin/templates') + fromQuery}>Kit admin</a>
 						{/if}
 						<a href={resolve('/(app)/help')} data-testid="help-link">Help</a>
+						<a href={resolve('/(app)/about')} data-testid="about-link">About</a>
 						<a href={resolve('/(app)/account')} data-testid="account-link">Account</a>
 						<button type="button" onclick={signOut}>Sign out</button>
 					</div>
@@ -348,6 +349,14 @@
 	<main id="main" class="app-main" tabindex="-1">
 		{@render children()}
 	</main>
+	<footer class="app-footer" data-testid="app-footer">
+		<nav aria-label="Site">
+			<a href={resolve('/(app)/help')} data-testid="footer-help">Help</a>
+			<a href={resolve('/(app)/about')} data-testid="footer-about">About</a>
+			<a href={resolve('/privacy')} data-testid="footer-privacy">Privacy</a>
+			<a href={resolve('/terms')} data-testid="footer-terms">Terms</a>
+		</nav>
+	</footer>
 </div>
 
 <Toast />
@@ -358,6 +367,33 @@
 		grid-template-columns: minmax(0, 1fr);
 		gap: inherit;
 		min-width: 0;
+	}
+	/* Quiet site links under every signed-in page. On a build page the phone's fixed tab bar is
+	   cleared by .shell.has-tabs padding-bottom (bar height + 20px), which the footer sits above. */
+	.app-footer nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 var(--sp-5);
+		padding-top: var(--sp-4);
+		border-top: 1px solid var(--line);
+	}
+	.app-footer a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 32px;
+		font-size: var(--fs-xs);
+		color: var(--muted);
+		text-decoration: none;
+	}
+	.app-footer a:hover {
+		color: var(--ink);
+		text-decoration: underline;
+	}
+	@media (pointer: coarse) {
+		.app-footer a {
+			min-height: 44px;
+			padding-inline: 4px;
+		}
 	}
 	.navprogress {
 		position: fixed;

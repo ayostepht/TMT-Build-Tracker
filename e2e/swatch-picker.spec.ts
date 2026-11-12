@@ -7,6 +7,8 @@ test('swatch picker: opens inside the panel, one tab stop for the swatches, arro
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const { buildId } = await ownerWithBuild(page, 'pickerpane');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	await page
 		.locator('li.slot[data-role="primary"]')
 		.getByRole('button', { name: /^Change filament for/ })
@@ -54,6 +56,8 @@ test('swatch picker: opens inside the panel, one tab stop for the swatches, arro
 test('swatch picker: Schoolhouse colors say they are approximate', async ({ page }) => {
 	const { buildId } = await ownerWithBuild(page, 'pickerapprox');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	await page
 		.locator('li.slot[data-role="primary"]')
 		.getByRole('button', { name: /^Change filament for/ })
@@ -72,6 +76,8 @@ test('swatch picker on a phone sits under the pinned chair', async ({ page }) =>
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { buildId } = await ownerWithBuild(page, 'pickerphone');
 	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
 	await page
 		.locator('li.slot[data-role="primary"]')
 		.getByRole('button', { name: /^Change filament for/ })

@@ -27,12 +27,10 @@
 <article class="ds-card ds-card--compact" data-testid="next-up-card" data-plate={plate.number}>
 	<div class="nu-head">
 		<a
-			class="pill-link nu-open"
+			class="nu-open"
 			href={resolve('/(app)/builds/[id]', { id: ctx.id })}
 			data-testid="landing-open-build"
-			title={ctx.view.build.name}
-			><span class="nu-open-name">{ctx.view.build.name}</span>
-			<span class="btn-arrow" aria-hidden="true">→</span></a
+			title={ctx.view.build.name}>{ctx.view.build.name}</a
 		>
 		<div class="nu-plate">Plate {plate.number}{plate.name ? ` · ${plate.name}` : ''}</div>
 	</div>
@@ -45,18 +43,29 @@
 </article>
 
 <style>
+	/* Small heading-style link naming the build, not a button. */
 	.nu-open {
 		max-width: 100%;
-		min-height: 44px;
-		padding-inline: 16px;
-		font-weight: 600;
-		margin-bottom: 8px;
-	}
-	.nu-open-name {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		font: 600 var(--fs-md) / 1.25 var(--f-head);
+		color: var(--ink);
+		text-decoration: underline;
+		text-decoration-color: var(--line);
+		text-underline-offset: 3px;
+	}
+	.nu-open:hover {
+		color: var(--accent);
+		text-decoration-color: var(--accent);
+	}
+	@media (pointer: coarse) {
+		.nu-open {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
+		}
 	}
 	.nu-head {
 		display: grid;

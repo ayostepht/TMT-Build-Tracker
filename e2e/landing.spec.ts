@@ -140,19 +140,22 @@ test('the landing opens few live streams and stays navigable', async ({ page }) 
 	await expect(page).toHaveURL(/\/builds\/new/);
 });
 
-test('landing quick links and open-build pills lead to the build', async ({ page }) => {
+test('the builds list is first, one tap to a build; build links in the cards lead there too', async ({
+	page
+}) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { chapterUrl, buildId } = await ownerWithBuild(page, 'landing-quick');
 	await page.goto(chapterUrl);
 	await settled(page);
-	const quick = page.getByTestId('landing-quick');
-	await expect(quick).toBeVisible();
-	const link = quick.getByRole('link', { name: /Test chair/ });
+	await expect(page.getByTestId('landing-quick')).toHaveCount(0);
+	const link = page.getByTestId('build-card').getByRole('link', { name: /Test chair/ });
 	await expect(link).toHaveAttribute('href', `/builds/${buildId}`);
 
 	// On screen without scrolling, and a thumb-sized target.
-	await expect(link).toBeInViewport({ ratio: 1 });
-	const box = await link.boundingBox();
+	// (the whole row is the link: the stretched ::after covers it)
+	const card = page.getByTestId('build-card').first();
+	await expect(card).toBeInViewport({ ratio: 1 });
+	const box = await card.boundingBox();
 	expect(box!.height).toBeGreaterThanOrEqual(44);
 	expect(box!.y + box!.height).toBeLessThanOrEqual(844);
 	expect(await page.evaluate(() => scrollY)).toBe(0);
@@ -231,7 +234,7 @@ test('a build card link is keyboard focusable and Enter opens it', async ({ page
 });
 
 for (const [label, name] of [
-	['quick links, pills and cards', 'Second chair'],
+	['build rows and cards', 'Second chair'],
 	['a very long build name', 'A rather long build name that keeps going and going past the edge'],
 	['a 40-character single word as the name', 'Supercalifragilisticexpialidocious12345678']
 ] as const) {
@@ -248,7 +251,7 @@ for (const [label, name] of [
 			.getByRole('button', { name: /^Start printing plate/ })
 			.click();
 		await expect(page.getByTestId('landing-now-card')).toHaveCount(1);
-		await expect(page.getByTestId('landing-quick')).toBeVisible();
+		await expect(page.getByTestId('build-card').first()).toBeVisible();
 		await expect(page.getByTestId('build-card')).toHaveCount(2);
 		for (const width of [390, 360]) {
 			await page.setViewportSize({ width, height: 844 });

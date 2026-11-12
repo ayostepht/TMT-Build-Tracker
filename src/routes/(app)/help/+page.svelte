@@ -49,8 +49,9 @@
 				in the Settings tab.
 			</li>
 			<li>
-				<b>Fine-tune the design.</b> The <b>Design</b> tab holds <b>Colors</b>, <b>Palettes</b> and
-				<b>Parts</b>, with a 3D view of the chair.
+				<b>Fine-tune the design.</b> The <b>Design</b> tab has four tabs: <b>Options</b>,
+				<b>Colors</b>,
+				<b>Palettes</b> and <b>Parts</b>, with a 3D view of the chair.
 			</li>
 			<li>
 				<b>Prepare the files.</b> The <b>Files</b> tab has the printer and bed, the plates, your sliced
@@ -81,11 +82,12 @@
 				<b>Now printing</b> and <b>Next up</b>). A plate is one print job on your bed.
 			</li>
 			<li>
-				<b>Start.</b> Press <b>Start printing</b> on the plate. This only marks its parts as
-				<b>Printing</b> and starts the clock. Then start the print on the printer itself: the Build
-				Tracker never sends a print to it. If your chapter has a printer connected, <b>Start on</b> the
-				printer's name also tells the app which plate that printer's next job is, so it can follow the
-				job.
+				<b>Start.</b> With no printer connected, press <b>Start printing</b> on the plate. With a
+				printer connected, press <b>Printing on</b> the printer's name instead; the app then also
+				follows that printer's job. If the plate is printing somewhere else, use
+				<b>Not on a connected printer</b>. Either way this only marks the plate's parts as
+				<b>Printing</b> and starts the clock. Start the print at the printer itself: the Build Tracker
+				never sends a print to it.
 			</li>
 			<li>
 				<b>Log the result.</b> When the plate comes off, press <b>Finish &amp; log</b>. Pick

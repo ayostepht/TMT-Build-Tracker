@@ -23,22 +23,32 @@
 	let { embedded = false }: { embedded?: boolean } = $props();
 	const ctx = getBuildCtx();
 
-	type Tab = 'colors' | 'palettes' | 'parts';
-	const TABS: { id: Tab; label: string }[] = [
+	type Tab = 'options' | 'colors' | 'palettes' | 'parts';
+	/** Options comes first (parts are chosen before colors); absent without variants and in the wizard (its own Options step). */
+	const hasOptions = $derived(!embedded && ctx.view.variantGroups.length > 0);
+	const tabs = $derived<{ id: Tab; label: string }[]>([
+		...(hasOptions ? [{ id: 'options' as const, label: 'Options' }] : []),
 		{ id: 'colors', label: 'Colors' },
 		{ id: 'palettes', label: 'Palettes' },
 		{ id: 'parts', label: 'Parts' }
-	];
-	/** One-line summary of the chosen variants, shown on the collapsed Options row. */
-	const optionsSummary = $derived(
-		ctx.view.variantGroups
-			.map((g) => {
-				const key = ctx.view.variantChoices[g.key] ?? g.defaultOption;
-				return (g.options.find((o) => o.key === key) ?? g.options[0])?.name;
-			})
-			.filter(Boolean)
-			.join(' \u00b7 ')
-	);
+	]);
+	/**
+	 * Opens on Options for a fresh build: every option still at its default and no color or option
+	 * change in the activity log yet (nothing server-side is added for this). The wizard has its own
+	 * Options step, so it always opens on Colors.
+	 */
+	function firstTab(): Tab {
+		const v = ctx.view;
+		if (embedded || !v.variantGroups.length) return 'colors';
+		const atDefaults = v.variantGroups.every(
+			(g) => (v.variantChoices[g.key] ?? g.defaultOption) === g.defaultOption
+		);
+		const touched = v.activity.some(
+			(a) =>
+				a.kind.startsWith('design.') || a.kind === 'filament.update' || a.kind === 'build.variant'
+		);
+		return atDefaults && !touched ? 'options' : 'colors';
+	}
 	let root = $state<HTMLElement>();
 	/** Desktop: height left below the workspace top edge (minus the wizard bar, or a small margin on the Design tab). */
 	let fill = $state('');
@@ -74,7 +84,7 @@
 	});
 	// Warm the catalog while the phone is idle, so the picker and the palettes open without a wait.
 	$effect(() => prefetchSwatches());
-	let tab = $state<Tab>('colors');
+	let tab = $state<Tab>(firstTab());
 	let paletteSeen = $state(false);
 	/** Palette shown in 3D but not saved. */
 	let preview = $state<PalettePreview | null>(null);
@@ -158,21 +168,21 @@
 
 	/** Arrow keys / Home / End move between the mode tabs (roving tabindex). */
 	function tabKey(e: KeyboardEvent) {
-		const i = TABS.findIndex((t) => t.id === tab);
+		const i = tabs.findIndex((t) => t.id === tab);
 		const n =
 			e.key === 'ArrowRight'
-				? (i + 1) % TABS.length
+				? (i + 1) % tabs.length
 				: e.key === 'ArrowLeft'
-					? (i + TABS.length - 1) % TABS.length
+					? (i + tabs.length - 1) % tabs.length
 					: e.key === 'Home'
 						? 0
 						: e.key === 'End'
-							? TABS.length - 1
+							? tabs.length - 1
 							: -1;
 		if (n < 0) return;
 		e.preventDefault();
-		setTab(TABS[n].id);
-		document.getElementById(`tab-${TABS[n].id}`)?.focus();
+		setTab(tabs[n].id);
+		document.getElementById(`tab-${tabs[n].id}`)?.focus();
 	}
 
 	/** Spoken (not shown) confirmation of a color or part change, for screen reader users. */
@@ -372,11 +382,12 @@
 			onkeydown={tabKey}
 			bind:offsetHeight={tabsH}
 		>
-			{#each TABS as t (t.id)}
+			{#each tabs as t (t.id)}
 				<button
 					type="button"
 					role="tab"
 					id="tab-{t.id}"
+					data-testid="design-tab-{t.id}"
 					aria-selected={tab === t.id}
 					aria-controls="tabpanel-{t.id}"
 					tabindex={tab === t.id ? 0 : -1}
@@ -385,7 +396,7 @@
 			{/each}
 		</div>
 
-		{#if tab !== 'palettes'}
+		{#if tab !== 'palettes' && tab !== 'options'}
 			<p class="muted hint">
 				{#if part}
 					Pick a slot in the part card to move {part.name}.
@@ -434,6 +445,29 @@
 			{/if}
 		</div>
 
+		{#if hasOptions}
+			<div
+				class="optsTab"
+				role="tabpanel"
+				id="tabpanel-options"
+				aria-labelledby="tab-options"
+				data-testid="design-options"
+				hidden={tab !== 'options'}
+			>
+				<p class="muted">
+					Choose your parts first: switching an option updates the 3D view, the part list and the
+					totals.
+				</p>
+				<VariantChooser
+					groups={ctx.view.variantGroups}
+					choices={ctx.view.variantChoices}
+					partNames={Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name]))}
+					disabled={!ctx.canEdit}
+					onselect={(group, option) => ctx.act(() => setVariant(ctx.id, group, option))}
+				/>
+			</div>
+		{/if}
+
 		<div
 			class="partsTab"
 			role="tabpanel"
@@ -441,29 +475,6 @@
 			aria-labelledby="tab-parts"
 			hidden={tab !== 'parts'}
 		>
-			{#if ctx.view.variantGroups.length}
-				<!-- The variants change which parts exist and what the chair looks like, so they sit on
-				     top of the Parts tab as one collapsed row with the current choices as its summary. -->
-				<details class="dw-opts" data-testid="design-options">
-					<summary data-testid="design-options-summary">
-						<span class="dw-opts-k">Options</span>
-						<span class="dw-opts-v">{optionsSummary}</span>
-					</summary>
-					<div class="dw-opts-body">
-						<p class="muted">
-							Switching an option updates the 3D view, the part list and the totals.
-						</p>
-						<VariantChooser
-							groups={ctx.view.variantGroups}
-							choices={ctx.view.variantChoices}
-							partNames={Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name]))}
-							disabled={!ctx.canEdit}
-							onselect={(group, option) => ctx.act(() => setVariant(ctx.id, group, option))}
-						/>
-					</div>
-				</details>
-			{/if}
-
 			<PartList
 				view={live}
 				{selected}
@@ -573,6 +584,11 @@
 			min-height: 44px;
 		}
 	}
+	/* Four tabs share the strip: tighter side padding so labels fit at 390 px. */
+	.dw-tabs > button {
+		padding-inline: var(--sp-3);
+		min-width: 0;
+	}
 	.dw-tabs > button:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
@@ -605,70 +621,8 @@
 		top: 48px;
 		right: 8px;
 	}
-	/* Options: a collapsed one-row disclosure at the top of the Parts tab (44px on touch). */
-	.dw-opts {
-		border: 1px solid var(--line);
-		border-radius: var(--r-lg);
-		background: var(--card);
-		min-width: 0;
-	}
-	.dw-opts > summary {
-		display: flex;
-		align-items: center;
-		gap: var(--sp-4);
-		min-height: 44px;
-		box-sizing: border-box;
-		padding: var(--sp-3) var(--sp-6);
-		cursor: pointer;
-		list-style: none;
-		min-width: 0;
-	}
-	.dw-opts > summary::-webkit-details-marker {
-		display: none;
-	}
-	.dw-opts > summary::after {
-		content: '';
-		flex: none;
-		margin-inline-start: auto;
-		width: 8px;
-		height: 8px;
-		border-right: 2px solid var(--muted);
-		border-bottom: 2px solid var(--muted);
-		transform: rotate(45deg);
-		transition: transform 0.12s ease;
-	}
-	.dw-opts[open] > summary::after {
-		transform: rotate(-135deg);
-	}
-	.dw-opts-k {
-		flex: none;
-		font-weight: 700;
-	}
-	.dw-opts-v {
-		flex: 1 1 0;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		color: var(--muted);
-		font-size: var(--fs-md);
-	}
-	.dw-opts[open] .dw-opts-v {
-		display: none;
-	}
-	.dw-opts-body {
-		display: grid;
-		gap: var(--sp-5);
-		padding: 0 var(--sp-6) var(--sp-6);
-		min-width: 0;
-	}
-	.dw-opts-body p {
+	.optsTab p {
 		margin: 0;
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.dw-opts > summary::after {
-			transition: none;
-		}
 	}
 	/* Sticky offsets for the parts list: just under the (sticky) tab bar. */
 	.partsTab {

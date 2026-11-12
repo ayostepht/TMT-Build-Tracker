@@ -6,25 +6,25 @@ A self-hostable web app for makers 3D-printing the MakeGood 3D TMT (toddler mobi
 
 ## Screenshots
 
-Taken on a throwaway instance with invented demo data.
+Taken on a throwaway instance with invented demo data. In the order a build happens:
+
+![The color designer: a 3D toddler chair in red, white and yellow, next to a list of color slots, each with its filament and the weight it needs](docs/images/screenshot-color-designer.png)
+
+Pick the filament for each color slot (primary, accent and so on) and see the chair in those colors. Each slot shows how much filament it needs and whether your stock covers it.
+
+![The plate arranger: a top view of one print plate for a 256 by 256 mm bed, with red and white parts laid out flat and numbered by group](docs/images/screenshot-plate-arranger.png)
+
+The app lays the parts out flat on the plates for your printer's bed and shows how much of the bed is used. You can export the plate as a 3MF for your slicer or start printing from here.
 
 <p align="center">
-  <img src="docs/images/screenshot-phone-now-card.png" alt="Phone view of a build: the Now printing card for plate 1, with the elapsed and remaining time and a Finish and log button" width="300">
+  <img src="docs/images/screenshot-phone-now-card.png" alt="A phone screen showing the plate currently printing, its filament, an elapsed-time and time-left line, and a Finish and log button" width="300">
 </p>
 
-The Now card on a phone, where makers update status next to the printer.
+On your phone at the printer: the plate that is printing, how long it has run and when it should finish. When the plate is done, tap Finish and log to mark its parts as printed, or flag a failure so they are queued for a reprint.
 
-![The plate arranger: a top view of one print plate for the Elegoo Centauri Carbon bed, each part drawn in its filament color with numbered badges](docs/images/screenshot-plate-arranger.png)
+![A printers page with one printer card showing a Printing badge, a progress bar at 42 percent, layer 168 of 400, time left and temperatures](docs/images/screenshot-printer-card.png)
 
-The plate arranger lays the parts out flat on your printer's bed.
-
-![The 3D color designer: the toddler chair model in red, white and yellow next to the list of filament slots](docs/images/screenshot-color-designer.png)
-
-The 3D color designer, with ready-made palettes and per-part colors.
-
-![A printer card showing a live, read-only status for an Elegoo printer: 42 percent, layer 168 of 400, temperatures](docs/images/screenshot-printer-card.png)
-
-Optional read-only printer status (shown here against a simulated printer).
+Optional: connect an Elegoo printer to see its progress, layer and temperatures next to each plate (shown here with a simulated printer). The app only reads from printers; it never starts, stops, pauses or moves them.
 
 ## MakeGood files and credit
 
