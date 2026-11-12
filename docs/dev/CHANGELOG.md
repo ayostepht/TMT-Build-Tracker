@@ -7,6 +7,12 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r48** (c64d852, from main 1e18c6c): one status badge for plates and parts (Printing with
+  a connected printer asks "Where is it printing?"), phone color picker layout, Help in the
+  nav, Printers page hides unlinked prints behind a disclosure, build-details save logs only
+  changed fields, public docs wording. No migration; rehearsal clean (row counts equal).
+  Checks on a copy of the live data: 8 of 10 pass; failed: the log sheet's grams `step="1"`
+  blocks Save with fractional slicer grams (pre-existing); open: the second link confirm.
 - **r47** (0245ca8, from main c47ecca): UI only, from the maintainer's r45 phone review:
   builds-first landing, "Printing on <printer>" as the main start with a printer
   connected, Options as the designer's first tab, picker filters wrap on the phone,

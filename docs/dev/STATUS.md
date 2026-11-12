@@ -10,7 +10,10 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **r48 ready to deploy: c64d852** (UI and two small server changes, no migration). The
+0. **r48 is live** (c64d852, deployed 2026-11-12 from main 1e18c6c; UI and two small server
+   changes, no migration; rollback: tag `r47` as `test`, no restore needed). Rehearsal clean;
+   checks on a copy of the live data: 8 of 10 pass, 1 failed, 1 open question (see "r48
+   checks" under open items). The
    maintainer reviewed it in the local preview on 2026-11-12 ("Demo looks great!").
    Contents: one
    actionable status badge for plates and parts (`StatusBadge`, `WherePrinting`; choosing
@@ -166,6 +169,17 @@ Route each to the agent named in brackets.
   agrees from the first render, but at 390 the layout select still showed "Loading…" while
   the heading already named the layout (agreed after network idle; one run per width).
   Look at the network waterfall; suspected: the fetch queued behind SSE and printer streams.
+- **r48 checks** (2026-11-12, copy of live data, simulated printer; shots in
+  `data/r48-check/shots/` on Unraid). Failed [build-state]: Printed → the log sheet
+  prefills "Filament used (g)" with the slicer's fractional grams (e.g. 162.52) but the
+  input has `step="1"` (`LogRunSheet.svelte`), so the browser blocks Save ("nearest valid
+  values are 162 and 163") until the grams are retyped; predates r48 (file unchanged since
+  r45) but is now on the main Printed path. Question for the maintainer: Printing → "Where
+  is it printing?" → the printer, while the printer already runs an unlinked job, sets the
+  plate Printing but links the job only after the second "Confirm Plate N is printing on
+  <printer>?" (the r38 rule, `StartOnPrinter`/`ExpectedConfirm`); keep the two steps or
+  link on the first? Seen: after one logged run of a 2-run plate the plate stays Printing
+  with nothing on the printer.
 - **r45 live checks** (2026-11-12, copy of live data; shots in `data/r45-check/shots/` on
   Unraid): privacy/terms/login/signup, landing quick row, Next up build button, whole-card
   links, long names, About 0.9.0, guide link, Cancel-first dialog with focus return,
