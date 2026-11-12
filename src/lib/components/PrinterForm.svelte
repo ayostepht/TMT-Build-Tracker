@@ -10,7 +10,8 @@
 	import { printerBrands } from '#lib/printers/catalog.ts';
 	import { cameraSupported, defaultCameraUrl } from '#lib/printers/camera-url.ts';
 	import type { ConnectionOptionView } from '#lib/printers/connection-options.ts';
-	import { SETUP_TEXT, guideUrl } from '#lib/printers/setup-steps.ts';
+	import { EXPERIMENTAL_TAG, isExperimental } from '#lib/printers/integrations-view.ts';
+	import { ISSUES_URL, SETUP_TEXT, guideUrl } from '#lib/printers/setup-steps.ts';
 	import { SHARE_LINK_HOST_PLACEHOLDER, supportsShareLink } from '#lib/printers/share-link.ts';
 	import {
 		PRINTER_KIND_INFO,
@@ -246,6 +247,13 @@
 				>
 					{#each typeChoices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
 				</select>
+				{#if option && isExperimental(option)}
+					<small class="pf-exp" data-testid="pf-experimental"
+						><span class="pf-tag">{EXPERIMENTAL_TAG}</span>
+						<a href={ISSUES_URL} target="_blank" rel="noreferrer noopener">Tell us how it went</a
+						></small
+					>
+				{/if}
 			</label>
 		{:else if !option}
 			<label class="field"
@@ -510,6 +518,12 @@
 	.pf-steps summary {
 		cursor: pointer;
 		min-height: 24px;
+	}
+	.pf-tag {
+		font-size: var(--fs-xs);
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
+		padding: 0 var(--sp-4);
 	}
 	.linkrm {
 		justify-self: start;

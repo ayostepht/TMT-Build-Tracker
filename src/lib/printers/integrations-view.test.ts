@@ -5,9 +5,8 @@ import {
 	connectionLabel,
 	hasConnectedPrinter,
 	hostedLabel,
-	optionForPrinter,
-	NEW_LABEL,
-	VERIFIED_LABEL
+	isExperimental,
+	optionForPrinter
 } from './integrations-view.ts';
 import { PRINTER_KINDS } from './status.ts';
 import { SETUP_TEXT, guideUrl, PRINTER_GUIDE_URL } from './setup-steps.ts';
@@ -32,33 +31,57 @@ describe('chooser groups', () => {
 			'Klipper',
 			'OctoPrint'
 		]);
-		expect(g[2].entries[0].description).toBe('Log prints by hand; the app shows no live status.');
+		expect(g[2].entries[0].description).toBe('A name only, for logging by hand');
 	});
 
-	it('hosted: network cards are disabled with the reason, the rest stay available', () => {
+	it('hosted: network rows are disabled with the reason, the rest stay available and carry no label', () => {
 		const g = chooserGroups(connectionOptionsFor(true));
 		for (const e of g[0].entries) {
 			expect(e.available).toBe(false);
 			expect(e.unavailableReason).toMatch(/hosted site/);
-			expect(hostedLabel(e.hosted)).toBe('Needs the app on your own network');
 		}
-		expect(g[1].entries[0]).toMatchObject({
-			available: true,
-			unavailableReason: null,
-			hosted: true
-		});
+		expect(g[1].entries[0]).toMatchObject({ available: true, unavailableReason: null });
+		expect(g[2].entries[0]).toMatchObject({ available: true, unavailableReason: null });
 		expect(hostedLabel(true)).toBe('Works on a hosted site');
-		expect(g[2].entries[0].available).toBe(true);
+		expect(hostedLabel(false)).toBe('Needs the app on your own network');
 	});
 
-	it('the two labels follow the data: Elegoo in regular use, the rest new, link card says which', () => {
+	it('only Klipper, OctoPrint and Bambu on the network are experimental', () => {
 		const g = chooserGroups(connectionOptionsFor(false));
-		const by = Object.fromEntries(g.flatMap((x) => x.entries).map((e) => [e.id, e.verifiedLabel]));
-		expect(by['elegoo-lan']).toBe(VERIFIED_LABEL);
-		expect(by['klipper-lan']).toBe(NEW_LABEL);
-		expect(by['bambu-lan']).toBe(NEW_LABEL);
-		expect(by.manual).toBeNull(); // no hardware label for a printer the app never contacts
-		expect(by.octoeverywhere).toBe('In regular use with Elegoo; new for Klipper and OctoPrint');
+		const by = Object.fromEntries(g.flatMap((x) => x.entries).map((e) => [e.id, e.experimental]));
+		expect(by).toEqual({
+			'elegoo-lan': false,
+			'klipper-lan': true,
+			'octoprint-lan': true,
+			'bambu-lan': true,
+			octoeverywhere: false,
+			manual: false
+		});
+		// the link's Klipper and OctoPrint types are experimental too: the form shows the tag
+		const link = connectionOptionsFor(false).filter((o) => o.via === 'link');
+		expect(link.map((o) => [o.linkPrinterType, isExperimental(o)])).toEqual([
+			['Elegoo', false],
+			['Klipper', true],
+			['OctoPrint', true]
+		]);
+	});
+
+	it('descriptions are a few words and match what each option supports', () => {
+		const g = chooserGroups(connectionOptionsFor(false));
+		const by = Object.fromEntries(g.flatMap((x) => x.entries).map((e) => [e.id, e.description]));
+		expect(by).toEqual({
+			'elegoo-lan': 'Live status and camera',
+			'klipper-lan': 'Live status and camera',
+			'octoprint-lan': 'Live status and camera',
+			'bambu-lan': 'Live status, no camera',
+			octoeverywhere: 'For Elegoo, Klipper or OctoPrint, from anywhere',
+			manual: 'A name only, for logging by hand'
+		});
+		for (const e of g.flatMap((x) => x.entries)) {
+			expect(e.description.split(/\s+/).length).toBeLessThanOrEqual(8);
+			const cam = e.options.every((o) => o.camera);
+			expect(/no camera/.test(e.description)).toBe(!cam && e.id !== 'manual');
+		}
 	});
 });
 

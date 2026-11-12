@@ -10,6 +10,8 @@ It depends on where the app runs.
 - **On a hosted site (a public-mode install run by someone else):** the app runs on the internet, so it cannot see your home network, and a printer address like `192.168.0.50` means nothing to it. Two options work there: a printer reached through an **OctoEverywhere shared link** (OctoEverywhere carries the connection from your printer to the internet) and a printer that is **not connected** (a name only, for logging by hand). Local addresses, finding printers, custom camera addresses and Spoolman are not available on a hosted site. To use those, run the app yourself.
 - A hosted site limits how many link printers each workspace and the whole site may have, because every link is a long-lived connection from the server to OctoEverywhere. If you hit the limit the message says so. The site's admin can change the numbers ([Environment reference](environment.md#limits)).
 
+OctoEverywhere and OctoPrint are different things with similar names. OctoEverywhere is a separate remote-access service, not part of OctoPrint. It works with several kinds of printers (OctoPrint, Klipper and Elegoo among them) through a plugin or companion that runs on the printer side. A "shared connection" is a link OctoEverywhere gives you that reaches that printer's own web interface from anywhere. OctoPrint itself has no built-in remote link: without OctoEverywhere (or your own VPN or reverse proxy) it can only be reached on your network, which is the plain **OctoPrint** option below. OctoEverywhere has a free tier; its pages do not say whether shared connections need a paid plan, so check there before you start.
+
 ## What works how well
 
 - **In regular use on a real printer:** Elegoo on your network, and Elegoo through an OctoEverywhere link (Centauri Carbon).
@@ -74,7 +76,7 @@ Not yet run against a real printer by the project. Choose **Klipper (Moonraker)*
 
 ### Klipper (Moonraker) through an OctoEverywhere shared link
 
-Not yet run against a real printer by the project. Instead of the printer's address, paste an OctoEverywhere **shared link** (the same kind of link as for Elegoo above: `https://shared-<token>.octoeverywhere.com`, stored encrypted, shown once). Status uses the link's Moonraker WebSocket and the camera comes from the link too. Leave the API key empty unless Moonraker requires one. The app asks the link more gently than a local connection and backs off when it does not answer. This works on a hosted site.
+Not yet run against a real printer by the project. You need Klipper with OctoEverywhere's companion installed and linked to your OctoEverywhere account, and a shared connection created there. Then, instead of the printer's address, paste an OctoEverywhere **shared link** (the same kind of link as for Elegoo above: `https://shared-<token>.octoeverywhere.com`, stored encrypted, shown once). Status uses the link's Moonraker WebSocket and the camera comes from the link too. Leave the API key empty unless Moonraker requires one. The app asks the link more gently than a local connection and backs off when it does not answer. This works on a hosted site.
 
 ## OctoPrint
 
@@ -82,7 +84,7 @@ Not yet run against a real printer by the project. Choose **OctoPrint** under **
 
 ### OctoPrint through an OctoEverywhere shared link
 
-Not yet run against a real printer by the project. Paste an OctoEverywhere **shared link** instead of the address. OctoPrint still needs its **API key**: create an application key in OctoPrint's settings and paste it too. Status is polled through the link (slower and gentler than on your network) and the camera comes from the link. This works on a hosted site.
+Not yet run against a real printer by the project. You need OctoPrint with the OctoEverywhere plugin installed and linked to an OctoEverywhere account, and a shared connection created there. The link only carries the connection: the app still talks to OctoPrint's own API through it, which is why OctoPrint's **API key** is still needed. Paste the **shared link** instead of the address, and create an application key in OctoPrint's settings and paste that too. Status is polled through the link (slower and gentler than on your network) and the camera comes from the link. This works on a hosted site.
 
 ## Bambu Lab (LAN mode)
 

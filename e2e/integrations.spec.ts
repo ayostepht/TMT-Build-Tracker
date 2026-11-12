@@ -50,24 +50,60 @@ test('the chooser renders every option from the options endpoint with its two la
 	for (const id of CARDS) await expect(page.getByTestId(`option-${id}`)).toBeVisible();
 	await expect(chooser.locator('button[data-testid^="option-"]')).toHaveCount(CARDS.length);
 
-	// The labels follow the data.
-	for (const o of opts.connectionOptions.filter((x) => x.group === 'lan' || x.group === 'manual')) {
-		const card = page.getByTestId(`option-${o.key}`);
-		await expect(card.getByTestId('hosted-label')).toHaveText(
-			o.hosted ? 'Works on a hosted site' : 'Needs the app on your own network'
+	// One quiet "Experimental" tag, exactly on the three LAN options that are not verified.
+	const experimental = opts.connectionOptions
+		.filter((o) => o.group === 'lan' && !o.verifiedOnHardware)
+		.map((o) => o.key);
+	expect(experimental.sort()).toEqual(['bambu-lan', 'klipper-lan', 'octoprint-lan']);
+	await expect(chooser.getByTestId('experimental-tag')).toHaveCount(3);
+	for (const id of CARDS) {
+		const row = page.getByTestId(`option-${id}`);
+		await expect(row.getByTestId('experimental-tag')).toHaveCount(
+			experimental.includes(id) ? 1 : 0
 		);
-		if (o.group === 'manual') await expect(card.getByTestId('verified-label')).toHaveCount(0);
-		else
-			await expect(card.getByTestId('verified-label')).toHaveText(
-				o.verifiedOnHardware ? 'In regular use' : 'New: not yet run on a real printer'
-			);
-		await expect(card).toBeEnabled();
+		await expect(row).toBeEnabled();
+		// no per-option labels any more
+		await expect(row.getByTestId('hosted-label')).toHaveCount(0);
+		await expect(row.getByTestId('verified-label')).toHaveCount(0);
 	}
-	const link = page.getByTestId('option-octoeverywhere');
-	await expect(link.getByTestId('hosted-label')).toHaveText('Works on a hosted site');
-	await expect(link.getByTestId('verified-label')).toHaveText(
-		'In regular use with Elegoo; new for Klipper and OctoPrint'
+	// One note with the issues link.
+	await expect(chooser.getByTestId('experimental-note')).toHaveCount(1);
+	await expect(chooser.getByTestId('experimental-note')).toContainText(
+		'Options marked Experimental have not been run on real printers yet. If you try one, tell us how it went.'
 	);
+	await expect(chooser.getByTestId('issues-link')).toHaveAttribute(
+		'href',
+		/^https:\/\/github\.com\/.+\/issues$/
+	);
+	// Short descriptions.
+	await expect(page.getByTestId('option-elegoo-lan')).toContainText('Live status and camera');
+	await expect(page.getByTestId('option-bambu-lan')).toContainText('Live status, no camera');
+	await expect(page.getByTestId('option-octoeverywhere')).toContainText(
+		'For Elegoo, Klipper or OctoPrint, from anywhere'
+	);
+	await expect(page.getByTestId('option-manual')).toContainText('A name only, for logging by hand');
+	// Compact rows: about 48 px on desktop, at most 64 px on the phone (44 px minimum).
+	const heights = async () =>
+		Promise.all(
+			CARDS.map(async (id) => (await page.getByTestId(`option-${id}`).boundingBox())!.height)
+		);
+	for (const h of await heights()) {
+		expect(h).toBeGreaterThanOrEqual(44);
+		expect(h).toBeLessThanOrEqual(64);
+	}
+	await page.screenshot({
+		path: 'data/r49-shots-integrations/chooser-390-light.png',
+		fullPage: true
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	for (const h of await heights()) {
+		expect(h).toBeGreaterThanOrEqual(44);
+		expect(h).toBeLessThanOrEqual(52);
+	}
+	// The whole chooser fits one desktop screen.
+	const box = (await chooser.boundingBox())!;
+	expect(box.y + box.height).toBeLessThanOrEqual(900);
+	await page.setViewportSize({ width: 390, height: 844 });
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 	await page.getByRole('button', { name: 'Cancel' }).first().click();
 	await expect(chooser).toHaveCount(0);
@@ -160,8 +196,14 @@ test('choosing an option shows only its fields and its setup steps', async ({ pa
 		path: 'data/r49-shots-integrations/form-octoeverywhere-elegoo-390-light.png',
 		fullPage: true
 	});
+	await hasNot('pf-experimental'); // Elegoo has been run on a real printer
 	await type.selectOption({ label: 'Klipper' });
-	await has('pf-shareLink', 'pf-apiKey');
+	await has('pf-shareLink', 'pf-apiKey', 'pf-experimental');
+	await expect(page.getByTestId('pf-experimental')).toContainText('Experimental');
+	await expect(page.getByTestId('pf-experimental').getByRole('link')).toHaveAttribute(
+		'href',
+		/\/issues$/
+	);
 	await expect(page.getByTestId('pf-apiKey')).not.toHaveAttribute('required', '');
 	await steps(/#klipper-moonraker-through-an-octoeverywhere-shared-link$/);
 	await page.screenshot({
@@ -169,6 +211,7 @@ test('choosing an option shows only its fields and its setup steps', async ({ pa
 		fullPage: true
 	});
 	await type.selectOption({ label: 'OctoPrint' });
+	await has('pf-experimental');
 	await expect(page.getByTestId('pf-apiKey')).toHaveAttribute('required', '');
 	await steps(/#octoprint-through-an-octoeverywhere-shared-link$/);
 	await hasNot('pf-host');

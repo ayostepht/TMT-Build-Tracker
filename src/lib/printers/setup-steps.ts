@@ -29,8 +29,7 @@ const LINK_STEP_PASTE =
 
 export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 	'elegoo-lan': {
-		description:
-			'Centauri Carbon and other Elegoo printers: live status and camera over your network.',
+		description: 'Live status and camera',
 		steps: [
 			'Make sure the printer is on the same network as the computer that runs this app.',
 			'Find the printer’s IP address on its network screen (or use “Find Elegoo printers” below; it only finds printers on the same network segment as this app).',
@@ -40,7 +39,7 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 		anchor: 'elegoo-sdcp'
 	},
 	'octoeverywhere-elegoo': {
-		description: 'Reach an Elegoo printer through OctoEverywhere.',
+		description: 'Live status and camera',
 		steps: [
 			LINK_STEP_CREATE,
 			LINK_STEP_COPY,
@@ -50,7 +49,7 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 		anchor: 'through-an-octoeverywhere-shared-link'
 	},
 	'octoeverywhere-klipper': {
-		description: 'Reach a Klipper printer through OctoEverywhere.',
+		description: 'Live status and camera',
 		steps: [
 			LINK_STEP_CREATE,
 			LINK_STEP_COPY,
@@ -61,7 +60,7 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 		anchor: 'klipper-moonraker-through-an-octoeverywhere-shared-link'
 	},
 	'octoeverywhere-octoprint': {
-		description: 'Reach an OctoPrint printer through OctoEverywhere.',
+		description: 'Live status and camera',
 		steps: [
 			LINK_STEP_CREATE,
 			LINK_STEP_COPY,
@@ -72,7 +71,7 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 		anchor: 'octoprint-through-an-octoeverywhere-shared-link'
 	},
 	'klipper-lan': {
-		description: 'Klipper printers through Moonraker, on your network.',
+		description: 'Live status and camera',
 		steps: [
 			'Make sure Moonraker (the service behind Mainsail or Fluidd) is running and the printer is on the same network as this app.',
 			'Find the printer’s IP address (its network screen, or your router’s list of devices).',
@@ -83,7 +82,7 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 		anchor: 'klipper-moonraker'
 	},
 	'octoprint-lan': {
-		description: 'OctoPrint printers, on your network.',
+		description: 'Live status and camera',
 		steps: [
 			'Make sure OctoPrint is running and on the same network as this app.',
 			'In OctoPrint’s settings, create an application key and copy it.',
@@ -93,7 +92,7 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 		anchor: 'octoprint'
 	},
 	'bambu-lan': {
-		description: 'Bambu Lab printers in LAN mode: live status, no camera.',
+		description: 'Live status, no camera',
 		steps: [
 			'In the printer’s network settings, switch on LAN mode. The app does not use Bambu’s cloud.',
 			'On the printer’s screen, find its IP address, the LAN access code and its serial number.',
@@ -103,7 +102,7 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 		anchor: 'bambu-lab-lan-mode'
 	},
 	manual: {
-		description: 'Log prints by hand; the app shows no live status.',
+		description: 'A name only, for logging by hand',
 		steps: [
 			'Give the printer a name. You will pick it when you start a plate and when you log a print.',
 			'Optionally choose its model.',
@@ -113,9 +112,11 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 	}
 };
 
-/** The option card for the OctoEverywhere group (three printer types behind one card). */
-export const LINK_GROUP_DESCRIPTION =
-	'Use OctoEverywhere’s shared connection: works from a hosted site, and when this app is not on the printer’s network. Elegoo, Klipper or OctoPrint.';
+/** The OctoEverywhere row (three printer types behind one row). */
+export const LINK_GROUP_DESCRIPTION = 'For Elegoo, Klipper or OctoPrint, from anywhere';
+
+/** The project's issue tracker: where makers report how an experimental option went. */
+export const ISSUES_URL = 'https://github.com/ayostepht/TMT-Build-Tracker/issues';
 
 export const SPOOLMAN_TEXT = {
 	description:
