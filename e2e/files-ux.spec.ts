@@ -216,7 +216,10 @@ test('compact printer summary, switching layouts asks first, printers from other
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	const sel = page.getByTestId('team-printer');
 	await expect(page.getByTestId('team-printer-group').first()).toHaveAttribute('label', /.+/);
-	await sel.selectOption({ label: 'CC1 · Elegoo Centauri Carbon · 256 × 256' });
+	// The option label ends with the live state (" · offline") once the supervisor has one, so
+	// match the stable prefix instead of the whole label.
+	const cc1 = sel.locator('option', { hasText: 'CC1 · Elegoo Centauri Carbon · 256 × 256' });
+	await sel.selectOption({ value: (await cc1.getAttribute('value'))! });
 	await expect(page.getByTestId('printer-model')).toHaveValue('elegoo-centauri-carbon');
 	await page.getByTestId('arrange-bed').click();
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for CC1');

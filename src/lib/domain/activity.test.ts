@@ -42,6 +42,12 @@ describe('filamentLabel', () => {
 });
 
 describe('describeActivity', () => {
+	it('keeps rendering the historical build.import kind', () => {
+		expect(say('build.import', { parts: 3, runs: 2 }, 'Sam')).toBe(
+			'Sam imported progress from the original prototype (3 parts and 2 prints)'
+		);
+	});
+
 	it('build lifecycle', () => {
 		expect(say('build.create', { name: 'x' })).toBe('Steph started this build');
 		expect(say('build.update', { phase: 'printing', name: 'Mia' })).toBe(

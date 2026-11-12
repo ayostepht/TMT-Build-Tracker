@@ -30,6 +30,7 @@ import {
 	type AdapterHandle,
 	type PrinterConfig
 } from '../types';
+import { openSocket, type SocketLike, type SocketPin } from '../ws-client';
 
 /** Merge a (partial) status update into the accumulated object tree. */
 export function mergeStatus(into: Obj, patch: Obj): Obj {
@@ -86,7 +87,7 @@ export function normalizeMoonraker(st: Obj): PrinterStatus {
 
 export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 	const subj = new StatusSubject();
-	let ws: WebSocket | null = null;
+	let ws: SocketLike | null = null;
 	let attempt = 0;
 	let retry: ReturnType<typeof setTimeout> | undefined;
 	let ping: ReturnType<typeof setInterval> | undefined;
@@ -149,12 +150,13 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 		if (subj.closed) return;
 		let named: string; // http(s) origin the REST calls go to
 		let wsBase: string;
+		let pin: SocketPin | undefined; // link: the validated public address the socket must dial
 		try {
 			// Resolved and validated on every (re)connect; both requests go to the validated IP
-			// (link: the validated public address; the global WebSocket cannot pin it, so the name is
-			// validated right before the dial).
+			// (link: the validated public address, which the socket is pinned to as well).
 			if (link) {
-				await resolveAllowed(link.host, undefined, { allowShareLink: true });
+				const t = await resolveAllowed(link.host, undefined, { allowShareLink: true });
+				pin = { ip: t.ip, family: t.family, servername: link.host };
 				named = link.origin;
 				wsBase = `wss://${link.host}`;
 			} else {
@@ -189,9 +191,9 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			}
 			if (subj.closed) return;
 		}
-		let sock: WebSocket;
+		let sock: SocketLike;
 		try {
-			sock = new WebSocket(`${wsBase}/websocket${query}`);
+			sock = openSocket(`${wsBase}/websocket${query}`, pin ? { pin } : undefined);
 		} catch (e) {
 			subj.emit({ state: 'offline', progress: null, message: safeError(e) });
 			retry = setTimeout(() => void open(), delay());
@@ -259,10 +261,13 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 				/* hostile or malformed frame: ignore it */
 			}
 		};
-		const handle = (data: unknown) => {
+		const handle = (data: unknown, bytes?: number) => {
 			// Checked before JSON.parse: nothing over the cap, or past the per-second budget, is parsed.
-			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
-			if (!budget.take(data.length)) return tooBig(FLOODED_MESSAGE);
+			// (The socket already refuses a frame over the cap while it is received.)
+			if (typeof data !== 'string') return tooBig();
+			const size = bytes ?? Buffer.byteLength(data);
+			if (size > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
+			if (!budget.take(size)) return tooBig(FLOODED_MESSAGE);
 			const m: unknown = JSON.parse(data);
 			if (!isObj(m)) return;
 			attempt = 0;
@@ -283,9 +288,12 @@ export function connectMoonraker(cfg: PrinterConfig): AdapterHandle {
 			}
 		};
 		sock.onerror = () => {};
-		sock.onclose = () => {
+		sock.onclose = (ev) => {
 			clearTimeout(connectTimer);
-			if (ws === sock) reconnect();
+			if (ws !== sock) return;
+			// 1009: the socket refused a message over the size cap while it arrived.
+			if (ev?.code === 1009) tooBig();
+			else reconnect();
 		};
 	}
 	void open();

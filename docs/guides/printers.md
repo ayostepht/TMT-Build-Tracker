@@ -67,6 +67,7 @@ If you already use OctoEverywhere with the printer, you can use its existing con
 - The link must look like `https://shared-<token>.octoeverywhere.com` (https, no port, path or query). Anything else is refused, and an OctoEverywhere address typed into the address field is refused: it belongs in the link field.
 - The link is a secret: anyone holding it can reach the printer through OctoEverywhere. It is stored encrypted and never shown again; the form offers **Remove link**.
 - Status uses the link's WebSocket (`wss://shared-<token>.octoeverywhere.com/websocket`) and the camera is the stream at `/video` on the same host.
+- OctoEverywhere links are reached over https only. The server connects to the address it checked, never follows redirects, and drops the connection if the printer side sends a message over 1 MiB or too much data per second.
 - An OctoEverywhere link is the only public destination the app will ever connect to; the name must resolve to public addresses only.
 - How to create a shared link inside OctoEverywhere is described in OctoEverywhere's own documentation.
 

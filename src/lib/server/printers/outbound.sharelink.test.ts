@@ -8,6 +8,7 @@ import {
 	setResolver
 } from './outbound';
 import type { PrinterStatus } from '#lib/printers/status.ts';
+import { resetFakeSocket, useFakeSocket } from './ws-test';
 
 // Made-up token: never a real link, and nothing here opens a real socket.
 const HOST = 'shared-testtoken12345678.octoeverywhere.com';
@@ -16,6 +17,7 @@ const PUBLIC4 = '93.184.216.34';
 afterEach(() => {
 	vi.unstubAllEnvs();
 	vi.unstubAllGlobals();
+	resetFakeSocket();
 	setResolver(null);
 });
 
@@ -158,8 +160,7 @@ describe('the status websocket in link mode is validated before it is dialled', 
 
 	it('a link name that resolves privately is never dialled, and reports the refusal', async () => {
 		const urls: string[] = [];
-		vi.stubGlobal(
-			'WebSocket',
+		useFakeSocket(
 			class {
 				constructor(u: string) {
 					urls.push(u);
@@ -179,8 +180,7 @@ describe('the status websocket in link mode is validated before it is dialled', 
 	it('public mode never dials the link', async () => {
 		vi.stubEnv('TMT_MODE', 'public');
 		const urls: string[] = [];
-		vi.stubGlobal(
-			'WebSocket',
+		useFakeSocket(
 			class {
 				constructor(u: string) {
 					urls.push(u);
@@ -199,8 +199,7 @@ describe('the status websocket in link mode is validated before it is dialled', 
 
 	it('a public answer is dialled at wss://<link>/websocket (validated, not pinned)', async () => {
 		const urls: string[] = [];
-		vi.stubGlobal(
-			'WebSocket',
+		useFakeSocket(
 			class {
 				constructor(u: string) {
 					urls.push(u);

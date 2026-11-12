@@ -264,6 +264,20 @@ describe('actions', () => {
 		expect(patches.find((p) => p.slug === 'handle-left')).toBeUndefined();
 	});
 
+	it('stopPrinting on a part with a logged run puts it back between runs, not To print', () => {
+		let v = makeView();
+		v = log(v, { plateNumber: 13, partSlug: 'rims-1-4' });
+		expect(betweenRuns(v, 'rims-1-4')).toBe(true);
+		v = applyPatches(v, startPrinting(v, ['rims-1-4'], now));
+		expect(v.state['rims-1-4'].startedAt).not.toBeNull();
+		v = applyPatches(v, stopPrinting(v, ['rims-1-4']));
+		expect(v.state['rims-1-4'].status).toBe('Printing');
+		expect(v.state['rims-1-4'].startedAt).toBeNull();
+		expect(betweenRuns(v, 'rims-1-4')).toBe(true);
+		// Already between runs: nothing to take off.
+		expect(stopPrinting(v, ['rims-1-4'])).toEqual([]);
+	});
+
 	it('setPrintStart clamps to now', () => {
 		const v = makeView();
 		const future = new Date(now.getTime() + 3600000);

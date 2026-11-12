@@ -44,6 +44,7 @@ import {
 	type AdapterHandle,
 	type PrinterConfig
 } from '../types';
+import { openSocket, type SocketLike, type SocketPin } from '../ws-client';
 
 /** Read-only commands: status refresh and attributes refresh. Always sent with empty data. */
 export const SDCP_READ_COMMANDS: readonly number[] = [0, 1];
@@ -106,7 +107,7 @@ export async function enableSdcpCamera(
 	const id = cfg.secrets.mainboardId || (await probeMainboardId(cfg.host)) || '';
 	if (!id) return false;
 	return new Promise<boolean>((resolve) => {
-		let sock: WebSocket;
+		let sock: SocketLike;
 		let sent = false;
 		let finished = false;
 		const done = (ok: boolean) => {
@@ -122,7 +123,7 @@ export async function enableSdcpCamera(
 		};
 		const t = setTimeout(() => done(sent), timeout);
 		try {
-			sock = new WebSocket(`ws://${ipForUrl(target.ip)}:${cfg.port ?? 3030}/websocket`);
+			sock = openSocket(`ws://${ipForUrl(target.ip)}:${cfg.port ?? 3030}/websocket`);
 		} catch {
 			clearTimeout(t);
 			return resolve(false);
@@ -138,7 +139,10 @@ export async function enableSdcpCamera(
 		};
 		sock.onmessage = (ev) => {
 			// An oversized or non-text answer ends this short-lived socket at once.
-			if (typeof ev.data !== 'string' || ev.data.length > MAX_REMOTE_MESSAGE_BYTES)
+			if (
+				typeof ev.data !== 'string' ||
+				(ev.bytes ?? Buffer.byteLength(ev.data)) > MAX_REMOTE_MESSAGE_BYTES
+			)
 				return done(sent);
 			if (sent) done(true);
 		};
@@ -260,7 +264,7 @@ export function extractFilaments(...sources: (Obj | undefined)[]): PrinterFilame
 
 export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	const subj = new StatusSubject();
-	let ws: WebSocket | null = null;
+	let ws: SocketLike | null = null;
 	let attempt = 0;
 	let poll: ReturnType<typeof setInterval> | undefined;
 	let retry: ReturnType<typeof setTimeout> | undefined;
@@ -336,12 +340,14 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 	async function open() {
 		if (subj.closed) return;
 		let url: string;
+		let pin: SocketPin | undefined;
 		try {
 			// Resolved and validated on every (re)connect. LAN: the socket goes to the validated IP.
-			// Link: wss to the link host; the name is validated (all answers public) right before
-			// the dial, but the global WebSocket cannot pin the address (see architecture notes).
+			// Link: wss to the link host; every answer must be public and the socket is pinned to
+			// the validated address (SNI and certificate checks stay on for the link host).
 			if (link) {
-				await resolveAllowed(link.host, undefined, { allowShareLink: true });
+				const t = await resolveAllowed(link.host, undefined, { allowShareLink: true });
+				pin = { ip: t.ip, family: t.family, servername: link.host };
 				url = shareLinkSocketUrl(link.origin);
 			} else {
 				const t = await resolveAllowed(cfg.host);
@@ -361,7 +367,7 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 			if (subj.closed) return;
 		}
 		try {
-			ws = new WebSocket(url);
+			ws = openSocket(url, pin ? { pin } : undefined);
 		} catch (e) {
 			subj.emit({ state: 'offline', progress: null, message: safeError(e) });
 			retry = setTimeout(() => void open(), delay());
@@ -407,15 +413,18 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		sock.onmessage = (ev) => {
 			// Event-handler throws are uncaught exceptions: nothing remote-driven may escape.
 			try {
-				handle(ev.data);
+				handle(ev.data, ev.bytes);
 			} catch {
 				/* hostile or malformed frame: ignore it */
 			}
 		};
-		const handle = (data: unknown) => {
+		const handle = (data: unknown, bytes?: number) => {
 			// Checked before JSON.parse: nothing over the cap, or past the per-second budget, is parsed.
-			if (typeof data !== 'string' || data.length > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
-			if (!budget.take(data.length)) return tooBig(FLOODED_MESSAGE);
+			// (The socket already refuses a frame over the cap while it is received.)
+			if (typeof data !== 'string') return tooBig();
+			const size = bytes ?? Buffer.byteLength(data);
+			if (size > MAX_REMOTE_MESSAGE_BYTES) return tooBig();
+			if (!budget.take(size)) return tooBig(FLOODED_MESSAGE);
 			const msg: unknown = JSON.parse(data);
 			if (!isObj(msg)) return;
 			hostile.good();
@@ -450,9 +459,12 @@ export function connectSdcp(cfg: PrinterConfig): AdapterHandle {
 		sock.onerror = () => {
 			/* close follows */
 		};
-		sock.onclose = () => {
+		sock.onclose = (ev) => {
 			clearTimeout(connectTimer);
-			if (ws === sock) scheduleReconnect();
+			if (ws !== sock) return;
+			// 1009: the socket refused a message over the size cap while it arrived.
+			if (ev?.code === 1009) tooBig();
+			else scheduleReconnect();
 		};
 	}
 	void open();

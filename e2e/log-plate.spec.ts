@@ -137,3 +137,62 @@ test('A fractional slicer estimate prefills a value the field takes, and Save wo
 	};
 	expect(v.runs.map((x) => x.grams)).toEqual([162.52]);
 });
+
+test('Grams that are not a number keep the sheet open with the message; a decimal comma is accepted', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'badgrams');
+	const { button } = await firstPlateLog(page, buildId);
+	await button.click();
+	const sheet = page.getByRole('dialog');
+	const grams = sheet.getByLabel('Filament used (g)');
+	const save = sheet.getByRole('button', { name: 'Save', exact: true });
+	const msg = sheet.getByText('Enter the grams as a number, 0 or more');
+	for (const bad of ['abc', '-5']) {
+		await grams.fill(bad);
+		await expect(msg).toBeVisible();
+		await save.click();
+		await expect(sheet).toBeVisible();
+		await expect(grams).toBeFocused();
+	}
+	await grams.fill('162,5');
+	await expect(msg).toHaveCount(0);
+	await save.click();
+	await expect(sheet).toBeHidden();
+	const v = (await (await page.request.get(`/api/builds/${buildId}/view`)).json()) as {
+		runs: { grams: number | null }[];
+	};
+	expect(v.runs.map((x) => x.grams)).toEqual([162.5]);
+});
+
+test('A one-part-per-run plate taken off the printer after run 1 reads Partly printed, not To print', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'rimstop');
+	const headers = { origin: new URL(page.url()).origin };
+	const post = (path: string, data: unknown) =>
+		page.request.post(`/api/builds/${buildId}/${path}`, { data, headers });
+	expect(
+		(
+			await post('runs', {
+				plateNumber: 13,
+				partSlug: 'rims-1-4',
+				date: '2026-11-03',
+				result: 'Success'
+			})
+		).ok()
+	).toBe(true);
+	expect((await post('printing', { action: 'start', slugs: ['rims-1-4'] })).ok()).toBe(true);
+	expect((await post('printing', { action: 'stop', slugs: ['rims-1-4'] })).ok()).toBe(true);
+	const v = (await (await page.request.get(`/api/builds/${buildId}/view`)).json()) as {
+		state: Record<string, { status: string; startedAt: string | null }>;
+	};
+	expect(v.state['rims-1-4']).toMatchObject({ status: 'Printing', startedAt: null });
+
+	await keepPrintedVisible(page, buildId);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await page.getByLabel('Group by').selectOption('plate');
+	await expect(
+		page.locator('.group-head', { hasText: 'Plate 13' }).getByText('Partly printed')
+	).toBeVisible();
+});

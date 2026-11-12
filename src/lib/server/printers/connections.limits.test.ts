@@ -1,7 +1,7 @@
 /**
  * r49 security fixes: socket flood budget, handshake timeout, silent-socket close, instance-wide
  * and manual printer caps, the test-route rate limit and uniform hosted failures, and the camera
- * URL cap. Nothing here opens a real socket: the global WebSocket is replaced by an in-memory fake
+ * URL cap. Nothing here opens a real socket: the socket seam (`setSocketFactory`) gets an in-memory fake
  * BEFORE any adapter is created, DNS is a stub, and HTTP goes through an injected fetch.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,20 +23,21 @@ import {
 } from './types';
 import { resetWriteRate } from '../write-rate';
 import type { PrinterStatus } from '#lib/printers/status.ts';
+import { resetFakeSocket, useFakeSocket } from './ws-test';
 
 const HOST = 'shared-testtoken12345678.octoeverywhere.com';
 const LINK = `https://${HOST}`;
 
-/** In-memory stand-in for the global WebSocket: never touches the network. */
+/** In-memory stand-in for the `ws` socket (injected through the socket seam): never touches the network. */
 class FakeWs {
 	static all: FakeWs[] = [];
 	readyState = 0;
 	closed = false;
 	sent: string[] = [];
 	onopen: (() => void) | null = null;
-	onclose: (() => void) | null = null;
+	onclose: ((e: { code?: number }) => void) | null = null;
 	onerror: (() => void) | null = null;
-	onmessage: ((e: { data: unknown }) => void) | null = null;
+	onmessage: ((e: { data: unknown; bytes?: number }) => void) | null = null;
 	constructor(public url: string) {
 		FakeWs.all.push(this);
 	}
@@ -52,7 +53,11 @@ class FakeWs {
 		this.onopen?.();
 	}
 	deliver(data: unknown) {
-		this.onmessage?.({ data });
+		// Like the real client: the size is the byte length on the wire.
+		this.onmessage?.({
+			data,
+			bytes: typeof data === 'string' ? Buffer.byteLength(data) : undefined
+		});
 	}
 }
 
@@ -64,12 +69,13 @@ const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 beforeEach(() => {
 	FakeWs.all = [];
 	vi.useFakeTimers();
-	vi.stubGlobal('WebSocket', FakeWs);
+	useFakeSocket(FakeWs);
 	setResolver(async () => ['93.184.216.34']);
 });
 afterEach(() => {
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
+	resetFakeSocket();
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 	setResolver(null);
@@ -90,6 +96,38 @@ describe('MessageBudget', () => {
 		now += 1000;
 		expect(b.take(60)).toBe(true);
 		expect(b.take(60)).toBe(false); // bytes over 100 in the window
+	});
+});
+
+describe('link sockets are pinned to the validated address', () => {
+	it.each(['moonraker', 'elegoo-sdcp'] as const)(
+		'%s: the dial gets the resolved public address and the link host as server name',
+		async (kind) => {
+			const pins: Parameters<typeof useFakeSocket>[1] = [];
+			useFakeSocket(FakeWs, pins);
+			const h = adapters[kind](cfg(kind));
+			watch(h);
+			await flush();
+			expect(pins).toEqual([{ ip: '93.184.216.34', family: 4, servername: HOST }]);
+			h.close();
+		}
+	);
+	it('a LAN socket is not pinned (its URL already carries the validated address)', async () => {
+		const pins: Parameters<typeof useFakeSocket>[1] = [];
+		useFakeSocket(FakeWs, pins);
+		setResolver(async () => ['192.168.1.20']);
+		const h = adapters.moonraker({
+			id: 'p',
+			kind: 'moonraker',
+			host: 'printer.local',
+			port: null,
+			secrets: {}
+		});
+		watch(h);
+		await flush();
+		expect(FakeWs.all[0].url).toBe('ws://192.168.1.20:7125/websocket');
+		expect(pins).toEqual([undefined]);
+		h.close();
 	});
 });
 
@@ -135,6 +173,38 @@ describe('flooding peers (Klipper and Elegoo sockets)', () => {
 		ws2.deliver(chunk); // 2.7 MB in one second
 		expect(ws2.closed).toBe(true);
 		expect(seen.at(-1)).toMatchObject({ message: FLOODED_MESSAGE });
+		h.close();
+	});
+
+	it('the budget counts bytes, not characters', async () => {
+		const h = adapters.moonraker(cfg('moonraker'));
+		const seen = watch(h);
+		await flush();
+		const ws = FakeWs.all[0];
+		ws.open();
+		// 400k two-byte characters = 800 KB per message (under the 1 MiB cap, 400k "characters").
+		const chunk = JSON.stringify({ a: '\u00e9'.repeat(400_000) });
+		ws.deliver(chunk);
+		ws.deliver(chunk);
+		expect(ws.closed).toBe(false); // 1.6 MB
+		ws.deliver(chunk); // 2.4 MB > 2 MiB, though only 1.2M characters
+		expect(ws.closed).toBe(true);
+		expect(seen.at(-1)).toMatchObject({ message: FLOODED_MESSAGE });
+		h.close();
+	});
+
+	it('a close with code 1009 (the socket refused a frame over the cap) is the oversize state with a long backoff', async () => {
+		const h = adapters.moonraker(cfg('moonraker'));
+		const seen = watch(h);
+		await flush();
+		const ws = FakeWs.all[0];
+		ws.open();
+		ws.onclose?.({ code: 1009 });
+		expect(seen.at(-1)).toMatchObject({ state: 'error', message: OVERSIZED_MESSAGE });
+		await tick(59_000);
+		expect(FakeWs.all).toHaveLength(1);
+		await tick(2000);
+		expect(FakeWs.all).toHaveLength(2);
 		h.close();
 	});
 

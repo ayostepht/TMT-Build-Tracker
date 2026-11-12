@@ -111,3 +111,13 @@ export function progressGrams(
 	const g = Math.round((total * Math.min(100, progress)) / 100);
 	return g > 0 ? g : null;
 }
+
+/**
+ * Grams typed in a log field. '' is "no grams" (null); a number 0 or more (decimal comma accepted)
+ * is that number; anything else is `NaN`, which the sheet shows as an inline message.
+ */
+export function parseGrams(text: string): number | null {
+	const t = text.trim().replace(',', '.');
+	if (t === '') return null;
+	return /^(\d+\.?\d*|\.\d+)$/.test(t) ? Number(t) : NaN;
+}

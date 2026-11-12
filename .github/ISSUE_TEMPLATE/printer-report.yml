@@ -1,0 +1,83 @@
+name: Printer connection report
+description: Tell us how a printer connection worked (or did not) for you.
+title: 'Printer report: '
+labels: ['printer-report']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for trying a printer connection. Reports on Klipper, OctoPrint and Bambu Lab connections (marked Experimental in the app) are especially useful, and a report that says "it all worked" helps as much as a problem.
+
+        **Never paste an OctoEverywhere link, API key, access code or serial number.** Mask IP addresses if you prefer.
+  - type: input
+    id: printer
+    attributes:
+      label: Printer make and model
+      placeholder: Voron 2.4, Prusa MK4 with OctoPrint, Bambu Lab P1S
+    validations:
+      required: true
+  - type: input
+    id: printer-software
+    attributes:
+      label: Firmware or software version
+      description: Klipper and Moonraker versions, OctoPrint version, or Bambu firmware version.
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection option used
+      description: The option you chose under Add a printer on the Integrations page.
+      options:
+        - Elegoo on your network
+        - OctoEverywhere link (Elegoo)
+        - OctoEverywhere link (Klipper)
+        - OctoEverywhere link (OctoPrint)
+        - Klipper (Moonraker)
+        - OctoPrint
+        - Bambu Lab (LAN mode)
+        - Not connected
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where the app runs
+      options:
+        - Docker on Linux
+        - Unraid
+        - Docker on Mac or Windows
+        - A hosted site
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: On the About page, or the version in /api/health.
+    validations:
+      required: true
+  - type: checkboxes
+    id: worked
+    attributes:
+      label: What worked
+      description: Tick everything that worked.
+      options:
+        - label: It connects
+        - label: Live status
+        - label: Progress and time left
+        - label: Camera
+        - label: A print linked to a plate
+        - label: Automatic logging
+  - type: textarea
+    id: problems
+    attributes:
+      label: What did not work, and what you saw
+      description: What you expected, what happened, and any message on screen.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant container log lines
+      description: Lines from `docker logs` that start with `[tmt]`. Remove anything private first.
+      render: text

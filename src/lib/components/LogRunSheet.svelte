@@ -21,6 +21,7 @@
 		toLocalInput,
 		today
 	} from '#lib/domain/index.ts';
+	import { parseGrams } from '#lib/domain/logrun.ts';
 	import { deleteRun, logRun, undoRun, updateRun } from '#lib/client/api.ts';
 	import { focusIn } from '#lib/client/focus.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
@@ -176,7 +177,8 @@
 
 	const durSeconds = $derived(dur.trim() === '' ? null : parseDur(dur));
 	const durInvalid = $derived(dur.trim() !== '' && durSeconds == null);
-	const gramsInvalid = $derived(gramsShown !== '' && !(Number(gramsShown) >= 0));
+	const gramsParsed = $derived(parseGrams(gramsShown));
+	const gramsInvalid = $derived(gramsParsed !== null && Number.isNaN(gramsParsed));
 
 	function buildInput(
 		res: RunResult | null
@@ -188,7 +190,7 @@
 			partSlugs: subset,
 			date: editRun ? editDate : toLocalInput(finDate).slice(0, 10) || today(),
 			result: res,
-			grams: gramsShown === '' ? null : Number(gramsShown),
+			grams: gramsParsed,
 			hours: hoursFromSeconds(durSeconds),
 			printer: printer || null,
 			note: note.trim()
@@ -211,7 +213,7 @@
 			...editRun,
 			result,
 			date: editDate || editRun.date,
-			grams: gramsShown === '' ? null : Number(gramsShown),
+			grams: gramsParsed,
 			hours: hoursFromSeconds(durSeconds),
 			printer: printer || null,
 			note: note.trim()
@@ -243,7 +245,7 @@
 				: 'Saving changes the log only; part statuses stay as they are.'
 			: runLine + runOutcomeSummary(ctx.view, buildInput(result))
 	);
-	const canSave = $derived(!!result && !durInvalid && !gramsInvalid && !busy);
+	const canSave = $derived(!!result && !durInvalid && !busy);
 
 	function recalc() {
 		if (!durEdited) dur = durText(startedAt ? elapsedSeconds(startedAt, finDate) : planned);
@@ -349,6 +351,10 @@
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
 		if (!canSave || !result) return;
+		if (gramsInvalid) {
+			document.getElementById(`${uid}-g`)?.focus();
+			return;
+		}
 		busy = true;
 		error = null;
 		if (editRun) {
@@ -489,10 +495,9 @@
 					>Filament used (g)
 					<input
 						id="{uid}-g"
-						type="number"
-						min="0"
-						step="any"
+						type="text"
 						inputmode="decimal"
+						autocomplete="off"
 						placeholder={result === 'Failed'
 							? 'optional'
 							: bomEstimate > 0

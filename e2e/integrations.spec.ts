@@ -73,7 +73,7 @@ test('the chooser renders every option from the options endpoint with its two la
 	);
 	await expect(chooser.getByTestId('issues-link')).toHaveAttribute(
 		'href',
-		/^https:\/\/github\.com\/.+\/issues$/
+		/^https:\/\/github\.com\/.+\/issues\/new\?template=printer-report\.yml$/
 	);
 	// Short descriptions.
 	await expect(page.getByTestId('option-elegoo-lan')).toContainText('Live status and camera');
@@ -202,7 +202,7 @@ test('choosing an option shows only its fields and its setup steps', async ({ pa
 	await expect(page.getByTestId('pf-experimental')).toContainText('Experimental');
 	await expect(page.getByTestId('pf-experimental').getByRole('link')).toHaveAttribute(
 		'href',
-		/\/issues$/
+		/\/issues\/new\?template=printer-report\.yml$/
 	);
 	await expect(page.getByTestId('pf-apiKey')).not.toHaveAttribute('required', '');
 	await steps(/#klipper-moonraker-through-an-octoeverywhere-shared-link$/);

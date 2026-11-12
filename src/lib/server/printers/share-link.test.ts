@@ -15,6 +15,7 @@ import { organization, printers, user } from '../db/schema';
 import { configFromInput, createPrinter, toConfig, toPublic, updatePrinter } from './store';
 import type { PrinterConfig } from './types';
 import { checkCameraUrl } from '#lib/printers/camera-url.ts';
+import { resetFakeSocket, useFakeSocket } from './ws-test';
 
 // A made-up token: never a real link.
 const HOST = 'shared-testtoken12345678.octoeverywhere.com';
@@ -26,6 +27,7 @@ beforeEach(() => setResolver(async () => ['93.184.216.34']));
 afterEach(async () => {
 	setResolver(null);
 	vi.unstubAllGlobals();
+	resetFakeSocket();
 	while (cleanup.length) await cleanup.pop()!();
 });
 async function until<T>(fn: () => T | undefined | false, ms = 5000): Promise<T> {
@@ -48,7 +50,7 @@ function stubSocket(mockPort: number) {
 			super(`ws://127.0.0.1:${mockPort}/websocket`);
 		}
 	}
-	vi.stubGlobal('WebSocket', Redirect);
+	useFakeSocket(Redirect);
 	return urls;
 }
 
@@ -102,8 +104,7 @@ describe('elegoo-sdcp through an OctoEverywhere link', () => {
 
 	it('ignores a link that is not the pinned shape and falls back to the address', async () => {
 		const urls: string[] = [];
-		vi.stubGlobal(
-			'WebSocket',
+		useFakeSocket(
 			class {
 				constructor(u: string) {
 					urls.push(u);
@@ -273,8 +274,7 @@ describe('credential hygiene (review findings)', () => {
 
 	it('L1: the placeholder host without a usable link is never dialled', async () => {
 		const dialled: string[] = [];
-		vi.stubGlobal(
-			'WebSocket',
+		useFakeSocket(
 			class {
 				constructor(u: string) {
 					dialled.push(u);
@@ -363,7 +363,7 @@ function fakeSockets() {
 			this.onclose?.();
 		}
 	}
-	vi.stubGlobal('WebSocket', FakeWs);
+	useFakeSocket(FakeWs);
 	return socks;
 }
 const STATUS = JSON.stringify({ Status: { CurrentStatus: [0], PrintInfo: { Status: 0 } } });

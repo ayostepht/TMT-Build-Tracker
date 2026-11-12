@@ -66,6 +66,15 @@ export function setStatus(
 	return [patch];
 }
 
+function hasLoggedSuccess(view: BuildView, slug: string): boolean {
+	return view.runs.some(
+		(r) =>
+			r.plateNumber != null &&
+			r.result === 'Success' &&
+			runTargets(view, { ...r, plateNumber: r.plateNumber }).includes(slug)
+	);
+}
+
 /**
  * A part of a multi-run plate that is marked Printing only because a run was logged and more are
  * needed: a successful run covers it, and it has no start time (logging a run clears it). Nothing
@@ -98,6 +107,14 @@ export function stopPrinting(view: BuildView, slugs: string[]): PartPatch[] {
 	for (const slug of slugs) {
 		const st = view.state[slug];
 		if (st && st.status === 'Printing') {
+			// A logged successful run covers the part: taking the next run off the printer puts it
+			// back between runs (still Printing, no start time), not back to To print.
+			if (!st.printedOn && hasLoggedSuccess(view, slug)) {
+				if (st.startedAt || st.runEstSeconds != null) {
+					out.push({ slug, status: 'Printing', startedAt: null, runEstSeconds: null });
+				}
+				continue;
+			}
 			out.push({
 				slug,
 				status: st.printedOn ? 'Printed' : 'To print',

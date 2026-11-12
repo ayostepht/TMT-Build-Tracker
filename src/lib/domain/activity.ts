@@ -294,6 +294,7 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			return str(p.designName)
 				? `${who} applied the color design "${str(p.designName)}"`
 				: `${who} applied a color design`;
+		// Historical kind: no code writes it any more, but old builds keep these rows and they must still read as a sentence.
 		case 'build.import': {
 			const bits = [
 				num(p.parts) !== null ? `${fmt(num(p.parts) as number)} parts` : null,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	elapsedSeconds,
 	hoursFromSeconds,
+	parseGrams,
 	partRuns,
 	progressGrams,
 	runOutcomeSummary,
@@ -113,5 +114,16 @@ describe('progressGrams', () => {
 		expect(progressGrams(41, null)).toBeNull();
 		expect(progressGrams(41, 0)).toBeNull();
 		expect(progressGrams(10, 2)).toBeNull(); // rounds to 0
+	});
+});
+
+describe('parseGrams', () => {
+	it('empty is null, numbers and decimal commas parse, anything else is NaN', () => {
+		expect(parseGrams('')).toBeNull();
+		expect(parseGrams('  ')).toBeNull();
+		expect(parseGrams('162.5')).toBe(162.5);
+		expect(parseGrams('162,5')).toBe(162.5);
+		expect(parseGrams('0')).toBe(0);
+		for (const bad of ['abc', '-1', '1e3', '1.2.3', '12 g']) expect(parseGrams(bad)).toBeNaN();
 	});
 });

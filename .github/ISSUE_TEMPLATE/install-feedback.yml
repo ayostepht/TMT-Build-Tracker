@@ -1,0 +1,28 @@
+name: Install or docs feedback
+description: A guide was unclear, or you got stuck installing.
+title: 'Docs: '
+labels: ['documentation']
+body:
+  - type: input
+    id: guide
+    attributes:
+      label: Which guide
+      placeholder: README quick start, Unraid guide, Reverse proxy
+    validations:
+      required: true
+  - type: textarea
+    id: stuck
+    attributes:
+      label: Where you got stuck
+      description: The step, and what you saw. Remove secrets from any log lines.
+    validations:
+      required: true
+  - type: textarea
+    id: help
+    attributes:
+      label: What would have helped
+  - type: input
+    id: setup
+    attributes:
+      label: What you installed on
+      placeholder: Docker on Ubuntu, Unraid 7, Synology

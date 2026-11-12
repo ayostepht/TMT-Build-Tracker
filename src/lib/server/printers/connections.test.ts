@@ -21,6 +21,7 @@ import { configFromInput, createPrinter, toPublic, updatePrinter } from './store
 import { getSupervisor, startSupervisor, Supervisor, testConnection } from './supervisor';
 import { linkBackoff, type PrinterConfig } from './types';
 import { discoverSdcp } from './discovery';
+import { resetFakeSocket, useFakeSocket } from './ws-test';
 
 const HOST = 'shared-testtoken12345678.octoeverywhere.com';
 const LINK = `https://${HOST}`;
@@ -32,6 +33,7 @@ beforeEach(() => setResolver(async () => ['93.184.216.34']));
 afterEach(async () => {
 	setResolver(null);
 	vi.unstubAllGlobals();
+	resetFakeSocket();
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 	vi.useRealTimers();
@@ -174,7 +176,7 @@ describe('Klipper (Moonraker) through an OctoEverywhere link', () => {
 				super(`ws://127.0.0.1:${wsPort}/websocket`);
 			}
 		}
-		vi.stubGlobal('WebSocket', Redirect);
+		useFakeSocket(Redirect);
 		return urls;
 	}
 
@@ -226,8 +228,7 @@ describe('Klipper (Moonraker) through an OctoEverywhere link', () => {
 	it('a relay that accepts the upgrade and hangs up is not re-dialled faster than linkBackoff', async () => {
 		vi.useFakeTimers();
 		let dials = 0;
-		vi.stubGlobal(
-			'WebSocket',
+		useFakeSocket(
 			class {
 				readyState = 0;
 				onopen: (() => void) | null = null;

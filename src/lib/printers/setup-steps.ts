@@ -115,8 +115,9 @@ export const SETUP_TEXT: Record<ConnectionKey, SetupText> = {
 /** The OctoEverywhere row (three printer types behind one row). */
 export const LINK_GROUP_DESCRIPTION = 'For Elegoo, Klipper or OctoPrint, from anywhere';
 
-/** The project's issue tracker: where makers report how an experimental option went. */
-export const ISSUES_URL = 'https://github.com/ayostepht/TMT-Build-Tracker/issues';
+/** The printer connection report form: where makers report how an experimental option went. */
+export const ISSUES_URL =
+	'https://github.com/ayostepht/TMT-Build-Tracker/issues/new?template=printer-report.yml';
 
 export const SPOOLMAN_TEXT = {
 	description:

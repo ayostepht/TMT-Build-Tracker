@@ -67,6 +67,7 @@ This is what the first public release, 1.0.0, will contain. The app is pre-relea
 
 ### Security
 
+- OctoEverywhere link connections are pinned: the server dials the exact address it validated, with the certificate checked for the link name. Every printer WebSocket refuses messages over 1 MiB, binary messages and compressed frames, and never follows redirects; a connection that breaks these rules is closed and retried slowly.
 - Security headers and a content security policy, request size caps, sign-in rate limits, and permission checks on the server for every change.
 - Printer and Spoolman addresses must be on private networks (the one exception is an OctoEverywhere shared link); redirects are never followed. Printer access codes, API keys and shared links are stored encrypted and never sent back to the browser or written to logs.
 - Streaming uploads with zip-bomb protection, and per-user write rate limits and storage quotas in public mode.

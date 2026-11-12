@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { jobAction } from '#lib/client/api.ts';
 	import { plateRunGrams, progressGrams } from '#lib/domain/index.ts';
+	import { parseGrams } from '#lib/domain/logrun.ts';
 	import type { PrinterJobView } from '#lib/printers/status.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 
@@ -45,16 +46,24 @@
 		}
 		busy = false;
 	}
-	const log = () =>
-		run(async () => {
+	const gramsParsed = $derived(parseGrams(String(grams)));
+	const gramsInvalid = $derived(gramsParsed !== null && Number.isNaN(gramsParsed));
+	let gramsEl: HTMLInputElement | undefined = $state();
+	const log = () => {
+		if (gramsInvalid) {
+			gramsEl?.focus();
+			return;
+		}
+		return run(async () => {
 			const r = await jobAction(job.id, {
 				action: 'confirm',
 				result: result as 'Success' | 'Failed' | 'Partial',
-				grams: grams === '' ? null : Number(grams),
+				grams: gramsParsed,
 				hours: hours === '' ? null : Number(hours)
 			});
 			if (r.spoolmanWarning) ctx.error = r.spoolmanWarning;
 		});
+	};
 </script>
 
 <div class="jobbox confirm" data-testid="confirm-print-log">
@@ -78,14 +87,18 @@
 			<label class="field"
 				>Grams
 				<input
-					type="number"
-					min="0"
-					step="any"
+					type="text"
 					inputmode="decimal"
+					autocomplete="off"
+					aria-invalid={gramsInvalid}
+					bind:this={gramsEl}
 					bind:value={grams}
 					placeholder={job.status === 'done' ? 'g' : 'optional'}
 					data-testid="confirm-grams"
 				/>
+				{#if gramsInvalid}<small class="err" role="alert"
+						>Enter the grams as a number, 0 or more (for example 162.5).</small
+					>{/if}
 				{#if job.status !== 'done' && init.grams !== ''}<small class="hint"
 						>Estimated from {Math.round(job.progress ?? 0)}% progress; edit if different.</small
 					>{/if}

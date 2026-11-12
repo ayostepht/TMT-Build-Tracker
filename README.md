@@ -6,23 +6,29 @@ A self-hostable web app for makers 3D-printing the MakeGood 3D TMT (toddler mobi
 
 ## Screenshots
 
-![The color designer: a 3D toddler chair in red, white and yellow, next to a list of color slots, each with its filament and the weight it needs](docs/images/screenshot-color-designer.png)
+![The color designer: a 3D toddler chair in navy and sky blue next to a list of color slots, each with its filament, part count and the weight it needs against your stock](docs/images/screenshot-color-designer.png)
 
 Pick the filament for each color slot (primary, accent and so on) and see the chair in those colors. Each slot shows how much filament it needs and whether your stock covers it.
 
-![The plate arranger: a top view of one print plate for a 256 by 256 mm bed, with red and white parts laid out flat and numbered by group](docs/images/screenshot-plate-arranger.png)
+![The plate arranger: a top view of one print plate for a 256 by 256 mm bed with two numbered parts laid out flat, and the share of the bed used](docs/images/screenshot-plate-arranger.png)
 
-The app lays the parts out flat on the plates for your printer's bed and shows how much of the bed is used. You can export the plate as a 3MF for your slicer or start printing it.
+The app lays the parts out flat on the plates for your printer's bed and shows how much of the bed is used. You can export a plate as a 3MF for your slicer.
 
-<p align="center">
-  <img src="docs/images/screenshot-phone-now-card.png" alt="A phone screen showing the plate currently printing, its filament, an elapsed-time and time-left line, and a Printed button" width="300">
-</p>
-
-On your phone at the printer: the plate that is printing, how long it has run and when it should finish. When the plate is done, tap the plate's status badge and choose Printed to log it and mark its parts as printed, or flag a failure so they are queued for a reprint.
-
-![A printers page with one printer card showing a Printing badge, a progress bar at 42 percent, layer 168 of 400, time left and temperatures](docs/images/screenshot-printer-card.png)
+![The Integrations page with Add a printer open: a short list of printer types on your network, through OctoEverywhere, or not connected, with an Experimental label on some, above the printer already added](docs/images/screenshot-integrations.png)
 
 Optional: add a printer on the Integrations page (Elegoo, Klipper with Moonraker, OctoPrint or Bambu Lab in LAN mode on your network, or Elegoo, Klipper or OctoPrint through an OctoEverywhere shared link, which also works on a hosted site; OctoEverywhere is a separate remote-access service, not part of OctoPrint) to see its status, progress and temperatures next to each plate, or add one that is not connected to log prints by hand. The app only reads from printers; it never starts, stops, pauses or moves them.
+
+<p align="center">
+  <img src="docs/images/screenshot-where-printing.png" alt="A phone screen with the Where is it printing? dialog open over the plate list, offering the connected printer and Not on a connected printer, with a Mark as printing button" width="300">
+</p>
+
+When you start a plate, mark it Printing and say where it is printing. You start the print at the printer itself.
+
+<p align="center">
+  <img src="docs/images/screenshot-phone-print.png" alt="A phone screen showing the plate that is printing, with its filament, the printer's progress at 42 percent, layer 168 of 400 and the time left" width="300">
+</p>
+
+On your phone at the printer: the plate that is printing, how far along it is and when it should finish. When the plate is done, tap its status badge and choose Printed to mark its parts as printed, or flag a failure so they are queued for a reprint.
 
 ## MakeGood files and credit
 
@@ -102,6 +108,16 @@ While the repository is private, the container package is private too and pullin
 | [Site admin: model and print geometry](docs/guides/site-admin.md) | Replacing the bundled 3D model, importing print geometry from the command line                                                                                |
 | [Export for your slicer](docs/guides/slicer-export.md)            | The 3MF export for Elegoo Slicer, OrcaSlicer, Bambu Studio and others                                                                                         |
 | [Changelog](CHANGELOG.md)                                         | What changed in each release                                                                                                                                  |
+
+## Feedback and beta testing
+
+This is a pre-release (0.9): your data and its formats are stable, but details may still change before 1.0. The most useful feedback right now:
+
+- Installing from the guide on a machine that is not the maintainer's, and telling us where the guide let you down.
+- Klipper (Moonraker), OctoPrint and Bambu Lab connections, which are marked Experimental in the app because they have not been run against real printers yet.
+- Using the app on phones other than an iPhone.
+
+To report, use one of the issue forms on [GitHub](https://github.com/ayostepht/TMT-Build-Tracker/issues/new/choose): a [printer connection report](https://github.com/ayostepht/TMT-Build-Tracker/issues/new?template=printer-report.yml) (also welcome when everything worked), a bug report, or install or docs feedback. Never paste an OctoEverywhere link, API key, access code or serial number. Security problems go through [SECURITY.md](SECURITY.md), not an issue.
 
 ## Development
 

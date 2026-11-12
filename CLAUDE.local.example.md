@@ -44,6 +44,4 @@ it instead of guessing.
 
 ## Other
 
-- Original prototype artifact: <PROTOTYPE_ARTIFACT_ID>; prototype DB snapshot: <path>
-  (personal data, never commit)
 - Scratch awaiting the maintainer's OK to delete: <paths>
