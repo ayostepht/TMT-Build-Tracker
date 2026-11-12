@@ -10,21 +10,25 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-1. **r46 is live** (cfe1c61, deployed 2026-11-12 from main 2185ff4): the migration squash.
-   The test copy's database was upgraded to the single baseline migration at startup (one
-   upgrade line, 7 tables rebuilt); journal 14 → 1, `templates.owner_org_id` now ON DELETE
-   CASCADE, schema identical to an empty-data install, row counts unchanged, foreign-key
-   and integrity checks clean. Rehearsal passed every check first (see CHANGELOG).
-   Rollback: `tmt-build-tracker:r45` + `tmt-backup-pre-r46.db`.
-2. **r45 is live** (b9ea636): password sign-in confirmed by the maintainer (2026-11-11).
-   They don't use Authentik yet: a real OIDC sign-in is a 1.0 checklist item (the r45
-   token handling is only unit-tested; maintainer will test before `v1.0.0`).
-   **r47 (UI, in progress on the Mac)** from the maintainer's r45 review: landing with the
-   Builds list first and no pill row; one clear start button when a printer is connected;
-   Options as the designer's first tab; picker filters wrap on the phone; About in the
-   menu plus a footer (Help, About, Privacy, Terms); README screenshot captions; compact
-   spool rows on the phone Overview; Print tab buttons 44 px on touch.
-3. **Going public** (maintainer will flip it after r46): the pre-public scan of all 135
+1. **r47 ready to deploy: 0245ca8** (UI only, no migration; maintainer approved the deploy
+   and wrote the Unraid prompt on 2026-11-12). From the maintainer's r45 phone review:
+   landing lists Builds first as compact rows (pill row removed; build name in the Now
+   printing / Next up cards is a small link); with a printer connected the main start is
+   "Printing on <printer>" with a helper line and the plain start reads "Not on a
+   connected printer"; Options is the designer's first tab (opens first on a fresh build;
+   not shown in the setup wizard); picker filters wrap on the phone and clear the pinned
+   viewer; Overview filaments are compact rows in one card (`FilamentTiles.svelte`: spools
+   field behind the row on the phone, inline from 900 px); About in the account menu and a
+   footer (Help, About, Privacy, Terms); Print tab buttons 44 px on touch; Help text and
+   README captions updated. Gated on the Mac: check, lint, 1463 unit tests, build, full
+   e2e once (2 failures, both fixed) and the affected specs again (56 passed). Docker
+   build is left for Unraid. The maintainer has not seen it yet: wait for their review.
+2. **r46 is live** (cfe1c61, 2026-11-12): the migration squash; the test copy was upgraded
+   to the single baseline with every check clean (see CHANGELOG). The maintainer checked
+   their build afterwards. Rollback: `tmt-build-tracker:r45` + `tmt-backup-pre-r46.db`.
+   A real OIDC (Authentik) sign-in is a 1.0 checklist item: the r45 token handling is only
+   unit-tested and the maintainer will test it before `v1.0.0`.
+3. **Going public** (r46 is live, so this is next once the maintainer has reviewed r47): the pre-public scan of all 135
    commits found no credentials or personal data (pattern search; no gitleaks installed).
    The same day: make the `ghcr.io` package public, update the README's "Image access"
    caveat, set `CI_FULL=true`, require approval for outside collaborators' workflow runs,
@@ -33,7 +37,7 @@ done. Keep it under ~150 lines.
    minutes (GHCR has no image after 578eb84; the test copy is built locally).
 4. **Stage 5** leftovers (Next steps 1): Unraid Community Apps template, `v1.0.0`. README
    screenshots are done (`docs/images/`, throwaway r45 instance with invented data and the
-   SDCP mock; re-shoot with `data/readme-shots/run.sh` on Unraid).
+   SDCP mock; the re-shoot scripts were deleted with the scratch, so a re-shoot starts over).
 5. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
@@ -169,9 +173,8 @@ Route each to the agent named in brackets.
   Open Lows, none blocking: storage totals are re-measured from disk on every upload
   (`quota.ts` `workspaceUploadBytes`; a cache needs an invalidation call from photo, plate
   and kit writes); the converted GLB after a STEP conversion is only counted at the next
-  upload; migration 0007 created `templates.owner_org_id` without the ON DELETE CASCADE the
-  schema declares (worked around in `account.ts` `deleteOwnedTemplates`; fix with the
-  migration squash); chapter delete runs our cleanup just before Better Auth's own delete,
+  upload; `templates.owner_org_id` has its ON DELETE CASCADE since r46, so the
+  `deleteOwnedTemplates` workaround in `account.ts` can be simplified [app-shell]; chapter delete runs our cleanup just before Better Auth's own delete,
   not in one transaction; activity is pruned to the newest 5000 rows per build; write-rate and slot state is per process (single process
   only); an OctoEverywhere link's status socket (wss) has its address checked as public right
   before each dial but is not pinned (the camera path is pinned).

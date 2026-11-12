@@ -409,6 +409,20 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## App shell (`app-shell`)
 
+- r47: the signed-in layout has a footer (`app-footer`: Help, About, Privacy, Terms) and
+  About in the account menu. The workspace page lists Builds first, then `LandingBoard`
+  (Now printing, Next up). `FilamentTiles.svelte` renders the Overview filaments as one
+  card of compact rows; `matchMedia(min-width: 900px)` switches between phone rows (spools
+  field behind an `aria-expanded` row button) and a desktop grid (field inline).
+- Start buttons: with an enabled printer `StartOnPrinter` ("Printing on <printer>",
+  primary, helper line) comes first and `PlateControl`'s plain start reads "Not on a
+  connected printer" (its `aria-label` stays "Start printing plate N"). Nothing is sent
+  to the printer.
+- Designer tabs are Options, Colors, Palettes, Parts (`DesignWorkspace.svelte`): Options
+  only when the kit has option groups and not in the wizard embed; `firstTab()` opens
+  Options when all options are at their defaults and recent activity has no design,
+  filament or variant entry.
+
 - Build tabs (nested routes): Overview · Design · Print (tracking, logs, now printing) ·
   Files (bed/printer, plates, sliced file, export, kit status) · Finish · Settings.
   `/print#plates|#export|#settings` redirect client-side to `/files#…`. The older tab URLs
