@@ -159,3 +159,38 @@ npm run preview:demo -- --no-build   # serve the earlier build copy, skip the bu
   (sha256 and size checked) into `data/preview/kitpacks/`. Without `gh` access the preview still runs, prints
   that the 3D model and plate geometry are missing, and wants the `.kitpack` file copied into that folder
   (then restart). Nothing fetched can be committed (`data/`, `*.kitpack` are gitignored).
+
+## Deploying published images (from 0.9, public repo)
+
+Once the repository is public, the test copy runs the image CI published, not a local
+build: after a pull request is merged, wait for the `image` job on `main`, then deploy
+`ghcr.io/<owner>/tmt-build-tracker:sha-<short>` of that commit (or `edge`). Backup,
+rehearsal on a copy and the swap are unchanged (above); replace the local `docker build`
+and `docker tag` steps with `docker pull` of that tag and tag it `test` as before. Keep
+the previous image for rollback. A release (`vX.Y.Z`, the maintainer's call) is deployed
+the same way from its version tag. Local image builds remain for checking a Dockerfile
+change before it is merged.
+
+## Worktrees (parallel agents)
+
+Agents sharing one checkout have collided (builds over each other's output, a formatter
+run over a whole folder, `git stash`). When more than one agent will edit code at the same
+time, give each task its own worktree: one task = one branch = one worktree = one pull
+request.
+
+- Create it beside the repo: `git worktree add ../TMT-wt-<task> -b <branch> origin/main`.
+- Dependencies: a worktree has no `node_modules`. Install once per worktree with `npm ci`
+  before its agent starts (one install at a time across the machine), or reuse the main
+  checkout's when `package-lock.json` is identical (symlink `node_modules`; never when the
+  task changes dependencies).
+- E2E: each worktree has its own `node_modules/.e2e.lock`, so use one machine-wide lock
+  file for Playwright and builds while several worktrees are active (for example
+  `flock /tmp/tmt-e2e.lock`), and give each worktree its own port from 5173-5199 if the
+  Playwright config allows it; otherwise run e2e one worktree at a time under that lock.
+- The preview (`npm run preview:demo`) builds the checkout it is started from: start it
+  from the worktree under review.
+- Remove the worktree after its pull request is merged or closed:
+  `git worktree remove ../TMT-wt-<task>` (deleting a worktree with unmerged work needs the
+  maintainer's OK).
+- Status: agreed with the maintainer on 2026-11-12, to be trialled on one task before it
+  becomes the rule; record what did not work here.

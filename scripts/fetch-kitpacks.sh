@@ -3,7 +3,7 @@
 # each verified against the sha256 (and size) in the index. Order of sources per pack:
 #   1. the pack already in the build context's kitpacks/ directory (local builds)
 #   2. $GH_TOKEN_FILE (a build secret): the GitHub API asset endpoint of the release
-#      (needed while the repository is private)
+#      (only needed for a private fork)
 #   3. the plain URL: $KITPACK_URL (placeholders {slug} {version} {file}, or a base URL),
 #      default https://github.com/$KITPACK_REPO/releases/download/kitpack-<slug>-<version>/<file>
 # A pack that cannot be fetched fails the build unless KITPACK_OPTIONAL=1 (the app then

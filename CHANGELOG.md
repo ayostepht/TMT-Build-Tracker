@@ -6,7 +6,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
-This is what the first public release, 1.0.0, will contain. The app is pre-release (version 0.9.0) and has not been published yet.
+This is the 0.9 pre-release, published for public testing; 1.0.0 will follow. Data formats are stable, but details may still change before 1.0.0.
 
 ### Added
 

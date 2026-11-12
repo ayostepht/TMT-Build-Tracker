@@ -11,8 +11,9 @@ RUN npm run build && npm prune --omit=dev
 
 # Kit packs (MakeGood's converted files, CC0): fetched and sha256-verified against
 # kitpacks/index.json. A pack file in the build context's kitpacks/ is used as is (local
-# builds). In CI the repo is private, so the release asset is read through the GitHub API with
-# the build secret gh_token (`--secret id=gh_token,...`). If the download fails the build fails,
+# builds). In CI the release asset is read through the GitHub API with the build secret
+# gh_token (`--secret id=gh_token,...`; needed only for a private fork, the plain release URL works
+# on the public repository). If the download fails the build fails,
 # unless --build-arg KITPACK_OPTIONAL=1 (the app then tries again at first start).
 FROM node:22-bookworm-slim AS kitpack
 ARG KITPACK_URL=""

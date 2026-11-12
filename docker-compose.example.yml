@@ -1,5 +1,7 @@
 services:
   tmt-build-tracker:
+    # latest = the newest release; pin a version such as :0.9.0 to upgrade only when you choose.
+    # :edge is the current main branch (unreleased, can break: back up first).
     image: ghcr.io/ayostepht/tmt-build-tracker:latest
     container_name: tmt-build-tracker
     restart: unless-stopped
@@ -26,7 +28,7 @@ services:
       # OIDC_CLIENT_ID: ""
       # OIDC_CLIENT_SECRET: ""
       # OIDC_PROVIDER_NAME: Authentik
-      # TMT_MODE: selfhost        # or public (SSO-only Google/GitHub, no printers; needs https PUBLIC_URL, ADDRESS_HEADER, ADMIN_EMAILS)
+      # TMT_MODE: selfhost        # or public (SSO-only Google/GitHub; printers only through OctoEverywhere links or not connected; needs https PUBLIC_URL, ADDRESS_HEADER, ADMIN_EMAILS)
       # SIGNUP: open              # open | invite | closed. Use invite or closed if reachable from the internet or with OIDC
       # GOOGLE_CLIENT_ID: ""      # Public mode; each provider needs both variables of its pair
       # (redirect URIs: <PUBLIC_URL>/api/auth/callback/google and /github)

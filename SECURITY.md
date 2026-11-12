@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest release receives security fixes. Before reporting, check that the problem is still present in the latest release (or, until the first release, on the `main` branch).
+Only the latest release receives security fixes. Before reporting, check that the problem is still present in the latest release (or, for a pre-release, on the `main` branch).
 
 ## Reporting a vulnerability
 

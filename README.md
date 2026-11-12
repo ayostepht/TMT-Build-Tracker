@@ -2,7 +2,7 @@
 
 A self-hostable web app for makers 3D-printing the MakeGood 3D TMT (toddler mobility trainer) chair. Teams ("chapters") plan, print, assemble and hand off builds together: parts and print plates, filament colors, print logs, a 3D color designer, 3MF export for your slicer, and optional read-only printer status. It has accounts, chapters and roles, and it is made for makers who can run a Docker container, not for developers.
 
-> **Status:** pre-release. The public release (public repository and container package) is still to come. Until then see [Image access](#image-access).
+> **Status:** 0.9 pre-release, in public testing. Data formats are stable, but details may change before 1.0.0. The Klipper, OctoPrint and Bambu Lab printer connections have not been run against real printers yet. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` (the newest release). See [Feedback and beta testing](#feedback-and-beta-testing) for how to help.
 
 ## Screenshots
 
@@ -38,7 +38,7 @@ The git repository itself contains only data about the kit (part names, settings
 
 ## Quick start (about 5 minutes)
 
-You need an always-on machine with Docker (a NAS, a mini PC or a desktop; the image is built for x86-64 and arm64). On Unraid use the [Unraid guide](docs/guides/unraid.md) instead. The image is `ghcr.io/ayostepht/tmt-build-tracker`. Tags: `latest` (the main branch), `1.2.3` and `1.2` (release tags `v1.2.3`), and `sha-<short commit>`. Allow about 0.5 GB of disk for the image and about 150 MB for the data folder (the installed kit pack).
+You need an always-on machine with Docker (a NAS, a mini PC or a desktop; the image is published for x86-64 and arm64; only x86-64 has been run by the project, so arm64 reports are welcome). On Unraid use the [Unraid guide](docs/guides/unraid.md) instead. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` needs no login. Tags: `latest` is the newest release; `0.9.0` and `0.9` are specific releases (git tag `v0.9.0`); `edge` is the current `main` branch, for people who want to test unreleased changes and accept that it can break (back up first, and do not expect to go back from `edge` to an older release without restoring that backup if a migration ran); `sha-<short commit>` is one exact build. You can also build it from source with `docker build -t tmt-build-tracker .` (see [CONTRIBUTING.md](CONTRIBUTING.md)). Allow about 0.5 GB of disk for the image and about 150 MB for the data folder (the installed kit pack).
 
 ### 1. Prepare a data folder and a secret
 
@@ -88,10 +88,7 @@ Known gap: behind a reverse proxy the sign-in rate limit needs `ADDRESS_HEADER`,
 
 ### Image access
 
-While the repository is private, the container package is private too and pulling it fails with `unauthorized` or `denied`. Pick one:
-
-- **Make the package public** (once the project is released): on GitHub open your profile or organization, **Packages**, **tmt-build-tracker**, **Package settings**, **Danger Zone**, **Change visibility**, **Public**. Nothing else is needed on the server.
-- **Log in to ghcr.io on the server:** create a GitHub **classic** personal access token with only the `read:packages` scope (GitHub does not accept fine-grained tokens for container packages), then run `docker login ghcr.io -u <your GitHub user>` and paste the token at the password prompt. On Unraid the login is stored under `/root`, which lives in RAM, so **it is gone after a reboot**; repeat it before updating the container after a restart.
+The image is public and is pulled without logging in. If a pull fails with `unauthorized` or `denied`, the usual cause is an old or expired `docker login ghcr.io` on the machine: run `docker logout ghcr.io` and pull again. Check also that the tag exists (for example `latest` or `0.9.0`) and that the name is spelled in lower case.
 
 ## Guides
 
@@ -117,7 +114,7 @@ This is a pre-release (0.9): your data and its formats are stable, but details m
 - Klipper (Moonraker), OctoPrint and Bambu Lab connections, which are marked Experimental in the app because they have not been run against real printers yet.
 - Using the app on phones other than an iPhone.
 
-To report, use one of the issue forms on [GitHub](https://github.com/ayostepht/TMT-Build-Tracker/issues/new/choose): a [printer connection report](https://github.com/ayostepht/TMT-Build-Tracker/issues/new?template=printer-report.yml) (also welcome when everything worked), a bug report, or install or docs feedback. Never paste an OctoEverywhere link, API key, access code or serial number. Security problems go through [SECURITY.md](SECURITY.md), not an issue.
+To report, use one of the issue forms on [GitHub](https://github.com/ayostepht/TMT-Build-Tracker/issues/new/choose): a [printer connection report](https://github.com/ayostepht/TMT-Build-Tracker/issues/new?template=printer-report.yml) (also welcome when everything worked), a bug report, install or docs feedback, or a feature request. Never paste an OctoEverywhere link, API key, access code or serial number. Security problems go through [SECURITY.md](SECURITY.md), not an issue.
 
 ## Development
 
