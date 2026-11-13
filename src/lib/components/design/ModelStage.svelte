@@ -140,7 +140,7 @@
 	.reset {
 		position: absolute;
 		right: 10px;
-		bottom: 30px; /* above the credit line, so the credit never wraps over the chair at 360 px */
+		bottom: 46px; /* above the two credit lines, so the credit never runs over the chair at 360 px */
 		opacity: 0.9;
 	}
 	.reset.raised {

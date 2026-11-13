@@ -4,7 +4,11 @@ A kit pack carries the converted MakeGood 3D TMT files (3D model, hardware model
 placements, print geometry) so a fresh install has the standard kit without uploading anything.
 
 MakeGood's files are released as **Creative Commons Public Domain (CC0)**; the pack credits
-MakeGood (`CREDITS.md` and `license` in `manifest.json`). The maker guide PDF is not part of the
+MakeGood (`CREDITS.md` and `license` in `manifest.json`). **Licenses are mixed since 1.0.2**: the
+one-piece push handle (`push-handle-one-piece`) is an experimental community design by jeepxj,
+endorsed by MakeGood, under **CC BY-NC** (credit the designer, no commercial use). It is listed
+in `otherLicenses` of the manifest and in the "Exceptions" section of `CREDITS.md`; everything
+else stays CC0 by MakeGood. The maker guide PDF is not part of the
 pack. The pack is too big for git (about 30 MB), so it is a **release asset**
 (`kitpack-<template slug>-<version>`), baked into the Docker image, and also downloadable at runtime.
 
@@ -24,6 +28,32 @@ pack. The pack is too big for git (about 30 MB), so it is a **release asset**
 | `print/meshes/<name>.qmesh.br` | One print mesh per piece in the quantized format below                                                                                        |
 
 `license`: `{ name: 'CC0 1.0 (Creative Commons Public Domain)', holder: 'MakeGood', url?, note: 'Credit: 3D model and print files by MakeGood' }`.
+
+`otherLicenses` (optional, since 1.0.2): `[{ parts: [slug, ...], name, holder, url?, note }]`, parts under another
+license than `license`. It is additive: the `tmt-kitpack-1` reader of the 1.0.0 and 1.0.1 apps rebuilds the manifest
+field by field and ignores the key, so older apps still read the pack and `appMinVersion` stays `0.0.1` (an older app
+that installs it simply has no row for the new part and skips it). The maintainer keeps the notices in
+`kitpacks/licenses.json`; `build-kit-pack.mjs` reads it (`--licenses <file>` for another). Any new non-CC0
+part needs a notice there and a line wherever the app credits the kit.
+
+### One-piece push handle (since 1.0.2)
+
+`push-handle-one-piece` has no STEP file. Its sources are the print geometry (the designer's 3MF, plate pose
+kept: 160 mm tall, a 346.6 x 56.8 mm bar once turned flat about z) and a model node built from the same 3MF:
+
+- **Model node** (`kitpack/model-node.ts`, `build-kit-pack.mjs --model-node <slug>=<3mf>`): the object's own mesh in
+  the frame the designer exported it in. Bambu centres an imported object and stores the original position as
+  `source_offset`; adding it back gives the assembly frame (the handle's low end is at y 395 and its rear face at z -499.2,
+  exactly where the multi-part bottom ends), so the placement is the identity like the STEP parts. The viewer mesh is
+  simplified to about 12k triangles (0.2% of the size) with 35 degree crease normals; the print mesh keeps every triangle.
+  Adding the node re-encodes the GLB: existing nodes keep their names, triangles and positions (the vertex count shrinks
+  a little because quantised normals weld).
+- **Print settings** (`--project-settings <slug>=<3mf>`): a single-object project keeps walls, infill, supports and
+  brim in the project settings, so the geometry import finds no per-object overrides; this copies those keys
+  (0.3 mm layers, 5 walls, 5% crosshatch infill, 5/3 shells, tree supports, auto brim) into the part's stored settings.
+- The seed carries the placement (identity) and a print footprint, so plates can be planned before the pack
+  installs. In a one-piece build the viewer draws `push-grip` at the multi-part position (it has one placement),
+  i.e. above the handle: where the grip goes on the one-piece handle is not known yet.
 
 ### Source groups (since 1.0.1)
 
@@ -70,7 +100,7 @@ For each template with an index entry:
 2. Find the pack: `KITPACK_DIR/<file>` (default `/app/kitpacks` in the image, `./kitpacks` in dev), else download
    from `KITPACK_URL` (default `https://github.com/ayostepht/TMT-Build-Tracker/releases/download/kitpack-{slug}-{version}/{file}`;
    `{slug}`, `{version}`, `{file}` placeholders, or a base URL; `file://` works) unless `KITPACK_DOWNLOAD=off`.
-3. Install per item (a pack newer than the installed pack data, e.g. 1.0.1 over 1.0.0, replaces rows with `kitpack:<older>`):
+3. Install per item (a pack newer than the installed pack data, e.g. 1.0.2 over 1.0.1, replaces rows with `kitpack:<older>`; admin-imported rows stay):
    - **Model** (+ hardware GLB, placements): when there is none, or only older pack data. A model an admin imported is kept.
    - **Placements**: only together with a model install; rows with `updated_by` set are never changed.
    - **Print geometry**: per part, replacing the seed row or older pack data (`source_note = kitpack:<version>`).
@@ -94,6 +124,11 @@ node --max-old-space-size=4096 scripts/build-kit-pack.mjs --db data/kitpack-work
   --print h-profile.3mf --print bucket-seat.3mf --print harness.zip --print xpa-project.3mf \
   --pack-version 1.0.1 --out data/kitpack
 ```
+
+Pack 1.0.2 is the 1.0.1 install plus one community part, built from a scratch install of 1.0.1 ("only pack what an
+install already has"): migrate and seed, let the installer put 1.0.1 in, then
+`node scripts/build-kit-pack.mjs --db <scratch>/tmt.db --pack-version 1.0.2 --out <dir> --print <handle.3mf> --model-node push-handle-one-piece=<handle.3mf> --project-settings push-handle-one-piece=<handle.3mf> --origins-from <the 1.0.1 pack>`
+(`--origins-from` keeps each part's source file name in `geometry.json`, which an installed pack row no longer knows; `kitpacks/licenses.json` is picked up by default).
 
 It prints the size and sha256. Then: attach the file to a GitHub release tagged
 `kitpack-makegood-tmt-revb-<version>`, put `slug`, `version`, `file`, `sha256`, `size` into

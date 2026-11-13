@@ -9,7 +9,7 @@ RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
-# Kit packs (MakeGood's converted files, CC0): fetched and sha256-verified against
+# Kit packs (MakeGood's converted files, CC0, plus jeepxj's one-piece push handle, CC BY-NC): fetched and sha256-verified against
 # kitpacks/index.json. A pack file in the build context's kitpacks/ is used as is (local
 # builds). In CI the release asset is read through the GitHub API with the build secret
 # gh_token (`--secret id=gh_token,...`; needed only for a private fork, the plain release URL works

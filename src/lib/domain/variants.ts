@@ -33,13 +33,14 @@ export function inactiveSlugs(
 	return out;
 }
 
-/** part slug → the variant group/option it belongs to. */
+/** part slug → the variant group/option it belongs to (the first option that lists it, when several share a part). */
 export function variantOfPart(
 	groups: VariantGroup[]
 ): Map<string, { group: string; option: string }> {
 	const m = new Map<string, { group: string; option: string }>();
 	for (const g of groups)
-		for (const o of g.options) for (const s of o.parts) m.set(s, { group: g.key, option: o.key });
+		for (const o of g.options)
+			for (const s of o.parts) if (!m.has(s)) m.set(s, { group: g.key, option: o.key });
 	return m;
 }
 

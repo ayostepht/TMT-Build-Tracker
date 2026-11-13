@@ -35,7 +35,7 @@ export function startup(): void {
 		.then((n) => n && console.log(`[tmt] removed ${n} stale upload leftover(s) from imports`))
 		.catch(() => {});
 	kickQueue(db);
-	// MakeGood's kit (CC0) from the baked-in or downloaded kit pack; in the background, never blocks start.
+	// MakeGood's kit (CC0, one community part under CC BY-NC) from the baked-in or downloaded kit pack; in the background, never blocks start.
 	installKitPacks(db).catch((e) => console.error('[tmt] kit pack install error', e));
 	if (process.env.TMT_PRINTERS !== 'off') startSupervisor(db);
 	done = true;

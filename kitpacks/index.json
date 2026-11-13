@@ -3,10 +3,10 @@
 	"packs": [
 		{
 			"slug": "makegood-tmt-revb",
-			"version": "1.0.1",
-			"file": "makegood-tmt-revb-1.0.1.kitpack",
-			"sha256": "02142e8b6af76e84df49c8318b9a747db6f2885ea4d689478d7602962f839729",
-			"size": 31904374
+			"version": "1.0.2",
+			"file": "makegood-tmt-revb-1.0.2.kitpack",
+			"sha256": "3aaa44d6f7770bf64dae10dbcef666f4dffa475b2104d1a1d5171917f19010b1",
+			"size": 32070463
 		}
 	]
 }

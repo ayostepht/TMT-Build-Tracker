@@ -459,7 +459,18 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - `models/jobs.ts`: `stepConversionsPerUser` (queued or running); `convert-core.ts`
   refuses zip entries over 512 MB or 1 GB in total. `guide.ts`: 300 pages per template,
   quota by size difference.
-- `kitpacks/index.json` lists only pack 1.0.1 (1.0.0 dropped from the image, about 31 MiB);
+- `kitpacks/index.json` lists only pack 1.0.2 (1.0.1 and 1.0.0 dropped from the image, about 31 MiB);
+  1.0.2 = the 1.0.1 install plus `push-handle-one-piece`. Manifest has optional
+  `otherLicenses` (non-CC0 parts; strings capped, http(s) urls only), kept in
+  `kitpacks/licenses.json`. Parts without a STEP: `kitpack/model-node.ts` adds a GLB node
+  from a slicer 3MF in the designer's frame (centred mesh + `source_offset`), identity
+  placement; `build-kit-pack.mjs` flags `--model-node`, `--project-settings`,
+  `--origins-from` (keeps source file names when packing from pack rows), `--licenses`.
+  A variant part may sit in several options of one group (the grip); `variantOfPart` names
+  the first. A part may be on no plate of a built-in layout and lands under "Other"; the
+  H2D layout carries plate 22, dropped unless the one-piece option is chosen.
+  `kit-status.ts`: placed parts with a non-STEP `sourceFile` never count as missing 3D
+  geometry.
   new packs omit `orient` / `sil.poses`. `src/lib/server/dockerfile.test.ts` fails when a
   Dockerfile `COPY` names a file that is not in the repo.
 - Startup: migrate, seed, `failStaleModelJobs`, `sweepImportsDir` (`imports-sweep.ts`:

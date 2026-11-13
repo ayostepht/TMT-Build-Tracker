@@ -14,7 +14,7 @@ const packFile = process.env.TMT_KITPACK;
 
 describe.skipIf(!packFile || !existsSync(packFile))('the real kit pack', () => {
 	it(
-		'installs into a fresh database: model, 40/40 print geometry, paint, X/P/A parts fit 256 x 256',
+		'installs into a fresh database: model, 41/41 print geometry, paint, the one-piece push handle, X/P/A parts fit 256 x 256',
 		{ timeout: 600_000 },
 		async () => {
 			const bytes = readFileSync(packFile!);
@@ -91,10 +91,33 @@ describe.skipIf(!packFile || !existsSync(packFile))('the real kit pack', () => {
 			expect(status.installing).toBe(false);
 
 			// print geometry: every part, all from the pack
+			const fps0 = loadFootprints(db, tpl.id);
 			const rows = listPrintGeometry(db, tpl.id);
-			expect(rows.length).toBe(40);
-			expect(rows.filter((r) => r.source.startsWith('kitpack:') && r.hasMesh).length).toBe(40);
-			expect(status.print.withGeometry).toBe(40);
+			expect(rows.length).toBe(41);
+			expect(rows.filter((r) => r.source.startsWith('kitpack:') && r.hasMesh).length).toBe(41);
+			expect(status.print.withGeometry).toBe(41);
+
+			// the one-piece push handle (community part): model node, plate-pose geometry, painted supports, license
+			const one = fps0.get('push-handle-one-piece')!;
+			expect(one.pieces).toHaveLength(1);
+			expect(one.pieces[0].h).toBe(160); // plate pose kept, not the 99 mm object pose
+			expect(one.pieces[0].paint?.supports).toBeGreaterThan(1000);
+			expect(one.pieces[0].settings).toMatchObject({
+				wall_loops: '5',
+				sparse_infill_density: '5%'
+			});
+			expect(
+				db
+					.select()
+					.from(schema.templateModels)
+					.where(eq(schema.templateModels.templateId, tpl.id))
+					.get()!.slugs
+			).toContain('push-handle-one-piece');
+			expect(manifest.otherLicenses?.[0]).toMatchObject({
+				holder: 'jeepxj',
+				parts: ['push-handle-one-piece']
+			});
+			expect(manifest.license.holder).toBe('MakeGood');
 
 			// painted faces equal the import's (counted in the pack manifest at build time)
 			const fps = loadFootprints(db, tpl.id);

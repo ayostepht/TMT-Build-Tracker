@@ -15,6 +15,7 @@ import { findTemplate, importFiles, initDb, listPrintGeometry } from '../print-g
 import { openDb, type Db } from '../db';
 
 export { buildKitPack } from './build';
+export { addModelNodeFrom3mf, applyProjectSettings } from './model-node';
 export { installKitPacks } from './install';
 export { findTemplate, importFiles, initDb, listPrintGeometry, openDb };
 export type { Db };

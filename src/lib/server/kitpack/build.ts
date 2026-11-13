@@ -35,6 +35,7 @@ import {
 	encodeQMesh,
 	parseManifest,
 	sha256Hex,
+	type PackLicenseNotice,
 	type PackManifest,
 	type PackSource,
 	type SourceRole
@@ -76,6 +77,13 @@ export interface BuildOptions {
 	scale?: number;
 	/** MakerWorld page of the model, when known. */
 	licenseUrl?: string;
+	/** Parts that are not MakeGood's CC0 files (community designs): written to the manifest and CREDITS.md. */
+	otherLicenses?: PackLicenseNotice[];
+	/**
+	 * Provenance (`origin`) per slug of the pack an install was made from: rows installed from a pack only know
+	 * `kitpack:<version>`, so a pack built from such an install takes the original file name from the older pack.
+	 */
+	originsFrom?: Record<string, string>;
 	log?: (msg: string) => void;
 }
 
@@ -89,13 +97,31 @@ export interface BuildResult {
 }
 
 function creditsText(m: PackManifest): string {
+	const others = m.otherLicenses ?? [];
+	const exceptions = others.length
+		? `
+## Exceptions
+
+Not everything here is MakeGood's CC0 work. ${others.length === 1 ? 'This part has its own license' : 'These parts have their own licenses'}:
+
+${others
+	.map(
+		(n) => `### ${n.parts.join(', ')}
+
+By **${n.holder}**, released as **${n.name}**.${n.url ? `\n\nSource: ${n.url}` : ''}
+
+${n.note}
+`
+	)
+	.join('\n')}`
+		: '';
 	return `# Credits
 
 The 3D model and print files in this kit pack are by **${m.license.holder}** (MakeGood 3D TMT,
-toddler mobility trainer), released as **${m.license.name}**.${m.license.url ? `\n\nSource: ${m.license.url}` : ''}
+toddler mobility trainer), released as **${m.license.name}**${others.length ? ', except where noted below' : ''}.${m.license.url ? `\n\nSource: ${m.license.url}` : ''}
 
 ${m.license.note}
-
+${exceptions}
 The files were converted for TMT Build Tracker (STEP to GLB for the 3D view, slicer projects to
 compact print geometry); the design is unchanged. The maker guide (PDF) is not included: get it
 from MakeGood.
@@ -202,7 +228,9 @@ export function buildKitPack(db: Db, opt: BuildOptions): BuildResult {
 			return {
 				slug: r.slug,
 				/** Which MakeGood file this part came from (provenance only; the installer ignores it). */
-				origin: r.sourceNote.split(': ')[0],
+				origin: r.sourceNote.startsWith('kitpack:')
+					? (opt.originsFrom?.[r.slug] ?? r.sourceNote.split(': ')[0])
+					: r.sourceNote.split(': ')[0],
 				footprint: fp,
 				hull: r.hull,
 				height: r.height,
@@ -225,6 +253,7 @@ export function buildKitPack(db: Db, opt: BuildOptions): BuildResult {
 			...(opt.licenseUrl ? { url: opt.licenseUrl } : {}),
 			note: LICENSE_NOTE
 		},
+		...(opt.otherLicenses?.length ? { otherLicenses: opt.otherLicenses } : {}),
 		contents: {
 			parts: geomRows.length,
 			meshes,

@@ -89,5 +89,15 @@ ships the result as a kit pack, a release asset that the Docker image includes a
 start (see `docs/kit-pack.md`; `CREDITS.md` and the license in `manifest.json` are inside every
 pack). The design is unchanged, the data is only reformatted (print meshes are quantized to 0.01 mm).
 
+### One-piece push handle (jeepxj, CC BY-NC)
+
+One part of the kit pack is **not** by MakeGood: the experimental **Push Handle (one piece)** is by
+**jeepxj**, licensed **CC BY-NC** (Creative Commons Attribution-NonCommercial; the version is not
+stated by the source, see <https://creativecommons.org/licenses/by-nc/4.0/> for the current text).
+It is shared among MakeGood's official files and bundled with the maintainer's decision. Source:
+<https://makerworld.com/en/models/3409242-3d-toddler-mobility-trainer-one-piece-push-handle>.
+Credit: one-piece push handle by jeepxj. Because of the NonCommercial term, do not use that part
+commercially. Everything else in the kit pack remains MakeGood, CC0.
+
 The maker guide (PDF) is **not** bundled. The app refers to MakeGood's guide page numbers and links
 to their guide; get it from MakeGood.

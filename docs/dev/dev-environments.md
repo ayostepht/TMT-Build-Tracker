@@ -186,7 +186,10 @@ Dockerfile unchanged on a local helper base image:
    `/etc/ssl/certs/ca-certificates.crt`; switch `/etc/apt/sources.list.d/debian.sources` to
    `https://deb.debian.org`; `/etc/apt/apt.conf.d/99proxy` with `Acquire::https::Proxy` set to
    `$HTTPS_PROXY` (its port changes per session) and `Acquire::https::CaInfo`; `ENV` for
-   `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS`, `npm_config_cafile`, `SSL_CERT_FILE`. Build it with
+   `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS`, `npm_config_cafile`, `SSL_CERT_FILE`. Rebuild it in
+   every new session: a helper with an earlier session's proxy port fails at the Dockerfile's
+   `apt-get` step with exit 100 (seen 2026-11-13). Check first with
+   `docker run --rm --network host tmt-cloud-base:node22 apt-get update`. Build it with
    `docker build --network host -t tmt-cloud-base:node22 <dir>`.
 3. `docker buildx build --network host --build-context
 node:22-bookworm-slim=docker-image://tmt-cloud-base:node22 --load -t

@@ -32,7 +32,7 @@ On your phone at the printer: the plate that is printing, how far along it is an
 
 ## MakeGood files and credit
 
-The MakeGood 3D TMT 3D model and print files are by MakeGood, released as Creative Commons Public Domain (CC0); bundled as a kit pack. Find the design on [MakerWorld](https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer). The maker guide is not included: get it from MakeGood.
+The MakeGood 3D TMT 3D model and print files are by MakeGood, released as Creative Commons Public Domain (CC0); bundled as a kit pack. Find the design on [MakerWorld](https://makerworld.com/en/models/2066081-3d-toddler-mobility-trainer). One part is not MakeGood's: the experimental one-piece push handle is by jeepxj, under CC BY-NC (attribution, non-commercial), from [MakerWorld](https://makerworld.com/en/models/3409242-3d-toddler-mobility-trainer-one-piece-push-handle). The maker guide is not included: get it from MakeGood.
 
 The git repository itself contains only data about the kit (part names, settings, plate groupings). The converted 3D model and print geometry ship separately as a versioned **kit pack** (a GitHub release asset, about 30 MB), which the Docker image downloads at build time and installs into your `/data` volume on first start, so the standard kit works with nothing to upload. See [docs/kit-pack.md](docs/kit-pack.md) for the format, the environment variables (`KITPACK_DIR`, `KITPACK_URL`, `KITPACK_DOWNLOAD=off`) and how a maintainer builds a pack. Files you import yourself in the kit admin always win over the pack.
 

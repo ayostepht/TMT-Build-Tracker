@@ -6,7 +6,13 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
-- Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types (plain PETG, TPU 95A) and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
+### Added
+
+- An optional one-piece push handle for printers with a bed of about 340 x 320 mm (Bambu H2S, H2D): choose "One piece, H2 series" under the push handle option. It is an experimental community design by jeepxj (CC BY-NC, endorsed by MakeGood) that replaces the push handle top, bottom, brace and pin and keeps the soft grip. It ships in kit pack 1.0.2, which installs by itself on the next start; builds you already have do not change.
+
+### Changed
+
+- Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG", and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
 
 ## [0.9.1] - 2026-11-13
 

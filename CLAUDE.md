@@ -191,6 +191,9 @@ _Every specialist in `.claude/agents/` follows this; agent files only add area r
   image, sha256 in `kitpacks/index.json`), installed on first start. Always credit
   MakeGood. `.gitignore` blocks `*.3mf`, `*.glb`, `*.step`, `*.kitpack`, `uploads/`; keep
   it that way. The maker guide PDF is not bundled: reference page numbers and link it.
+  One exception (maintainer, 2026-11-13): the one-piece push handle by jeepxj is CC BY-NC,
+  bundled with credit (`kitpacks/licenses.json`, pack `CREDITS.md`, README, THIRD_PARTY).
+  Any other non-CC0 file needs the maintainer's yes and the same credits.
 - **Template vs design vs build.** A _template_ is a printable kit with generic filament
   roles (`primary`, `accent`, `soft`, `tire`). A _color design_ maps roles to filaments
   and parts to roles. A _build_ belongs to a team, snapshots a design, and holds all
