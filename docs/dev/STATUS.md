@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-13 (0.9.1 released, see item 0; `edge` is the default branch; test
-copy on r52 = `edge` 3ec52a7, the published image; not yet on 0.9.1)._
+copy on r53 = `edge` 296cd50 (0.9.1 + #32, #33, #35), the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -21,8 +21,8 @@ done. Keep it under ~150 lines.
    the default branch), not at f20a168 on `main`: same app code (only excluded paths
    differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
    e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
-   (checked anonymously 2026-11-13). **Next:** deploy `0.9.1` to the test copy (the maintainer's
-   OK; r52 = `edge` 3ec52a7 lacks #26 and the version bump).
+   (checked anonymously 2026-11-13). The test copy runs it (r53 = `edge` 296cd50, which adds
+   #32, #33 and #35 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
@@ -241,7 +241,9 @@ Route each to the agent named in brackets.
 
 - **Design studio** [design-studio-ui]: a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
-  over: class-only field styles in components were not audited for `--line` borders;
+  over: the picker's Type counts differ from the swatches listed (r53: "98A (8)" lists 13,
+  "90A (19)" lists 14); at 390 the 3D model covers part of the stage credit line (r53);
+  class-only field styles in components were not audited for `--line` borders;
   adjacent `.pill-link` hit bands can overlap on touch; "MakeGood · CC0" credit wraps over the chair at 360 px;
   `share/ApplyDesign` uses raw fetch (add `listDesigns` to `client/api.ts`);
   `editableTargets` lacks `kind` (can't tell builds from drafts); no "start a draft from
@@ -263,11 +265,14 @@ Route each to the agent named in brackets.
   `PartRow` could carry a `data-testid` on its status group (`viewer.spec.ts` selects it
   by role) [build-state]; a local `npm run dev`/built server without release credentials
   logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
+- **Filament catalog** [filaments-catalog]: the picker's "Foaming" type never shows,
+  because the catalog has no foaming TPU (the only `/foam/i` matches are PLA "Seafoam"
+  colors); seen on r53.
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
 - **Files tab** [plates-3mf]: on r45 at 390 the layout select showed "Loading…" while the
   heading already named the layout. Probably the race fixed on 2026-11-13 (the picker's
-  preload effect re-ran on every view refresh; layout answers were not latest-wins): check
-  on the next deploy. That race also made `print-template.spec.ts:66` time out on CI.
+  preload effect re-ran on every view refresh; layout answers were not latest-wins). r53
+  checks: "Replace plates?" appeared every time; "Loading…" not seen at 1440 or 390. That race also made `print-template.spec.ts:66` time out on CI.
 - **CI** [release-pwa]: the e2e job's limit is 35 min (was 20; the suite takes ~20 min with 1
   worker and a timeout cancelled the `edge` run of #33, skipping its image). As the suite
   grows, shard it (`--shard=1/2` over two jobs, each with its own server and DB) rather than
