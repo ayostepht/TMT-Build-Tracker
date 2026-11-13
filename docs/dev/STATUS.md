@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-13 (plate 9 retry fixes on branches, see item 0; public, 0.9.0 released; test copy on r50 = e4584d5, a local
+_Last updated: 2026-11-13 (plate 9 retry fixes, edge flow, see item 0; public, 0.9.0 released; test copy on r50 = e4584d5, a local
 build; main is at 0e413e1 and ahead of it by docs only. No agents or work in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
@@ -10,34 +10,28 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **Plate 9 retry fixes (2026-11-13, cloud session), not merged yet.** From the maintainer's
-   bug report (r50 / v0.9.0; live data consistent, no repair needed). Branch
-   `claude/vigilant-newton-4yy4kk`: a Failed/Partial log, run delete/edit/undo no longer drop
-   Printing for parts on a live printer job; choosing Printing takes the start from the
-   active linked job and the estimate from the printer; linking a new job over a stale
-   Printing state (ended unlogged job or manual start) takes the new job's start and
-   estimate [build-state, printers]. Branch `fix/where-printing-overflow` (worktree
-   `../TMT-wt-where-overflow`): "Where is it printing?" sheet no longer widens with a long
-   file name; shared `Dialog` body is a `minmax(0, 1fr)` grid [design-studio-ui]. Gate both:
-   check, lint, full vitest (1579 / 1564), build PASS; security review no high/medium.
-   Follow-ups added to #18 (2026-11-13): printer elapsed/remaining bounded by
-   `sanePrintSeconds` (`domain/format.ts`) in `liveJobStart` and `attach`; a non-blocking
-   "Plate N has an unlogged failed print … Open print log" notice on the "Confirm Plate N is
-   printing on …" step (`unloggedEndedJobs` in `printers/status.ts`); new
-   `e2e/plate-retry.spec.ts`; `e2e/log-plate.spec.ts` race fixed (it read client state from
-   before its own API calls; now reloads). Decided (maintainer): Success on a live plate still
-   prints the parts; the keep-Printing rule needs a live printer job. The notice is one component
-   (`UnloggedNotice.svelte`) and also shows after a "Link to plate…" pick (maintainer asked);
-   it shows for auto-linked jobs too (open question to the maintainer). Open: two linked jobs
-   on one plate can show the notice twice [printers]; possible SSE gap: after API edits a
-   client-side navigation showed stale state until reload (seen in log-plate), unconfirmed
-   [build-state]. **Edge flow (maintainer, 2026-11-13):** PRs merge into the `edge` branch,
-   which publishes the `edge` image; the maintainer reviews it on Unraid and merges `edge`
-   into `main`. #20 (CI) and #19 (sheet overflow) are merged into `edge`; #21 (minimatch
-   override) and #22 (README compose sample, no release numbers in the README) are open. The
-   maintainer sets branch protection on `edge` and dismisses the esbuild and deepmerge
-   Dependabot alerts (not reachable). Cloud sessions: use the "TMT-Build-Tracker" environment
-   (setup script installs deps and the Playwright browser).
+0. **On `edge`, waiting for the maintainer's review (2026-11-13, cloud session).** From the
+   plate 9 retry report (r50 / v0.9.0; live data consistent, no repair needed): #18 (a
+   Failed/Partial log, run delete/edit/undo keep parts on a live printer job Printing;
+   Printing takes the printer's start and estimate; a newly linked job replaces a stale
+   Printing state; printer estimates bounded by `sanePrintSeconds`; `UnloggedNotice` on the
+   confirm step and after a "Link to plate…" pick; `e2e/plate-retry.spec.ts`;
+   `e2e/log-plate.spec.ts` race fixed), #19 ("Where is it printing?" sheet no longer widens
+   with a long file name), #20 (edge flow: PRs merge into `edge`, which publishes the `edge`
+   image; Dependabot targets `edge`), #21 (minimatch override, GHSA-g3hv-75wg-m249), #22
+   (README compose sample, no release numbers in the README, CONTRIBUTING edge flow).
+   **Next:** the maintainer reviews the `edge` image on Unraid (plate retry, Printing start
+   time, unlogged notice, phone sheet), then merges `edge` into `main`; deploying the test
+   copy and tagging a release stay their call. Decided: Success on a live plate still prints
+   the parts; keep-Printing needs a live printer job. Open: the notice also shows for
+   auto-linked jobs (question to the maintainer); two linked jobs on one plate can show it
+   twice [printers]; possible SSE gap: after API edits a client-side navigation showed stale
+   state until reload (seen in log-plate), unconfirmed [build-state]; vite's optional esbuild
+   peer is invalid in `npm ls` (cosmetic; a devDependency `esbuild ^0.28` would fix it).
+   Maintainer: dismiss the esbuild (drizzle-kit) and deepmerge Dependabot alerts (not
+   reachable; the minimatch alert closes once the fix reaches the default branch). Cloud
+   sessions: use the "TMT-Build-Tracker" environment (setup script installs deps and the
+   Playwright browser; `deb.debian.org` allowed for Docker builds, see dev-environments).
 1. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
    was merged, `v0.9.0` tagged, CI in full mode (`CI_FULL=true`). `main` is protected and
    work lands through pull requests (see CLAUDE.md "The repository is public"). Image
