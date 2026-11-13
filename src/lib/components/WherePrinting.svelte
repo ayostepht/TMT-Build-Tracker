@@ -103,6 +103,9 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
+		/* A fieldset is min-content wide by default; without this a long file name widens the sheet. */
+		min-inline-size: 0;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--sp-2);
 	}
 	.wp-set legend {
@@ -136,7 +139,9 @@
 		flex: none;
 	}
 	.wp-text {
+		flex: 1 1 auto;
 		min-width: 0;
+		overflow: hidden;
 	}
 	.wp-job {
 		display: block;

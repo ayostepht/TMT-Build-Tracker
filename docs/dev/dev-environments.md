@@ -11,8 +11,8 @@ each machine's untracked `CLAUDE.local.md`, whose shape is `CLAUDE.local.example
 | Maintainer's Mac                               | Local Claude Code sessions (VS Code)          | `~/Documents/Github Repos/TMT-Build-Tracker` | Native Node 22, `flock` from Homebrew                                                   |
 | Unraid dev container (`claude-unraid-manager`) | Cloud sessions, image builds, **all deploys** | `/workspace/TMT-Build-Tracker`               | git only; Node, Playwright and buildx run in throwaway containers via the Docker socket |
 
-Both push to the same GitHub repo. **At session start:** `git fetch`; if `main` and
-`origin/main` differ, or you're on a branch, say so to the maintainer before working. **At
+Both push to the same GitHub repo. **At session start:** `git fetch`; if `edge`/`main`
+differ from `origin/edge`/`origin/main`, or you're on a branch, say so to the maintainer before working. **At
 session end:** everything committed; push with the maintainer's OK so the other machine
 picks up from `docs/dev/STATUS.md`.
 
@@ -169,14 +169,15 @@ runs `npm ci && npx playwright install chromium` in the checkout (browsers land 
 `/opt/pw-browsers`), so `check`, unit tests and e2e run as on the Mac; CI runs them again on
 the pull request. The setup script runs only when a fresh container is built. The local
 preview is not available to the maintainer from a cloud session: they review user-visible
-changes on the `edge` image on Unraid once the change is on `main` (maintainer,
-2026-11-13), instead of `npm run preview:demo` before the merge.
+changes on the `edge` image on Unraid once the pull request is merged into the `edge`
+branch (maintainer, 2026-11-13), instead of `npm run preview:demo` before the merge.
 
 ## Deploying published images (from 0.9, public repo)
 
 Once the repository is public, the test copy runs the image CI published, not a local
-build: after a pull request is merged, wait for the `image` job on `main`, then deploy
-`ghcr.io/<owner>/tmt-build-tracker:sha-<short>` of that commit (or `edge`). Backup,
+build: after a pull request is merged into `edge`, wait for the `image` job on `edge`, then
+deploy `ghcr.io/<owner>/tmt-build-tracker:sha-<short>` of that commit (or `edge`). After
+the maintainer merges `edge` into `main`, a push to `main` publishes `sha-<short>` only. Backup,
 rehearsal on a copy and the swap are unchanged (above); replace the local `docker build`
 and `docker tag` steps with `docker pull` of that tag and tag it `test` as before. Keep
 the previous image for rollback. A release (`vX.Y.Z`, the maintainer's call) is deployed
@@ -190,7 +191,7 @@ run over a whole folder, `git stash`). When more than one agent will edit code a
 time, give each task its own worktree: one task = one branch = one worktree = one pull
 request.
 
-- Create it beside the repo: `git worktree add ../TMT-wt-<task> -b <branch> origin/main`.
+- Create it beside the repo: `git worktree add ../TMT-wt-<task> -b <branch> origin/edge`.
 - Dependencies: a worktree has no `node_modules`. Install once per worktree with `npm ci`
   before its agent starts (one install at a time across the machine). A symlinked
   `node_modules` is enough for vitest, eslint and a dev server, but **not** for

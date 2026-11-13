@@ -241,8 +241,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   and manual starts never hold a part. A printer-sourced plate time follows; a typed one stays.
   Printer run-time numbers go through `sanePrintSeconds` (`domain/format.ts`: finite, >= 0,
   1 s to 30 days) before they become an estimate. `printers/status.ts` `unloggedEndedJobs` /
-  `unloggedNotice` drive a non-blocking notice in `ExpectedConfirm` (optional `jobs` prop)
-  when the plate has an ended, unlogged job; `ConfirmPrintLog` exposes `#confirm-log-<jobId>`.
+  `unloggedNotice` drive `UnloggedNotice.svelte`, a non-blocking notice shown when a plate has
+  an ended, unlogged job: in `ExpectedConfirm` before linking, and after linking for every
+  linked running job (`PrinterJobs`, Printers page), always derived from store jobs, never
+  local state. `ConfirmPrintLog` exposes `#confirm-log-<jobId>` as its scroll target.
 - **Client store** (`client/printer-store.svelte.ts`): sequence-guarded `load()`, refetch on
   SSE reopen / visibilitychange / online / focus, 30 s poll, "Printer status unavailable ·
   Retry".
@@ -569,8 +571,9 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `v*` tags, manual runs and, with the repository variable `CI_FULL=true`, on every push
   and pull request; `image` needs both and runs on pushes and manual runs with `publish`,
   never on pull requests. Tags published: a release tag `vX.Y.Z` gives `latest`, `X.Y.Z`,
-  `X.Y`; a pre-release tag (with `-`) only its full version; `main` gives `edge`; every
-  build also `sha-<short>`. Without `CI_FULL` a push to `main` publishes nothing. One run
+  `X.Y`; a pre-release tag (with `-`) only its full version; the `edge` branch gives `edge`
+  (pushes run on `main` and `edge`; `main` gives only `sha-<short>`); every
+  build also `sha-<short>`. Without `CI_FULL` a push to `main` or `edge` publishes nothing. One run
   per ref; tag and manual runs are never cancelled. Issue forms live in
   `.github/ISSUE_TEMPLATE/` (bug, feature request, install or docs feedback, printer
   connection report; the app's Experimental note links to the last).

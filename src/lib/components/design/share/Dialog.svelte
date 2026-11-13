@@ -99,6 +99,9 @@
 	.dlg-body {
 		padding-top: var(--sp-3);
 		display: grid;
+		/* Safety net: wide content shrinks (or ellipsizes) instead of widening the sheet. */
+		grid-template-columns: minmax(0, 1fr);
+		min-width: 0;
 		gap: var(--sp-7);
 	}
 </style>

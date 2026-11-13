@@ -6,10 +6,15 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
+### Added
+
+- When a plate still has an earlier print that was never logged (for example a failed one), linking a new print to it says so, with a button that opens that print's log.
+
 ### Fixed
 
 - Logging a failed or partial print no longer takes a plate off "Now printing" when the plate is already printing again on a connected printer. Deleting, editing or undoing an older print log keeps it printing too.
 - A plate's start time and time left come from the printer when it is printing on a connected printer, also when you choose Printing after the print started or link a new print over an earlier one that was never logged.
+- The "Where is it printing?" sheet no longer scrolls sideways on a phone when the printer shows a long file name.
 
 ## [0.9.0] - 2026-11-12
 
