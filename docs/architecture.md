@@ -555,8 +555,9 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `v*` tags, manual runs and, with the repository variable `CI_FULL=true`, on every push
   and pull request; `image` needs both and runs on pushes and manual runs with `publish`,
   never on pull requests. Tags published: a release tag `vX.Y.Z` gives `latest`, `X.Y.Z`,
-  `X.Y`; a pre-release tag (with `-`) only its full version; `main` gives `edge`; every
-  build also `sha-<short>`. Without `CI_FULL` a push to `main` publishes nothing. One run
+  `X.Y`; a pre-release tag (with `-`) only its full version; the `edge` branch gives `edge`
+  (pushes run on `main` and `edge`; `main` gives only `sha-<short>`); every
+  build also `sha-<short>`. Without `CI_FULL` a push to `main` or `edge` publishes nothing. One run
   per ref; tag and manual runs are never cancelled. Issue forms live in
   `.github/ISSUE_TEMPLATE/` (bug, feature request, install or docs feedback, printer
   connection report; the app's Experimental note links to the last).
