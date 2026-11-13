@@ -66,7 +66,7 @@ docker run --rm -v "$PWD":/app -w /app mcr.microsoft.com/playwright:v<version>-n
 
 ## Conventions you need
 
-- **Stack:** SvelteKit (Svelte 5, TypeScript, `adapter-node`), SQLite via `better-sqlite3` and Drizzle, Better Auth (email/password, organization plugin, optional OIDC), three.js, fflate and fast-xml-parser for 3MF, Server-Sent Events, Vitest and Playwright. The code map is in [docs/architecture.md](docs/architecture.md).
+- **Stack:** SvelteKit (Svelte 5, TypeScript, `adapter-node`), SQLite via `better-sqlite3` and Drizzle, Better Auth (email/password, organization plugin, optional OIDC), three.js, fflate and fast-xml-parser for 3MF, Server-Sent Events, Vitest and Playwright. The code map is in [docs/architecture.md](https://github.com/ayostepht/TMT-Build-Tracker/blob/edge/docs/architecture.md) (on the `edge` branch).
 - **Imports:** there is no `$lib` alias. Import through the package.json subpath imports with explicit extensions (`#lib/server/db/index.ts`). Route ids include the `(app)` group: `resolve('/(app)/builds/[id]')`.
 - **Layering:** state rules live in `src/lib/domain/actions.ts` only, and `src/lib/domain/` has no database, Svelte or Node imports. Every build mutation goes through `mutateBuild` in `src/lib/server/builds/actions.ts`: it writes an `activity` row and emits an SSE event, and a new activity kind needs a sentence in the activity formatter. Client fetches go through `src/lib/client/api.ts`.
 - **Permissions are checked on the server** for every mutation (owner, editor, viewer; `src/lib/server/access.ts`). Hiding a button is not access control.
@@ -82,13 +82,21 @@ Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT
 
 - Open an issue first for anything beyond a small fix, so the idea can be discussed before you spend time on it (the issue forms include a feature request).
 - Changes come as pull requests against `edge`, where changes are reviewed before they reach `main` and a release. CI must pass: `test` and `e2e`. Workflow runs for a first-time contributor wait for a maintainer's approval.
+- Do not open pull requests against `main`: it only receives promotions from `edge` (see below).
 - A database schema change comes with its generated migration and must upgrade an existing 0.9 database; the upgrade test checks this.
 - Do not commit MakeGood's files (the kit pack ships separately), personal data or secrets.
 - Security problems go through [SECURITY.md](SECURITY.md), not an issue or pull request.
 
+## Branches: how a change reaches `main`
+
+- `edge` is where work lands. Every pull request targets `edge`, and the `edge` image is built from it.
+- `main` is what users and contributors need: the app, its tests, the install and operator docs. The files the maintainer's Claude Code sessions use (`CLAUDE.md`, `CLAUDE.local.example.md`, `.claude/`, `docs/dev/`, `docs/architecture.md`) live on `edge` only; the list is `.github/main-exclude.txt`. To read them, switch to the `edge` branch on GitHub.
+- The maintainer promotes `edge` by running the **promote** workflow (Actions, then promote, then Run workflow). It opens a pull request into `main` whose tree is `edge` minus the excluded files, and starts the `test` and `e2e` checks on its branch. The maintainer merges that pull request with **Create a merge commit** (not squash), so the `Promoted-From:` line in its message stays in `main`'s history and the next promotion lists only new commits.
+- Never commit to `main` directly: the next promotion makes `main` equal to `edge` again, so anything only on `main` would be overwritten.
+
 ## Pull requests
 
-Describe what changed and why, and say which checks you ran. Keep a pull request to one subject, include tests for behaviour changes, and update the docs (README, `docs/guides/`, `docs/architecture.md`) when what a user or contributor sees changes. By contributing you agree your work is released under the project's [MIT license](LICENSE).
+Describe what changed and why, and say which checks you ran. Keep a pull request to one subject, include tests for behaviour changes, and update the docs (README, `docs/guides/`, and `docs/architecture.md` on `edge`) when what a user or contributor sees changes. By contributing you agree your work is released under the project's [MIT license](LICENSE).
 
 User-visible changes add a line under `Unreleased` in [CHANGELOG.md](CHANGELOG.md) (Added, Changed, Fixed or Security, in plain language); the release step moves those lines under the new version.
 

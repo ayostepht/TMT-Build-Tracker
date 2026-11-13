@@ -1,7 +1,8 @@
 name: docker
 
-# Pull requests merge into `edge`; the maintainer reviews the `edge` image and then merges
-# `edge` into `main`; releases are `v*` tags.
+# Pull requests merge into `edge`; the maintainer reviews the `edge` image and then promotes
+# `edge` to `main` with the `promote` workflow (a pull request into `main` that leaves out the
+# files in .github/main-exclude.txt, which it starts this workflow on); releases are `v*` tags.
 # Default mode (repository variable CI_FULL unset): a push to main or edge, or a pull request,
 # runs only `test` (~4 min). `e2e` and `image` run on `v*` tags and on manual runs (Actions > docker >
 # Run workflow). Set the repository variable CI_FULL=true (Settings > Secrets and variables >

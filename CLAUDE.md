@@ -44,8 +44,13 @@ work lands:
   `docs/…`) based on `origin/edge`. You may merge a pull request you opened yourself into
   `edge` once the whole routine was followed (agents' checks, `verifier`,
   `security-reviewer` where required) and every required GitHub Actions check is green on
-  its head commit (maintainer, 2026-11-12). Merging `edge` into `main` is the maintainer's
-  call, after they reviewed the `edge` image. A pull request opened by anyone else,
+  its head commit (maintainer, 2026-11-12). `main` is never merged into or committed to
+  directly: after reviewing the `edge` image, the maintainer runs Actions → "Promote edge to
+  main", which opens a pull request into `main` with `edge`'s files minus the agent-only paths
+  in `.github/main-exclude.txt` (this file, `.claude/`, `docs/dev/`, `docs/architecture.md`);
+  they merge it with a merge commit (maintainer, 2026-11-13: keep `main` clean). A new
+  agent-only file goes into that list; public files (README, guides, CONTRIBUTING) must not
+  link to excluded files except through `blob/edge/…` URLs. A pull request opened by anyone else,
   Dependabot included, is merged only on the maintainer's go-ahead. Docs-only commits
   under `docs/dev/` may go straight to `edge` when protection allows it. Never force-push.
 - **Images.** CI publishes `edge` (+ `sha-<short>`) from every push to the `edge` branch,
