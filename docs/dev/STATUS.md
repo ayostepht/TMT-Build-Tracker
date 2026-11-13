@@ -199,10 +199,10 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
   the index already points at it. Decided (maintainer, 2026-11-13): the grip stays in the
   one-piece option on its own TPU plate (different material); keep the extra H2D plate 22.
   Cosmetic, open: the 3D view shows the grip at its multi-part position, above the shorter
-  handle. Confirm the THIRD_PARTY wording of the NonCommercial term. Not yet run: the
-  Docker image build + empty-data start + 1.0.1 → 1.0.2 upgrade in the image (the cloud
-  helper image's apt step failed and a diagnostic re-run was refused; do it on Unraid
-  in the deploy rehearsal). An orphaned agent preview server may still listen on port
+  handle. Confirm the THIRD_PARTY wording of the NonCommercial term. Image check done in the cloud session (2026-11-13): the image builds, an empty data dir
+  installs 1.0.2 (41 geometry rows), a restart is a no-op, and a 1.0.1 install upgrades to
+  1.0.2. The release asset `kitpack-makegood-tmt-revb-1.0.2` is published and its download
+  matches the index. An orphaned agent preview server may still listen on port
   4291 in that cloud container (its kill was refused; gone when the container is reclaimed).
 - (2026-11-12) Look at the camera tile on the live build (not checked on r50).
 - Unraid scratch: the maintainer approved deleting the r45 to r50 check folders as they
