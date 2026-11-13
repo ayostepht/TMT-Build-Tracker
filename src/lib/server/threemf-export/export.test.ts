@@ -8,6 +8,7 @@ import type { ArrangedPlate } from '#lib/domain/arrange.ts';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
 import type { BuildPrinter, BuildView } from '#lib/domain/types.ts';
 import { catalogPrinter } from '#lib/printers/catalog.ts';
+import { layoutBed } from '#lib/printers/layout-bed.ts';
 import { printerFromCatalog } from '#lib/printers/printer.ts';
 import { ApiError } from '../access';
 import { planArrangement } from '../builds/arrange-plan';
@@ -16,7 +17,7 @@ import { setPrinter } from '../builds/actions';
 import { arrangeForPrinter, buildArrangement } from '../builds/plates';
 import { loadBuildView } from '../builds/view';
 import { openDb, runMigrations, type Db } from '../db';
-import { buildPlates, member, organization, templates, user } from '../db/schema';
+import { buildPlates, builds, member, organization, templates, user } from '../db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { ExtractedPart } from '../print-geometry/extract';
 import type { PrintMesh } from '../print-geometry/mesh-format';
@@ -285,6 +286,18 @@ describe('plan', () => {
 		const view = viewFor();
 		view.printer = null;
 		expect(() => plan({ view, plates: [] })).toThrow(/printer/i);
+	});
+
+	it('a built-in layout stands for its bed when there is no printer', () => {
+		const view = viewFor();
+		const bed = layoutBed('xpa')!;
+		const plates = planArrangement({ ...view, printer: bed }, footprints())!.result.plates;
+		view.printer = null;
+		view.layoutPrinter = bed;
+		const p = plan({ view, plates });
+		expect(p.printer.name).toBe('Bambu X1 / P1 / A1');
+		expect(p.printer.bedX).toBe(256);
+		expect(p.printer.keepOut?.length).toBeGreaterThan(0);
 	});
 });
 
@@ -634,7 +647,13 @@ describe('exportBuild3mf with a database', () => {
 			}
 			throw new Error('did not throw');
 		};
+		// the template's default MakeGood layout counts as the bed; an uploaded 3MF has none
+		expect(loadBuildView(db, id, 'owner')!.layoutPrinter?.name).toBe('Bambu X1 / P1 / A1');
+		expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(409);
+		db.update(builds).set({ plateLayout: 'upload' }).where(eq(builds.id, id)).run();
+		expect(loadBuildView(db, id, 'owner')!.layoutPrinter).toBeNull();
 		expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(400);
+		db.update(builds).set({ plateLayout: null }).where(eq(builds.id, id)).run();
 		setPrinter(db, id, 'owner', { printer: cc });
 		expect(err(() => exportBuild3mf(db, id, 'outsider', { flavor: 'orca' })).status).toBe(404);
 		expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(409);

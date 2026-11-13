@@ -35,8 +35,8 @@
 		files: 4,
 		export: 5
 	};
-	/** Export needs a printer (its bed size and filament slots), so Files is where the wizard stops without one. */
-	const needsPrinter = $derived(!ctx.view.printer);
+	/** Export needs a bed (size and filament slots): a printer, or a built-in MakeGood layout, which stands for its bed. Files is where the wizard stops without either. */
+	const needsPrinter = $derived(!ctx.view.printer && !ctx.view.layoutPrinter);
 	const MAX_WITHOUT_PRINTER = 4;
 	const step = $derived.by(() => {
 		const n = param && param in STEP_NAMES ? STEP_NAMES[param] : Number(param);
@@ -49,7 +49,7 @@
 	/** Why Continue is blocked on this step, or '' (it is not). */
 	const blocker = $derived(
 		step === 4 && needsPrinter
-			? "Choose your printer above to continue: the export uses its bed size and filament slots. Add one on the Printers page if it isn't listed."
+			? "Choose a MakeGood profile or your printer above to continue: the export needs a bed size and filament slots. Add a printer on the Printers page if it isn't listed."
 			: ''
 	);
 
@@ -63,7 +63,8 @@
 				? needsPrinter
 				: typeof to === 'number' && to > MAX_WITHOUT_PRINTER && needsPrinter
 		) {
-			error = 'Choose your printer first: the export uses its bed size and filament slots.';
+			error =
+				'Choose a MakeGood profile or your printer first: the export needs a bed size and filament slots.';
 			return;
 		}
 		if (typeof to === 'number' && to > (ctx.view.build.setupStep ?? 5)) {

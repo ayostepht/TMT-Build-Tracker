@@ -51,6 +51,22 @@ import {
 	user
 } from '../db/schema';
 import { normalizeRole } from '../access';
+import { layoutBed } from '#lib/printers/layout-bed.ts';
+
+function defaultLayoutKey(db: Db, templateId: string): string | null {
+	return (
+		db
+			.select({ key: templatePlateLayouts.key })
+			.from(templatePlateLayouts)
+			.where(
+				and(
+					eq(templatePlateLayouts.templateId, templateId),
+					eq(templatePlateLayouts.isDefault, true)
+				)
+			)
+			.get()?.key ?? null
+	);
+}
 
 export function loadBuildView(db: Db, buildId: string, userId: string): BuildView | null {
 	const access = buildAccess(db, buildId, userId);
@@ -402,6 +418,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		activity: acts,
 		members,
 		printer: (b.printer as BuildPrinter | null) ?? null,
+		layoutPrinter: b.printer ? null : layoutBed(b.plateLayout ?? defaultLayoutKey(db, tpl.id)),
 		assembly: loadAssembly(db, buildId, tpl.id, variantChoices, parts),
 		photos: loadPhotos(db, buildId),
 		handoff: loadHandoff(db, buildId, access.canEdit)

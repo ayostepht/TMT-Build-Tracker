@@ -15,6 +15,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 - Logging a failed or partial print no longer takes a plate off "Now printing" when the plate is already printing again on a connected printer. Deleting, editing or undoing an older print log keeps it printing too.
 - A plate's start time and time left come from the printer when it is printing on a connected printer, also when you choose Printing after the print started or link a new print over an earlier one that was never logged.
 - The "Where is it printing?" sheet no longer scrolls sideways on a phone when the printer shows a long file name.
+- Choosing one of MakeGood's built-in plate layouts (for example Bambu X1 / P1 / A1) now counts as choosing the bed: the setup wizard continues without a printer, the plate layout card names the bed the profile is for, and its export works. Arranging plates for your own bed still needs your printer.
 
 ## [0.9.0] - 2026-11-12
 
