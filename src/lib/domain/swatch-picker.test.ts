@@ -290,7 +290,7 @@ describe('type filter', () => {
 		for (const t of [...mix, ...tpu, ...swatches('tpu'), ...swatches('petg')])
 			expect(filamentSubtypes(t).length === 0).toBe(exclusionReason(t) === '');
 	});
-	it('lists the subtypes that occur, with counts, between Standard and All types', () => {
+	it('lists the subtypes that occur, with counts, between the default and All types', () => {
 		const o = typeOptions(mix, 'tpu');
 		expect(o.map((x) => x.id)).toEqual([
 			'',
@@ -302,9 +302,9 @@ describe('type filter', () => {
 			'silk',
 			'all'
 		]);
-		expect(o[0].label).toBe('Standard');
+		expect(o[0].label).toBe('95A');
 		expect(o.find((x) => x.id === 'hardness:98A')!.count).toBe(2);
-		expect(typeOptions(mix, 'petg')[0].label).toBe('Standard');
+		expect(typeOptions(mix, 'petg')[0].label).toBe('PETG');
 		expect(typeOptions(mix, 'tpu', ['sunlu']).find((x) => x.id === 'hardness:98A')!.count).toBe(1);
 	});
 	it('a subtype shows only swatches carrying it; brand and search still apply', () => {

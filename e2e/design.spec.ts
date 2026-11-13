@@ -239,7 +239,7 @@ test('the swatch picker hides types palettes never use until asked', async ({ pa
 	).toEqual([]);
 	// Type filter: one subtype at a time (98A), everything with "All types".
 	const type = picker.getByTestId('type-select');
-	await expect(type.locator('option').first()).toContainText('Standard');
+	await expect(type.locator('option').first()).toContainText('95A');
 	await type.selectOption('hardness:98A');
 	await expect.poll(async () => (await labels()).length).toBeGreaterThan(0);
 	const only98 = await labels();

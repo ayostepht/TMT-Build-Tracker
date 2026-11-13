@@ -13,6 +13,7 @@ import {
 	type Lab
 } from './color.ts';
 import {
+	ALLOWED_TPU_HARDNESS,
 	EXCLUDED_FILAMENTS,
 	exclusionReason,
 	filamentSubtypes,
@@ -77,8 +78,6 @@ export interface TypeOption {
 	label: string;
 	/** Swatches of this type in the list (not for 'all'). */
 	count?: number;
-	/** What the option means, for a tooltip. */
-	hint?: string;
 }
 
 const subtypeRank = (id: string) =>
@@ -95,7 +94,7 @@ const hardnessKey = (id: string) => {
 };
 
 /**
- * The Type select's options for a material's swatch list: Standard first (95A for TPU), each
+ * The Type select's options for a material's swatch list: the default first (95A for TPU, PETG otherwise), each
  * subtype that occurs (with its count), then All types. Counts are raw swatches of `brands`
  * (empty: all), before same-looking ones collapse.
  */
@@ -121,12 +120,7 @@ export function typeOptions(
 		(a, b) => subtypeRank(a.id) - subtypeRank(b.id) || hardnessKey(a.id) - hardnessKey(b.id)
 	);
 	return [
-		{
-			id: '',
-			label: 'Standard',
-			count: standard,
-			hint: family === 'tpu' ? '95A TPU, the hardness palettes use' : 'The types palettes use'
-		},
+		{ id: '', label: family === 'tpu' ? ALLOWED_TPU_HARDNESS : 'PETG', count: standard },
 		...subs,
 		{ id: TYPE_ALL, label: 'All types' }
 	];

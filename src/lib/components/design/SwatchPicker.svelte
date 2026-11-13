@@ -164,7 +164,7 @@
 			o.id === TYPE_ALL ? o : { ...o, count: inBrand.get(o.id) ?? 0 }
 		);
 	});
-	// A subtype the material does not have (after switching PETG/TPU) falls back to Standard.
+	// A subtype the material does not have (after switching PETG/TPU) falls back to the default type.
 	const effType = $derived(typeOpts.some((o) => o.id === typeSel) ? typeSel : '');
 	const result = $derived(pickerSwatches(items, { type: effType, brands, preferred, query: q }));
 	const neutrals = $derived(result.neutrals);
@@ -460,7 +460,7 @@
 					}}
 				>
 					{#each typeOpts as o (o.id)}
-						<option value={o.id} title={o.hint}
+						<option value={o.id}
 							>{o.label}{o.id === TYPE_ALL
 								? hidden > 0
 									? ` (+${hidden})`
