@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-13 (plate 9 retry fixes, edge flow, see item 0; public, 0.9.0 released; test copy on r50 = e4584d5, a local
-build; main is at 0e413e1 and ahead of it by docs only. No agents or work in progress)._
+_Last updated: 2026-11-13 (plate 9 retry fixes reviewed on the `edge` image, see item 0; public, 0.9.0 released; test copy on
+r52 = `edge` 3ec52a7, the published image. No agents or work in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -10,7 +10,7 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **On `edge`, waiting for the maintainer's review (2026-11-13, cloud session).** From the
+0. **On `edge`, reviewed by the maintainer on Unraid (r52, 2026-11-13): all four checks passed.** From the
    plate 9 retry report (r50 / v0.9.0; live data consistent, no repair needed): #18 (a
    Failed/Partial log, run delete/edit/undo keep parts on a live printer job Printing;
    Printing takes the printer's start and estimate; a newly linked job replaces a stale
@@ -20,9 +20,7 @@ done. Keep it under ~150 lines.
    with a long file name), #20 (edge flow: PRs merge into `edge`, which publishes the `edge`
    image; Dependabot targets `edge`), #21 (minimatch override, GHSA-g3hv-75wg-m249), #22
    (README compose sample, no release numbers in the README, CONTRIBUTING edge flow).
-   **Next:** the maintainer reviews the `edge` image on Unraid (plate retry, Printing start
-   time, unlogged notice, phone sheet), then merges `edge` into `main`; deploying the test
-   copy and tagging a release stay their call. Decided: Success on a live plate still prints
+   **Next:** the maintainer merges `edge` into `main`; tagging a release stays their call. Decided: Success on a live plate still prints
    the parts; keep-Printing needs a live printer job. Open: the notice also shows for
    auto-linked jobs (question to the maintainer); two linked jobs on one plate can show it
    twice [printers]; possible SSE gap: after API edits a client-side navigation showed stale
@@ -54,7 +52,7 @@ done. Keep it under ~150 lines.
    look). Next deploys of the test copy use published images (`sha-<short>` / `edge`), see
    dev-environments. Worktrees for parallel agents: trial on the next multi-agent task.
 
-2. **r50 is live** (e4584d5, 2026-11-12, main 9ed6906; rollback: tag `r49` as `test`, no restore; rehearsal clean, all 5 checks passed, live link connected in 3 s, 0 reconnects in 20 min) (no migration; adds the runtime dependency `ws`, so
+2. **r50** (superseded by r51/r52; e4584d5, 2026-11-12, main 9ed6906; rollback: tag `r49` as `test`, no restore; rehearsal clean, all 5 checks passed, live link connected in 3 s, 0 reconnects in 20 min) (no migration; adds the runtime dependency `ws`, so
    the image build must run `npm ci` cleanly). Contents: every printer WebSocket goes
    through `ws-client.ts` (1 MiB `maxPayload`, no compression, no redirects, handshake
    timeout); OctoEverywhere link sockets are pinned to the validated address. This closes

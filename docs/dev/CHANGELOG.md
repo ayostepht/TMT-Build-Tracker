@@ -7,6 +7,15 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r52** (published `edge` image, 3ec52a7, 2026-11-13; tagged `edge-3ec52a7`): the first
+  test-copy deploy from the `edge` channel. Plate retry keeps a live plate Printing, Printing
+  takes the printer's start time, unlogged-print notice (#18); "Where is it printing?" sheet
+  fits a phone with a long file name (#19); minimatch override (#21). No migration, so no
+  rehearsal. The maintainer checked all four on Unraid, all passed. Rollback: re-tag `v0.9.0`
+  as `test`, no restore.
+- **r51** (published `latest` image = v0.9.0 = 74d9a42, 2026-11-12): the first deploy of a
+  published image instead of a local build; no app-code changes from r50. No migration.
+  Rollback: re-tag `r50` as `test`, no restore.
 - **r50** (e4584d5, from main 9ed6906): every printer WebSocket through `ws` (1 MiB limit, no
   compression or redirects, handshake timeout; link sockets pinned to the validated
   address); Partly printed kept when a next run is taken off; grams reject text and accept a
