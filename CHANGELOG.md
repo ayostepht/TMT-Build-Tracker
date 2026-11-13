@@ -6,7 +6,9 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- The "Where is it printing?" sheet no longer scrolls sideways on a phone when the printer shows a long file name.
 
 ## [0.9.0] - 2026-11-12
 
