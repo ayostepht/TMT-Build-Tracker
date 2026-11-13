@@ -82,7 +82,7 @@ describe('built-in layouts', () => {
 		const l = buildLayouts(db, id, 'owner');
 		expect(l.layouts.map((x) => [x.key, x.plateCount])).toEqual([
 			['xpa', 24],
-			['h2d', 21]
+			['h2d', 22]
 		]);
 		expect(l.current).toBe('xpa');
 		expect(view(id).plates).toHaveLength(24);
@@ -111,7 +111,7 @@ describe('built-in layouts', () => {
 		const id = mk();
 		const events = onBuildEvents(id);
 		const r = setPlateLayout(db, id, 'owner', { key: 'h2d' });
-		expect(r).toEqual({ plates: 21, convertedRuns: 0 });
+		expect(r).toEqual({ plates: 22, convertedRuns: 0 });
 		expect(view(id).plates.find((p) => p.number === 1)!.source).toBe('layout:h2d');
 		expect(buildLayouts(db, id, 'owner').current).toBe('h2d');
 		expect(events.at(-1)?.kind).toBe('plates.layout');
@@ -121,7 +121,7 @@ describe('built-in layouts', () => {
 			{ id: 'x', userId: 'owner', userName: 'Owen', kind: a.kind, payload: a.payload, at: '' },
 			view(id)
 		);
-		expect(text).toBe("Owen switched the plates to MakeGood's Bambu H2D / H2S profile (21 plates)");
+		expect(text).toBe("Owen switched the plates to MakeGood's Bambu H2D / H2S profile (22 plates)");
 		expect(() => setPlateLayout(db, id, 'owner', { key: 'zzz' })).toThrow(/Unknown plate layout/);
 	});
 

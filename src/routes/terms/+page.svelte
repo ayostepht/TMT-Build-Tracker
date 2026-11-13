@@ -48,8 +48,9 @@
 	<h2>MakeGood</h2>
 	<p>
 		The chair design and its print files are by MakeGood, released under CC0, and credited in the
-		app. This is an independent project. It is not made, endorsed or run by MakeGood, and it is not
-		affiliated with them. The build guide is not part of the app; it is only linked.
+		app, except the optional one-piece push handle, which is by jeepxj under CC BY-NC. This is an
+		independent project. It is not made, endorsed or run by MakeGood, and it is not affiliated with
+		them. The build guide is not part of the app; it is only linked.
 	</p>
 
 	<h2>What you upload and enter</h2>

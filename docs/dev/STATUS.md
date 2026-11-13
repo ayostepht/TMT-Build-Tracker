@@ -190,6 +190,21 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
+- (2026-11-13, issues #29 / #30) **Review PR #32** (#30 picker Type filter: default reads
+  "95A" / "PETG", subtypes with counts; plus hovered selected badges stay readable) on the
+  `edge` image after merge. **#29 one-piece push handle** (branch
+  `feat/one-piece-push-handle`): publish release `kitpack-makegood-tmt-revb-1.0.2` with
+  `makegood-tmt-revb-1.0.2.kitpack` (sha256 3aaa44d6…10b1, 32,070,463 B; the file was sent
+  to the maintainer from the cloud session; rebuilding changes the sha256) before merging,
+  the index already points at it. Decide: where the TPU grip goes on the one-piece handle
+  (the 3D view shows it floating at the multi-part position; maintainer "not sure" whether
+  the grip is used); keep the extra H2D plate 22 ("Bambu H2D / H2S (22 plates)",
+  "Hand-tuned by MakeGood" is then slightly off) or drop it so the part lands under
+  "Other"; confirm the THIRD_PARTY wording of the NonCommercial term. Not yet run: the
+  Docker image build + empty-data start + 1.0.1 → 1.0.2 upgrade in the image (the cloud
+  helper image's apt step failed and a diagnostic re-run was refused; do it on Unraid
+  in the deploy rehearsal). An orphaned agent preview server may still listen on port
+  4291 in that cloud container (its kill was refused; gone when the container is reclaimed).
 - (2026-11-12) Look at the camera tile on the live build (not checked on r50).
 - Unraid scratch: the maintainer approved deleting the r45 to r50 check folders as they
   came up; the last prompt (`data/r50-check/`, `/workspace/tmt-coldstart`) may not have
@@ -291,7 +306,14 @@ Route each to the agent named in brackets.
   whether learned part profiles inherit stray slots (accounting filters them since
   fix/filament-role-mismatch).
 - **Kit** [kit-and-startup]: template copies: switching back to the built-in kit leaves
-  the unused copy; designs from the base kit don't apply to a copy.
+  the unused copy; designs from the base kit don't apply to a copy. One-piece push handle
+  (#29): `bomGrams` is null (unsliced source); a build already on the H2D or X/P/A layout
+  that switches to one-piece shows the part under "Other" until the layout is re-applied
+  or plates are arranged; `KitCredit` shows the jeepxj line everywhere (no build context;
+  could be limited to one-piece builds via a prop) [app-shell].
+- **E2E** [plates-3mf, e2e-playwright]: `printer-arrange.spec.ts:7` once counted 23
+  plate diagrams for 24 plate cards in a full local run under load (2026-11-13); passed
+  alone and on CI. Watch for a recurrence.
 - **Security** (Stage 1 done; `docs/dev/audit-2026-11.md` has the findings and their status).
   Open Lows, none blocking: storage totals are re-measured from disk on every upload
   (`quota.ts` `workspaceUploadBytes`; a cache needs an invalidation call from photo, plate
@@ -312,14 +334,19 @@ Route each to the agent named in brackets.
 - Arranger: max edge/keep-out clearance; 1 mm default edge margin; 8 mm between parts;
   rigid source layouts only when per-piece packing would split a part.
 - MakeGood files are CC0: kit pack (release asset + Docker image), never in git, always
-  credited; the maker guide is linked, not bundled.
+  credited; the maker guide is linked, not bundled. Exception (2026-11-13): the one-piece
+  push handle by jeepxj (CC BY-NC, MakerWorld 3409242, shared in MakeGood's official
+  files) is bundled from pack 1.0.2 with credit (`kitpacks/licenses.json`, pack
+  `CREDITS.md`, README, THIRD_PARTY, About/Help/Terms, `KitCredit`). The one-piece option
+  keeps the TPU grip for now; `include` (multi-part) stays the default.
 - One place per task: kit files live in the wizard's template step and Files → print
   settings; the hardware model is not user-uploadable.
 - Chapters are optional (personal "My builds" workspace); printers work in personal
   workspaces.
 - Palettes/generator exclude matte, silk, transparent, glow, marble, wood, glitter, rock,
   multi-color, CF/GF and non-95A TPU. Manual picks are unrestricted. No ready-made palette
-  has near-black tires.
+  has near-black tires. The picker's Type select defaults to that set, labelled "95A" (TPU)
+  / "PETG", and filters to one subtype on request (2026-11-13, #30).
 - Spoolman stays optional.
 - Design tab: Colors | Palettes | Parts. Slots always show the role ("Primary PETG", …)
   with the filament as subtitle; picker title is the role. "Save as design" is for sharing

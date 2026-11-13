@@ -251,7 +251,8 @@
 				<p>
 					From MakeGood, who released the design under CC0. The converted model and print files come
 					as a kit pack that is installed on the first start of the app. They are not in the source
-					code. A site admin can import other kit files in the kit admin. See
+					code. The optional one-piece push handle is by jeepxj (CC BY-NC). A site admin can import
+					other kit files in the kit admin. See
 					<a href={resolve('/(app)/about')}>About</a> for the credit.
 				</p>
 			</details>

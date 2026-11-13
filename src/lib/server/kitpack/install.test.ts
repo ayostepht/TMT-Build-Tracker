@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { strFromU8, unzipSync } from 'fflate';
 import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { PrintFootprint } from '#lib/domain/print-footprint.ts';
@@ -222,6 +223,45 @@ describe('kit pack install', () => {
 		expect(pack.res.manifest.license.holder).toBe('MakeGood');
 		expect(pack.res.manifest.license.name).toContain('CC0');
 		expect(pack.res.maxQuantError).toBeLessThanOrEqual(0.01);
+	});
+
+	it('records a community part under another license, and the installer still reads the pack', async () => {
+		const src = sourceKit();
+		const outFile = join(packs, `${SLUG}-1.0.9.kitpack`);
+		const notice = {
+			parts: ['tires'],
+			name: 'CC BY-NC',
+			holder: 'someone',
+			url: 'https://example.test/m',
+			note: 'Credit: someone'
+		};
+		const res = buildKitPack(src.db, {
+			templateSlug: SLUG,
+			version: '1.0.9',
+			outFile,
+			otherLicenses: [notice],
+			log: quiet
+		});
+		expect(res.manifest.license.holder).toBe('MakeGood');
+		expect(res.manifest.otherLicenses).toEqual([notice]);
+		const bytes = readFileSync(outFile);
+		const credits = strFromU8(unzipSync(new Uint8Array(bytes))['CREDITS.md']);
+		expect(credits).toContain('MakeGood');
+		expect(credits).toContain('## Exceptions');
+		expect(credits).toContain('someone');
+		expect(credits).toContain('https://example.test/m');
+		writeIndex(packs, [
+			{
+				slug: SLUG,
+				version: '1.0.9',
+				file: `${SLUG}-1.0.9.kitpack`,
+				sha256: sha256Hex(bytes),
+				size: bytes.length
+			}
+		]);
+		const { db } = freshInstall();
+		const out = await installKitPacks(db, { dir: packs, download: false, log: quiet });
+		expect(out[0]).toMatchObject({ status: 'installed', version: '1.0.9' });
 	});
 
 	it('installs model, hardware, placements and print geometry into a fresh install', async () => {
