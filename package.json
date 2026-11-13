@@ -1,7 +1,7 @@
 {
 	"name": "tmt-build-tracker",
 	"private": true,
-	"version": "0.9.0",
+	"version": "0.9.1",
 	"description": "Self-hosted build tracker for makers 3D-printing the MakeGood 3D TMT chair",
 	"license": "MIT",
 	"repository": {
@@ -65,6 +65,9 @@
 	},
 	"imports": {
 		"#lib/*": "./src/lib/*"
+	},
+	"overrides": {
+		"minimatch": "^11.0.1"
 	},
 	"dependencies": {
 		"@gltf-transform/core": "^4.5.1",

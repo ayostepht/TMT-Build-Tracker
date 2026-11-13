@@ -1,19 +1,23 @@
 name: docker
 
-# Default mode (repository variable CI_FULL unset): a push to main or a pull request runs only
-# `test` (~4 min). `e2e` and `image` run on `v*` tags and on manual runs (Actions > docker >
+# Pull requests merge into `edge`; the maintainer reviews the `edge` image and then promotes
+# `edge` to `main` with the `promote` workflow (a pull request into `main` that leaves out the
+# files in .github/main-exclude.txt, which it starts this workflow on); releases are `v*` tags.
+# Default mode (repository variable CI_FULL unset): a push to main or edge, or a pull request,
+# runs only `test` (~4 min). `e2e` and `image` run on `v*` tags and on manual runs (Actions > docker >
 # Run workflow). Set the repository variable CI_FULL=true (Settings > Secrets and variables >
-# Actions > Variables) and e2e runs on every push and PR, image on every push to main.
+# Actions > Variables) and e2e runs on every push and PR, image on every push to main or edge.
 # Delete the variable to go back.
 # Image tags: `latest`, `X.Y.Z` and `X.Y` only for a release tag `vX.Y.Z` (no `-` in it); a
-# pre-release tag (`vX.Y.Z-rc.1`) publishes only its full version; `edge` is the current main
-# (push to main, or a manual run from main); `sha-<short>` on every published build.
+# pre-release tag (`vX.Y.Z-rc.1`) publishes only its full version; `edge` is the `edge` branch
+# (push to edge, or a manual run from edge); a push to main publishes `sha-<short>` only;
+# `sha-<short>` on every published build.
 # Pull requests never publish: the image job does not run for them.
 on:
   push:
-    branches: [main]
+    branches: [main, edge]
     tags: ['v*']
-    # Not evaluated for tag pushes, so releases always run. Docs-only pushes to main skip the run.
+    # Not evaluated for tag pushes, so releases always run. Docs-only pushes to main or edge skip the run.
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
@@ -24,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Publish the image to ghcr.io after test and e2e pass (a run from main tags it edge and sha-<short>, from another branch sha-<short> only; latest and version tags come only from v* tags)'
+        description: 'Publish the image to ghcr.io after test and e2e pass (a run from edge tags it edge and sha-<short>, from another branch sha-<short> only; latest and version tags come only from v* tags)'
         type: boolean
         default: true
 
@@ -123,7 +127,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
-            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/edge' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
             type=sha

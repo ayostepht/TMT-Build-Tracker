@@ -1,7 +1,10 @@
 version: 2
 updates:
+  # Version updates target `edge` like every other pull request (maintainer, 2026-11-13).
+  # Security updates always target the default branch; GitHub ignores target-branch for them.
   - package-ecosystem: npm
     directory: /
+    target-branch: edge
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -20,6 +23,7 @@ updates:
         update-types: [major]
   - package-ecosystem: github-actions
     directory: /
+    target-branch: edge
     schedule:
       interval: monthly
     open-pull-requests-limit: 2

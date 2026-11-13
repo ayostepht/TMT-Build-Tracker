@@ -127,7 +127,11 @@ export class PlanError extends Error {
 }
 
 export function buildExportPlan(input: PlanInput): ExportPlan {
-	const { view, footprints, flavor } = input;
+	const { footprints, flavor } = input;
+	// a built-in MakeGood layout stands for its bed when the build has no printer of its own
+	const view = input.view.printer
+		? input.view
+		: { ...input.view, printer: input.view.layoutPrinter ?? null };
 	const printer = view.printer && { ...view.printer, keepOut: effectiveKeepOut(view.printer) };
 	if (!printer)
 		throw new PlanError('Choose a printer first (Print tab) so the export knows your bed.');

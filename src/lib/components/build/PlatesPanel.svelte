@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { printersHrefFor } from '#lib/workspace-links.ts';
+	import { layoutBedLabel } from '#lib/printers/layout-bed.ts';
 	import { onMount, tick } from 'svelte';
 	import { fmt, fmtH, runInfo } from '#lib/domain/index.ts';
 	import {
@@ -419,6 +420,13 @@
 				><b>Printer:</b> <span data-testid="printer-name">{printer.name}</span>, bed {printer.bedX} ×
 				{printer.bedY}
 				mm{printer.mmSlots > 1 ? `, ${printer.mmSlots} filaments per plate` : ''}</span
+			>
+		{:else if ctx.view.layoutPrinter}
+			<span data-testid="layout-bed"
+				><b>For:</b>
+				{layoutBedLabel(ctx.view.layoutPrinter)}{ctx.view.layoutPrinter.mmSlots > 1
+					? `, ${ctx.view.layoutPrinter.mmSlots} filaments per plate`
+					: ''}</span
 			>
 		{:else}
 			<span class="muted">No bed chosen yet. Choose "Arrange for my bed" below.</span>

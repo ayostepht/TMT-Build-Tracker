@@ -7,6 +7,7 @@ import {
 	setRunEstimate,
 	setStatus,
 	startPrinting,
+	type LiveStart,
 	stopPrinting,
 	validPrintedOn
 } from '#lib/domain/index.ts';
@@ -31,6 +32,7 @@ import {
 	organization,
 	printRuns,
 	printerJobs,
+	printers,
 	user
 } from '../db/schema';
 import { emitBuildEvent } from '../events';
@@ -42,6 +44,7 @@ import { isPersonalOrg } from '../teams';
 import { autoRearrangeBuild, REARRANGE_KINDS } from './arrange-plan';
 import { applyPatches, loadBuildView } from './view';
 import { isObj, type Obj } from '#lib/domain/guards.ts';
+import { sanePrintSeconds } from '#lib/domain/format.ts';
 
 interface Outcome {
 	kind: string;
@@ -297,6 +300,53 @@ export function syncPlateTime(
 	return plate.number;
 }
 
+/**
+ * Part slugs of a build that are on a printer job running right now (printing or paused).
+ * Domain functions use it so a Failed/Partial log of an older attempt never takes a plate off
+ * the printer that has been restarted. A job being confirmed has already ended, so it is
+ * never in the set.
+ */
+export function livePrintingSlugs(tx: Db, buildId: string): Set<string> {
+	const out = new Set<string>();
+	const rows = tx
+		.select({ partSlugs: printerJobs.partSlugs })
+		.from(printerJobs)
+		.where(
+			and(eq(printerJobs.buildId, buildId), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all();
+	for (const r of rows) for (const s of r.partSlugs ?? []) out.add(s);
+	return out;
+}
+
+/**
+ * The live job (printing/paused, linked to this build) that already covers `slugs`: the one
+ * covering most of them, then the latest started. Gives its printer-derived start and, when the
+ * printer's last status has both elapsed and remaining seconds, the total run time.
+ */
+function liveJobStart(tx: Db, buildId: string, slugs: string[]): LiveStart | null {
+	const rows = tx
+		.select({
+			startedAt: printerJobs.startedAt,
+			partSlugs: printerJobs.partSlugs,
+			lastStatus: printers.lastStatus
+		})
+		.from(printerJobs)
+		.innerJoin(printers, eq(printers.id, printerJobs.printerId))
+		.where(
+			and(eq(printerJobs.buildId, buildId), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all()
+		.map((j) => ({ ...j, n: (j.partSlugs ?? []).filter((s) => slugs.includes(s)).length }))
+		.filter((j) => j.n > 0 && j.startedAt)
+		.sort((a, b) => b.n - a.n || b.startedAt!.getTime() - a.startedAt!.getTime());
+	const best = rows[0];
+	if (!best) return null;
+	const st = best.lastStatus ?? {};
+	const total = sanePrintSeconds(st.elapsedSec, st.remainingSec);
+	return { startedAt: best.startedAt!, runEstSeconds: total };
+}
+
 export function printingAction(db: Db, buildId: string, userId: string, body: unknown): void {
 	if (!isObj(body)) bad('Invalid body');
 	const action = body.action;
@@ -314,7 +364,7 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 				return {
 					kind: 'printing.start',
 					payload: { slugs, ...(printer ? { printer } : {}) },
-					patches: startPrinting(view, slugs, now)
+					patches: startPrinting(view, slugs, now, liveJobStart(tx, buildId, slugs))
 				};
 			}
 			case 'stop': {
@@ -447,7 +497,7 @@ function runOutcome(
 					result: input.result,
 					...(userId === null ? { auto: true } : {})
 				},
-				patches: applyRun(view, input, now)
+				patches: applyRun(view, input, now, { livePrinting: livePrintingSlugs(tx, buildId) })
 			}
 		};
 	}
@@ -474,7 +524,8 @@ export function deleteRun(
 				: recomputeParts(
 						view,
 						view.runs.filter((x) => x.id !== runId),
-						runTargets(view, runFromRow(r))
+						runTargets(view, runFromRow(r)),
+						{ livePrinting: livePrintingSlugs(tx, buildId) }
 					);
 		return {
 			kind: 'run.delete',
@@ -610,10 +661,13 @@ export function undoRun(
 			note: r.note
 		});
 		const patches: PartPatch[] = [];
+		const live = livePrintingSlugs(tx, buildId);
 		for (const raw of rawParts) {
 			if (!isObj(raw) || typeof raw.slug !== 'string') bad('Invalid part snapshot');
 			const slug = raw.slug;
 			if (!allowed.includes(slug) || !view.state[slug]) bad('Part is not affected by this run');
+			// Printing again on a live job: the snapshot is of an older attempt, keep the live state.
+			const keep = live.has(slug) && view.state[slug].status === 'Printing';
 			if (!(PART_STATUSES as readonly unknown[]).includes(raw.status)) bad('Invalid status');
 			const startedAt = raw.startedAt ?? null;
 			if (
@@ -630,6 +684,7 @@ export function undoRun(
 				if (typeof v !== 'boolean') bad('comps values must be booleans');
 				comps[k] = v;
 			}
+			if (keep) continue;
 			patches.push({
 				slug,
 				status: raw.status as PartStatus,
@@ -795,7 +850,9 @@ export function updateRun(
 				.map((r) => (r.id === runId ? { ...next, userName: r.userName } : r))
 				.sort((a, b) => (a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1));
 			const slugs = [...new Set([...runTargets(view, old), ...runTargets(view, next)])];
-			patches = recomputeParts(view, runs, slugs);
+			patches = recomputeParts(view, runs, slugs, {
+				livePrinting: livePrintingSlugs(tx, buildId)
+			});
 		}
 		return {
 			kind: 'run.update',

@@ -2,10 +2,18 @@ import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild } from './helpers';
 import type { Page } from '@playwright/test';
 
+/** Open the Print tab once the page is hydrated: an early click on the link can be lost. */
+async function openPrint(page: Page) {
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await expect(page).toHaveURL(/\/print$/);
+	await page.waitForLoadState('networkidle');
+}
+
 /** Print tab grouped by Plate; returns the first plate group's "Log plate N printed" button and N. */
 async function firstPlateLog(page: Page, buildId: string) {
 	await keepPrintedVisible(page, buildId);
-	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await openPrint(page);
 	await expect(page.getByTestId('ready-to-print')).toHaveCount(0);
 	await page.getByLabel('Group by').selectOption('plate');
 	const heads = page
@@ -69,7 +77,7 @@ test('A plate run shows in the Print log of a part on that plate, tagged with th
 
 test('A part detail offers Log plate printed and logs the run', async ({ page }) => {
 	await ownerWithBuild(page);
-	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await openPrint(page);
 	const todo = page.locator('.row[data-s="To print"]').first();
 	await todo.getByRole('button', { name: /^Details for/ }).click();
 	const log = todo.getByRole('button', { name: /^Log a print on plate \d+$/ });
@@ -101,6 +109,7 @@ test('a plate printed during this visit stays visible, marked, until reload (Hid
 }) => {
 	const { buildId } = await ownerWithBuild(page, 'justnow');
 	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
 	await page.getByLabel('Group by').selectOption('plate');
 	const log = page.getByRole('button', { name: /^Log a print on plate \d+$/ });
 	await log.first().click();
@@ -125,6 +134,7 @@ test('A fractional slicer estimate prefills a value the field takes, and Save wo
 	});
 	expect(r.ok()).toBe(true);
 	await page.reload();
+	await page.waitForLoadState('networkidle');
 	await page.getByLabel('Group by').selectOption('plate');
 	await button.click();
 	const sheet = page.getByRole('dialog');
@@ -189,8 +199,10 @@ test('A one-part-per-run plate taken off the printer after run 1 reads Partly pr
 	};
 	expect(v.state['rims-1-4']).toMatchObject({ status: 'Printing', startedAt: null });
 
+	// The page loaded before the API calls above: reload so the client holds the new state.
+	await page.reload();
 	await keepPrintedVisible(page, buildId);
-	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await openPrint(page);
 	await page.getByLabel('Group by').selectOption('plate');
 	await expect(
 		page.locator('.group-head', { hasText: 'Plate 13' }).getByText('Partly printed')

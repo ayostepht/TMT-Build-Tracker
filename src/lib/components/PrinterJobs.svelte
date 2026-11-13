@@ -4,6 +4,7 @@
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import ConfirmPrintLog from './ConfirmPrintLog.svelte';
 	import JobLinkControl from './JobLinkControl.svelte';
+	import UnloggedNotice from './UnloggedNotice.svelte';
 
 	/**
 	 * Above the Now printing cards: running jobs no one has linked to a plate yet ("Link to
@@ -15,6 +16,15 @@
 
 	const unlinked = $derived(
 		store.jobs.filter((j) => !j.buildId && (j.status === 'printing' || j.status === 'paused'))
+	);
+	/** Running jobs of this build: a link just made (or an earlier one) may share a plate with an unlogged print. */
+	const linkedRunning = $derived(
+		store.jobs.filter(
+			(j) =>
+				j.buildId === ctx.id &&
+				j.plateNumber != null &&
+				(j.status === 'printing' || j.status === 'paused')
+		)
 	);
 	const pending = $derived(store.jobs.filter((j) => j.pendingConfirm && j.buildId === ctx.id));
 </script>
@@ -34,10 +44,23 @@
 				job={j}
 				{ctx}
 				exp={store.expected.find((e) => e.jobId === j.id && e.buildId === ctx.id)}
+				jobs={store.jobs}
 				onlinked={() => store.load()}
 			/>
 		{/if}
 	</div>
+{/each}
+
+{#each linkedRunning as j (j.id)}
+	<UnloggedNotice
+		jobs={store.jobs}
+		buildId={ctx.id}
+		plateNumber={j.plateNumber!}
+		partSlugs={j.partSlugs}
+		exceptJobId={j.id}
+		testid="linked-unlogged"
+		linked
+	/>
 {/each}
 
 {#each pending as j (j.id)}

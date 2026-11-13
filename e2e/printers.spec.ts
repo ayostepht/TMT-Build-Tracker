@@ -806,6 +806,84 @@ test('"Where is it printing?" with a print already running links it to the plate
 	idle();
 });
 
+test('"Where is it printing?" with a long file name does not scroll sideways on a phone', async ({
+	page
+}, testInfo) => {
+	test.setTimeout(150_000);
+	const LONG = 'ECC_0.4_tmt_0000_OVERTURE PETG High Speed _0.2_17h44m.gcode';
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { buildId } = await ownerWithBuild(page, 'wherelong');
+	const org = (
+		(await (await page.request.get(`/api/builds/${buildId}/printer-jobs`)).json()) as {
+			organizationId: string;
+		}
+	).organizationId;
+	const created = await page.request.post('/api/printers', {
+		data: {
+			organizationId: org,
+			name: 'Longname Centauri',
+			kind: 'elegoo-sdcp',
+			host: '127.0.0.1',
+			port: mock.port,
+			secrets: { mainboardId: 'ABCDEF' }
+		}
+	});
+	expect(created.ok()).toBe(true);
+	const printerId = ((await created.json()).printer as { id: string }).id;
+	const idle = () => mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
+	idle();
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+
+	mock.printing(LONG, 8);
+	await expect(
+		page.getByTestId('printer-live').or(page.getByTestId('link-plate')).first()
+	).toBeVisible({ timeout: 20_000 });
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	await chooseStatus(page.locator('.group-head').getByTestId('plate-status').first(), 'Printing');
+	const dlg = page.getByTestId('where-printing');
+	await expect(dlg).toBeVisible();
+	const job = dlg.getByTestId(`where-job-${printerId}`);
+	await expect(job).toContainText(`Printing now: ${LONG}`);
+
+	// The sheet and its body do not scroll sideways.
+	const overflow = await dlg.evaluate((el) => {
+		const body = el.querySelector('.ds-modal__body') as HTMLElement;
+		return {
+			dlg: el.scrollWidth - el.clientWidth,
+			body: body.scrollWidth - body.clientWidth,
+			page: document.documentElement.scrollWidth - document.documentElement.clientWidth
+		};
+	});
+	expect(overflow.dlg).toBeLessThanOrEqual(0);
+	expect(overflow.body).toBeLessThanOrEqual(0);
+	expect(overflow.page).toBeLessThanOrEqual(0);
+
+	// The confirm button stays fully on screen.
+	const vp = page.viewportSize()!;
+	const box = (await dlg.getByTestId('where-confirm').boundingBox())!;
+	expect(box.x).toBeGreaterThanOrEqual(0);
+	expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
+
+	// The long name is cut with an ellipsis inside the sheet instead of widening it.
+	const fit = await job.evaluate((el) => ({
+		clipped: el.scrollWidth > el.clientWidth,
+		right: el.getBoundingClientRect().right,
+		dlgRight: el.closest('dialog')!.getBoundingClientRect().right
+	}));
+	expect(fit.clipped).toBe(true);
+	expect(fit.right).toBeLessThanOrEqual(fit.dlgRight);
+
+	await testInfo.attach('where-long-390', {
+		body: await page.screenshot(),
+		contentType: 'image/png'
+	});
+	await dlg.getByRole('button', { name: 'Cancel' }).click();
+	await expect(dlg).toBeHidden();
+	idle();
+});
+
 test('Printers page: a running unlinked job can be linked there; Stop monitoring says what it does', async ({
 	page
 }) => {

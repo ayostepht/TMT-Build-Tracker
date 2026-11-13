@@ -3,7 +3,7 @@
  * edited or deleted. Pure; it replays the runs through `applyRun`, so the rules
  * are the ones used when logging.
  */
-import { applyRun, runTargets } from './actions.ts';
+import { applyRun, runTargets, type RunOpts } from './actions.ts';
 import type { BuildView, PartPatch, PartState, PrintRun } from './types.ts';
 
 /**
@@ -13,9 +13,16 @@ import type { BuildView, PartPatch, PartState, PrintRun } from './types.ts';
  * components ticked when it was not Printed before); otherwise a Failed run
  * leaves Reprint; some Success runs but not enough -> Printing only when the
  * part is Printing now, else To print; no runs -> To print.
+ * A slug in `opts.livePrinting` that is Printing now stays Printing (start time and estimate kept)
+ * unless the history completes it: a newer print is running on a live job.
  * Returns only the patches that change something.
  */
-export function recomputeParts(view: BuildView, runs: PrintRun[], slugs: string[]): PartPatch[] {
+export function recomputeParts(
+	view: BuildView,
+	runs: PrintRun[],
+	slugs: string[],
+	opts: RunOpts = {}
+): PartPatch[] {
 	const out: PartPatch[] = [];
 	for (const slug of new Set(slugs)) {
 		const cur = view.state[slug];
@@ -33,7 +40,7 @@ export function recomputeParts(view: BuildView, runs: PrintRun[], slugs: string[
 		for (const r of runs) {
 			if (runTargets(view, r).includes(slug)) {
 				const simView: BuildView = { ...view, state: { ...view.state, [slug]: sim }, runs: seen };
-				const p = applyRun(simView, r, new Date()).find((x) => x.slug === slug);
+				const p = applyRun(simView, r, new Date(), opts).find((x) => x.slug === slug);
 				if (p) {
 					const { slug: _s, comps, ...rest } = p;
 					void _s;
@@ -46,6 +53,9 @@ export function recomputeParts(view: BuildView, runs: PrintRun[], slugs: string[
 
 		let status = sim.status;
 		if (status === 'Printing' && cur.status !== 'Printing') status = 'To print';
+		if (status !== 'Printed' && cur.status === 'Printing' && opts.livePrinting?.has(slug)) {
+			status = 'Printing';
+		}
 		const keepPrinting = status === 'Printing';
 		const printedOn = status === 'Printed' ? sim.printedOn : null;
 		const startedAt = keepPrinting ? cur.startedAt : null;

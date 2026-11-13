@@ -22,7 +22,7 @@
 		JSON.stringify([
 			flavor,
 			ctx.view.plates.map((p) => [p.number, p.parts, p.source, p.runs]),
-			ctx.view.printer,
+			ctx.view.printer ?? ctx.view.layoutPrinter,
 			ctx.view.parts.map((p) => [p.slug, p.role]),
 			ctx.view.filaments.map((f) => [f.key, f.hex, f.name, f.material])
 		])
@@ -31,7 +31,7 @@
 	$effect(() => {
 		void key;
 		const mine = ++seq;
-		if (!ctx.view.printer) {
+		if (!(ctx.view.printer ?? ctx.view.layoutPrinter)) {
 			pv = null;
 			error = null;
 			return;
@@ -94,7 +94,7 @@
 			>{/if}
 	</div>
 
-	{#if !ctx.view.printer}
+	{#if !(ctx.view.printer ?? ctx.view.layoutPrinter)}
 		<p class="muted" data-testid="export-no-printer">
 			Choose your printer above first. The file uses its bed size and filament slots.
 		</p>

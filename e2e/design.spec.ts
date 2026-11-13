@@ -210,8 +210,8 @@ test('design tab: the next step goes to Files, where the export lives', async ({
 
 	await page.getByTestId('next-plates').click();
 	await expect(page).toHaveURL(/\/files$/);
-	// No printer yet: the export card asks for one.
-	await expect(page.getByTestId('export-no-printer')).toBeVisible();
+	// No printer yet: the default MakeGood profile stands for its bed.
+	await expect(page.getByTestId('export-no-printer')).toHaveCount(0);
 
 	await arrangeForCentauri(page);
 	await expect(page.getByTestId('layout-name')).toBeVisible();
