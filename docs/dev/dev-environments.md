@@ -204,8 +204,14 @@ session; containers are named `tmt-*` and started with `--rm`.
 
 Once the repository is public, the test copy runs the image CI published, not a local
 build: after a pull request is merged into `edge`, wait for the `image` job on `edge`, then
-deploy `ghcr.io/<owner>/tmt-build-tracker:sha-<short>` of that commit (or `edge`). After
-the maintainer merges `edge` into `main`, a push to `main` publishes `sha-<short>` only. Backup,
+deploy `ghcr.io/<owner>/tmt-build-tracker:sha-<short>` of that commit (or `edge`). `main`
+is updated only by promotion: Actions → "Promote edge to main" (`.github/workflows/promote.yml`)
+builds `promote/<short>` from `main` with `edge`'s tree minus `.github/main-exclude.txt`, opens
+a pull request into `main` and dispatches `docker.yml` on it (`test` + `e2e`, no image); merge
+it with a merge commit (keeps the `Promoted-From:` trailer), then tag a release on `main` if
+wanted. A push to `main` publishes `sha-<short>` only. Hotfixes also go through `edge`. First
+promotion: check that the dispatched checks satisfy `main`'s required checks; if not, re-run
+them from the pull request and note it here. Backup,
 rehearsal on a copy and the swap are unchanged (above); replace the local `docker build`
 and `docker tag` steps with `docker pull` of that tag and tag it `test` as before. Keep
 the previous image for rollback. A release (`vX.Y.Z`, the maintainer's call) is deployed

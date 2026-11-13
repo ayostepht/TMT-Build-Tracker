@@ -132,7 +132,7 @@ To report, use one of the issue forms on [GitHub](https://github.com/ayostepht/T
 
 ## Development
 
-Contributors: see [CONTRIBUTING.md](CONTRIBUTING.md) (setup with Node 22, commands, conventions) and [docs/architecture.md](docs/architecture.md). To report a security problem, see [SECURITY.md](SECURITY.md).
+Contributors: see [CONTRIBUTING.md](CONTRIBUTING.md) (setup with Node 22, commands, conventions) and the code map [docs/architecture.md](https://github.com/ayostepht/TMT-Build-Tracker/blob/edge/docs/architecture.md) (on the `edge` branch). To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ## License
 

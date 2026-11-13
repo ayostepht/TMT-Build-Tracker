@@ -1,0 +1,18 @@
+# Paths that live on the `edge` branch only and are removed when `edge` is promoted to `main`
+# (.github/workflows/promote.yml). One path or glob per line; a directory removes everything
+# under it. Blank lines and lines starting with # are ignored.
+#
+# Rule: `main` holds what people who use or contribute to the app need. Agent and maintainer
+# working files stay on `edge`. Never list anything the build, the tests, CI or the Docker
+# image needs.
+
+# Instructions for Claude Code sessions and the maintainer's machine template
+CLAUDE.md
+CLAUDE.local.example.md
+.claude/
+
+# Maintainer status, deploy history, audits, machine setup
+docs/dev/
+
+# Code map written for the specialist agents
+docs/architecture.md

@@ -1,0 +1,186 @@
+name: promote
+
+# Promote `edge` to `main` as a pull request that leaves out the agent and maintainer files
+# listed in .github/main-exclude.txt. Run it by hand from the edge branch:
+# Actions > promote > Use workflow from: edge > Run workflow.
+# The pull request is merged by a person (main is protected). Use "Create a merge commit":
+# the `Promoted-From:` line in the promotion commit then stays in main's history, and the
+# next run uses it to list only the commits that are new.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'edge branch, tag or commit to promote (default: the head of edge)'
+        type: string
+        default: edge
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    # Only this job may write: it pushes the promote branch, opens the pull request and
+    # starts the CI run on the branch (see the last step).
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_REF: ${{ inputs.ref }}
+    steps:
+      # workflow_dispatch runs the workflow file of the branch it is started from, with this
+      # job's write token. Refuse any other branch, loudly (a skipped job is easy to miss).
+      # This guards against a mistake; it cannot stop someone who dispatches an edited copy of
+      # the file from their own branch, so also limit who can write to the repository.
+      - name: Require the edge branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/edge" ]; then
+            echo "::error::Run this workflow from the edge branch (Use workflow from: edge). It was started from $GITHUB_REF."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve the commit to promote
+        id: src
+        run: |
+          set -euo pipefail
+          # The input is user-typed: allow plain ref and sha characters only, never an option.
+          if ! printf '%s' "${SOURCE_REF:-edge}" | grep -Eq '^[A-Za-z0-9._/][A-Za-z0-9._/-]*$'; then
+            echo "::error::Invalid ref input; use edge, a branch name or a commit sha."
+            exit 1
+          fi
+          git fetch --no-tags origin '+refs/heads/edge:refs/remotes/origin/edge'
+          ref="${SOURCE_REF:-edge}"
+          if [ "$ref" = edge ]; then ref=origin/edge; fi
+          sha="$(git rev-parse --verify --end-of-options "${ref}^{commit}")"
+          # The commit must be part of edge, so nothing outside the reviewed branch reaches main.
+          if ! git merge-base --is-ancestor "$sha" origin/edge; then
+            echo "::error::$sha is not on the edge branch; only edge commits can be promoted."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Check the exclude list
+        run: |
+          set -euo pipefail
+          # The list that counts is the one on the commit being promoted.
+          git show "${{ steps.src.outputs.sha }}:.github/main-exclude.txt" > "$RUNNER_TEMP/exclude.txt" \
+            || { echo "::error::.github/main-exclude.txt is missing on the commit to promote."; exit 1; }
+          grep -vE '^\s*(#|$)' "$RUNNER_TEMP/exclude.txt" | sed 's/[[:space:]]*$//' > "$RUNNER_TEMP/paths.txt" || true
+          if [ ! -s "$RUNNER_TEMP/paths.txt" ]; then
+            echo "::error::.github/main-exclude.txt has no paths; refusing to promote everything."
+            exit 1
+          fi
+          # Plain paths only: no pathspec magic (:), options (-), absolute paths, .., globs, and
+          # nothing the app, its tests, CI or the image need.
+          bad="$(grep -E '^[:/-]|\.\.|[*?[]|^\.github(/|$)|^(src|drizzle|static|scripts|e2e)(/|$)' "$RUNNER_TEMP/paths.txt" || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::Invalid lines in .github/main-exclude.txt (leading : - /, .., glob characters, or a protected path such as .github/, src/, drizzle/, static/, scripts/, e2e/):"
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+          echo "Excluded from main:"; cat "$RUNNER_TEMP/paths.txt"
+
+      - name: Build the promotion commit
+        id: build
+        run: |
+          set -euo pipefail
+          sha='${{ steps.src.outputs.sha }}'
+          short='${{ steps.src.outputs.short }}'
+          branch="promote/$short"
+          mapfile -t paths < "$RUNNER_TEMP/paths.txt"
+
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "::error::Branch $branch already exists; close its pull request and delete the branch first."
+            exit 1
+          fi
+
+          # Last promoted edge commit: the newest Promoted-From line on main, else the point
+          # where edge and main first diverged (the first promotion lists everything since).
+          last="$(git log origin/main --format=%B --author='github-actions\[bot\]' --grep='^Promoted-From: ' \
+                  | sed -n 's/^Promoted-From: \([0-9a-f]\{40\}\).*/\1/p' | head -n 1)"
+          if [ -z "$last" ] || ! git cat-file -e "${last}^{commit}" 2>/dev/null; then
+            last="$(git merge-base origin/main "$sha")"
+          fi
+
+          git switch -c "$branch" origin/main
+          # Index and working tree become exactly edge's tree. Files deleted on edge are removed
+          # (and edge-only content never merges with main's old content).
+          git read-tree -u --reset "$sha"
+          # Then the excluded paths go, including ones that exist on main today.
+          git rm -r -q -f --ignore-unmatch -- "${paths[@]}"
+          # Also drop leftovers that git rm leaves behind as empty directories (harmless, but tidy).
+          git clean -fdq
+
+          if git diff --cached --quiet origin/main; then
+            echo "::notice::main already matches edge $short (minus the excluded paths); nothing to promote."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Commits new since the last promotion, leaving out ones that touch only excluded paths.
+          excl=(); for p in "${paths[@]}"; do excl+=(":(exclude)$p"); done
+          git log --no-merges --reverse --format='- %h %s' "${last}..${sha}" -- . "${excl[@]}" > "$RUNNER_TEMP/commits.txt"
+          [ -s "$RUNNER_TEMP/commits.txt" ] || echo "- (only agent and maintainer files changed)" > "$RUNNER_TEMP/commits.txt"
+
+          {
+            echo "Promote edge $short to main"
+            echo
+            echo "Edge commits since the last promotion (${last:0:7}):"
+            echo
+            cat "$RUNNER_TEMP/commits.txt"
+            echo
+            echo "Files listed in .github/main-exclude.txt are left out of main."
+            echo
+            echo "Promoted-From: $sha"
+          } > "$RUNNER_TEMP/message.txt"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -F "$RUNNER_TEMP/message.txt"
+          git push origin "$branch"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: steps.build.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          branch='${{ steps.build.outputs.branch }}'
+          short='${{ steps.src.outputs.short }}'
+          {
+            echo "Promotes \`edge\` (\`$short\`) to \`main\`. The files in \`.github/main-exclude.txt\` (agent and maintainer docs) are not part of it."
+            echo
+            echo "Edge commits new since the last promotion:"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/commits.txt"
+            echo '```'
+            echo
+            echo "Before merging: the \`test\` and \`e2e\` checks must be green on this branch (this workflow started them; see the note below). Merge with **Create a merge commit** so the \`Promoted-From:\` line stays in main's history. Do not squash."
+            echo
+            echo "Promoted-From: ${{ steps.src.outputs.sha }}"
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base main --head "$branch" \
+            --title "Promote edge $short to main" --body-file "$RUNNER_TEMP/body.md"
+
+      # A branch push and a pull request opened with GITHUB_TOKEN do not start other workflows.
+      # workflow_dispatch is the exception, so start the docker workflow on the branch by hand.
+      # Its `test` and `e2e` jobs report on the branch head commit, which is what the protected
+      # `main` waits for. publish=false: no image is built from this branch.
+      - name: Start the CI checks on the promote branch
+        if: steps.build.outputs.changed == 'true'
+        run: |
+          gh workflow run docker.yml --ref '${{ steps.build.outputs.branch }}' -f publish=false
