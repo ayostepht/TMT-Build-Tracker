@@ -65,15 +65,27 @@ docker run -d --name tmt-build-tracker --restart unless-stopped \
 
 If port 3000 is already in use on the machine, change the first number (for example `-p 3091:3000`) and open that port instead.
 
-Or with Docker Compose:
+Or with Docker Compose. Save this as `docker-compose.yml` next to the `data` folder from step 1 and paste the output of `openssl rand -hex 32` as the secret (use the value from `tmt.env` if you made one; the compose file does not read `tmt.env`):
 
-```bash
-cp docker-compose.example.yml docker-compose.yml
-# edit docker-compose.yml: paste your secret into BETTER_AUTH_SECRET
-docker compose up -d
+```yaml
+services:
+  tmt-build-tracker:
+    image: ghcr.io/ayostepht/tmt-build-tracker:latest
+    container_name: tmt-build-tracker
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./data:/data
+    environment:
+      BETTER_AUTH_SECRET: '' # required: paste the output of  openssl rand -hex 32
+      # Set when you serve it over https behind a reverse proxy (no trailing slash):
+      # PUBLIC_URL: https://tmt.example.com
+      # Extra site admins, besides the first account created:
+      # ADMIN_EMAILS: you@example.com
 ```
 
-`docker-compose.example.yml` maps `./data` to `/data` and publishes port 3000; every optional setting is in it as a commented line. If the pull fails with `unauthorized` or `denied`, see [Image access](#image-access).
+Then run `docker compose up -d`. As with `docker run`, if port 3000 is taken change the first number, and `./data` must be owned by uid 1000 (`sudo chown 1000:1000 data`, step 1). The repository's `docker-compose.example.yml` is the same file with every other option (sign-up mode, single sign-on, upload limits, printers) as a commented line: `cp docker-compose.example.yml docker-compose.yml` gives you that one instead. If the pull fails with `unauthorized` or `denied`, see [Image access](#image-access).
 
 Migrations and seeding of the standard kit run automatically at start. The health check is `GET /api/health` (it returns `{"ok":true,"version":"0.9.0"}` when the database answers, and status 503 otherwise; the version shown is an example).
 
