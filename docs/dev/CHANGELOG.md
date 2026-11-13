@@ -15,7 +15,8 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
   geometry row (`push-handle-one-piece`), 40 admin rows kept with no `source_note` change;
   only those row counts changed. Live build unchanged apart from the new To print row.
   UI checks on a copy of the live data: all passed except "Foaming", which the catalog
-  cannot show (no foaming TPU). Rollback: re-tag `r52` as `test`, no restore.
+  cannot show (no foaming TPU). The maintainer checked it on their phone, all good.
+  Rollback: re-tag `r52` as `test`, no restore.
 - **r52** (published `edge` image, 3ec52a7, 2026-11-13; tagged `edge-3ec52a7`): the first
   test-copy deploy from the `edge` channel. Plate retry keeps a live plate Printing, Printing
   takes the printer's start time, unlogged-print notice (#18); "Where is it printing?" sheet

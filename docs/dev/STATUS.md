@@ -199,18 +199,6 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
-- (2026-11-13) **r53 phone review** of #32 / #33 / #35 on the test copy. Checks on a copy of the
-  live data (2026-11-13, 390 + 1440): Type select reads "95A" by default, 98A lists only 98A,
-  All types lists everything (108 TPU swatches), a hovered selected brand chip stays
-  readable; one-piece handle option, H2D / H2S layout with plate 22 and the grip on its own
-  TPU plate 18; "Replace plates?" appeared 3 of 3 times when a MakeGood layout was picked
-  right after arranging; jeepxj credit on About, Help (FAQ) and the 3D stage. Not checkable:
-  **no "Foaming" type**, because the catalog has no foaming TPU (the only `/foam/i` matches
-  are PLA "Seafoam" colors) [filaments-catalog]. Seen, open: the type counts differ from the
-  swatches listed (98A (8) lists 13, 90A (19) lists 14) [design-studio-ui]; at 390 the
-  3D model covers part of the stage credit line [design-studio-ui]. The kit pack upgraded the
-  test copy's 1.0.1 model to 1.0.2 (it was not admin-imported); kit-status lists nothing
-  missing.
 - (2026-11-13, issues #29 / #30) **Review PR #32** (#30 picker Type filter: default reads
   "95A" / "PETG", subtypes with counts; plus hovered selected badges stay readable) on the
   `edge` image after merge. **#29 one-piece push handle** (branch
@@ -253,7 +241,9 @@ Route each to the agent named in brackets.
 
 - **Design studio** [design-studio-ui]: a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
-  over: class-only field styles in components were not audited for `--line` borders;
+  over: the picker's Type counts differ from the swatches listed (r53: "98A (8)" lists 13,
+  "90A (19)" lists 14); at 390 the 3D model covers part of the stage credit line (r53);
+  class-only field styles in components were not audited for `--line` borders;
   adjacent `.pill-link` hit bands can overlap on touch; "MakeGood · CC0" credit wraps over the chair at 360 px;
   `share/ApplyDesign` uses raw fetch (add `listDesigns` to `client/api.ts`);
   `editableTargets` lacks `kind` (can't tell builds from drafts); no "start a draft from
@@ -275,6 +265,9 @@ Route each to the agent named in brackets.
   `PartRow` could carry a `data-testid` on its status group (`viewer.spec.ts` selects it
   by role) [build-state]; a local `npm run dev`/built server without release credentials
   logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
+- **Filament catalog** [filaments-catalog]: the picker's "Foaming" type never shows,
+  because the catalog has no foaming TPU (the only `/foam/i` matches are PLA "Seafoam"
+  colors); seen on r53.
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
 - **Files tab** [plates-3mf]: on r45 at 390 the layout select showed "Loading…" while the
   heading already named the layout. Probably the race fixed on 2026-11-13 (the picker's
