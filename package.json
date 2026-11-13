@@ -66,6 +66,9 @@
 	"imports": {
 		"#lib/*": "./src/lib/*"
 	},
+	"overrides": {
+		"minimatch": "^11.0.1"
+	},
 	"dependencies": {
 		"@gltf-transform/core": "^4.5.1",
 		"@gltf-transform/extensions": "^4.5.1",
