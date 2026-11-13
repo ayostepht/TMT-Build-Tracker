@@ -223,3 +223,71 @@ test('Choosing Printing on a printer that already runs the print keeps the print
 		await removePrinter(page, printerId);
 	}
 });
+
+test('Link to plate while an earlier print of that plate is unlogged: the notice shows, opens that log, and goes once it is logged', async ({
+	page
+}) => {
+	test.setTimeout(150_000);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	mock.set(IDLE);
+	const { buildId } = await ownerWithBuild(page, 'retry3');
+	const printerId = await addPrinter(page, buildId, 'Retry Bench Three');
+	try {
+		const plate = (await view(page, buildId)).plates[0];
+		await page.goto(`/builds/${buildId}`);
+		await page.waitForLoadState('networkidle');
+
+		// A: linked by hand, then cancelled and left unlogged.
+		mock.printing('notice-a.gcode', 39, { ticks: 2340, totalTicks: 6000 });
+		const unlinkedA = page.getByTestId('unlinked-job').filter({ hasText: 'notice-a.gcode' });
+		await expect(unlinkedA).toBeVisible({ timeout: 20_000 });
+		await unlinkedA.getByTestId('link-plate').selectOption(String(plate.number));
+		await expect(page.getByTestId('now-card')).toContainText(`Plate ${plate.number}`, {
+			timeout: 15_000
+		});
+		// Nothing earlier to warn about yet.
+		await expect(page.getByTestId('linked-unlogged')).toHaveCount(0);
+		mock.set({ printStatus: 8, machineStatus: [0], progress: 39 });
+		const prompt = page.getByTestId('confirm-print-log');
+		await expect(prompt).toContainText('notice-a.gcode', { timeout: 20_000 });
+
+		// B: linking it through the dropdown goes through at once and then says A is unlogged.
+		mock.printing('notice-b.gcode', 30, { ticks: 5400, totalTicks: 18000 });
+		const unlinkedB = page.getByTestId('unlinked-job').filter({ hasText: 'notice-b.gcode' });
+		await expect(unlinkedB).toBeVisible({ timeout: 20_000 });
+		await unlinkedB.getByTestId('link-plate').selectOption(String(plate.number));
+		await expect(unlinkedB).toBeHidden({ timeout: 15_000 });
+		const notice = page.getByTestId('linked-unlogged');
+		await expect(notice).toBeVisible();
+		await expect(notice).toContainText(`Plate ${plate.number} has an unlogged`);
+		await expect(page.getByTestId('expected-unlogged')).toHaveCount(0);
+		if (process.env.TMT_SHOTS) {
+			for (const [w, scheme] of [
+				[390, 'light'],
+				[390, 'dark'],
+				[1440, 'light'],
+				[1440, 'dark']
+			] as const) {
+				await page.emulateMedia({ colorScheme: scheme });
+				await page.setViewportSize({ width: w, height: w === 390 ? 844 : 900 });
+				await notice.scrollIntoViewIfNeeded();
+				await page.screenshot({ path: `data/shots/link-notice-${w}-${scheme}.png` });
+			}
+			await page.emulateMedia({ colorScheme: null });
+			await page.setViewportSize({ width: 1440, height: 900 });
+		}
+
+		// "Open print log" takes the user to A's Confirm print log.
+		await notice.getByTestId('linked-unlogged-open').click();
+		await expect(prompt).toBeFocused();
+
+		// Logging A removes the notice.
+		await prompt.getByTestId('confirm-result').selectOption('Failed');
+		await prompt.getByTestId('confirm-log').click();
+		await expect(prompt).toBeHidden({ timeout: 15_000 });
+		await expect(notice).toBeHidden({ timeout: 15_000 });
+	} finally {
+		mock.set(IDLE);
+		await removePrinter(page, printerId);
+	}
+});
