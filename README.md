@@ -2,7 +2,7 @@
 
 A self-hostable web app for makers 3D-printing the MakeGood 3D TMT (toddler mobility trainer) chair. Teams ("chapters") plan, print, assemble and hand off builds together: parts and print plates, filament colors, print logs, a 3D color designer, 3MF export for your slicer, and optional read-only printer status. It has accounts, chapters and roles, and it is made for makers who can run a Docker container, not for developers.
 
-> **Status:** 0.9 pre-release, in public testing. Data formats are stable, but details may change before 1.0.0. The Klipper, OctoPrint and Bambu Lab printer connections have not been run against real printers yet. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` (the newest release). See [Feedback and beta testing](#feedback-and-beta-testing) for how to help.
+> **Status:** Pre-release, in public testing (see the [changelog](CHANGELOG.md) for the current version). Data formats are stable, but details may change before the first stable release. The Klipper, OctoPrint and Bambu Lab printer connections have not been run against real printers yet. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` (the newest release). See [Feedback and beta testing](#feedback-and-beta-testing) for how to help.
 
 ## Screenshots
 
@@ -38,7 +38,7 @@ The git repository itself contains only data about the kit (part names, settings
 
 ## Quick start (about 5 minutes)
 
-You need an always-on machine with Docker (a NAS, a mini PC or a desktop; the image is published for x86-64 and arm64; only x86-64 has been run by the project, so arm64 reports are welcome). On Unraid use the [Unraid guide](docs/guides/unraid.md) instead. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` needs no login. Tags: `latest` is the newest release; `0.9.0` and `0.9` are specific releases (git tag `v0.9.0`); `edge` is the `edge` branch, where pull requests land first and the maintainer reviews them before they reach `main` and a release, for people who want to test unreleased changes and accept that it can break (back up first, and do not expect to go back from `edge` to an older release without restoring that backup if a migration ran); `sha-<short commit>` is one exact build (published for every `main` and `edge` build). You can also build it from source with `docker build -t tmt-build-tracker .` (see [CONTRIBUTING.md](CONTRIBUTING.md)). Allow about 0.5 GB of disk for the image and about 150 MB for the data folder (the installed kit pack).
+You need an always-on machine with Docker (a NAS, a mini PC or a desktop; the image is published for x86-64 and arm64; only x86-64 has been run by the project, so arm64 reports are welcome). On Unraid use the [Unraid guide](docs/guides/unraid.md) instead. The image is public: `docker pull ghcr.io/ayostepht/tmt-build-tracker:latest` needs no login. Tags: `latest` is the newest release; `X.Y.Z` and `X.Y` are specific releases (git tag `vX.Y.Z`); `edge` is the `edge` branch, where pull requests land first and the maintainer reviews them before they reach `main` and a release, for people who want to test unreleased changes and accept that it can break (back up first, and do not expect to go back from `edge` to an older release without restoring that backup if a migration ran); `sha-<short commit>` is one exact build (published for every `main` and `edge` build). You can also build it from source with `docker build -t tmt-build-tracker .` (see [CONTRIBUTING.md](CONTRIBUTING.md)). Allow about 0.5 GB of disk for the image and about 150 MB for the data folder (the installed kit pack).
 
 ### 1. Prepare a data folder and a secret
 
@@ -87,12 +87,12 @@ services:
 
 Then run `docker compose up -d`. As with `docker run`, if port 3000 is taken change the first number, and `./data` must be owned by uid 1000 (`sudo chown 1000:1000 data`, step 1). The repository's `docker-compose.example.yml` is the same file with every other option (sign-up mode, single sign-on, upload limits, printers) as a commented line: `cp docker-compose.example.yml docker-compose.yml` gives you that one instead. If the pull fails with `unauthorized` or `denied`, see [Image access](#image-access).
 
-Migrations and seeding of the standard kit run automatically at start. The health check is `GET /api/health` (it returns `{"ok":true,"version":"0.9.0"}` when the database answers, and status 503 otherwise; the version shown is an example).
+Migrations and seeding of the standard kit run automatically at start. The health check is `GET /api/health` (it returns `{"ok":true,"version":"<version>"}` when the database answers, and status 503 otherwise; the version shown is an example).
 
 ### 3. First start
 
 1. `docker ps` shows the container as **healthy** after about 20 seconds. If it stops, run `docker logs tmt-build-tracker`: the log says what is wrong (see [Troubleshooting](docs/guides/troubleshooting.md)).
-2. The log should show `[tmt] seeded templates: makegood-tmt-revb`, `Listening on http://0.0.0.0:3000`, and within a few seconds `[tmt] kit pack: makegood-tmt-revb 1.0.1: model installed, 40 print geometry row(s)...`. A Better Auth warning "Base URL is not set" is normal while `PUBLIC_URL` is empty.
+2. The log should show `[tmt] seeded templates: makegood-tmt-revb`, `Listening on http://0.0.0.0:3000`, and within a few seconds `[tmt] kit pack: makegood-tmt-revb <version>: model installed, 40 print geometry row(s)...`. A Better Auth warning "Base URL is not set" is normal while `PUBLIC_URL` is empty.
 3. Open `http://<server-ip>:3000`, on the sign-in page choose **Create one** (next to "No account?") and create your account. **The first account created on the install is the site admin** (kit admin pages at `/admin/templates`). More admins can be named in `ADMIN_EMAILS` (case-insensitive; read at start, so restart the container after changing it).
 4. The MakeGood kit (model, print geometry, credit) is already installed; nothing to upload. To see it, press **New build** on the page you land on, then **Create build**: a five-step setup opens (Template, Options, Colors, Files, Export) and the 3D chair appears at the Colors step. The in-app **Help** page explains the rest.
 
@@ -102,7 +102,7 @@ Known gap: behind a reverse proxy the sign-in rate limit needs `ADDRESS_HEADER`,
 
 ### Image access
 
-The image is public and is pulled without logging in. If a pull fails with `unauthorized` or `denied`, the usual cause is an old or expired `docker login ghcr.io` on the machine: run `docker logout ghcr.io` and pull again. Check also that the tag exists (for example `latest` or `0.9.0`) and that the name is spelled in lower case.
+The image is public and is pulled without logging in. If a pull fails with `unauthorized` or `denied`, the usual cause is an old or expired `docker login ghcr.io` on the machine: run `docker logout ghcr.io` and pull again. Check also that the tag exists (for example `latest` or a version such as `X.Y.Z`) and that the name is spelled in lower case.
 
 ## Guides
 
@@ -122,7 +122,7 @@ The image is public and is pulled without logging in. If a pull fails with `unau
 
 ## Feedback and beta testing
 
-This is a pre-release (0.9): your data and its formats are stable, but details may still change before 1.0. The most useful feedback right now:
+This is a pre-release: your data and its formats are stable, but details may still change before the first stable release. The most useful feedback right now:
 
 - Installing from the guide on a machine that is not the maintainer's, and telling us where the guide let you down.
 - Klipper (Moonraker), OctoPrint and Bambu Lab connections, which are marked Experimental in the app because they have not been run against real printers yet.
