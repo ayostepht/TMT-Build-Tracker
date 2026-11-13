@@ -264,10 +264,14 @@ Route each to the agent named in brackets.
   by role) [build-state]; a local `npm run dev`/built server without release credentials
   logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
-- **Files tab** [plates-3mf]: on r45 (copy of live data, in-app navigation) the 1440 view
-  agrees from the first render, but at 390 the layout select still showed "Loading…" while
-  the heading already named the layout (agreed after network idle; one run per width).
-  Look at the network waterfall; suspected: the fetch queued behind SSE and printer streams.
+- **Files tab** [plates-3mf]: on r45 at 390 the layout select showed "Loading…" while the
+  heading already named the layout. Probably the race fixed on 2026-11-13 (the picker's
+  preload effect re-ran on every view refresh; layout answers were not latest-wins): check
+  on the next deploy. That race also made `print-template.spec.ts:66` time out on CI.
+- **CI** [release-pwa]: the e2e job's limit is 35 min (was 20; the suite takes ~20 min with 1
+  worker and a timeout cancelled the `edge` run of #33, skipping its image). As the suite
+  grows, shard it (`--shard=1/2` over two jobs, each with its own server and DB) rather than
+  add workers: specs share one DB and server.
 - **r48 checks** (2026-11-12, copy of live data, simulated printer; shots in
   `data/r48-check/shots/` on Unraid). Failed [build-state]: Printed → the log sheet
   prefills "Filament used (g)" with the slicer's fractional grams (e.g. 162.52) but the

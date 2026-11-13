@@ -128,7 +128,12 @@
 		load();
 	});
 	$effect(() => {
-		if (buildId && preload) apply(preload);
+		const p = preload;
+		// Only a new answer (a new object) may re-apply. `buildId` is read untracked: the parent passes
+		// `ctx.id`, a getter that reads the whole build view, so tracking it re-ran this effect on every
+		// view refresh and put an old answer ("default layout") back over what the picker had just
+		// set ("arranged"). A pick of the default layout was then taken as "nothing to do".
+		if (p && untrack(() => buildId)) untrack(() => apply(p));
 	});
 
 	// Bed draft: the New build form starts on 256 × 256; an existing build starts on its printer.

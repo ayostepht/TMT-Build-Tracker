@@ -137,11 +137,18 @@
 						? source.slice('layout:'.length)
 						: null; // 'template': the default layout
 	// Reload the layout name whenever the plates come from somewhere else (switch, upload, other tab).
+	// Latest request wins, and a switch or arrange made by the picker invalidates every request sent
+	// before it: a slower answer from before the change ("default layout") must not overwrite what the
+	// picker just set ("arranged"), or the picker believes the old layout is still in place and
+	// silently ignores a pick of it (no "Replace plates?" question).
+	let layoutsSeq = 0;
 	$effect(() => {
 		const seed = sourceLayout(ctx.view.plates[0]?.source);
 		if (seed !== undefined) current = seed;
+		const seq = ++layoutsSeq;
 		buildPlateLayouts(ctx.id)
 			.then((r) => {
+				if (seq !== layoutsSeq) return;
 				layouts = r.layouts;
 				current = r.current;
 				layoutsLoaded = true;
@@ -473,7 +480,7 @@
 			allowUpload
 			{preload}
 			plateCount={ctx.view.plates.length}
-			onchanged={() => (arrRev++, ctx.refresh())}
+			onchanged={() => (layoutsSeq++, arrRev++, ctx.refresh())}
 			onupload={openUpload}
 		/>
 	{/if}

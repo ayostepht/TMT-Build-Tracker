@@ -75,7 +75,8 @@ jobs:
     env:
       KITPACK_DOWNLOAD: 'off'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Suite takes ~20 min on ubuntu-latest (1 worker); one retry can add the 3-minute test timeout.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
