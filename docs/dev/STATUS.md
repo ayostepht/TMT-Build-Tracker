@@ -276,7 +276,10 @@ Route each to the agent named in brackets.
   logs a 404 fetching kit pack 1.0.1 (expected while the repo is private) [kit-and-startup].
 - **Filament catalog** [filaments-catalog]: the picker's "Foaming" type never shows,
   because the catalog has no foaming TPU (the only `/foam/i` matches are PLA "Seafoam"
-  colors); seen on r53.
+  colors); seen on r53. Upstream SpoolmanDB (2026-11-12) has none either. Decided
+  (maintainer, 2026-11-13): makers add foaming TPU as their own filament for now. A future
+  refresh from a cloud session needs the vendor hosts allowed in its environment (every
+  vendor store, incl. Overture and Schoolhouse Spools, is refused there); the Mac works.
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
 - **Files tab** [plates-3mf]: on r45 at 390 the layout select showed "Loading…" while the
   heading already named the layout. Probably the race fixed on 2026-11-13 (the picker's
