@@ -6,6 +6,12 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.1] - 2026-11-13
+
+A patch release of the 0.9 pre-release: fixes from the first days of public testing. No database changes; update as usual (take a backup first).
+
 ### Added
 
 - When a plate still has an earlier print that was never logged (for example a failed one), linking a new print to it says so, with a button that opens that print's log.
