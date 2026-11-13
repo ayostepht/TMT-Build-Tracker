@@ -36,6 +36,8 @@ export interface FilamentRole {
 	spools: number; // spools on hand (1 kg each)
 	recommendedSpools: number;
 	spoolmanSpoolId: number | null;
+	/** True for the template's own slots (primary, accent, soft, tire, …): they can be recoloured but never removed. */
+	kit: boolean;
 }
 
 export interface PartComponent {
@@ -50,6 +52,8 @@ export interface PartDef {
 	name: string;
 	section: string;
 	role: string; // FilamentRole.key: design snapshot's partRoles[slug] ?? template defaultRole
+	defaultRole: string; // FilamentRole.key the template gives this part (what a palette reset returns it to)
+	locked: boolean; // "Lock color": a palette apply leaves this part on its current filament (builds.design.lockedParts)
 	bomGrams: number | null;
 	qty: number | null;
 	walls: number | null;

@@ -6,6 +6,9 @@ import {
 	hiddenSlugs,
 	materialAllowed,
 	newRoleKey,
+	paletteReset,
+	removeImpact,
+	replacementOptions,
 	roleOptions,
 	symmetryPeers
 } from './design.ts';
@@ -99,5 +102,73 @@ describe('newRoleKey', () => {
 		expect(newRoleKey(['primary'], 'Polymaker Red')).toBe('polymaker-red');
 		expect(newRoleKey(['polymaker-red'], 'Polymaker Red')).toBe('polymaker-red-2');
 		expect(newRoleKey([], '!!!')).toBe('color');
+	});
+});
+
+describe('paletteReset', () => {
+	it('lists unlocked parts off their kit slot as reset and locked parts as kept', () => {
+		const view = makeView();
+		const [a, b, c] = view.allParts;
+		const other = view.filaments.find((f) => f.key !== a.defaultRole)!.key;
+		const moved = {
+			...view,
+			allParts: view.allParts.map((p) =>
+				p.slug === a.slug
+					? { ...p, role: other }
+					: p.slug === b.slug
+						? { ...p, role: other, locked: true }
+						: p.slug === c.slug
+							? { ...p, locked: true }
+							: p
+			)
+		};
+		const r = paletteReset(moved);
+		expect(r.reset.map((p) => p.slug)).toEqual([a.slug]);
+		expect(r.kept.map((p) => p.slug).sort()).toEqual([b.slug, c.slug].sort());
+		expect(paletteReset(view)).toEqual({ reset: [], kept: [] });
+	});
+});
+
+describe('removeImpact and replacementOptions', () => {
+	const base = makeView();
+	const withRed = {
+		...base,
+		filaments: [
+			...base.filaments,
+			{ ...base.filaments[0], key: 'red', name: 'Red', kit: false, tpu: false }
+		]
+	};
+	const g = base.variantGroups.find((x) => x.options.length > 1)!;
+	const inactivePart = base.allParts.find((p) => !base.parts.some((x) => x.slug === p.slug))!;
+
+	it('counts every part on the slot and flags the ones of an unchosen option', () => {
+		expect(g).toBeTruthy();
+		const view = {
+			...withRed,
+			allParts: withRed.allParts.map((p) =>
+				p.slug === inactivePart.slug || p.slug === 'wing-left' ? { ...p, role: 'red' } : p
+			)
+		};
+		view.parts = view.parts.map((p) => (p.slug === 'wing-left' ? { ...p, role: 'red' } : p));
+		const impact = removeImpact(view, 'red');
+		expect(impact.map((i) => i.part.slug)).toEqual(['wing-left', inactivePart.slug]);
+		expect(impact.map((i) => i.inactive)).toEqual([false, true]);
+		expect(removeImpact(view, 'nothing')).toEqual([]);
+	});
+
+	it('offers the other slots and blocks the ones an affected part cannot use', () => {
+		const view = {
+			...withRed,
+			allParts: withRed.allParts.map((p) => (p.slug === 'wing-left' ? { ...p, role: 'red' } : p))
+		};
+		const opts = replacementOptions(view, 'red');
+		expect(opts.map((o) => o.filament.key)).not.toContain('red');
+		const soft = opts.find((o) => o.filament.key === 'soft')!;
+		expect(soft.ok).toBe(false);
+		expect(soft.reason).toMatch(/PETG/);
+		expect(opts.find((o) => o.filament.key === 'primary')).toMatchObject({
+			ok: true,
+			reason: null
+		});
 	});
 });

@@ -239,7 +239,16 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
-- **Design studio** [design-studio-ui]: a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
+- **Design studio** [design-studio-ui]: #34 (2026-11-13): re-applying a palette resets
+  unlocked parts to their kit slot; "Lock color" keeps a part's exact colour (locked parts on
+  a recoloured slot move to a slot with their old filament, reused or auto-added); a used
+  non-kit colour is removed through a replacement dialog (spools and Spoolman link dropped,
+  role-keyed grams remapped). Locks live in `builds.design.lockedParts` (builds and drafts
+  only, not saved designs); "Use this design" clears them. Follow-ups: a palette or
+  single-filament change doesn't check that parts already on the slot accept the new
+  material (security-reviewer Low, pre-existing in `updateFilament`); the palette Undo
+  activity doesn't mention the auto-added lock slots it removes.
+- a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
   over: class-only field styles in components were not audited for `--line` borders;
   adjacent `.pill-link` hit bands can overlap on touch; "MakeGood · CC0" credit wraps over the chair at 360 px;
