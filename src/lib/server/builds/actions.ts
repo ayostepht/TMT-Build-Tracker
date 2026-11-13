@@ -44,6 +44,7 @@ import { isPersonalOrg } from '../teams';
 import { autoRearrangeBuild, REARRANGE_KINDS } from './arrange-plan';
 import { applyPatches, loadBuildView } from './view';
 import { isObj, type Obj } from '#lib/domain/guards.ts';
+import { sanePrintSeconds } from '#lib/domain/format.ts';
 
 interface Outcome {
 	kind: string;
@@ -342,12 +343,7 @@ function liveJobStart(tx: Db, buildId: string, slugs: string[]): LiveStart | nul
 	const best = rows[0];
 	if (!best) return null;
 	const st = best.lastStatus ?? {};
-	const el = st.elapsedSec;
-	const rem = st.remainingSec;
-	const total =
-		typeof el === 'number' && typeof rem === 'number' && Number.isFinite(el + rem) && el + rem > 0
-			? Math.round(el + rem)
-			: null;
+	const total = sanePrintSeconds(st.elapsedSec, st.remainingSec);
 	return { startedAt: best.startedAt!, runEstSeconds: total };
 }
 

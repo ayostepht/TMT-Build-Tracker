@@ -11,7 +11,7 @@ import { jobNeverStarted, stopPrinting } from '#lib/domain/actions.ts';
 import { releaseUnstarted } from '#lib/domain/recompute.ts';
 import { progressGrams } from '#lib/domain/logrun.ts';
 import { defaultRunParts } from '#lib/domain/run-choice.ts';
-import { today } from '#lib/domain/format.ts';
+import { sanePrintSeconds, today } from '#lib/domain/format.ts';
 import type { BuildView, PartPatch } from '#lib/domain/types.ts';
 import type { PrinterExpectedView, PrinterJobView, PrinterStatus } from '#lib/printers/status.ts';
 import { ApiError } from '../access';
@@ -213,10 +213,7 @@ function attach(
 			? (job.partSlugs ?? []).filter((s) => !slugs.includes(s))
 			: [];
 	const started = job.startedAt ?? new Date();
-	const est =
-		status.elapsedSec != null && status.remainingSec != null
-			? Math.round(status.elapsedSec + status.remainingSec)
-			: null;
+	const est = sanePrintSeconds(status.elapsedSec, status.remainingSec);
 	const payload = {
 		printer: printer.name,
 		printerId: printer.id,

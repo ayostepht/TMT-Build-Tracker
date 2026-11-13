@@ -2,7 +2,13 @@
 	import { untrack } from 'svelte';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { jobAction } from '#lib/client/api.ts';
-	import type { PrinterExpectedView } from '#lib/printers/status.ts';
+	import { resolve } from '$app/paths';
+	import {
+		unloggedEndedJobs,
+		unloggedNotice,
+		type PrinterExpectedView,
+		type PrinterJobView
+	} from '#lib/printers/status.ts';
 	import { getBuildCtx, type BuildCtx } from './build-context.svelte.ts';
 	import { runChoices, runOptionLabel } from './run-label.ts';
 
@@ -14,13 +20,16 @@
 		exp,
 		onother,
 		ctx: ctxProp,
-		onlinked
+		onlinked,
+		jobs: jobsProp
 	}: {
 		exp: PrinterExpectedView;
 		onother: () => void;
 		/** Outside a build page (the Printers page) the build's context is passed in. */
 		ctx?: BuildCtx;
 		onlinked?: () => void | Promise<void>;
+		/** Jobs to look for an unlogged print of the same plate in (default: the build's store). */
+		jobs?: PrinterJobView[];
 	} = $props();
 	const ctx = untrack(() => ctxProp ?? getBuildCtx());
 	const store = untrack(() =>
@@ -35,6 +44,33 @@
 		if (c) t += ` · ${runOptionLabel(ctx, c)}`;
 		return t;
 	});
+
+	// A finished print of these parts that nobody logged yet: said, never blocking.
+	const unlogged = $derived(
+		unloggedEndedJobs(
+			jobsProp ?? store?.jobs ?? [],
+			ctx.id,
+			exp.plateNumber,
+			exp.partSlugs,
+			exp.jobId
+		)[0]
+	);
+	const unloggedNote = $derived.by(() => {
+		if (!unlogged) return '';
+		const at = unlogged.finishedAt ?? unlogged.startedAt;
+		const time = at
+			? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+			: '';
+		return unloggedNotice(unlogged, time);
+	});
+	/** Take the user to that job's "Confirm print log" when it is on this page, else to the build. */
+	function showLog(e: MouseEvent) {
+		const box = unlogged && document.getElementById(`confirm-log-${unlogged.id}`);
+		if (!box) return;
+		e.preventDefault();
+		box.scrollIntoView({ block: 'center' });
+		box.focus({ preventScroll: true });
+	}
 
 	let busy = $state(false);
 	let err = $state('');
@@ -60,6 +96,17 @@
 
 <div class="exp-confirm" data-testid="expected-confirm">
 	<p class="exp-q">Confirm <b>{label}</b> is printing on {exp.printerName}?</p>
+	{#if unlogged}
+		<p class="exp-unlogged" data-testid="expected-unlogged">
+			{unloggedNote} Log it first so its time and filament count.
+			<a
+				class="pill-link"
+				href={resolve('/(app)/builds/[id]', { id: ctx.id })}
+				data-testid="expected-unlogged-open"
+				onclick={showLog}>Open print log</a
+			>
+		</p>
+	{/if}
 	<div class="exp-actions">
 		<button
 			class="btn sm primary"
@@ -84,6 +131,16 @@
 	}
 	.exp-q {
 		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.exp-unlogged {
+		margin: 0;
+		padding: var(--sp-4) var(--sp-5);
+		border: 1px solid var(--line);
+		border-left: 4px solid var(--warn);
+		border-radius: var(--r-md);
+		background: var(--card);
+		font-size: var(--fs-sm);
 		overflow-wrap: anywhere;
 	}
 	.exp-actions {

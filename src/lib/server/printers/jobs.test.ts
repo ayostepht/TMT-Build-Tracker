@@ -19,6 +19,7 @@ import {
 } from '../db/schema';
 import { createBuild } from '../builds/create';
 import { addRun, deleteRun, printingAction, updatePlate } from '../builds/actions';
+import { sanePrintSeconds } from '#lib/domain/format.ts';
 import { filamentStats } from '#lib/domain/accounting.ts';
 import { loadBuildView } from '../builds/view';
 import { nowPrinting } from '#lib/domain/now.ts';
@@ -1026,5 +1027,14 @@ describe('linking a job over parts that are already Printing', () => {
 		link(b.id, st);
 		expect(plateEst()).toBe(6000);
 		expect(view().state['handle-left'].runEstSeconds).toBe(7100);
+	});
+});
+
+describe('attach run-time estimate', () => {
+	it('is taken from sane elapsed + remaining only (see sanePrintSeconds)', () => {
+		expect(sanePrintSeconds(600, 1800)).toBe(2400);
+		expect(sanePrintSeconds(NaN, 5)).toBeNull();
+		expect(sanePrintSeconds(-1, 100)).toBeNull();
+		expect(sanePrintSeconds(2_592_000, 1)).toBeNull();
 	});
 });

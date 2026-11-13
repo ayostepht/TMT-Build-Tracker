@@ -89,6 +89,23 @@ describe('logging an older attempt while the plate prints again', () => {
 		expect(part().runEstSeconds).toBe(7200);
 	});
 
+	it.each([
+		['negative elapsed', { elapsedSec: -5e9, remainingSec: 5e9 + 3600 }],
+		['negative remaining', { elapsedSec: 3600, remainingSec: -10 }],
+		['NaN', { elapsedSec: NaN, remainingSec: 100 }],
+		['strings', { elapsedSec: '100', remainingSec: '100' }],
+		['over 30 days', { elapsedSec: 2_000_000, remainingSec: 1_000_000 }]
+	])('start ignores an absurd printer estimate (%s) but keeps the start', (_n, status) => {
+		db.update(printers)
+			.set({ lastStatus: { state: 'printing', ...status } as never })
+			.where(eq(printers.id, printerId))
+			.run();
+		liveJob();
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['handle-left'] });
+		expect(part().startedAt!.getTime()).toBe(T0.getTime());
+		expect(part().runEstSeconds).toBeNull();
+	});
+
 	it('a Failed run keeps the plate Printing with its start; delete and undo too', () => {
 		liveJob();
 		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['handle-left'] });

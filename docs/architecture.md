@@ -239,6 +239,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   Linking (`attach` → `linkPatches`): the job's start and estimate replace a part's Printing
   state unless another live job (`heldByOtherJobs`) covers the part; ended, unlogged jobs
   and manual starts never hold a part. A printer-sourced plate time follows; a typed one stays.
+  Printer run-time numbers go through `sanePrintSeconds` (`domain/format.ts`: finite, >= 0,
+  1 s to 30 days) before they become an estimate. `printers/status.ts` `unloggedEndedJobs` /
+  `unloggedNotice` drive a non-blocking notice in `ExpectedConfirm` (optional `jobs` prop)
+  when the plate has an ended, unlogged job; `ConfirmPrintLog` exposes `#confirm-log-<jobId>`.
 - **Client store** (`client/printer-store.svelte.ts`): sequence-guarded `load()`, refetch on
   SSE reopen / visibilitychange / online / focus, 30 s poll, "Printer status unavailable ·
   Retry".

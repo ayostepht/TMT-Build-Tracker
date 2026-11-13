@@ -20,16 +20,16 @@ done. Keep it under ~150 lines.
    `../TMT-wt-where-overflow`): "Where is it printing?" sheet no longer widens with a long
    file name; shared `Dialog` body is a `minmax(0, 1fr)` grid [design-studio-ui]. Gate both:
    check, lint, full vitest (1579 / 1564), build PASS; security review no high/medium.
-   **Still to do:** e2e not run (Playwright 1.65 browser not installed in the cloud session):
-   specs `printers`, `print-start`, `log-plate`, `run-edit`, plus new specs by
-   `e2e-playwright` for the retry flow (cancelled job → second job linked → Confirm log as
-   Failed → still Now printing) and a 390 px no-overflow check with a long file name; the
-   maintainer's preview review of the sheet; pull requests. Open questions for the
-   maintainer: Success logged while a newer job prints the same parts still prints them;
-   the keep-Printing rule needs a live printer job (a hand-logged failure without one still
-   sets Reprint). Follow-up (low, hardening): bound `elapsedSec`/`remainingSec` (>= 0, cap)
-   in `liveJobStart` and `attach` [build-state, printers]. Optional UX: warn when linking a
-   new job to a plate with an unlogged ended job.
+   Follow-ups added to #18 (2026-11-13): printer elapsed/remaining bounded by
+   `sanePrintSeconds` (`domain/format.ts`) in `liveJobStart` and `attach`; a non-blocking
+   "Plate N has an unlogged failed print … Open print log" notice on the "Confirm Plate N is
+   printing on …" step (`unloggedEndedJobs` in `printers/status.ts`); new
+   `e2e/plate-retry.spec.ts`; `e2e/log-plate.spec.ts` race fixed (it read client state from
+   before its own API calls; now reloads). Decided (maintainer): Success on a live plate still
+   prints the parts; the keep-Printing rule needs a live printer job. **Next:** the same notice
+   in the "Link to plate…" dropdown flow (maintainer asked) [printers]; possible SSE gap: after
+   API edits a client-side navigation showed stale state until reload (seen in log-plate),
+   unconfirmed [build-state]. PRs #18 and #19 target `edge` (see the edge flow, #20).
 1. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
    was merged, `v0.9.0` tagged, CI in full mode (`CI_FULL=true`). `main` is protected and
    work lands through pull requests (see CLAUDE.md "The repository is public"). Image

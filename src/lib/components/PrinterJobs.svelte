@@ -34,6 +34,7 @@
 				job={j}
 				{ctx}
 				exp={store.expected.find((e) => e.jobId === j.id && e.buildId === ctx.id)}
+				jobs={store.jobs}
 				onlinked={() => store.load()}
 			/>
 		{/if}
