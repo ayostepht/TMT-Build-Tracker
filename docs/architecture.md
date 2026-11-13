@@ -57,6 +57,13 @@ Sections match the subagents in `.claude/agents/`:
   (`recomputeParts`) replays a part's runs through `applyRun`; `deleteRun`/`updateRun`
   recompute targeted parts (`?recompute=0` to skip). Undo right after logging:
   `POST /api/builds/[id]/runs/[runId]/undo` with a client snapshot.
+- **Live printer jobs win over run history:** `applyRun`/`recomputeParts` take
+  `opts.livePrinting` (slugs on a `printing`/`paused` printer job of the build, from
+  `livePrintingSlugs(tx, buildId)` in `builds/actions.ts`). A Failed/Partial run, a run
+  delete/edit, or an undo leaves such a Printing part untouched (a retry is on the bed);
+  Success still prints it. `printingAction` 'start' takes `startedAt` from the build's active
+  linked job (clamped to now) and the estimate from the printer's `last_status`
+  (`elapsedSec + remainingSec`), via `startPrinting(view, slugs, now, live)`.
 - **Variants:** `templates.variant_groups`, `builds.variant_choices`, `domain/variants.ts`.
   `BuildView.parts`/`state`/`plates` hold active parts only; `allParts` has everything.
 - **Workspaces:** every user has a personal workspace (organization with metadata
@@ -229,6 +236,15 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - **Jobs:** the supervisor emits a `job` event on job create/link/finish. Link/expect take
   optional `partSlugs` on per-part plates. Dismissing a job with no logged run releases its
   Printing parts (`printer.job.release`). Auto-link needs plate numbers in file names.
+  Linking (`attach` → `linkPatches`): the job's start and estimate replace a part's Printing
+  state unless another live job (`heldByOtherJobs`) covers the part; ended, unlogged jobs
+  and manual starts never hold a part. A printer-sourced plate time follows; a typed one stays.
+  Printer run-time numbers go through `sanePrintSeconds` (`domain/format.ts`: finite, >= 0,
+  1 s to 30 days) before they become an estimate. `printers/status.ts` `unloggedEndedJobs` /
+  `unloggedNotice` drive `UnloggedNotice.svelte`, a non-blocking notice shown when a plate has
+  an ended, unlogged job: in `ExpectedConfirm` before linking, and after linking for every
+  linked running job (`PrinterJobs`, Printers page), always derived from store jobs, never
+  local state. `ConfirmPrintLog` exposes `#confirm-log-<jobId>` as its scroll target.
 - **Client store** (`client/printer-store.svelte.ts`): sequence-guarded `load()`, refetch on
   SSE reopen / visibilitychange / online / focus, 30 s poll, "Printer status unavailable ·
   Retry".

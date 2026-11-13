@@ -76,3 +76,18 @@ export function parseSlicerTime(s: string): number | null {
 	const sec = hm ? +hm[1] * 3600 + +hm[2] * 60 : parseDur(t);
 	return sec && sec > 0 ? Math.round(sec) : null;
 }
+
+/** Longest print a printer's status may claim (30 days), in seconds. */
+export const MAX_PRINT_SECONDS = 2_592_000;
+
+/**
+ * Total print seconds (elapsed + remaining) from a printer's untrusted status, or null when either
+ * value is not a finite number >= 0, or the total is 0 or above 30 days.
+ */
+export function sanePrintSeconds(elapsed: unknown, remaining: unknown): number | null {
+	if (typeof elapsed !== 'number' || typeof remaining !== 'number') return null;
+	if (!Number.isFinite(elapsed) || !Number.isFinite(remaining) || elapsed < 0 || remaining < 0)
+		return null;
+	const total = Math.round(elapsed + remaining);
+	return total > 0 && total <= MAX_PRINT_SECONDS ? total : null;
+}

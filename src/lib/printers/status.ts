@@ -201,3 +201,29 @@ export function splitTeamJobs(jobs: PrinterJobView[]): {
 	}
 	return { shown, other };
 }
+
+/**
+ * Finished prints on `plateNumber` of `buildId` that nobody logged or dismissed yet and that
+ * cover some of `partSlugs` (no slugs on either side = the whole plate). Linking another job
+ * to the same parts should mention them: the new job's time and filament would be mixed in.
+ */
+export function unloggedEndedJobs(
+	jobs: PrinterJobView[],
+	buildId: string,
+	plateNumber: number,
+	partSlugs?: string[] | null,
+	exceptJobId?: string
+): PrinterJobView[] {
+	return jobs.filter((j) => {
+		if (j.id === exceptJobId || !j.pendingConfirm) return false;
+		if (j.buildId !== buildId || j.plateNumber !== plateNumber) return false;
+		if (!partSlugs?.length || !j.partSlugs?.length) return true;
+		return j.partSlugs.some((s) => partSlugs.includes(s));
+	});
+}
+
+/** "Plate 9 has an unlogged failed print from 4:04 PM." (`time` already formatted) */
+export function unloggedNotice(job: PrinterJobView, time: string): string {
+	const how = job.status === 'done' ? 'earlier' : 'failed';
+	return `Plate ${job.plateNumber} has an unlogged ${how} print${time ? ` from ${time}` : ''}.`;
+}

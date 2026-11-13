@@ -66,7 +66,7 @@
 	};
 </script>
 
-<div class="jobbox confirm" data-testid="confirm-print-log">
+<div class="jobbox confirm" id="confirm-log-{job.id}" tabindex="-1" data-testid="confirm-print-log">
 	<div>
 		<b>Confirm print log</b>
 		<div>

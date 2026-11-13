@@ -11,8 +11,8 @@ each machine's untracked `CLAUDE.local.md`, whose shape is `CLAUDE.local.example
 | Maintainer's Mac                               | Local Claude Code sessions (VS Code)          | `~/Documents/Github Repos/TMT-Build-Tracker` | Native Node 22, `flock` from Homebrew                                                   |
 | Unraid dev container (`claude-unraid-manager`) | Cloud sessions, image builds, **all deploys** | `/workspace/TMT-Build-Tracker`               | git only; Node, Playwright and buildx run in throwaway containers via the Docker socket |
 
-Both push to the same GitHub repo. **At session start:** `git fetch`; if `main` and
-`origin/main` differ, or you're on a branch, say so to the maintainer before working. **At
+Both push to the same GitHub repo. **At session start:** `git fetch`; if `edge`/`main`
+differ from `origin/edge`/`origin/main`, or you're on a branch, say so to the maintainer before working. **At
 session end:** everything committed; push with the maintainer's OK so the other machine
 picks up from `docs/dev/STATUS.md`.
 
@@ -160,6 +160,18 @@ npm run preview:demo -- --no-build   # serve the earlier build copy, skip the bu
   that the 3D model and plate geometry are missing, and wants the `.kitpack` file copied into that folder
   (then restart). Nothing fetched can be committed (`data/`, `*.kitpack` are gitignored).
 
+## Cloud sessions (claude.ai/code)
+
+A cloud session runs in a fresh Linux container: Node 22 native, no Docker, no
+`CLAUDE.local.md` (no private values, no deploys). The maintainer's personal cloud
+environment "TMT-Build-Tracker" allows the Playwright download hosts and its setup script
+runs `npm ci && npx playwright install chromium` in the checkout (browsers land in
+`/opt/pw-browsers`), so `check`, unit tests and e2e run as on the Mac; CI runs them again on
+the pull request. The setup script runs only when a fresh container is built. The local
+preview is not available to the maintainer from a cloud session: they review user-visible
+changes on the `edge` image on Unraid once the pull request is merged into the `edge`
+branch (maintainer, 2026-11-13), instead of `npm run preview:demo` before the merge.
+
 ## Deploying published images (from 0.9, public repo)
 
 Once the repository is public, the test copy runs the image CI published, not a local
@@ -181,9 +193,11 @@ request.
 
 - Create it beside the repo: `git worktree add ../TMT-wt-<task> -b <branch> origin/edge`.
 - Dependencies: a worktree has no `node_modules`. Install once per worktree with `npm ci`
-  before its agent starts (one install at a time across the machine), or reuse the main
-  checkout's when `package-lock.json` is identical (symlink `node_modules`; never when the
-  task changes dependencies).
+  before its agent starts (one install at a time across the machine). A symlinked
+  `node_modules` is enough for vitest, eslint and a dev server, but **not** for
+  `npm run check`: `tsconfig.json` extends `$app/tsconfig`, which resolves through the
+  symlink to the other checkout's `.svelte-kit` and gives hundreds of false `./$types`
+  errors (seen 2026-11-13). Gate a worktree only with its own `npm ci`.
 - E2E: each worktree has its own `node_modules/.e2e.lock`, so use one machine-wide lock
   file for Playwright and builds while several worktrees are active (for example
   `flock /tmp/tmt-e2e.lock`), and give each worktree its own port from 5173-5199 if the
