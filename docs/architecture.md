@@ -142,6 +142,13 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Plates and 3MF (`plates-3mf`)
 
+- **Implied bed for built-in layouts:** a build with no printer gets `view.layoutPrinter`
+  from its MakeGood layout key (`layoutBed` in `src/lib/printers/layout-bed.ts`: `xpa` =
+  Bambu X1 / P1 / A1 256 × 256, `h2d` = H2D / H2S 350 × 320, both 4 slots), derived in
+  `loadBuildView` and never stored. The setup wizard, `PlatesPanel`, `ExportCard` and the
+  export (`buildExportPlan`, `prepareExport`) fall back to it; arranging, re-arranging,
+  printer jobs and uploaded 3MFs still need `view.printer`. A new tuned layout gets an
+  implied bed by adding it to `LAYOUT_BEDS`.
 - **Arranger:** `domain/arrange.ts` (see `arrange.README.md`). Flat rotations only
   (no 3D re-orientation code exists: removed 2026-11-11; `seed/arrange-tmt-snapshot.test.ts` pins the flat arranger's output); 1 mm default edge margin, 8 mm between parts, max
   clearance to edges and keep-outs; rigid source groups only when per-piece packing would

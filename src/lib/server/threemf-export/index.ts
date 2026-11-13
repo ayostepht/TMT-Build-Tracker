@@ -65,8 +65,10 @@ export function prepareExport(
 	userId: string,
 	opts: ExportOptions
 ): PreparedExport {
-	const view = loadBuildView(db, buildId, userId);
-	if (!view) throw new ApiError(404, 'Not found');
+	const loaded = loadBuildView(db, buildId, userId);
+	if (!loaded) throw new ApiError(404, 'Not found');
+	// a built-in MakeGood layout stands for its bed when the build has no printer of its own
+	const view = loaded.printer ? loaded : { ...loaded, printer: loaded.layoutPrinter ?? null };
 	if (!view.printer)
 		throw new ApiError(400, 'Choose a printer first (Print tab) so the export knows your bed.');
 	const footprints = loadFootprints(db, view.build.templateId);

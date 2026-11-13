@@ -299,23 +299,32 @@ test('invites default to editor, copy the link, and removing a member asks first
 	await expect(page.getByTestId('member-row').filter({ hasText: 'Ed Editor' })).toHaveCount(0);
 });
 
-test('wizard: Continue is blocked on Files until a printer is chosen', async ({ page }) => {
+test('wizard: the default MakeGood profile counts as the bed, so Continue works without a printer', async ({
+	page
+}) => {
 	await signUp(page, 'Wanda Wizard', uniqueEmail('wizard-block'));
-	await startBuild(page, 'Blocked chair');
+	await startBuild(page, 'Profile chair');
 	await toSetupStep(page, 4);
-	await expect(page.getByTestId('wizard-next')).toBeDisabled();
-	await expect(page.getByTestId('wizard-blocker')).toContainText('Choose your printer');
-	await expect(page.getByTestId('setup-step-5')).toBeDisabled();
-	// Asking for the Export step by URL lands on Files.
-	await page.goto(page.url().replace(/step=4/, 'step=5'));
+	await expect(page.getByTestId('layout-name')).toContainText("MakeGood's Bambu X1 / P1 / A1");
+	await expect(page.getByTestId('layout-bed')).toContainText('Bambu X1 / P1 / A1 (256 × 256 mm)');
+	await expect(page.getByTestId('printer-line')).not.toContainText('No bed chosen yet');
+	await expect(page.getByTestId('wizard-blocker')).toHaveCount(0);
+	await expect(page.getByTestId('wizard-next')).toBeEnabled();
+	await page.screenshot({
+		path: `${SHOTS_B}/wizard-profile-bed-${page.viewportSize()!.width}.png`
+	});
+	// Continue reaches Export, and the wizard can finish.
+	await page.getByTestId('wizard-next').click();
+	await expect(page.getByTestId('wizard-done')).toBeEnabled();
+	await page.getByTestId('wizard-done').click();
+	await expect(page.getByTestId('setup-done')).toBeVisible();
+	// "Arrange for my bed" still takes a real printer.
+	await page.goto(`${page.url().split('?')[0]}?step=4`);
 	await page.waitForLoadState('networkidle');
-	await expect(page.getByTestId('wizard-blocker')).toBeVisible();
-	await page.screenshot({ path: `${SHOTS_B}/wizard-blocked-${page.viewportSize()!.width}.png` });
 	await page.getByTestId('plate-layout').selectOption({ label: 'Arrange for my bed' });
 	await page.getByTestId('bed-preset-256x256').click();
 	await page.getByTestId('arrange-bed').click();
 	await expect(page.getByTestId('layout-name')).toContainText('Arranged for');
-	await expect(page.getByTestId('wizard-blocker')).toHaveCount(0);
 	await expect(page.getByTestId('wizard-next')).toBeEnabled();
 });
 
