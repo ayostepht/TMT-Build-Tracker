@@ -160,6 +160,15 @@ npm run preview:demo -- --no-build   # serve the earlier build copy, skip the bu
   that the 3D model and plate geometry are missing, and wants the `.kitpack` file copied into that folder
   (then restart). Nothing fetched can be committed (`data/`, `*.kitpack` are gitignored).
 
+## Cloud sessions (claude.ai/code)
+
+A cloud session runs in a fresh Linux container: Node 22 native, no Docker, no
+`CLAUDE.local.md` (no private values, no deploys). The repo-pinned Playwright browser may
+not be installable there, so end-to-end specs run in CI on the pull request. The local
+preview is not available to the maintainer from a cloud session: they review user-visible
+changes on the `edge` image on Unraid once the change is on `main` (maintainer,
+2026-11-13), instead of `npm run preview:demo` before the merge.
+
 ## Deploying published images (from 0.9, public repo)
 
 Once the repository is public, the test copy runs the image CI published, not a local
