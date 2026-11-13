@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { swatches } from '../server/filaments/index.ts';
-import type { SwatchTuple } from './palettes.ts';
+import { exclusionReason, filamentSubtypes, type SwatchTuple } from './palettes.ts';
 import {
 	chipBrandList,
 	closestMatches,
@@ -8,7 +8,8 @@ import {
 	colorFamily,
 	groupByFamily,
 	isApproxHex,
-	pickerSwatches
+	pickerSwatches,
+	typeOptions
 } from './swatch-picker.ts';
 
 const names = (r: { neutrals: { t: SwatchTuple }[]; colorful: { t: SwatchTuple }[] }) =>
@@ -265,5 +266,65 @@ describe('picker layout helpers', () => {
 		);
 		expect(isApproxHex(['Overture', 'Red', '#e53935', 'PETG'])).toBe(false);
 		expect(isApproxHex(['X', 'Y', '#e53935', 'PETG', 'matte approx'])).toBe(true);
+	});
+});
+
+describe('type filter', () => {
+	const mix: SwatchTuple[] = [
+		['Overture', 'Blue', '#1e60d2', 'TPU-95A'],
+		['Overture', 'Blue 98A', '#1e60d3', 'TPU-98A'],
+		['Sunlu', 'Matte Red 98A', '#c02020', 'TPU-98A'],
+		['Sunlu', 'Green 85A', '#20a040', 'TPU-85A'],
+		['Sunlu', 'Foaming Black', '#101010', 'TPU Foaming'],
+		['Extrudr', 'FLEX Soft Yellow', '#e0c020', 'TPU'],
+		['Overture', 'Silk Gold', '#d4af37', 'TPU-95A']
+	];
+	const ids = (t: SwatchTuple) => filamentSubtypes(t).map((s) => s.id);
+	it('classifies swatches; standard is exactly what exclusionReason allows', () => {
+		expect(ids(mix[0])).toEqual([]);
+		expect(ids(mix[1])).toEqual(['hardness:98A']);
+		expect(ids(mix[2])).toEqual(['hardness:98A', 'matte']);
+		expect(ids(mix[4])).toEqual(['foam']);
+		expect(ids(mix[5])).toEqual(['grade']);
+		expect(ids(mix[6])).toEqual(['silk']);
+		for (const t of [...mix, ...tpu, ...swatches('tpu'), ...swatches('petg')])
+			expect(filamentSubtypes(t).length === 0).toBe(exclusionReason(t) === '');
+	});
+	it('lists the subtypes that occur, with counts, between the default and All types', () => {
+		const o = typeOptions(mix, 'tpu');
+		expect(o.map((x) => x.id)).toEqual([
+			'',
+			'hardness:85A',
+			'hardness:98A',
+			'foam',
+			'grade',
+			'matte',
+			'silk',
+			'all'
+		]);
+		expect(o[0].label).toBe('95A');
+		expect(o.find((x) => x.id === 'hardness:98A')!.count).toBe(2);
+		expect(typeOptions(mix, 'petg')[0].label).toBe('PETG');
+		expect(typeOptions(mix, 'tpu', ['sunlu']).find((x) => x.id === 'hardness:98A')!.count).toBe(1);
+	});
+	it('a subtype shows only swatches carrying it; brand and search still apply', () => {
+		expect(names(pickerSwatches(mix, { type: 'hardness:98A' })).sort()).toEqual([
+			'Overture Blue 98A',
+			'Sunlu Matte Red 98A'
+		]);
+		expect(names(pickerSwatches(mix, { type: 'matte' }))).toEqual(['Sunlu Matte Red 98A']);
+		expect(names(pickerSwatches(mix, { type: 'hardness:98A', brands: ['Overture'] }))).toEqual([
+			'Overture Blue 98A'
+		]);
+		expect(names(pickerSwatches(mix, { type: 'hardness:98A', query: 'matte' }))).toEqual([
+			'Sunlu Matte Red 98A'
+		]);
+		expect(pickerSwatches(mix, { type: 'foam' }).hidden).toBe(0);
+	});
+	it('the default is unchanged and All types equals showAll', () => {
+		expect(names(pickerSwatches(mix, { type: '' }))).toEqual(names(pickerSwatches(mix)));
+		expect(names(pickerSwatches(mix, { type: 'all' }))).toEqual(
+			names(pickerSwatches(mix, { showAll: true }))
+		);
 	});
 });

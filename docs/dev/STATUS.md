@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-13 (0.9.1 release in preparation, see item 0; `edge` is the default
-branch; test copy on r52 = `edge` 3ec52a7, the published image)._
+_Last updated: 2026-11-13 (0.9.1 released, see item 0; `edge` is the default branch; test
+copy on r52 = `edge` 3ec52a7, the published image; not yet on 0.9.1)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -10,17 +10,26 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **0.9.1 (2026-11-13), in preparation.** Contents on `edge`: #18 (plate retry: live printer
-   job keeps the plate Printing, printer start time and estimate, `sanePrintSeconds`,
-   `UnloggedNotice`), #19 (phone sheet overflow), #21 (minimatch override), #22 (README compose
-   sample, no release numbers), #26 (a built-in MakeGood layout counts as the chosen bed:
-   `layoutBed` → `view.layoutPrinter`). The maintainer reviewed #18/#19 on Unraid (r52, all
-   four checks passed) and released #26 without a separate review (minor). Release steps:
-   release PR into `edge` (version 0.9.1, CHANGELOG `[0.9.1]`, upgrade fixture
-   `fixtures/v0.9.1/`) → "Promote edge to main" (the first promotion: watch whether the
-   dispatched checks satisfy `main`'s required checks; it also removes the agent docs from
-   `main`) → the maintainer merges it with a merge commit → tag `v0.9.1` on `main` (the
-   maintainer's yes) → deploy `0.9.1` to the test copy.
+0. **0.9.1 released (2026-11-13).** Contents: #18 (plate retry: live printer job keeps the
+   plate Printing, printer start time and estimate, `sanePrintSeconds`, `UnloggedNotice`),
+   #19 (phone sheet overflow), #21 (minimatch override), #22 (README compose sample, no
+   release numbers), #26 (a built-in MakeGood layout counts as the chosen bed: `layoutBed` →
+   `view.layoutPrinter`), #27 (version, CHANGELOG, `fixtures/v0.9.1`). First promotion:
+   #28 (`promote/d1cff2d` → `main`, merge commit f20a168); `main` no longer holds `CLAUDE.md`,
+   `.claude/`, `docs/dev/`, `docs/architecture.md`. The maintainer published release
+   `v0.9.1` from the Releases page; the tag points at d1cff2d on `edge` (the form defaulted to
+   the default branch), not at f20a168 on `main`: same app code (only excluded paths
+   differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
+   e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
+   (checked anonymously 2026-11-13). **Next:** deploy `0.9.1` to the test copy (the maintainer's
+   OK; r52 = `edge` 3ec52a7 lacks #26 and the version bump).
+   **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
+   `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
+   `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
+   pull requests" is off (kept off on purpose): open the PR into `main` by hand, CI runs on
+   it normally → the maintainer merges with a merge commit → tag `vX.Y.Z` on `main` (release
+   form: set Target to `main`), then the release notes = the CHANGELOG section. Cloud
+   sessions could not push tags until the maintainer fixed GitHub access on 2026-11-13.
    **Branch model (maintainer, 2026-11-13):** `edge` is the default branch and is protected;
    pull requests (Dependabot too) target `edge`, which publishes the `edge` image; `main` is
    updated only by the promote workflow and stays clean (`.github/main-exclude.txt`).

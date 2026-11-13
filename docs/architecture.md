@@ -342,7 +342,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   colored tires 4 of 6. Brand matching: a preferred brand wins only within
   `max(best + 6, 10)` ΔE; preferred brands list in localStorage `tmt.preferredBrands.v2`.
 - **Swatch picker** (`domain/swatch-picker.ts`): `exclusionReason` (TPU 95A only, no
-  silk/matte/…), "Show all types", look-alike merge across brands (`mergeAcrossBrands`,
+  silk/matte/…), a Type select (`type`: `''` standard, `'all'`, or one subtype id from
+  `filamentSubtypes()` in `palettes.ts`, built from `EXCLUDED_FILAMENTS` + `hardnesses()`;
+  no subtypes = standard, unit-tested; options from `typeOptions()`, counts before the
+  duplicate collapse; the subtype filter runs before collapse and the cross-brand merge;
+  `showAll` = `'all'`; session state only, preselects the current pick's subtype), look-alike merge across brands (`mergeAcrossBrands`,
   ΔE2000 < 3), OKLCH hue families (`colorFamily`), `approx` flag from `hexSource === 'image'`.
 - **Parts:** `PartSheet` (part chip + slot strip over the stage), `PartList` (role filter
   chips, sticky groups). `share/DesignActions` above the tabs ("Saved automatically",

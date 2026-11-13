@@ -425,7 +425,8 @@ a.ds-badge:hover {
 	border-color: var(--accent);
 	background: var(--accent-soft);
 }
-button.ds-badge[aria-pressed='true'] {
+button.ds-badge[aria-pressed='true'],
+button.ds-badge[aria-pressed='true']:hover:not(:disabled) {
 	background: var(--ink);
 	color: var(--paper);
 	border-color: var(--ink);
