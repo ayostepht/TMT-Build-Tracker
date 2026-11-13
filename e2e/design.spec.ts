@@ -237,10 +237,20 @@ test('the swatch picker hides types palettes never use until asked', async ({ pa
 	expect(
 		clean.filter((l) => /93A|silk|carbon|, TPU-?(85|90|93|98)A|\b(64|75)D\b/i.test(l))
 	).toEqual([]);
-	await picker.getByTestId('show-all-types').check();
+	// Type filter: one subtype at a time (98A), everything with "All types".
+	const type = picker.getByTestId('type-select');
+	await expect(type.locator('option').first()).toContainText('Standard');
+	await type.selectOption('hardness:98A');
+	await expect.poll(async () => (await labels()).length).toBeGreaterThan(0);
+	const only98 = await labels();
+	expect(only98.every((l) => /98A/i.test(l))).toBe(true);
+	await expect(picker.locator('.sw.excl').first()).toBeVisible();
+	await type.selectOption('all');
 	await expect.poll(async () => (await labels()).length).toBeGreaterThan(clean.length);
 	await expect(picker.locator('.sw.excl').first()).toBeVisible();
 	expect((await labels()).some((l) => /not used by palettes/.test(l))).toBe(true);
+	await type.selectOption('');
+	await expect.poll(async () => (await labels()).length).toBe(clean.length);
 	// Brand chips are a multi-select.
 	await picker.getByRole('button', { name: 'Overture', exact: true }).click();
 	await picker.getByRole('button', { name: 'Sunlu', exact: true }).click();

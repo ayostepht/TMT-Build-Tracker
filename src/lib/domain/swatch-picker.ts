@@ -12,7 +12,14 @@ import {
 	isNeutral,
 	type Lab
 } from './color.ts';
-import { exclusionReason, FLAG_APPROX, POPULAR_BRANDS, type SwatchTuple } from './palettes.ts';
+import {
+	EXCLUDED_FILAMENTS,
+	exclusionReason,
+	filamentSubtypes,
+	FLAG_APPROX,
+	POPULAR_BRANDS,
+	type SwatchTuple
+} from './palettes.ts';
 
 export interface PickerEntry {
 	t: SwatchTuple;
@@ -23,8 +30,13 @@ export interface PickerEntry {
 }
 
 export interface PickerOptions {
-	/** List the excluded types too (tagged with their reason). */
+	/** List the excluded types too (tagged with their reason). Same as `type: 'all'`. */
 	showAll?: boolean;
+	/**
+	 * Which type to list: '' (default) the standard ones palettes may pick, 'all' everything, or a
+	 * subtype id from {@link typeOptions} (`foam`, `matte`, `hardness:98A` …): only swatches carrying it.
+	 */
+	type?: string;
 	/** Only these brands (empty: all). */
 	brands?: string[];
 	/** Preferred brands: their swatches come first. */
@@ -54,6 +66,70 @@ function hexToLab(hex: string): Lab {
 	let l = labCache.get(hex);
 	if (!l) labCache.set(hex, (l = rawHexToLab(hex)));
 	return l;
+}
+
+/** The picker's Type value for "every type". */
+export const TYPE_ALL = 'all';
+
+export interface TypeOption {
+	/** '' standard, 'all', or a subtype id. */
+	id: string;
+	label: string;
+	/** Swatches of this type in the list (not for 'all'). */
+	count?: number;
+	/** What the option means, for a tooltip. */
+	hint?: string;
+}
+
+const subtypeRank = (id: string) =>
+	id.startsWith('hardness:')
+		? 0
+		: id === 'foam'
+			? 1
+			: id === 'grade'
+				? 2
+				: 3 + EXCLUDED_FILAMENTS.findIndex((e) => e.id === id);
+const hardnessKey = (id: string) => {
+	const m = /^hardness:(\d+)([AD])/.exec(id);
+	return m ? (m[2] === 'D' ? 1000 : 0) + Number(m[1]) : 0;
+};
+
+/**
+ * The Type select's options for a material's swatch list: Standard first (95A for TPU), each
+ * subtype that occurs (with its count), then All types. Counts are raw swatches of `brands`
+ * (empty: all), before same-looking ones collapse.
+ */
+export function typeOptions(
+	items: SwatchTuple[],
+	family: string,
+	brands: string[] = []
+): TypeOption[] {
+	const bs = new Set(brands.map(lc));
+	const counts = new Map<string, TypeOption>();
+	let standard = 0;
+	for (const t of items) {
+		if (bs.size && !bs.has(lc(t[0]))) continue;
+		const subs = filamentSubtypes(t);
+		if (!subs.length) standard++;
+		for (const s of subs) {
+			const o = counts.get(s.id);
+			if (o) o.count = (o.count ?? 0) + 1;
+			else counts.set(s.id, { id: s.id, label: s.label, count: 1 });
+		}
+	}
+	const subs = [...counts.values()].sort(
+		(a, b) => subtypeRank(a.id) - subtypeRank(b.id) || hardnessKey(a.id) - hardnessKey(b.id)
+	);
+	return [
+		{
+			id: '',
+			label: 'Standard',
+			count: standard,
+			hint: family === 'tpu' ? '95A TPU, the hardness palettes use' : 'The types palettes use'
+		},
+		...subs,
+		{ id: TYPE_ALL, label: 'All types' }
+	];
 }
 
 /** Why this swatch is not offered by default ('' when it is). */
@@ -180,8 +256,12 @@ function computePicker(items: SwatchTuple[], opts: PickerOptions): PickerResult 
 	const words = lc((opts.query ?? '').replace(/^#/, ''))
 		.split(/\s+/)
 		.filter(Boolean);
+	const type = opts.showAll ? TYPE_ALL : (opts.type ?? '');
+	const sub = type && type !== TYPE_ALL ? type : '';
 	const matching = items.filter((t) => {
 		if (brands.size && !brands.has(lc(t[0]))) return false;
+		// Before duplicates collapse, so a 98A swatch is not swallowed by a same-looking 95A one.
+		if (sub && !filamentSubtypes(t).some((s) => s.id === sub)) return false;
 		if (!words.length) return true;
 		const hay = `${t[0]} ${t[1]} ${t[3]} ${t[2].slice(1)}`.toLowerCase();
 		return words.every((w) => hay.includes(w));
@@ -192,9 +272,10 @@ function computePicker(items: SwatchTuple[], opts: PickerOptions): PickerResult 
 			.map((t): PickerEntry => ({ t, reason: pickerReason(t) }))
 			.sort((a, b) => Number(!!a.reason) - Number(!!b.reason))
 	);
-	const reveal = !!opts.showAll || words.length > 0;
-	const shown = reveal ? all : all.filter((e) => !e.reason);
-	const hidden = reveal ? 0 : all.length - shown.length;
+	// A search reveals every type, unless one subtype is chosen: then it narrows within that.
+	const reveal = type === TYPE_ALL || (words.length > 0 && !sub);
+	const shown = reveal || sub ? all : all.filter((e) => !e.reason);
+	const hidden = reveal || sub ? 0 : all.length - shown.length;
 	// Several brands in view and no search: same-looking swatches of different brands become one.
 	const visible = brands.size !== 1 && !words.length ? mergeAcrossBrands(shown, preferred) : shown;
 
@@ -244,7 +325,12 @@ let memo: { items: SwatchTuple[]; key: string; result: PickerResult } | undefine
 /** The picker's lists. The last query-free result is memoized per (items, brands, preferred, showAll). */
 export function pickerSwatches(items: SwatchTuple[], opts: PickerOptions = {}): PickerResult {
 	if ((opts.query ?? '').trim()) return computePicker(items, opts);
-	const key = JSON.stringify([!!opts.showAll, opts.brands ?? [], opts.preferred ?? []]);
+	const key = JSON.stringify([
+		!!opts.showAll,
+		opts.type ?? '',
+		opts.brands ?? [],
+		opts.preferred ?? []
+	]);
 	if (memo && memo.items === items && memo.key === key) return memo.result;
 	const result = computePicker(items, opts);
 	memo = { items, key, result };

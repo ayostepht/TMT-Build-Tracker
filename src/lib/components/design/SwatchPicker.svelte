@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { suggestName } from '#lib/filament-catalog.ts';
-	import type { SwatchTuple } from '#lib/domain/palettes.ts';
+	import { filamentSubtypes, type SwatchTuple } from '#lib/domain/palettes.ts';
 	import {
 		chipBrandList,
 		closestMatches,
@@ -13,6 +13,8 @@
 		isApproxHex,
 		pickerReason,
 		pickerSwatches,
+		typeOptions,
+		TYPE_ALL,
 		type PickerEntry
 	} from '#lib/domain/swatch-picker.ts';
 	import {
@@ -64,7 +66,10 @@
 	let brands = $state<string[]>([]);
 	let preferred = $state<string[]>([]);
 	let q = $state('');
-	let allTypes = $state(false);
+	/** The Type filter: '' standard, 'all', or a subtype id (see typeOptions). */
+	let typeSel = $state('');
+	/** Opening on a non-standard current color selects its type once, so the pick stays visible. */
+	let typeSeeded = false;
 	let recent = $state<SwatchTuple[]>([]);
 	let hover = $state<SwatchTuple | null>(null);
 	let cap = $state(480);
@@ -115,6 +120,12 @@
 				if (!live) return;
 				items = l;
 				loading = false;
+				if (!typeSeeded) {
+					typeSeeded = true;
+					const cur = l.find(isCurrent);
+					const sub = cur ? filamentSubtypes(cur)[0] : undefined;
+					if (sub) typeSel = sub.id;
+				}
 			},
 			() => {
 				if (!live) return;
@@ -146,9 +157,16 @@
 		cap = 480;
 	}
 
-	const result = $derived(
-		pickerSwatches(items, { showAll: allTypes, brands, preferred, query: q })
-	);
+	// Options come from the whole list so they stay put when a brand is picked; counts follow the brand.
+	const typeOpts = $derived.by(() => {
+		const inBrand = new Map(typeOptions(items, family, brands).map((o) => [o.id, o.count]));
+		return typeOptions(items, family).map((o) =>
+			o.id === TYPE_ALL ? o : { ...o, count: inBrand.get(o.id) ?? 0 }
+		);
+	});
+	// A subtype the material does not have (after switching PETG/TPU) falls back to Standard.
+	const effType = $derived(typeOpts.some((o) => o.id === typeSel) ? typeSel : '');
+	const result = $derived(pickerSwatches(items, { type: effType, brands, preferred, query: q }));
 	const neutrals = $derived(result.neutrals);
 	const colorful = $derived(result.colorful);
 	const hidden = $derived(result.hidden);
@@ -342,6 +360,7 @@
 		family = f;
 		brands = [];
 		famFilter = '';
+		typeSel = '';
 		cap = 480;
 	}
 </script>
@@ -424,16 +443,34 @@
 		</div>
 
 		<div class="filters" role="group" aria-label="Filters">
-			{#if hidden > 0 || allTypes}
-				<label
-					class="ds-badge sp-chip sp-tog"
-					title={allTypes
-						? 'Tagged swatches are not used by palettes'
-						: `${hidden} hidden: silk, matte, other hardness, filled …`}
+			{#if typeOpts.length > 2}
+				<select
+					class="typesel"
+					aria-label="Type"
+					data-testid="type-select"
+					value={effType}
+					title={hidden > 0
+						? `${hidden} hidden: silk, matte, other hardness, filled …`
+						: effType
+							? 'Swatches palettes skip carry their reason'
+							: ''}
+					onchange={(e) => {
+						typeSel = e.currentTarget.value;
+						cap = 480;
+					}}
 				>
-					<input type="checkbox" bind:checked={allTypes} data-testid="show-all-types" /> All types{#if !allTypes}
-						<span class="muted tog-n">+{hidden}</span>{/if}
-				</label>
+					{#each typeOpts as o (o.id)}
+						<option value={o.id} title={o.hint}
+							>{o.label}{o.id === TYPE_ALL
+								? hidden > 0
+									? ` (+${hidden})`
+									: ''
+								: o.id === ''
+									? ''
+									: ` (${o.count})`}</option
+						>
+					{/each}
+				</select>
 			{/if}
 			{#if groups.length || neutrals.length}
 				<select
@@ -565,7 +602,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="body" bind:this={bodyEl} onkeydown={gridKey}>
 			{#if note}<p class="muted small" role="status">{note}</p>{/if}
-			{#if searching && !allTypes}
+			{#if searching && effType === ''}
 				<p class="muted small">Search also finds types that palettes skip.</p>
 			{/if}
 			{#if organizationId && mine.length}
@@ -676,8 +713,10 @@
 				{#if nothing}
 					<p class="muted">
 						No {famLabel} colors match. Try another brand or search{hidden
-							? `, or show all types (${hidden} hidden)`
-							: ''}.
+							? `, or change Type to see more (${hidden} hidden)`
+							: effType
+								? ', or change Type'
+								: ''}.
 					</p>
 				{:else if moreColors || neutrals.length > cap}
 					<button type="button" class="btn sm" onclick={() => (cap += 600)}>Show more</button>
@@ -809,17 +848,14 @@
 		cursor: pointer;
 		flex: none;
 	}
-	.sp-tog {
-		color: var(--muted);
-		gap: var(--sp-2);
-	}
 	select {
 		max-width: 170px;
 	}
 	.brandsel {
 		display: none;
 	}
-	.fam {
+	.fam,
+	.typesel {
 		max-width: 190px;
 	}
 	.detail {
@@ -1079,14 +1115,6 @@
 			max-width: none;
 			padding-inline: var(--sp-3);
 			text-overflow: ellipsis;
-		}
-		.filters > .sp-tog {
-			flex: none;
-			min-height: 44px;
-			padding-inline: var(--sp-4);
-		}
-		.tog-n {
-			display: none;
 		}
 		.brandsel {
 			display: block;
