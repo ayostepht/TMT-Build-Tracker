@@ -12,7 +12,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Changed
 
-- Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG" and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
+- Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG", and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
 
 ## [0.9.1] - 2026-11-13
 
