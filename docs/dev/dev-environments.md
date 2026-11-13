@@ -180,9 +180,11 @@ request.
 
 - Create it beside the repo: `git worktree add ../TMT-wt-<task> -b <branch> origin/main`.
 - Dependencies: a worktree has no `node_modules`. Install once per worktree with `npm ci`
-  before its agent starts (one install at a time across the machine), or reuse the main
-  checkout's when `package-lock.json` is identical (symlink `node_modules`; never when the
-  task changes dependencies).
+  before its agent starts (one install at a time across the machine). A symlinked
+  `node_modules` is enough for vitest, eslint and a dev server, but **not** for
+  `npm run check`: `tsconfig.json` extends `$app/tsconfig`, which resolves through the
+  symlink to the other checkout's `.svelte-kit` and gives hundreds of false `./$types`
+  errors (seen 2026-11-13). Gate a worktree only with its own `npm ci`.
 - E2E: each worktree has its own `node_modules/.e2e.lock`, so use one machine-wide lock
   file for Playwright and builds while several worktrees are active (for example
   `flock /tmp/tmt-e2e.lock`), and give each worktree its own port from 5173-5199 if the

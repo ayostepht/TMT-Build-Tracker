@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-12 (public, 0.9.0 released; test copy on r50 = e4584d5, a local
+_Last updated: 2026-11-13 (plate 9 retry fixes on branches, see 00; public, 0.9.0 released; test copy on r50 = e4584d5, a local
 build; main is at 0e413e1 and ahead of it by docs only. No agents or work in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
@@ -10,6 +10,26 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
+00. **Plate 9 retry fixes (2026-11-13, cloud session), not merged yet.** From the maintainer's
+   bug report (r50 / v0.9.0; live data consistent, no repair needed). Branch
+   `claude/vigilant-newton-4yy4kk`: a Failed/Partial log, run delete/edit/undo no longer drop
+   Printing for parts on a live printer job; choosing Printing takes the start from the
+   active linked job and the estimate from the printer; linking a new job over a stale
+   Printing state (ended unlogged job or manual start) takes the new job's start and
+   estimate [build-state, printers]. Branch `fix/where-printing-overflow` (worktree
+   `../TMT-wt-where-overflow`): "Where is it printing?" sheet no longer widens with a long
+   file name; shared `Dialog` body is a `minmax(0, 1fr)` grid [design-studio-ui]. Gate both:
+   check, lint, full vitest (1579 / 1564), build PASS; security review no high/medium.
+   **Still to do:** e2e not run (Playwright 1.65 browser not installed in the cloud session):
+   specs `printers`, `print-start`, `log-plate`, `run-edit`, plus new specs by
+   `e2e-playwright` for the retry flow (cancelled job → second job linked → Confirm log as
+   Failed → still Now printing) and a 390 px no-overflow check with a long file name; the
+   maintainer's preview review of the sheet; pull requests. Open questions for the
+   maintainer: Success logged while a newer job prints the same parts still prints them;
+   the keep-Printing rule needs a live printer job (a hand-logged failure without one still
+   sets Reprint). Follow-up (low, hardening): bound `elapsedSec`/`remainingSec` (>= 0, cap)
+   in `liveJobStart` and `attach` [build-state, printers]. Optional UX: warn when linking a
+   new job to a plate with an unlogged ended job.
 0. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
    was merged, `v0.9.0` tagged, CI in full mode (`CI_FULL=true`). `main` is protected and
    work lands through pull requests (see CLAUDE.md "The repository is public"). Image

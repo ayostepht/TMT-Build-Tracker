@@ -7,6 +7,7 @@ import { openDb, runMigrations, type Db } from '../db';
 import {
 	activity,
 	buildParts,
+	buildPlates,
 	builds,
 	member,
 	organization,
@@ -20,6 +21,7 @@ import { createBuild } from '../builds/create';
 import { addRun, deleteRun, printingAction, updatePlate } from '../builds/actions';
 import { filamentStats } from '#lib/domain/accounting.ts';
 import { loadBuildView } from '../builds/view';
+import { nowPrinting } from '#lib/domain/now.ts';
 import { onBuildEvents } from '../builds/test-helpers';
 import { getExpected, setExpected, setOrgSettings } from '../org-settings';
 import { templateSeeds } from '../seed';
@@ -903,5 +905,126 @@ describe('team job history keeps unlinked prints apart', () => {
 		}
 		const t = teamJobs(db, 'org1');
 		expect(t.some((j) => j.buildId === buildId)).toBe(true);
+	});
+});
+
+describe('linking a job over parts that are already Printing', () => {
+	const FILE_A = 'Plate 1 - Handle Left.gcode';
+	const FILE_B = 'slice_b_17h44m.gcode'; // another slice: no plate match, linked by hand
+	const view = () => loadBuildView(db, buildId, 'owner')!;
+	const plateEst = () =>
+		db.select().from(buildPlates).where(eq(buildPlates.number, 1)).get()!.manualEstSeconds;
+	const link = (jobId: string, st: PrinterStatus) => {
+		db.update(printers)
+			.set({ lastStatus: st as never })
+			.run();
+		linkJob(db, jobId, 'org1', 'owner', buildId, 1);
+	};
+	/** Job A (linked by file name, est 4500 s, started at(0)) ends cancelled at 39%, unlogged. */
+	const cancelledA = () => {
+		processStatus(db, printerId, printing(FILE_A, 20, 1500, { remainingSec: 3000 }), at(25));
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 39, fileName: FILE_A, layer: 40 },
+			at(35)
+		);
+		const a = jobs().find((j) => j.fileName === FILE_A)!;
+		expect(a.status).toBe('cancelled');
+		expect(partStatus('handle-left')).toBe('Printing');
+		expect(plateEst()).toBe(4500);
+		return a;
+	};
+	/** Job B starts at(40) (elapsed 100 s), total 7100 s, unlinked until the user links it. */
+	const startB = () => {
+		const st = printing(FILE_B, 1, 100, { remainingSec: 7000 });
+		processStatus(db, printerId, st, at(40));
+		const b = jobs().find((j) => j.fileName === FILE_B)!;
+		expect(b.buildId).toBeNull();
+		return { b, st };
+	};
+
+	it('takes the new job start and estimate over an ended, unlogged job', () => {
+		cancelledA();
+		const { b, st } = startB();
+		link(b.id, st);
+		const p = view().state['handle-left'];
+		expect(p.status).toBe('Printing');
+		expect(p.startedAt).toBe(b.startedAt!.toISOString());
+		expect(p.startedAt).not.toBe(at(0).toISOString());
+		expect(p.runEstSeconds).toBe(7100);
+		expect(plateEst()).toBe(7100);
+	});
+
+	it('confirming the old job as Failed or Partial keeps the plate printing on the new job', () => {
+		for (const result of ['Failed', 'Partial'] as const) {
+			db.delete(printRuns).run();
+			db.delete(printerJobs).run();
+			db.update(buildParts).set({ status: 'To print', startedAt: null, runEstSeconds: null }).run();
+			const a = cancelledA();
+			const { b, st } = startB();
+			link(b.id, st);
+			const runId = confirmJob(db, a.id, 'org1', 'owner', { result });
+			expect(jobs().find((j) => j.id === a.id)!.runId).toBe(runId);
+			expect(db.select().from(printRuns).get()).toMatchObject({ id: runId, result });
+			const p = view().state['handle-left'];
+			expect(p.status, result).toBe('Printing');
+			expect(p.startedAt).toBe(b.startedAt!.toISOString());
+			expect(p.runEstSeconds).toBe(7100);
+			// the Overview's "Now printing" card (domain nowPrinting over the build view)
+			const card = nowPrinting(view()).find((c) => c.plate === 1);
+			expect(card, result).toBeTruthy();
+			expect(card!.startedAt).toBe(b.startedAt!.toISOString());
+		}
+	});
+
+	it('a manual start at now, then a job that started earlier: the job start wins', () => {
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['handle-left'] });
+		expect(view().state['handle-left'].startedAt).toBeTruthy();
+		const st = printing(FILE_B, 10, 900, { remainingSec: 6000 });
+		processStatus(db, printerId, st, new Date());
+		const b = jobs().find((j) => j.fileName === FILE_B)!;
+		link(b.id, st);
+		const p = view().state['handle-left'];
+		expect(p.startedAt).toBe(b.startedAt!.toISOString());
+		expect(p.runEstSeconds).toBe(6900);
+		expect(plateEst()).toBe(6900);
+	});
+
+	it('keeps the start and estimate when another running job already covers the parts', () => {
+		// job A running and linked by file name on printer 1
+		processStatus(db, printerId, printing(FILE_A, 20, 1500, { remainingSec: 3000 }), at(25));
+		const before = view().state['handle-left'];
+		expect(before.startedAt).toBe(at(0).toISOString());
+		// a second printer runs another file; the user links it to the same plate
+		const p2 = createPrinter(db, 'org1', 'owner', {
+			name: 'Second',
+			kind: 'elegoo-sdcp',
+			host: '10.0.0.10',
+			catalogId: 'elegoo-centauri-carbon'
+		}).id;
+		const st = printing(FILE_B, 5, 200, { remainingSec: 9000 });
+		processStatus(db, p2, st, at(30));
+		const b = jobs().find((j) => j.fileName === FILE_B)!;
+		db.update(printers)
+			.set({ lastStatus: st as never })
+			.where(eq(printers.id, p2))
+			.run();
+		linkJob(db, b.id, 'org1', 'owner', buildId, 1);
+		const after = view().state['handle-left'];
+		expect(after.startedAt).toBe(before.startedAt);
+		expect(after.runEstSeconds).toBe(4500);
+	});
+
+	it('does not overwrite a plate time the user typed', () => {
+		cancelledA();
+		db.update(buildPlates)
+			.set({ manualEstSeconds: 6000, manualEstSource: 'user' })
+			.where(eq(buildPlates.number, 1))
+			.run();
+		const { b, st } = startB();
+		link(b.id, st);
+		expect(plateEst()).toBe(6000);
+		expect(view().state['handle-left'].runEstSeconds).toBe(7100);
 	});
 });

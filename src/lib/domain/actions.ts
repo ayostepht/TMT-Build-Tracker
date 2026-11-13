@@ -91,12 +91,29 @@ export function betweenRuns(view: BuildView, slug: string): boolean {
 	);
 }
 
-export function startPrinting(view: BuildView, slugs: string[], now: Date): PartPatch[] {
+/** A live printer job already covering the parts: its real start and (optional) total run time. */
+export interface LiveStart {
+	startedAt: Date;
+	runEstSeconds?: number | null;
+}
+
+export function startPrinting(
+	view: BuildView,
+	slugs: string[],
+	now: Date,
+	live?: LiveStart | null
+): PartPatch[] {
 	const out: PartPatch[] = [];
+	const start =
+		live && !isNaN(live.startedAt.getTime()) && live.startedAt < now ? live.startedAt : now;
 	for (const slug of slugs) {
 		const st = view.state[slug];
 		if (st && (st.status !== 'Printing' || betweenRuns(view, slug))) {
-			out.push({ slug, status: 'Printing', startedAt: now.toISOString() });
+			const patch: PartPatch = { slug, status: 'Printing', startedAt: start.toISOString() };
+			if (live && start === live.startedAt && live.runEstSeconds != null) {
+				patch.runEstSeconds = live.runEstSeconds;
+			}
+			out.push(patch);
 		}
 	}
 	return out;
@@ -184,8 +201,25 @@ export function runTargets(view: BuildView, run: PrintRunInput): string[] {
  * leave them Printing), Failed flags unprinted parts for Reprint. A part-log
  * run (no plate): Success prints, Failed flags for Reprint.
  */
-export function applyRun(view: BuildView, run: PrintRunInput, now: Date): PartPatch[] {
+export interface RunOpts {
+	/**
+	 * Slugs that are on a live printer job right now (status printing/paused). A Failed or Partial
+	 * run leaves such a part alone (still Printing, start time and estimate kept): the print that
+	 * is running is a newer attempt than the run being logged.
+	 */
+	livePrinting?: ReadonlySet<string>;
+}
+
+export function applyRun(
+	view: BuildView,
+	run: PrintRunInput,
+	now: Date,
+	opts: RunOpts = {}
+): PartPatch[] {
 	void now;
+	const live = opts.livePrinting;
+	const keepLive = (slug: string) =>
+		run.result !== 'Success' && !!live?.has(slug) && view.state[slug]?.status === 'Printing';
 	const targets = runTargets(view, run).filter((s) => view.state[s]);
 	if (!targets.length) return [];
 
@@ -193,7 +227,7 @@ export function applyRun(view: BuildView, run: PrintRunInput, now: Date): PartPa
 		const out: PartPatch[] = [];
 		for (const slug of targets) {
 			const st = view.state[slug];
-			if (st.status === 'Printed') continue;
+			if (st.status === 'Printed' || keepLive(slug)) continue;
 			if (run.result === 'Success') {
 				out.push({
 					slug,
@@ -219,7 +253,8 @@ export function applyRun(view: BuildView, run: PrintRunInput, now: Date): PartPa
 				(run.partSlug ? r.partSlug === run.partSlug : !r.partSlug)
 		).length + (run.result === 'Success' ? 1 : 0);
 
-	return targets.map((slug) => {
+	return targets.flatMap((slug): PartPatch[] => {
+		if (keepLive(slug)) return [];
 		const st = view.state[slug];
 		const part = view.parts.find((p) => p.slug === slug);
 		const patch: PartPatch = { slug, startedAt: null, runEstSeconds: null };
@@ -236,7 +271,7 @@ export function applyRun(view: BuildView, run: PrintRunInput, now: Date): PartPa
 		} else if (run.result === 'Failed' && st.status !== 'Printed') {
 			patch.status = 'Reprint';
 		}
-		return patch;
+		return [patch];
 	});
 }
 
