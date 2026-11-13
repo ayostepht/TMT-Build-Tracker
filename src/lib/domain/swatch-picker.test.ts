@@ -9,7 +9,8 @@ import {
 	groupByFamily,
 	isApproxHex,
 	pickerSwatches,
-	typeOptions
+	typeOptions,
+	typeOptionsListed
 } from './swatch-picker.ts';
 
 const names = (r: { neutrals: { t: SwatchTuple }[]; colorful: { t: SwatchTuple }[] }) =>
@@ -326,5 +327,28 @@ describe('type filter', () => {
 		expect(names(pickerSwatches(mix, { type: 'all' }))).toEqual(
 			names(pickerSwatches(mix, { showAll: true }))
 		);
+	});
+});
+
+describe('Type counts equal what the picker lists (real catalog)', () => {
+	for (const fam of ['tpu', 'petg'] as const) {
+		const items = swatches(fam);
+		for (const brands of [[], ['Overture'], ['Sunlu', 'Polymaker']]) {
+			it(`${fam}, brands ${brands.join('+') || 'all'}`, () => {
+				const opts = typeOptionsListed(items, fam, brands);
+				expect(opts.length).toBeGreaterThan(2);
+				for (const o of opts) {
+					if (o.id === 'all') continue;
+					const r = pickerSwatches(items, { type: o.id, brands });
+					expect(o.count, `${fam} ${o.label}`).toBe(r.neutrals.length + r.colorful.length);
+				}
+			});
+		}
+	}
+	it('the 90A count is the listed one, not the raw rows', () => {
+		const items = swatches('tpu');
+		const raw = typeOptions(items, 'tpu').find((o) => o.id === 'hardness:90A')!.count!;
+		const listed = typeOptionsListed(items, 'tpu').find((o) => o.id === 'hardness:90A')!.count!;
+		expect(listed).toBeLessThan(raw);
 	});
 });

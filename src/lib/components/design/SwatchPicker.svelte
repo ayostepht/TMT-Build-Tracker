@@ -13,7 +13,7 @@
 		isApproxHex,
 		pickerReason,
 		pickerSwatches,
-		typeOptions,
+		typeOptionsListed,
 		TYPE_ALL,
 		type PickerEntry
 	} from '#lib/domain/swatch-picker.ts';
@@ -136,6 +136,8 @@
 		return () => (live = false);
 	});
 
+	const CLOSEST_N = 8;
+	const CLOSEST_MIN_LIST = 2 * CLOSEST_N;
 	const lc = (s: string) => s.toLowerCase();
 	const famLabel = $derived(family === 'tpu' ? 'TPU' : 'PETG');
 
@@ -157,13 +159,8 @@
 		cap = 480;
 	}
 
-	// Options come from the whole list so they stay put when a brand is picked; counts follow the brand.
-	const typeOpts = $derived.by(() => {
-		const inBrand = new Map(typeOptions(items, family, brands).map((o) => [o.id, o.count]));
-		return typeOptions(items, family).map((o) =>
-			o.id === TYPE_ALL ? o : { ...o, count: inBrand.get(o.id) ?? 0 }
-		);
-	});
+	// Options come from the whole list so they stay put when a brand is picked; counts are what the grid lists for that type and brand.
+	const typeOpts = $derived(typeOptionsListed(items, family, brands, preferred));
 	// A subtype the material does not have (after switching PETG/TPU) falls back to the default type.
 	const effType = $derived(typeOpts.some((o) => o.id === typeSel) ? typeSel : '');
 	const result = $derived(pickerSwatches(items, { type: effType, brands, preferred, query: q }));
@@ -195,11 +192,28 @@
 	const idOf = (sid: string, t: SwatchTuple) => `${sid}|${keyOf(t)}`;
 	const toEntry = (t: SwatchTuple): PickerEntry => ({ t, reason: pickerReason(t) });
 	const plain = $derived(!searching && effFam === '');
+	// A short list (a rare Type) is already all in view: repeating it as "Closest" would only make the
+	// swatch count look wrong next to the Type count.
 	const closest = $derived(
-		plain && current ? closestMatches([...colorful, ...neutrals], current.hex, 8) : []
+		plain && current && colorful.length + neutrals.length > CLOSEST_MIN_LIST
+			? closestMatches([...colorful, ...neutrals], current.hex, CLOSEST_N)
+			: []
 	);
-	const recentList = $derived(plain && !brands.length ? recentShown.map(toEntry) : []);
-	const neutralsOn = $derived(neutralsOpen || searching || effFam === 'neutral');
+	// Only recent picks of the type being listed (a 98A list must not carry 95A "recent" swatches).
+	const listedKeys = $derived(
+		[...neutrals, ...colorful].flatMap((e) => [
+			keyOf(e.t),
+			...(e.others ?? []).map((o) => keyOf(o.t))
+		])
+	);
+	const recentList = $derived(
+		plain && !brands.length
+			? recentShown.filter((t) => listedKeys.includes(keyOf(t))).map(toEntry)
+			: []
+	);
+	// A short list shows everything, neutrals included, so the grid adds up to the Type count.
+	const shortList = $derived(colorful.length + neutrals.length <= CLOSEST_MIN_LIST);
+	const neutralsOn = $derived(neutralsOpen || searching || effFam === 'neutral' || shortList);
 	const sections = $derived.by(() => {
 		let budget = cap;
 		const out: { id: string; label: string; count?: number; entries: PickerEntry[] }[] = [];
