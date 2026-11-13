@@ -172,6 +172,34 @@ preview is not available to the maintainer from a cloud session: they review use
 changes on the `edge` image on Unraid once the pull request is merged into the `edge`
 branch (maintainer, 2026-11-13), instead of `npm run preview:demo` before the merge.
 
+**Docker in a cloud session** (verified 2026-11-13). The container has Docker, buildx and
+compose but the daemon is not running: start it with `dockerd` as a background process
+(log to the scratchpad) and wait for `docker info`. Pulls from Docker Hub work. Build
+containers cannot reach the session's HTTPS proxy and don't trust its CA, so build the repo
+Dockerfile unchanged on a local helper base image:
+
+1. Kit pack: download the file listed in `kitpacks/index.json` from its GitHub release
+   (`https://github.com/<owner>/TMT-Build-Tracker/releases/download/kitpack-<slug>-<version>/<file>`)
+   into `kitpacks/` and check its sha256 and size against the index.
+2. Helper base (scratch dir, never committed or pushed): `FROM node:22-bookworm-slim`; copy
+   `/root/.ccr/ca-bundle.crt` in as `/usr/local/share/ca-certificates/ccr.crt` and
+   `/etc/ssl/certs/ca-certificates.crt`; switch `/etc/apt/sources.list.d/debian.sources` to
+   `https://deb.debian.org`; `/etc/apt/apt.conf.d/99proxy` with `Acquire::https::Proxy` set to
+   `$HTTPS_PROXY` (its port changes per session) and `Acquire::https::CaInfo`; `ENV` for
+   `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS`, `npm_config_cafile`, `SSL_CERT_FILE`. Build it with
+   `docker build --network host -t tmt-cloud-base:node22 <dir>`.
+3. `docker buildx build --network host --build-context
+node:22-bookworm-slim=docker-image://tmt-cloud-base:node22 --load -t
+tmt-build-tracker:cloudcheck .` (about 1.5 min warm).
+4. Empty-data check: a fresh data dir owned by 1000:1000, `docker run -d --rm --name
+tmt-cloudcheck -p 5198:3000 -v <dir>:/data -e BETTER_AUTH_SECRET=$(openssl rand -hex 32)
+tmt-build-tracker:cloudcheck`, poll `/api/health`, read the log (seeded templates, kit pack
+   installed a few seconds later), stop, start again on the same dir.
+
+The resulting image carries the proxy settings: it is for local checks only, never pushed.
+The environment must allow `deb.debian.org` (it does). Leave `dockerd` running for the
+session; containers are named `tmt-*` and started with `--rm`.
+
 ## Deploying published images (from 0.9, public repo)
 
 Once the repository is public, the test copy runs the image CI published, not a local
