@@ -19,8 +19,9 @@ done. Keep it under ~150 lines.
    `.claude/`, `docs/dev/`, `docs/architecture.md`. The maintainer published release
    `v0.9.1` from the Releases page; the tag points at d1cff2d on `edge` (the form defaulted to
    the default branch), not at f20a168 on `main`: same app code (only excluded paths
-   differ), left as is. Image run for the tag: actions run 43363456558 (`latest`, `0.9.1`,
-   `0.9`); confirm it finished. **Next:** deploy `0.9.1` to the test copy (the maintainer's
+   differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
+   e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
+   (checked anonymously 2026-11-13). **Next:** deploy `0.9.1` to the test copy (the maintainer's
    OK; r52 = `edge` 3ec52a7 lacks #26 and the version bump).
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
