@@ -39,20 +39,22 @@ maintainer says so in this session.
 **The repository is public (0.9 pre-release) and other people run it.** That changes how
 work lands:
 
-- **Branches and pull requests.** `main` is protected (`test` and `e2e` must pass). Code
-  reaches it through a pull request from a branch (`feat/…`, `fix/…`, `docs/…`). You may
-  merge a pull request you opened yourself once the whole routine was followed (agents'
-  checks, `verifier`, `security-reviewer` where required, the maintainer's preview review
-  for user-visible changes) and every required GitHub Actions check is green on its head
-  commit (maintainer, 2026-11-12). A pull request opened by anyone else, Dependabot
-  included, is merged only on the maintainer's go-ahead. Docs-only commits under
-  `docs/dev/` may go straight to `main` when protection allows it. Never force-push.
-- **Images.** CI publishes `edge` (+ `sha-<short>`) from every push to `main`, and `latest`
-  plus `X.Y.Z` / `X.Y` only from a release tag `vX.Y.Z`. Tagging a release is the
-  maintainer's call. Testers run `latest`; `main` may be ahead of it.
-- **The maintainer reviews in the local preview first** (`npm run preview:demo`, see
-  `docs/dev/dev-environments.md`): start it for every user-visible change before asking
-  for a merge or a deploy.
+- **Branches and pull requests.** Work merges into `edge`, not `main` (maintainer,
+  2026-11-13). Code reaches `edge` through a pull request from a branch (`feat/…`, `fix/…`,
+  `docs/…`) based on `origin/edge`. You may merge a pull request you opened yourself into
+  `edge` once the whole routine was followed (agents' checks, `verifier`,
+  `security-reviewer` where required) and every required GitHub Actions check is green on
+  its head commit (maintainer, 2026-11-12). Merging `edge` into `main` is the maintainer's
+  call, after they reviewed the `edge` image. A pull request opened by anyone else,
+  Dependabot included, is merged only on the maintainer's go-ahead. Docs-only commits
+  under `docs/dev/` may go straight to `edge` when protection allows it. Never force-push.
+- **Images.** CI publishes `edge` (+ `sha-<short>`) from every push to the `edge` branch,
+  only `sha-<short>` from a push to `main`, and `latest` plus `X.Y.Z` / `X.Y` only from a
+  release tag `vX.Y.Z`. Tagging a release is the maintainer's call. Testers run `latest`;
+  `edge` and `main` may be ahead of it.
+- **The maintainer reviews user-visible changes** in the local preview
+  (`npm run preview:demo`, see `docs/dev/dev-environments.md`) when the session is on the
+  Mac, and on the `edge` image on Unraid after the merge into `edge` otherwise.
 - **The test copy runs published images**, not local builds: deploy `sha-<short>` or
   `edge` of the merged commit after the usual backup and rehearsal.
 - **Released migrations are frozen.** Never edit, squash or renumber a migration that is

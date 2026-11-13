@@ -163,8 +163,9 @@ npm run preview:demo -- --no-build   # serve the earlier build copy, skip the bu
 ## Deploying published images (from 0.9, public repo)
 
 Once the repository is public, the test copy runs the image CI published, not a local
-build: after a pull request is merged, wait for the `image` job on `main`, then deploy
-`ghcr.io/<owner>/tmt-build-tracker:sha-<short>` of that commit (or `edge`). Backup,
+build: after a pull request is merged into `edge`, wait for the `image` job on `edge`, then
+deploy `ghcr.io/<owner>/tmt-build-tracker:sha-<short>` of that commit (or `edge`). After
+the maintainer merges `edge` into `main`, a push to `main` publishes `sha-<short>` only. Backup,
 rehearsal on a copy and the swap are unchanged (above); replace the local `docker build`
 and `docker tag` steps with `docker pull` of that tag and tag it `test` as before. Keep
 the previous image for rollback. A release (`vX.Y.Z`, the maintainer's call) is deployed
@@ -178,7 +179,7 @@ run over a whole folder, `git stash`). When more than one agent will edit code a
 time, give each task its own worktree: one task = one branch = one worktree = one pull
 request.
 
-- Create it beside the repo: `git worktree add ../TMT-wt-<task> -b <branch> origin/main`.
+- Create it beside the repo: `git worktree add ../TMT-wt-<task> -b <branch> origin/edge`.
 - Dependencies: a worktree has no `node_modules`. Install once per worktree with `npm ci`
   before its agent starts (one install at a time across the machine), or reuse the main
   checkout's when `package-lock.json` is identical (symlink `node_modules`; never when the
