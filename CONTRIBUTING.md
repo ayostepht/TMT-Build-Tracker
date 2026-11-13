@@ -42,9 +42,9 @@ A change is done when `check`, `lint`, `test` and `build` pass, the end-to-end s
 
 The workflow is `.github/workflows/docker.yml`:
 
-- A push to `main` or a pull request runs the `test` job (check, lint, unit tests, route-folder guard). A push that changes only docs runs nothing.
-- The `e2e` job and the Docker image build run on `v*` tags and on manual runs (Actions, then docker, then Run workflow). When the repository variable `CI_FULL=true` is set (Settings, Secrets and variables, Actions, Variables), every push and pull request also runs the end-to-end suite, and every push to `main` builds the image.
-- Image tags: a release tag `vX.Y.Z` publishes `latest`, `X.Y.Z` and `X.Y`; a pre-release tag (with a `-`) publishes only its full version; `main` publishes `edge`; every build also gets `sha-<short commit>`. Pull requests never publish an image.
+- A push to `main` or `edge`, or a pull request, runs the `test` job (check, lint, unit tests, route-folder guard). A push that changes only docs runs nothing.
+- The `e2e` job and the Docker image build run on `v*` tags and on manual runs (Actions, then docker, then Run workflow). When the repository variable `CI_FULL=true` is set (Settings, Secrets and variables, Actions, Variables), every push and pull request also runs the end-to-end suite, and every push to `main` or `edge` builds the image.
+- Image tags: a release tag `vX.Y.Z` publishes `latest`, `X.Y.Z` and `X.Y`; a pre-release tag (with a `-`) publishes only its full version; a push to the `edge` branch publishes `edge`; a push to `main` publishes only `sha-<short commit>`; every `edge` build also gets `sha-<short commit>`. Pull requests never publish an image.
 
 Run the end-to-end specs you touched locally before you open a pull request.
 
@@ -81,7 +81,7 @@ docker run --rm -v "$PWD":/app -w /app mcr.microsoft.com/playwright:v<version>-n
 Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 - Open an issue first for anything beyond a small fix, so the idea can be discussed before you spend time on it (the issue forms include a feature request).
-- Changes come as pull requests against `main`. CI must pass: `test` and `e2e`. Workflow runs for a first-time contributor wait for a maintainer's approval.
+- Changes come as pull requests against `edge`, where changes are reviewed before they reach `main` and a release. CI must pass: `test` and `e2e`. Workflow runs for a first-time contributor wait for a maintainer's approval.
 - A database schema change comes with its generated migration and must upgrade an existing 0.9 database; the upgrade test checks this.
 - Do not commit MakeGood's files (the kit pack ships separately), personal data or secrets.
 - Security problems go through [SECURITY.md](SECURITY.md), not an issue or pull request.

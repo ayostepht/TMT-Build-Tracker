@@ -1,7 +1,8 @@
 services:
   tmt-build-tracker:
     # latest = the newest release; pin a version such as :0.9.0 to upgrade only when you choose.
-    # :edge is the current main branch (unreleased, can break: back up first).
+    # :edge is the newest changes under review, ahead of main and the releases (can break: back up first).
+    # :sha-<short commit> is one exact build.
     image: ghcr.io/ayostepht/tmt-build-tracker:latest
     container_name: tmt-build-tracker
     restart: unless-stopped
