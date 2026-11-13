@@ -62,6 +62,11 @@ test('use a sliced file as a print template, recolor, re-arrange with its times'
 	// A printer is set and the MakeGood plates are back: "my own plates" that are not arranged.
 	await arrangeForCentauri(page);
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for Elegoo Centauri Carbon');
+	// The heading is seeded from the plates and can lead the picker, which only asks before replacing
+	// arranged plates once it knows they are arranged: wait for its own "arranged" state (the button
+	// reads "Re-arrange plates" and the select is back on "Arrange for my bed") before picking.
+	await expect(page.getByTestId('arrange-bed')).toHaveText('Re-arrange plates');
+	await expect(page.getByTestId('plate-layout')).toHaveValue('__arrange__');
 	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu X1 / P1 / A1 (24 plates)' });
 	await page.getByTestId('layout-confirm-yes').click();
 	await expect(page.getByTestId('layout-name')).toHaveText("MakeGood's Bambu X1 / P1 / A1 profile");
