@@ -26,14 +26,22 @@ done. Keep it under ~150 lines.
    printing on …" step (`unloggedEndedJobs` in `printers/status.ts`); new
    `e2e/plate-retry.spec.ts`; `e2e/log-plate.spec.ts` race fixed (it read client state from
    before its own API calls; now reloads). Decided (maintainer): Success on a live plate still
-   prints the parts; the keep-Printing rule needs a live printer job. **Next:** the same notice
-   in the "Link to plate…" dropdown flow (maintainer asked) [printers]; possible SSE gap: after
-   API edits a client-side navigation showed stale state until reload (seen in log-plate),
-   unconfirmed [build-state]. PRs #18 and #19 target `edge` (see the edge flow, #20).
+   prints the parts; the keep-Printing rule needs a live printer job. The notice is one component
+   (`UnloggedNotice.svelte`) and also shows after a "Link to plate…" pick (maintainer asked);
+   it shows for auto-linked jobs too (open question to the maintainer). Open: two linked jobs
+   on one plate can show the notice twice [printers]; possible SSE gap: after API edits a
+   client-side navigation showed stale state until reload (seen in log-plate), unconfirmed
+   [build-state]. **Edge flow (maintainer, 2026-11-13):** PRs merge into the `edge` branch,
+   which publishes the `edge` image; the maintainer reviews it on Unraid and merges `edge`
+   into `main`. #20 (CI) and #19 (sheet overflow) are merged into `edge`; #21 (minimatch
+   override) and #22 (README compose sample, no release numbers in the README) are open. The
+   maintainer sets branch protection on `edge` and dismisses the esbuild and deepmerge
+   Dependabot alerts (not reachable). Cloud sessions: use the "TMT-Build-Tracker" environment
+   (setup script installs deps and the Playwright browser).
 1. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
    was merged, `v0.9.0` tagged, CI in full mode (`CI_FULL=true`). `main` is protected and
    work lands through pull requests (see CLAUDE.md "The repository is public"). Image
-   channels: `latest`/`0.9.0`/`0.9` from the tag, `edge` from `main`. Done since the flip:
+   channels: `latest`/`0.9.0`/`0.9` from the tag, `edge` from the `edge` branch (was `main` until 2026-11-13). Done since the flip:
    the `ghcr.io` package is public and pulls anonymously (amd64 + arm64); Unraid ran a cold
    start of the published image against an empty data directory three times, all clean;
    release `v0.9.0` is published and marked Latest (kit pack 1.0.1 release kept, 1.0.0
