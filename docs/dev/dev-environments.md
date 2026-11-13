@@ -163,8 +163,11 @@ npm run preview:demo -- --no-build   # serve the earlier build copy, skip the bu
 ## Cloud sessions (claude.ai/code)
 
 A cloud session runs in a fresh Linux container: Node 22 native, no Docker, no
-`CLAUDE.local.md` (no private values, no deploys). The repo-pinned Playwright browser may
-not be installable there, so end-to-end specs run in CI on the pull request. The local
+`CLAUDE.local.md` (no private values, no deploys). The maintainer's personal cloud
+environment "TMT-Build-Tracker" allows the Playwright download hosts and its setup script
+runs `npm ci && npx playwright install chromium` in the checkout (browsers land in
+`/opt/pw-browsers`), so `check`, unit tests and e2e run as on the Mac; CI runs them again on
+the pull request. The setup script runs only when a fresh container is built. The local
 preview is not available to the maintainer from a cloud session: they review user-visible
 changes on the `edge` image on Unraid once the change is on `main` (maintainer,
 2026-11-13), instead of `npm run preview:demo` before the merge.
