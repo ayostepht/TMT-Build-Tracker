@@ -91,7 +91,7 @@ Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT
 
 - `edge` is where work lands. Every pull request targets `edge`, and the `edge` image is built from it.
 - `main` is what users and contributors need: the app, its tests, the install and operator docs. The files the maintainer's Claude Code sessions use (`CLAUDE.md`, `CLAUDE.local.example.md`, `.claude/`, `docs/dev/`, `docs/architecture.md`) live on `edge` only; the list is `.github/main-exclude.txt`. To read them, switch to the `edge` branch on GitHub.
-- The maintainer promotes `edge` by running the **promote** workflow (Actions, then promote, then Run workflow). It opens a pull request into `main` whose tree is `edge` minus the excluded files, and starts the `test` and `e2e` checks on its branch. The maintainer merges that pull request with **Create a merge commit** (not squash), so the `Promoted-From:` line in its message stays in `main`'s history and the next promotion lists only new commits.
+- The maintainer promotes `edge` by running the **promote** workflow (Actions, then promote, then Run workflow with "Use workflow from" set to `edge`; it refuses to run from any other branch). It opens a pull request into `main` whose tree is `edge` minus the excluded files, and starts the `test` and `e2e` checks on its branch. The maintainer merges that pull request with **Create a merge commit** (not squash), so the `Promoted-From:` line in its message stays in `main`'s history and the next promotion lists only new commits.
 - Never commit to `main` directly: the next promotion makes `main` equal to `edge` again, so anything only on `main` would be overwritten.
 
 ## Pull requests
