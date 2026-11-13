@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-13 (0.9.1 released, see item 0; `edge` is the default branch; test
-copy on r52 = `edge` 3ec52a7, the published image; not yet on 0.9.1)._
+copy on r53 = `edge` 296cd50 (0.9.1 + #32, #33, #35), the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -21,8 +21,8 @@ done. Keep it under ~150 lines.
    the default branch), not at f20a168 on `main`: same app code (only excluded paths
    differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
    e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
-   (checked anonymously 2026-11-13). **Next:** deploy `0.9.1` to the test copy (the maintainer's
-   OK; r52 = `edge` 3ec52a7 lacks #26 and the version bump).
+   (checked anonymously 2026-11-13). The test copy runs it (r53 = `edge` 296cd50, which adds
+   #32, #33 and #35 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
@@ -199,6 +199,18 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
+- (2026-11-13) **r53 phone review** of #32 / #33 / #35 on the test copy. Checks on a copy of the
+  live data (2026-11-13, 390 + 1440): Type select reads "95A" by default, 98A lists only 98A,
+  All types lists everything (108 TPU swatches), a hovered selected brand chip stays
+  readable; one-piece handle option, H2D / H2S layout with plate 22 and the grip on its own
+  TPU plate 18; "Replace plates?" appeared 3 of 3 times when a MakeGood layout was picked
+  right after arranging; jeepxj credit on About, Help (FAQ) and the 3D stage. Not checkable:
+  **no "Foaming" type**, because the catalog has no foaming TPU (the only `/foam/i` matches
+  are PLA "Seafoam" colors) [filaments-catalog]. Seen, open: the type counts differ from the
+  swatches listed (98A (8) lists 13, 90A (19) lists 14) [design-studio-ui]; at 390 the
+  3D model covers part of the stage credit line [design-studio-ui]. The kit pack upgraded the
+  test copy's 1.0.1 model to 1.0.2 (it was not admin-imported); kit-status lists nothing
+  missing.
 - (2026-11-13, issues #29 / #30) **Review PR #32** (#30 picker Type filter: default reads
   "95A" / "PETG", subtypes with counts; plus hovered selected badges stay readable) on the
   `edge` image after merge. **#29 one-piece push handle** (branch
@@ -266,8 +278,8 @@ Route each to the agent named in brackets.
 - **Drafts** [app-shell]: printer/layout pickers only in Files, not in draft Settings.
 - **Files tab** [plates-3mf]: on r45 at 390 the layout select showed "Loading…" while the
   heading already named the layout. Probably the race fixed on 2026-11-13 (the picker's
-  preload effect re-ran on every view refresh; layout answers were not latest-wins): check
-  on the next deploy. That race also made `print-template.spec.ts:66` time out on CI.
+  preload effect re-ran on every view refresh; layout answers were not latest-wins). r53
+  checks: "Replace plates?" appeared every time; "Loading…" not seen at 1440 or 390. That race also made `print-template.spec.ts:66` time out on CI.
 - **CI** [release-pwa]: the e2e job's limit is 35 min (was 20; the suite takes ~20 min with 1
   worker and a timeout cancelled the `edge` run of #33, skipping its image). As the suite
   grows, shard it (`--shard=1/2` over two jobs, each with its own server and DB) rather than

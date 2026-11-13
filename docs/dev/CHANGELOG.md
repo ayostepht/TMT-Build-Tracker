@@ -7,6 +7,15 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r53** (published `sha-296cd50` = `edge` 296cd50, same digest, 2026-11-13): 0.9.1 (#18, #19,
+  #21, #22, #26, #27), picker Type filter (#32), one-piece push handle with kit pack 1.0.2
+  (#33), layout-picker race fix and CI e2e limit (#35). No migration. Rehearsal clean: health
+  0.9.1, "updated templates", "added 2 part rows to existing builds" (the one-piece handle,
+  To print), kit pack 1.0.2 installed the model (1.0.1 before, not admin-imported) and 1 new
+  geometry row (`push-handle-one-piece`), 40 admin rows kept with no `source_note` change;
+  only those row counts changed. Live build unchanged apart from the new To print row.
+  UI checks on a copy of the live data: all passed except "Foaming", which the catalog
+  cannot show (no foaming TPU). Rollback: re-tag `r52` as `test`, no restore.
 - **r52** (published `edge` image, 3ec52a7, 2026-11-13; tagged `edge-3ec52a7`): the first
   test-copy deploy from the `edge` channel. Plate retry keeps a live plate Printing, Printing
   takes the printer's start time, unlogged-print notice (#18); "Where is it printing?" sheet
