@@ -16,11 +16,14 @@
 		job,
 		ctx,
 		exp,
+		jobs,
 		onlinked
 	}: {
 		job: PrinterJobView;
 		ctx: BuildCtx;
 		exp?: PrinterExpectedView;
+		/** Jobs to warn about an unlogged print of the same plate (see ExpectedConfirm). */
+		jobs?: PrinterJobView[];
 		/** Called after the link succeeded and the build was refreshed. */
 		onlinked: () => void | Promise<void>;
 	} = $props();
@@ -62,7 +65,7 @@
 </script>
 
 {#if suggestion}
-	<ExpectedConfirm exp={suggestion} {ctx} {onlinked} onother={() => (other = true)} />
+	<ExpectedConfirm exp={suggestion} {ctx} {jobs} {onlinked} onother={() => (other = true)} />
 {:else}
 	<label class="sel"
 		><span class="sr-only">Link to plate</span>

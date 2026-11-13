@@ -2,8 +2,9 @@
 	import { untrack } from 'svelte';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { jobAction } from '#lib/client/api.ts';
-	import type { PrinterExpectedView } from '#lib/printers/status.ts';
+	import type { PrinterExpectedView, PrinterJobView } from '#lib/printers/status.ts';
 	import { getBuildCtx, type BuildCtx } from './build-context.svelte.ts';
+	import UnloggedNotice from './UnloggedNotice.svelte';
 	import { runChoices, runOptionLabel } from './run-label.ts';
 
 	/**
@@ -14,13 +15,16 @@
 		exp,
 		onother,
 		ctx: ctxProp,
-		onlinked
+		onlinked,
+		jobs: jobsProp
 	}: {
 		exp: PrinterExpectedView;
 		onother: () => void;
 		/** Outside a build page (the Printers page) the build's context is passed in. */
 		ctx?: BuildCtx;
 		onlinked?: () => void | Promise<void>;
+		/** Jobs to look for an unlogged print of the same plate in (default: the build's store). */
+		jobs?: PrinterJobView[];
 	} = $props();
 	const ctx = untrack(() => ctxProp ?? getBuildCtx());
 	const store = untrack(() =>
@@ -60,6 +64,14 @@
 
 <div class="exp-confirm" data-testid="expected-confirm">
 	<p class="exp-q">Confirm <b>{label}</b> is printing on {exp.printerName}?</p>
+	<UnloggedNotice
+		jobs={jobsProp ?? store?.jobs ?? []}
+		buildId={ctx.id}
+		plateNumber={exp.plateNumber}
+		partSlugs={exp.partSlugs}
+		exceptJobId={exp.jobId}
+		testid="expected-unlogged"
+	/>
 	<div class="exp-actions">
 		<button
 			class="btn sm primary"

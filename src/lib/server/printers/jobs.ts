@@ -11,7 +11,7 @@ import { jobNeverStarted, stopPrinting } from '#lib/domain/actions.ts';
 import { releaseUnstarted } from '#lib/domain/recompute.ts';
 import { progressGrams } from '#lib/domain/logrun.ts';
 import { defaultRunParts } from '#lib/domain/run-choice.ts';
-import { today } from '#lib/domain/format.ts';
+import { sanePrintSeconds, today } from '#lib/domain/format.ts';
 import type { BuildView, PartPatch } from '#lib/domain/types.ts';
 import type { PrinterExpectedView, PrinterJobView, PrinterStatus } from '#lib/printers/status.ts';
 import { ApiError } from '../access';
@@ -140,11 +140,17 @@ export function findPlateForFile(db: Db, printer: PrinterRow, fileName: string):
 	return hits.length === 1 ? hits[0] : null;
 }
 
+/**
+ * Patches for linking a live job to parts. The job's own start and estimate win, except for parts
+ * whose Printing state belongs to another job that is still running (`heldByOther`): those keep
+ * theirs. A part that is Printing from an ended, unlogged job or from a manual start is taken over.
+ */
 function linkPatches(
 	view: BuildView,
 	slugs: string[],
 	startedAt: Date,
-	estSeconds: number | null
+	estSeconds: number | null,
+	heldByOther: ReadonlySet<string> = new Set()
 ): PartPatch[] {
 	const iso = startedAt.toISOString();
 	const out: PartPatch[] = [];
@@ -155,11 +161,33 @@ function linkPatches(
 		if (st.status !== 'Printing') {
 			p.status = 'Printing';
 			p.startedAt = iso;
-		} else if (!st.startedAt) p.startedAt = iso;
-		if (estSeconds && !st.runEstSeconds) p.runEstSeconds = estSeconds;
+			if (estSeconds) p.runEstSeconds = estSeconds;
+		} else if (heldByOther.has(slug)) {
+			if (!st.startedAt) p.startedAt = iso;
+			if (estSeconds && !st.runEstSeconds) p.runEstSeconds = estSeconds;
+		} else {
+			if (st.startedAt !== iso) p.startedAt = iso;
+			if (estSeconds && st.runEstSeconds !== estSeconds) p.runEstSeconds = estSeconds;
+		}
 		if (Object.keys(p).length > 1) out.push(p);
 	}
 	return out;
+}
+
+/** Parts of a build that another running job (not `jobId`) is linked to. */
+function heldByOtherJobs(tx: Db, buildId: string, jobId: string): Set<string> {
+	const rows = tx
+		.select({ partSlugs: printerJobs.partSlugs })
+		.from(printerJobs)
+		.where(
+			and(
+				eq(printerJobs.buildId, buildId),
+				ne(printerJobs.id, jobId),
+				inArray(printerJobs.status, ['printing', 'paused'])
+			)
+		)
+		.all();
+	return new Set(rows.flatMap((r) => r.partSlugs ?? []));
 }
 
 /** Attach a job to a plate: parts go to Printing with the job's start time. */
@@ -185,10 +213,7 @@ function attach(
 			? (job.partSlugs ?? []).filter((s) => !slugs.includes(s))
 			: [];
 	const started = job.startedAt ?? new Date();
-	const est =
-		status.elapsedSec != null && status.remainingSec != null
-			? Math.round(status.elapsedSec + status.remainingSec)
-			: null;
+	const est = sanePrintSeconds(status.elapsedSec, status.remainingSec);
 	const payload = {
 		printer: printer.name,
 		printerId: printer.id,
@@ -203,7 +228,9 @@ function attach(
 			.where(eq(printerJobs.id, job.id))
 			.run();
 		const live = job.status === 'printing' || job.status === 'paused';
-		const patches = live ? linkPatches(view, slugs, started, est) : [];
+		const patches = live
+			? linkPatches(view, slugs, started, est, heldByOtherJobs(tx, c.view.build.id, job.id))
+			: [];
 		// the run time the printer reported is the plate's time too (never over a typed one)
 		if (live && est && patches.some((p) => p.runEstSeconds === est))
 			syncPlateTime(tx, c.view.build.id, view, slugs, est, 'printer');

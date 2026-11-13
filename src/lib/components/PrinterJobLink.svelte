@@ -13,11 +13,13 @@
 		job,
 		builds,
 		exp,
+		jobs,
 		onlinked
 	}: {
 		job: PrinterJobView;
 		builds: { id: string; name: string }[];
 		exp?: PrinterExpectedView;
+		jobs?: PrinterJobView[];
 		onlinked: () => void | Promise<void>;
 	} = $props();
 
@@ -67,7 +69,7 @@
 	{/if}
 	{#if loading}<span class="muted">Loading…</span>{/if}
 	{#if ctx}
-		<JobLinkControl {job} {ctx} {exp} {onlinked} />
+		<JobLinkControl {job} {ctx} {exp} {jobs} {onlinked} />
 	{/if}
 	{#if err}<div class="error" role="alert" style="white-space:normal">{err}</div>{/if}
 </div>

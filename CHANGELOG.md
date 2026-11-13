@@ -8,6 +8,21 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 Nothing yet.
 
+## [0.9.1] - 2026-11-13
+
+A patch release of the 0.9 pre-release: fixes from the first days of public testing. No database changes; update as usual (take a backup first).
+
+### Added
+
+- When a plate still has an earlier print that was never logged (for example a failed one), linking a new print to it says so, with a button that opens that print's log.
+
+### Fixed
+
+- Logging a failed or partial print no longer takes a plate off "Now printing" when the plate is already printing again on a connected printer. Deleting, editing or undoing an older print log keeps it printing too.
+- A plate's start time and time left come from the printer when it is printing on a connected printer, also when you choose Printing after the print started or link a new print over an earlier one that was never logged.
+- The "Where is it printing?" sheet no longer scrolls sideways on a phone when the printer shows a long file name.
+- Choosing one of MakeGood's built-in plate layouts (for example Bambu X1 / P1 / A1) now counts as choosing the bed: the setup wizard continues without a printer, the plate layout card names the bed the profile is for, and its export works. Arranging plates for your own bed still needs your printer.
+
 ## [0.9.0] - 2026-11-12
 
 The first public version: a pre-release for public testing; 1.0.0 will follow. Data formats are stable, but details may still change before 1.0.0.

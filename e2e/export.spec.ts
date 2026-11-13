@@ -21,11 +21,11 @@ test('export for a slicer: no geometry, then a project 3MF per color and a plain
 	await page.getByRole('link', { name: 'Files', exact: true }).click();
 	await expect(page).toHaveURL(/\/files$/);
 
-	// Without a printer the card asks for one.
-	await expect(page.getByTestId('export-no-printer')).toBeVisible();
+	// Without a printer the default MakeGood profile stands for its bed: the card works.
+	await expect(page.getByTestId('export-no-printer')).toHaveCount(0);
+	await expect(page.getByTestId('layout-bed')).toContainText('256 × 256');
 	const noPrinter = await page.request.get(`/api/builds/${buildId}/export/preview`);
-	expect(noPrinter.status()).toBe(400);
-	expect((await noPrinter.json()).error).toMatch(/printer/i);
+	expect(noPrinter.status()).toBe(200);
 
 	// Elegoo Centauri Carbon with CANVAS (4 filaments); saving arranges the plates.
 	await arrangeForCentauri(page);

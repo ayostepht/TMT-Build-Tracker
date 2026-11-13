@@ -4,6 +4,7 @@
 	import { jobAction } from '#lib/client/api.ts';
 	import { PrinterStore } from '#lib/client/printer-store.svelte.ts';
 	import PrinterCard from '#lib/components/PrinterCard.svelte';
+	import UnloggedNotice from '#lib/components/UnloggedNotice.svelte';
 	import PrinterJobLink from '#lib/components/PrinterJobLink.svelte';
 	import { splitTeamJobs, type PrinterJobView } from '#lib/printers/status.ts';
 	import type { PageProps } from './$types';
@@ -82,6 +83,15 @@
 								· waiting for your print log</span
 							>{/if}
 						{#if data.canEdit && (j.status === 'printing' || j.status === 'paused')}
+							<UnloggedNotice
+								jobs={store.jobs}
+								buildId={j.buildId}
+								plateNumber={j.plateNumber}
+								partSlugs={j.partSlugs}
+								exceptJobId={j.id}
+								testid="linked-unlogged"
+								linked
+							/>
 							<button class="btn ghost sm" type="button" onclick={() => unlink(j.id)}>Unlink</button
 							>
 						{/if}
@@ -92,6 +102,7 @@
 								job={j}
 								builds={store.builds}
 								exp={store.expected.find((e) => e.jobId === j.id)}
+								jobs={store.jobs}
 								onlinked={() => store.load()}
 							/>
 						{/if}

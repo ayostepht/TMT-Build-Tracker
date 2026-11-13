@@ -239,6 +239,12 @@ export interface BuildView {
 	members: { userId: string; name: string; role: TeamRole }[];
 	/** Printer chosen for plate planning; null until the user picks one. */
 	printer: BuildPrinter | null;
+	/**
+	 * Bed preset of the build's built-in MakeGood layout (set only while `printer` is null and a
+	 * tuned layout is chosen). Counts as the chosen bed for the wizard and the export; never
+	 * used to arrange.
+	 */
+	layoutPrinter?: BuildPrinter | null;
 	/** Assembly checklist: the steps that apply to this build's variant choices, plus its progress. */
 	assembly: BuildAssembly;
 	/** Photos of the build (progress, finished chair, handoff), oldest first. Files via `/api/builds/[id]/photos/[photoId]`. */
