@@ -148,6 +148,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Plates and 3MF (`plates-3mf`)
 
+- Files tab layouts: `PlatesPanel` fetches the build's layouts and passes them to
+  `PlateLayoutPicker` as `preload`; answers are latest-wins (numbered requests) and
+  `onchanged` invalidates older ones. The picker applies a `preload` only when the object
+  changes. Props such as `ctx.id` are getters over the whole view: read them untracked in
+  effects that must not re-run on every refresh.
 - **Implied bed for built-in layouts:** a build with no printer gets `view.layoutPrinter`
   from its MakeGood layout key (`layoutBed` in `src/lib/printers/layout-bed.ts`: `xpa` =
   Bambu X1 / P1 / A1 256 × 256, `h2d` = H2D / H2S 350 × 320, both 4 slots), derived in
