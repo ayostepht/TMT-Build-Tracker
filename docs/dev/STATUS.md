@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-13 (plate 9 retry fixes on branches, see 00; public, 0.9.0 released; test copy on r50 = e4584d5, a local
+_Last updated: 2026-11-13 (plate 9 retry fixes on branches, see item 0; public, 0.9.0 released; test copy on r50 = e4584d5, a local
 build; main is at 0e413e1 and ahead of it by docs only. No agents or work in progress)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
@@ -10,7 +10,7 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-00. **Plate 9 retry fixes (2026-11-13, cloud session), not merged yet.** From the maintainer's
+0. **Plate 9 retry fixes (2026-11-13, cloud session), not merged yet.** From the maintainer's
    bug report (r50 / v0.9.0; live data consistent, no repair needed). Branch
    `claude/vigilant-newton-4yy4kk`: a Failed/Partial log, run delete/edit/undo no longer drop
    Printing for parts on a live printer job; choosing Printing takes the start from the
@@ -30,7 +30,7 @@ done. Keep it under ~150 lines.
    sets Reprint). Follow-up (low, hardening): bound `elapsedSec`/`remainingSec` (>= 0, cap)
    in `liveJobStart` and `attach` [build-state, printers]. Optional UX: warn when linking a
    new job to a plate with an unlogged ended job.
-0. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
+1. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
    was merged, `v0.9.0` tagged, CI in full mode (`CI_FULL=true`). `main` is protected and
    work lands through pull requests (see CLAUDE.md "The repository is public"). Image
    channels: `latest`/`0.9.0`/`0.9` from the tag, `edge` from `main`. Done since the flip:
@@ -52,7 +52,7 @@ done. Keep it under ~150 lines.
    look). Next deploys of the test copy use published images (`sha-<short>` / `edge`), see
    dev-environments. Worktrees for parallel agents: trial on the next multi-agent task.
 
-1. **r50 is live** (e4584d5, 2026-11-12, main 9ed6906; rollback: tag `r49` as `test`, no restore; rehearsal clean, all 5 checks passed, live link connected in 3 s, 0 reconnects in 20 min) (no migration; adds the runtime dependency `ws`, so
+2. **r50 is live** (e4584d5, 2026-11-12, main 9ed6906; rollback: tag `r49` as `test`, no restore; rehearsal clean, all 5 checks passed, live link connected in 3 s, 0 reconnects in 20 min) (no migration; adds the runtime dependency `ws`, so
    the image build must run `npm ci` cleanly). Contents: every printer WebSocket goes
    through `ws-client.ts` (1 MiB `maxPayload`, no compression, no redirects, handshake
    timeout); OctoEverywhere link sockets are pinned to the validated address. This closes
@@ -77,7 +77,7 @@ done. Keep it under ~150 lines.
    private" sentences, link the changelog from `/about`, check the issue forms render and
    the guide anchors resolve on GitHub. The maintainer will then invite beta testers on the
    MakeGood TMT forum (Docker/self-hosting, ideally Klipper, OctoPrint or Bambu).
-2. **r49 is live** (ca4d9c1, 2026-11-12, main bec473e; no migration; rollback: tag `r48` as `test`, no restore; rehearsal clean, all 10 checks passed, live link 0 reconnects in 15 min). The maintainer reviewed it in the local
+3. **r49 is live** (ca4d9c1, 2026-11-12, main bec473e; no migration; rollback: tag `r48` as `test`, no restore; rehearsal clean, all 10 checks passed, live link 0 reconnects in 15 min). The maintainer reviewed it in the local
    preview on 2026-11-12 ("everything else looks good!"); the chooser was then compacted to
    single rows with one Experimental note, as they asked, and re-gated. Decision
    (maintainer): their own printer goes on a hosted instance through its OctoEverywhere
@@ -103,7 +103,7 @@ done. Keep it under ~150 lines.
    2026-11-12 where a new unit test sent one SDCP discovery broadcast on the Mac's LAN is
    fixed (test sets public mode first) and no other printers unit test can reach the
    network (security-reviewer, sampled).
-3. **r48 is live** (c64d852, deployed 2026-11-12 from main 1e18c6c; UI and two small server
+4. **r48 is live** (c64d852, deployed 2026-11-12 from main 1e18c6c; UI and two small server
    changes, no migration; rollback: tag `r47` as `test`, no restore needed). Rehearsal clean;
    checks on a copy of the live data: 8 of 10 pass, 1 failed, 1 open question (see "r48
    checks" under open items). The
@@ -123,7 +123,7 @@ done. Keep it under ~150 lines.
    Later ideas, not started: OctoEverywhere for more printer types as they prove out,
    PrusaLink / Prusa Connect, finish notifications (ntfy, Discord, Home Assistant); avoid
    Bambu cloud.
-4. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
+5. **r47 is live** (0245ca8, deployed 2026-11-12 from main c47ecca; rollback: tag `r46` as
    `test`, no restore needed). Rehearsal clean (no upgrade line, journal still the
    baseline row, row counts equal). All 8 r47 checks passed on a copy of the live data with
    the simulated printer (shots in `data/r47-check/shots/` on Unraid). Seen during the
@@ -143,17 +143,17 @@ done. Keep it under ~150 lines.
    README captions updated. Gated on the Mac: check, lint, 1463 unit tests, build, full
    e2e once (2 failures, both fixed) and the affected specs again (56 passed). Docker
    build is left for Unraid. The maintainer has not seen it yet: wait for their review.
-5. **r46 is live** (cfe1c61, 2026-11-12): the migration squash; the test copy was upgraded
+6. **r46 is live** (cfe1c61, 2026-11-12): the migration squash; the test copy was upgraded
    to the single baseline with every check clean (see CHANGELOG). The maintainer checked
    their build afterwards. Rollback: `tmt-build-tracker:r45` + `tmt-backup-pre-r46.db`.
    A real OIDC (Authentik) sign-in is a 1.0 checklist item: the r45 token handling is only
    unit-tested and the maintainer will test it before `v1.0.0`.
-6. **Towards 1.0**: Unraid Community Apps template, `v1.0.0`, a real Authentik sign-in
+7. **Towards 1.0**: Unraid Community Apps template, `v1.0.0`, a real Authentik sign-in
    (maintainer), Klipper / OctoPrint / Bambu on real hardware through beta testers, the
    hosted (`TMT_MODE=public`) paths on a real deploy, a duplicate-link check (needs a
    `link_hash` column: schema change, ask first). README screenshots (`docs/images/`, five)
    come from `scripts/preview/readme-shots.mjs` against the local preview.
-7. Wait for (or ask about) the maintainer's phone checks below, then act on them.
+8. Wait for (or ask about) the maintainer's phone checks below, then act on them.
 
 ## Where we are
 
