@@ -14,6 +14,10 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 - Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG", and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
 
+### Fixed
+
+- Files: choosing one of MakeGood's plate layouts right after arranging plates for your own bed could be ignored (no "Replace plates?" question, the list snapped back). The choice now always applies.
+
 ## [0.9.1] - 2026-11-13
 
 A patch release of the 0.9 pre-release: fixes from the first days of public testing. No database changes; update as usual (take a backup first).
