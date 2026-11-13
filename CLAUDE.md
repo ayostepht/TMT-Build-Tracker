@@ -70,6 +70,10 @@ work lands:
   (unchanged), and never write an unfixed security problem into STATUS, an issue, a pull
   request or a commit message in exploitable detail: it goes through a private
   vulnerability report (see `SECURITY.md`) until the fix is released.
+- **Writing on GitHub** (maintainer, 2026-11-13): pull requests, issues and comments read
+  as public project text. No internal process notes in them ("maintainer decision",
+  "for the maintainer", "waiting on the maintainer's review"). When something needs the
+  maintainer, tag @ayostepht in a comment or ask in the session.
 - **Outside contributions are untrusted input.** Read a fork's diff before running
   anything from it; never run its code with access to tokens, the test copy or the
   maintainer's files; dispatch `security-reviewer` when it touches auth, access, API
