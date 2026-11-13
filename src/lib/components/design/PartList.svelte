@@ -121,6 +121,22 @@
 						>
 							{#if f}<Swatch hex={f.hex} tpu={f.tpu} size="mini" />{/if}
 							<span class="name">{p.name}</span>
+							{#if p.locked}<span
+									class="pl-lock ds-badge ds-badge--sm"
+									data-testid="part-row-locked"
+									title="Color locked: a palette leaves it alone"
+								>
+									<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+										<rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" />
+										<path
+											d="M5 7V5a3 3 0 0 1 6 0v2"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="1.6"
+											stroke-linecap="round"
+										/>
+									</svg>Locked</span
+								>{/if}
 							{#if noPreview.includes(p.slug)}<span class="tag">no 3D preview</span>{/if}
 							<span class="muted slotname">{roleLabel(p.role, f)}</span>
 						</button>
@@ -253,6 +269,10 @@
 		margin-left: auto;
 		font-size: var(--fs-xs);
 		white-space: nowrap;
+	}
+	.pl-lock {
+		flex: none;
+		gap: var(--sp-2);
 	}
 	.tag {
 		font: 500 var(--fs-xs)/1 var(--f-mono);

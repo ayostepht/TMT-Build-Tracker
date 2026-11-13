@@ -133,3 +133,59 @@ test('studio: screenshots (phone, desktop, wide; light and dark)', async ({ page
 		}
 	}
 });
+
+test('studio draft: lock a part, apply a palette, remove an added color', async ({ page }) => {
+	await signUp(page, 'Dana Draft', uniqueEmail('studio-remove'));
+	await page.waitForLoadState('networkidle');
+	await page.goto('/studio');
+	await page.waitForLoadState('networkidle');
+	await page.getByTestId('new-draft').click();
+	await page.getByTestId('create-draft').click();
+	await expect(page).toHaveURL(/\/builds\/[^/]+\/design/);
+	const id = new URL(page.url()).pathname.split('/')[2];
+	const res = await page.request.patch(`/api/builds/${id}/design`, {
+		data: {
+			addRole: { key: 'red', name: 'Cherry Red', material: 'PETG', hex: '#aa0000' },
+			partRoles: { 'wing-left': 'red', 'wing-right': 'red', 'seat-center': 'accent' }
+		}
+	});
+	expect(res.ok()).toBe(true);
+	await page.reload();
+	await page.waitForLoadState('networkidle');
+	const partRow = (slug: string) => page.locator(`[data-testid="part-row"][data-slug="${slug}"]`);
+
+	// Lock a part, then apply a palette: the wings reset, the locked part stays.
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await partRow('seat-center').click();
+	await page.getByTestId('part-lock').click();
+	await expect(page.getByTestId('part-lock')).toHaveAttribute('aria-pressed', 'true');
+	await page.getByRole('button', { name: 'Close part details' }).click();
+	await page.getByRole('tab', { name: 'Palettes' }).click();
+	const list = page.getByRole('group', { name: 'Ready-made palettes' });
+	if (!(await list.isVisible()))
+		await page.getByTestId('readymade-toggle').locator('summary').click();
+	await page.locator('[data-palette="fire-truck"]').click();
+	await expect(page.getByTestId('palette-reset-note')).toContainText('1 locked kept');
+	await page.getByTestId('palette-bar').getByRole('button', { name: 'Apply' }).click();
+	await expect(page.getByTestId('palette-bar')).toHaveCount(0);
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(partRow('seat-center').getByTestId('part-row-locked')).toBeVisible();
+	await expect(partRow('wing-left')).not.toContainText('Cherry Red');
+
+	// Put the wings back on the added colour, then remove it through the dialog.
+	const back = await page.request.patch(`/api/builds/${id}/design`, {
+		data: { partRoles: { 'wing-left': 'red', 'wing-right': 'red' } }
+	});
+	expect(back.ok()).toBe(true);
+	await page.reload();
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('tab', { name: 'Colors' }).click();
+	const red = page.locator('li.slot[data-role="red"]');
+	await red.getByTestId('remove-color').click();
+	await expect(page.getByTestId('remove-color-lead')).toContainText('assigned to 2 parts');
+	await page.getByTestId('remove-replace-primary').check();
+	await page.getByTestId('remove-color-confirm').click();
+	await expect(red).toHaveCount(0);
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(partRow('wing-left')).toContainText('Primary');
+});

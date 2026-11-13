@@ -15,6 +15,7 @@
 		bothSides = $bindable(true),
 		noPreview = false,
 		onmove,
+		onlock,
 		onclose
 	}: {
 		view: BuildView;
@@ -22,6 +23,8 @@
 		bothSides?: boolean;
 		noPreview?: boolean;
 		onmove: (role: string) => void;
+		/** "Lock color" toggled: the part (and, with both sides, its peers) keep their filament when a palette is applied. */
+		onlock?: (locked: boolean) => void;
 		onclose: () => void;
 	} = $props();
 
@@ -41,6 +44,11 @@
 		<span class="title" title="{part.name} · {slotName}">
 			<b>{part.name}</b><span class="muted">&nbsp;· {slotName}</span>
 		</span>
+		{#if part.locked}
+			<span class="ps-lock ds-badge ds-badge--sm" data-testid="part-locked" title="Color locked">
+				{@render lockIcon()}<span class="ps-lock-text">Locked</span>
+			</span>
+		{/if}
 		{#if limited}<span class="only" title="{part.name} needs {mats}">{mats} only</span>{/if}
 		{#if view.canEdit && peers.length}
 			<label class="both" title="Apply to both sides ({peers.map((p) => p.name).join(', ')})">
@@ -90,10 +98,39 @@
 				</button>
 			{/each}
 		</div>
+		<button
+			type="button"
+			class="ps-lockbtn"
+			data-testid="part-lock"
+			aria-pressed={part.locked}
+			aria-describedby="ps-lock-hint"
+			onclick={() => onlock?.(!part.locked)}
+		>
+			{@render lockIcon()}
+			<span>Lock color</span>
+		</button>
+		<p class="note muted ps-hint" id="ps-lock-hint">
+			{part.locked
+				? 'Locked: applying a palette leaves this part on its current filament.'
+				: 'Lock to keep this part’s filament when a palette is applied.'}
+		</p>
 	{:else}
 		<p class="note muted">View-only access: colors cannot be changed.</p>
 	{/if}
 </section>
+
+{#snippet lockIcon()}
+	<svg class="ps-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+		<rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" />
+		<path
+			d="M5 7V5a3 3 0 0 1 6 0v2"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="1.6"
+			stroke-linecap="round"
+		/>
+	</svg>
+{/snippet}
 
 <style>
 	.sheet {
@@ -198,6 +235,59 @@
 	.slotbtn:disabled {
 		opacity: 0.55;
 		cursor: not-allowed;
+	}
+	.ps-lock {
+		flex: none;
+		gap: var(--sp-2);
+	}
+	.ps-icon {
+		flex: none;
+	}
+	.ps-lockbtn {
+		justify-self: start;
+		display: inline-flex;
+		gap: var(--sp-3);
+		align-items: center;
+		min-height: 36px;
+		padding: var(--sp-2) var(--sp-5);
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
+		background: var(--paper);
+		color: var(--ink);
+		font: 600 var(--fs-sm) / 1 var(--f-body);
+		cursor: pointer;
+	}
+	.ps-lockbtn:hover {
+		border-color: var(--accent);
+	}
+	.ps-lockbtn[aria-pressed='true'] {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.ps-lockbtn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	@media (pointer: coarse) {
+		.ps-lockbtn {
+			min-height: 44px;
+		}
+	}
+	/* Phones: the floating chip stays compact; the hint is still read out through aria-describedby. */
+	@media (max-width: 899px) {
+		.ps-hint {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+	}
+	@media (max-width: 760px) {
+		.ps-lock-text {
+			display: none;
+		}
 	}
 	.only {
 		flex: none;

@@ -224,6 +224,14 @@ describe('describeActivitySegments', () => {
 			['printer.job.release', { plateNumber: 7 }],
 			['printer.job.unstarted', { printer: 'CC', plateNumber: 8, result: 'cancelled' }],
 			['design.update', { moves: [{ slug: part.slug, role: 'accent', roleName: 'Blue' }] }],
+			['design.update', { palette: { label: 'Sunset', reset: 5, kept: 2 }, locked: ['Wing Left'] }],
+			[
+				'design.update',
+				{
+					removed: { key: 'x', name: 'Red', material: 'PETG', spools: 1, spoolmanSpoolId: 12 },
+					replacedBy: { key: 'primary', name: 'Primary', material: 'PETG' }
+				}
+			],
 			['something.new', {}]
 		];
 		for (const [kind, payload] of rows) {
@@ -289,5 +297,92 @@ describe('printer.job.unstarted', () => {
 		);
 		expect(text('cancelled')).toContain('before it started; nothing was logged');
 		expect(text('failed')).toContain('stopped');
+	});
+});
+
+describe('design.update palette, lock and removal sentences', () => {
+	const d = (payload: Record<string, unknown>) =>
+		describeActivity(act('design.update', payload), view);
+	const who = describeActivity(act('design.update', {}), view).replace(' changed the colors', '');
+
+	it('describes a palette apply with resets and kept locks', () => {
+		expect(d({ palette: { label: 'Sunset', reset: 5, kept: 2 } })).toBe(
+			`${who} applied the Sunset palette; 5 parts back to their kit colors, 2 locked parts kept`
+		);
+		expect(d({ palette: { label: 'Sunset', reset: 1, kept: 1 } })).toContain(
+			'1 part back to its kit color, 1 locked part kept'
+		);
+		expect(d({ palette: { label: 'Sunset', reset: 0, kept: 2 } })).toBe(
+			`${who} applied the Sunset palette; 2 locked parts kept`
+		);
+		expect(d({ palette: { label: 'Sunset', reset: 0, kept: 0 } })).toBe(
+			`${who} applied the Sunset palette`
+		);
+	});
+
+	it('describes locks, unlocks and locked parts moved to a new slot', () => {
+		expect(d({ locked: ['Wing Left'] })).toBe(`${who} locked the color of Wing Left`);
+		expect(d({ unlocked: ['A', 'B'] })).toBe(`${who} unlocked the color of A and B`);
+		expect(
+			d({
+				lockedAdded: [{ key: 'c1', name: 'Overture Red', material: 'PETG', parts: ['Wing Left'] }]
+			})
+		).toBe(`${who} kept Wing Left on a new color slot (Overture Red PETG)`);
+		expect(d({ lockedAdded: [{ key: 'c1', name: 'Overture Red' }] })).toContain(
+			'kept locked parts on a new color slot (Overture Red)'
+		);
+	});
+
+	it('describes a removal with replacement, Spoolman link and dropped spools', () => {
+		const base = {
+			removed: { key: 'x', name: 'Overture Red', material: 'PETG', parts: 3 },
+			replacedBy: { key: 'primary', name: 'Primary', material: 'PETG' }
+		};
+		expect(d(base)).toBe(`${who} removed Overture Red PETG; its 3 parts now use Primary PETG`);
+		expect(d({ ...base, removed: { ...base.removed, spoolmanSpoolId: 12, spools: 2 } })).toContain(
+			'and unlinked Spoolman spool #12 and dropped 2 spools of stock'
+		);
+		// old shape still reads
+		expect(d({ removed: { key: 'x', name: 'Red' } })).toBe(`${who} removed a color: Red`);
+	});
+
+	it('does not repeat a material the name already contains', () => {
+		const rep = { key: 'primary', name: 'Primary PETG', material: 'PETG' };
+		expect(
+			d({ removed: { key: 'x', name: 'Red PETG', material: 'PETG', parts: 2 }, replacedBy: rep })
+		).toBe(`${who} removed Red PETG; its 2 parts now use Primary PETG`);
+		expect(
+			d({ removed: { key: 'x', name: 'red petg', material: 'PETG', parts: 1 }, replacedBy: rep })
+		).toBe(`${who} removed red petg; its 1 part now uses Primary PETG`);
+		// word boundary: "PETGX" does not contain PETG
+		expect(d({ lockedAdded: [{ name: 'PETGX', material: 'PETG', parts: ['A'] }] })).toContain(
+			'(PETGX PETG)'
+		);
+		expect(d({ lockedAdded: [{ name: 'Blue PETG', material: 'PETG', parts: ['A'] }] })).toContain(
+			'on a new color slot (Blue PETG)'
+		);
+		expect(
+			d({
+				removed: { key: 'x', name: 'Black TPU', material: 'TPU 95A', parts: 2 },
+				replacedBy: { key: 'p', name: 'Soft TPU 95A', material: 'TPU 95A' }
+			})
+		).toBe(`${who} removed Black TPU 95A; its 2 parts now use Soft TPU 95A`);
+	});
+
+	it('describes a palette undo, with removed slots singular and plural', () => {
+		expect(d({ palette: { label: 'previous', slots: [] } })).toBe(
+			`${who} undid the palette change`
+		);
+		expect(d({ palette: { label: 'Sunset', undo: true } })).toBe(`${who} undid the palette change`);
+		expect(d({ palette: { undo: true, removeRoles: ['c1'] } })).toBe(
+			`${who} undid the palette change; removed 1 color slot added for locked parts`
+		);
+		expect(d({ palette: { undo: true, removeRoles: ['c1', 'c2'] } })).toBe(
+			`${who} undid the palette change; removed 2 color slots added for locked parts`
+		);
+	});
+
+	it('strips control characters from names', () => {
+		expect(d({ locked: ['A\u0001B'] })).toBe(`${who} locked the color of AB`);
 	});
 });
