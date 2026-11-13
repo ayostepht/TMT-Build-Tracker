@@ -39,6 +39,8 @@ function toSegments(s: string): Segment[] {
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? clean(v) || null : null);
+const obj = (v: unknown): Obj | null =>
+	typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 function list(items: string[]): string {
@@ -284,10 +286,84 @@ function describeMarked(a: ActivityItem, view: Names): string {
 				}
 				for (const e of byRole.values()) bits.push(`moved ${list(e.names)} to ${e.to}`);
 			}
+			const names = (v: unknown): string[] =>
+				Array.isArray(v) ? v.map((x) => str(x)).filter((x): x is string => !!x) : [];
+			// "applied the Sunset palette; 5 parts back to their kit colors, 2 locked parts kept"
+			const pal = obj(p.palette);
+			if (pal) {
+				const undo = pal.undo === true || str(pal.label) === 'previous';
+				const nRemoved = Array.isArray(pal.removeRoles)
+					? pal.removeRoles.length
+					: Array.isArray(p.removeRoles)
+						? p.removeRoles.length
+						: Math.max(0, Math.round(num(pal.removed) ?? 0));
+				const reset = Math.max(0, Math.round(num(pal.reset) ?? 0));
+				const kept = Math.max(0, Math.round(num(pal.kept) ?? 0));
+				const tail: string[] = [];
+				if (reset)
+					tail.push(
+						`${reset} ${reset === 1 ? 'part back to its kit color' : 'parts back to their kit colors'}`
+					);
+				if (kept) tail.push(`${kept} locked ${kept === 1 ? 'part' : 'parts'} kept`);
+				if (nRemoved)
+					tail.push(
+						`removed ${nRemoved} color ${nRemoved === 1 ? 'slot' : 'slots'} added for locked parts`
+					);
+				const head = undo
+					? 'undid the palette change'
+					: `applied the ${str(pal.label) ? `${str(pal.label)} ` : ''}palette`;
+				bits.push(`${head}${tail.length ? `; ${tail.join(', ')}` : ''}`);
+			}
+			// Name + material, without repeating a material the name already carries ("Red PETG" + "PETG").
+			const named = (name: string, material: string | null): string => {
+				if (!material) return name;
+				const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+				const edge = '(^|[^\\p{L}\\p{N}])';
+				if (new RegExp(`${edge}${esc(material)}($|[^\\p{L}\\p{N}])`, 'iu').test(name)) return name;
+				// "Black TPU" + "TPU 95A": the name already ends with the first words of the material.
+				const words = material.split(/\s+/);
+				for (let k = words.length - 1; k >= 1; k--) {
+					const lead = words.slice(0, k).join(' ');
+					if (new RegExp(`${edge}${esc(lead)}$`, 'iu').test(name))
+						return `${name} ${words.slice(k).join(' ')}`;
+				}
+				return `${name} ${material}`;
+			};
+			const lockedAdded = Array.isArray(p.lockedAdded) ? (p.lockedAdded as unknown[]) : [];
+			for (const raw of lockedAdded) {
+				const e = obj(raw);
+				if (!e) continue;
+				const ps = names(e.parts);
+				const slot = named(str(e.name) ?? 'a new color', str(e.material));
+				bits.push(`kept ${ps.length ? list(ps) : 'locked parts'} on a new color slot (${slot})`);
+			}
+			const locked = names(p.locked);
+			if (locked.length) bits.push(`locked the color of ${list(locked)}`);
+			const unlocked = names(p.unlocked);
+			if (unlocked.length) bits.push(`unlocked the color of ${list(unlocked)}`);
 			const added = (p.added ?? null) as Obj | null;
 			if (added) bits.push(`added a color: ${str(added.name) ?? 'new color'}`);
-			const removed = (p.removed ?? null) as Obj | null;
-			if (removed) bits.push(`removed a color: ${str(removed.name) ?? 'a color'}`);
+			const removed = obj(p.removed);
+			if (removed) {
+				const label = named(str(removed.name) ?? 'a color', str(removed.material));
+				const rep = obj(p.replacedBy);
+				if (!rep) bits.push(`removed a color: ${str(removed.name) ?? 'a color'}`);
+				else {
+					const n = num(removed.parts);
+					const repLabel = named(str(rep.name) ?? 'another color', str(rep.material));
+					let t = `removed ${label}; ${
+						n === null ? 'its parts' : n === 1 ? 'its 1 part' : `its ${fmt(n)} parts`
+					} now ${n === 1 ? 'uses' : 'use'} ${repLabel}`;
+					const extra: string[] = [];
+					if (num(removed.spoolmanSpoolId) !== null)
+						extra.push(`unlinked Spoolman spool #${num(removed.spoolmanSpoolId)}`);
+					const sp = num(removed.spools);
+					if (sp !== null && sp > 0)
+						extra.push(`dropped ${fmtSpools(sp)} ${sp === 1 ? 'spool' : 'spools'} of stock`);
+					if (extra.length) t += ` and ${list(extra)}`;
+					bits.push(t);
+				}
+			}
 			return bits.length ? `${who} ${list(bits)}` : `${who} changed the colors`;
 		}
 		case 'design.apply':

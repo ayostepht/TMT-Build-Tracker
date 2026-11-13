@@ -6,6 +6,7 @@ import { openDb, runMigrations, type Db } from '../db';
 import {
 	activity,
 	buildFilaments,
+	buildPlates,
 	builds,
 	colorDesigns,
 	member,
@@ -126,28 +127,29 @@ describe('updateBuildDesign', () => {
 		).toBe(400);
 	});
 
-	it('adds a color, uses it, and refuses to remove it while used (409)', () => {
+	it('adds a color and removes it once nothing uses it', () => {
 		const id = mk();
 		updateBuildDesign(db, id, 'owner', {
 			addRole: { name: 'Polymaker Red', material: 'PETG', hex: '#C0281E' }
 		});
 		let v = view(id);
 		const red = v.filaments.at(-1)!;
-		expect(red).toMatchObject({ key: 'polymaker-red', hex: '#c0281e', spools: 0, tpu: false });
+		expect(red).toMatchObject({
+			key: 'polymaker-red',
+			hex: '#c0281e',
+			spools: 0,
+			tpu: false,
+			kit: false
+		});
 		expect(describeActivity(last(v, 'design.update'), v)).toBe(
 			'User owner added a color: Polymaker Red'
 		);
 		updateBuildDesign(db, id, 'owner', { partRoles: { 'wing-left': red.key } });
 		v = view(id);
 		expect(v.parts.find((p) => p.slug === 'wing-left')!.role).toBe('polymaker-red');
-		expect(code(() => updateBuildDesign(db, id, 'owner', { removeRole: 'polymaker-red' }))).toBe(
-			409
-		);
-		const original = view(id).filaments.find((f) => f.key === 'accent')!.key;
-		updateBuildDesign(db, id, 'owner', { partRoles: { 'wing-left': original } });
+		updateBuildDesign(db, id, 'owner', { partRoles: { 'wing-left': 'accent' } });
 		updateBuildDesign(db, id, 'owner', { removeRole: 'polymaker-red' });
 		expect(view(id).filaments.some((f) => f.key === 'polymaker-red')).toBe(false);
-		expect(code(() => updateBuildDesign(db, id, 'owner', { removeRole: 'primary' }))).toBe(400);
 		expect(code(() => updateBuildDesign(db, id, 'owner', { removeRole: 'zzz' }))).toBe(404);
 	});
 
@@ -307,5 +309,352 @@ describe('applyDesignToBuild', () => {
 		const d = createDesign(db, 'owner', { buildId: src, name: 'Hidden' });
 		const other = mk(null, 'org2', 'outsider');
 		expect(code(() => applyDesignToBuild(db, d.id, other, 'outsider'))).toBe(404);
+	});
+});
+
+const addRed = (id: string, extra: Record<string, unknown> = {}) =>
+	updateBuildDesign(db, id, 'owner', {
+		addRole: { key: 'red', name: 'Red', material: 'PETG', hex: '#aa0000' },
+		...extra
+	});
+const lockedOf = (id: string) =>
+	view(id)
+		.allParts.filter((p) => p.locked)
+		.map((p) => p.slug)
+		.sort();
+const rolesOfBuild = (id: string) =>
+	Object.fromEntries(view(id).allParts.map((p) => [p.slug, p.role]));
+const activityCount = (id: string) =>
+	db.select().from(activity).where(eq(activity.buildId, id)).all().length;
+
+describe('removing a color that is in use', () => {
+	it('needs a replacement: 409 without one, 400 for the kit, an unknown slot or itself', () => {
+		const id = mk();
+		addRed(id, { partRoles: { 'wing-left': 'red' } });
+		expect(code(() => updateBuildDesign(db, id, 'owner', { removeRole: 'red' }))).toBe(409);
+		expect(
+			code(() => updateBuildDesign(db, id, 'owner', { removeRole: 'red', replaceWith: 'red' }))
+		).toBe(400);
+		expect(
+			code(() => updateBuildDesign(db, id, 'owner', { removeRole: 'red', replaceWith: 'nope' }))
+		).toBe(400);
+		expect(
+			code(() => updateBuildDesign(db, id, 'owner', { removeRole: 'primary', replaceWith: 'red' }))
+		).toBe(400);
+		expect(code(() => updateBuildDesign(db, id, 'owner', { replaceWith: 'primary' }))).toBe(400);
+		expect(view(id).filaments.some((f) => f.key === 'red')).toBe(true);
+	});
+
+	it('names the parts a replacement cannot take (material) and changes nothing', () => {
+		const id = mk();
+		updateBuildDesign(db, id, 'owner', {
+			addRole: { key: 'flex', name: 'Flex Pink', material: 'TPU 95A', hex: '#ff66aa' },
+			partRoles: { 'soft-headrest': 'flex' }
+		});
+		const n = activityCount(id);
+		let msg = '';
+		try {
+			updateBuildDesign(db, id, 'owner', { removeRole: 'flex', replaceWith: 'primary' });
+		} catch (e) {
+			expect(e).toBeInstanceOf(ApiError);
+			expect((e as ApiError).status).toBe(400);
+			msg = (e as ApiError).message;
+		}
+		expect(msg).toMatch(/Soft Headrest/);
+		expect(rolesOfBuild(id)['soft-headrest']).toBe('flex');
+		expect(activityCount(id)).toBe(n);
+		updateBuildDesign(db, id, 'owner', { removeRole: 'flex', replaceWith: 'soft' });
+		expect(rolesOfBuild(id)['soft-headrest']).toBe('soft');
+	});
+
+	it('moves every part (hidden variants too, locks kept), drops spools and link, remaps grams, logs it', () => {
+		const id = mk();
+		addRed(id, { partRoles: { 'wing-left': 'red', 'footrest-front': 'red' } });
+		updateBuildDesign(db, id, 'owner', { lock: { slugs: ['wing-left'], locked: true } });
+		db.update(buildFilaments)
+			.set({ spools: 2, spoolmanSpoolId: 7 })
+			.where(and(eq(buildFilaments.buildId, id), eq(buildFilaments.roleKey, 'red')))
+			.run();
+		db.insert(buildPlates)
+			.values({ buildId: id, number: 90, name: 'P', filamentGrams: { red: 10, primary: 5 } })
+			.run();
+		expect(view(id).parts.some((p) => p.slug === 'footrest-front')).toBe(false);
+		const ev = onBuildEvents(id);
+		const n = activityCount(id);
+		updateBuildDesign(db, id, 'editor', { removeRole: 'red', replaceWith: 'primary' });
+		const v = view(id);
+		expect(v.filaments.some((f) => f.key === 'red')).toBe(false);
+		expect(
+			db
+				.select()
+				.from(buildFilaments)
+				.where(and(eq(buildFilaments.buildId, id), eq(buildFilaments.roleKey, 'red')))
+				.all()
+		).toEqual([]);
+		expect(rolesOfBuild(id)).toMatchObject({ 'wing-left': 'primary', 'footrest-front': 'primary' });
+		expect(lockedOf(id)).toEqual(['wing-left']);
+		expect(
+			db
+				.select()
+				.from(buildPlates)
+				.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 90)))
+				.get()!.filamentGrams
+		).toEqual({ primary: 15 });
+		expect(activityCount(id)).toBe(n + 1);
+		expect(ev.at(-1)!.kind).toBe('design.update');
+		const text = describeActivity(last(v, 'design.update'), v);
+		expect(text).toContain(
+			'removed Red PETG; its 2 parts now use Primary PETG and unlinked Spoolman spool #7 and dropped 2 spools of stock'
+		);
+		expect(text).toContain('unlinked Spoolman spool #7');
+		expect(text).toContain('dropped 2 spools of stock');
+	});
+
+	it('works on a Studio draft and not for viewers', () => {
+		const id = createBuild(
+			db,
+			{ organizationId: orgId, templateId, designId: null, name: 'D', kind: 'draft' },
+			'owner'
+		);
+		addRed(id, { partRoles: { 'wing-left': 'red' } });
+		expect(
+			code(() => updateBuildDesign(db, id, 'viewer', { removeRole: 'red', replaceWith: 'primary' }))
+		).toBe(403);
+		updateBuildDesign(db, id, 'editor', { removeRole: 'red', replaceWith: 'accent' });
+		expect(rolesOfBuild(id)['wing-left']).toBe('accent');
+		expect(view(id).filaments.some((f) => f.key === 'red')).toBe(false);
+	});
+});
+
+describe('Lock color', () => {
+	it('locks and unlocks parts, logs part names, and ignores a repeat', () => {
+		const id = mk();
+		updateBuildDesign(db, id, 'editor', {
+			lock: { slugs: ['wing-left', 'wing-right'], locked: true }
+		});
+		expect(lockedOf(id)).toEqual(['wing-left', 'wing-right']);
+		let v = view(id);
+		expect(describeActivity(last(v, 'design.update'), v)).toBe(
+			'User editor locked the color of Wing Left and Wing Right'
+		);
+		const n = activityCount(id);
+		updateBuildDesign(db, id, 'editor', { lock: { slugs: ['wing-left'], locked: true } });
+		expect(activityCount(id)).toBe(n);
+		updateBuildDesign(db, id, 'editor', { lock: { slugs: ['wing-left'], locked: false } });
+		expect(lockedOf(id)).toEqual(['wing-right']);
+		v = view(id);
+		expect(describeActivity(last(v, 'design.update'), v)).toBe(
+			'User editor unlocked the color of Wing Left'
+		);
+		// the roles and filaments survive a lock write
+		expect(v.filaments).toHaveLength(4);
+		expect(
+			code(() => updateBuildDesign(db, id, 'viewer', { lock: { slugs: ['x'], locked: true } }))
+		).toBe(403);
+		expect(
+			code(() => updateBuildDesign(db, id, 'owner', { lock: { slugs: ['nope'], locked: true } }))
+		).toBe(400);
+		expect(
+			code(() => updateBuildDesign(db, id, 'owner', { lock: { slugs: [], locked: true } }))
+		).toBe(400);
+		expect(code(() => updateBuildDesign(db, id, 'owner', { lock: { slugs: ['wing-left'] } }))).toBe(
+			400
+		);
+	});
+
+	it('a locked part can still be moved by hand', () => {
+		const id = mk();
+		updateBuildDesign(db, id, 'owner', { lock: { slugs: ['wing-left'], locked: true } });
+		updateBuildDesign(db, id, 'owner', { partRoles: { 'wing-left': 'primary' } });
+		expect(rolesOfBuild(id)['wing-left']).toBe('primary');
+		expect(lockedOf(id)).toEqual(['wing-left']);
+	});
+
+	it('Apply this design clears the locks', () => {
+		const id = mk();
+		const d = createDesign(db, 'owner', { buildId: id, name: 'Same' });
+		updateBuildDesign(db, id, 'owner', {
+			lock: { slugs: ['wing-left', 'seat-center'], locked: true }
+		});
+		applyDesignToBuild(db, d.id, id, 'owner');
+		expect(lockedOf(id)).toEqual([]);
+		expect(
+			(db.select().from(builds).where(eq(builds.id, id)).get()!.design as Record<string, unknown>)
+				.lockedParts
+		).toBeUndefined();
+	});
+});
+
+describe('applying a palette in one call', () => {
+	const pal = (reset = true) => ({
+		palette: {
+			label: 'Sunset',
+			reset,
+			slots: {
+				primary: { name: 'Sun Orange', material: 'PETG', hex: '#ff8800' },
+				accent: { name: 'Sun Red', material: 'PETG', hex: '#cc2200' }
+			}
+		}
+	});
+
+	it('sets the filaments and sends every unlocked part back to its kit slot, as one activity row', () => {
+		const id = mk();
+		updateBuildDesign(db, id, 'owner', {
+			addRole: { key: 'red', name: 'Red', material: 'PETG', hex: '#aa0000' },
+			partRoles: { 'wing-left': 'red', 'seat-center': 'accent', 'push-top': 'primary' }
+		});
+		const ev = onBuildEvents(id);
+		const n = activityCount(id);
+		updateBuildDesign(db, id, 'editor', pal());
+		const v = view(id);
+		expect(activityCount(id)).toBe(n + 1);
+		expect(ev).toHaveLength(1);
+		expect(db.select().from(activity).where(eq(activity.buildId, id)).all().at(-1)!.kind).toBe(
+			'design.update'
+		);
+		expect(v.filaments.find((f) => f.key === 'primary')).toMatchObject({
+			name: 'Sun Orange',
+			hex: '#ff8800'
+		});
+		expect(v.allParts.every((p) => p.role === p.defaultRole)).toBe(true);
+		const text = describeActivity(last(v, 'design.update'), v);
+		expect(text).toContain('applied the Sunset palette; 3 parts back to their kit colors');
+	});
+
+	it('keeps locked parts on their exact color by moving them to a slot that holds it', () => {
+		const id = mk();
+		const before = view(id);
+		const oldPrimary = before.filaments.find((f) => f.key === 'primary')!;
+		const oldAccent = before.filaments.find((f) => f.key === 'accent')!;
+		updateBuildDesign(db, id, 'owner', {
+			partRoles: { 'wing-right': 'primary' },
+			lock: { slugs: ['wing-left', 'seat-center', 'wing-right'], locked: true }
+		});
+		updateBuildDesign(db, id, 'owner', pal());
+		const v = view(id);
+		const roles = rolesOfBuild(id);
+		// wing-left was on accent, seat-center on primary, wing-right (locked) on primary: all keep the old color
+		const slotOf = (slug: string) => v.filaments.find((f) => f.key === roles[slug])!;
+		expect(slotOf('wing-left')).toMatchObject({
+			name: oldAccent.name,
+			hex: oldAccent.hex,
+			kit: false
+		});
+		expect(slotOf('seat-center')).toMatchObject({
+			name: oldPrimary.name,
+			hex: oldPrimary.hex,
+			kit: false
+		});
+		expect(roles['wing-right']).toBe(roles['seat-center']);
+		expect(v.filaments).toHaveLength(6);
+		expect(lockedOf(id)).toEqual(['seat-center', 'wing-left', 'wing-right']);
+		const text = describeActivity(last(v, 'design.update'), v);
+		expect(text).toContain('3 locked parts kept');
+		expect(text).toContain('on a new color slot');
+		// the same palette again changes nothing about the locked parts and adds no slot
+		updateBuildDesign(db, id, 'owner', {
+			palette: {
+				label: 'Again',
+				reset: true,
+				slots: { primary: { name: 'Other', material: 'PETG', hex: '#010203' } }
+			}
+		});
+		expect(view(id).filaments).toHaveLength(6);
+		expect(rolesOfBuild(id)['seat-center']).toBe(roles['seat-center']);
+	});
+
+	it('reuses an existing non-kit slot that already holds the locked color', () => {
+		const id = mk();
+		const primary = view(id).filaments.find((f) => f.key === 'primary')!;
+		updateBuildDesign(db, id, 'owner', {
+			addRole: { key: 'same', name: primary.name, material: primary.material, hex: primary.hex },
+			lock: { slugs: ['seat-center'], locked: true }
+		});
+		updateBuildDesign(db, id, 'owner', pal());
+		expect(rolesOfBuild(id)['seat-center']).toBe('same');
+		expect(
+			view(id)
+				.filaments.map((f) => f.key)
+				.sort()
+		).toEqual(['accent', 'primary', 'same', 'soft', 'tire']);
+		const v = view(id);
+		expect(describeActivity(last(v, 'design.update'), v)).not.toContain('new color slot');
+	});
+
+	it('leaves a locked part alone when its slot keeps the same filament', () => {
+		const id = mk();
+		const primary = view(id).filaments.find((f) => f.key === 'primary')!;
+		updateBuildDesign(db, id, 'owner', { lock: { slugs: ['seat-center'], locked: true } });
+		updateBuildDesign(db, id, 'owner', {
+			palette: {
+				label: 'Same',
+				reset: true,
+				slots: { primary: { name: primary.name, material: primary.material, hex: primary.hex } }
+			}
+		});
+		expect(rolesOfBuild(id)['seat-center']).toBe('primary');
+		expect(view(id).filaments).toHaveLength(4);
+	});
+
+	it('Undo: one call restores filaments, part colors and removes the auto-added slots', () => {
+		const id = mk();
+		updateBuildDesign(db, id, 'owner', {
+			partRoles: { 'wing-right': 'primary' },
+			lock: { slugs: ['wing-left'], locked: true }
+		});
+		const before = view(id);
+		const slots = Object.fromEntries(
+			before.filaments
+				.filter((f) => f.kit)
+				.map((f) => [f.key, { name: f.name, material: f.material, hex: f.hex }])
+		);
+		const beforeRoles = rolesOfBuild(id);
+		const keys = new Set(before.filaments.map((f) => f.key));
+		updateBuildDesign(db, id, 'owner', pal());
+		const added = view(id)
+			.filaments.map((f) => f.key)
+			.filter((k) => !keys.has(k));
+		expect(added).toHaveLength(1);
+		const n = activityCount(id);
+		updateBuildDesign(db, id, 'owner', {
+			palette: { label: 'earlier', slots },
+			partRoles: beforeRoles,
+			removeRoles: added
+		});
+		expect(activityCount(id)).toBe(n + 1);
+		const after = view(id);
+		expect(rolesOfBuild(id)).toEqual(beforeRoles);
+		const shape = (v: typeof after) =>
+			v.filaments.map((f) => [f.key, f.name, f.material, f.hex.toLowerCase()]).sort();
+		expect(shape(after)).toEqual(shape(before));
+		expect(lockedOf(id)).toEqual(['wing-left']);
+		// removeRoles only takes slots nothing uses
+		expect(code(() => updateBuildDesign(db, id, 'owner', { removeRoles: ['primary'] }))).toBe(409);
+	});
+
+	it('works on drafts, is refused for viewers, and validates the body', () => {
+		const id = createBuild(
+			db,
+			{ organizationId: orgId, templateId, designId: null, name: 'D', kind: 'draft' },
+			'owner'
+		);
+		expect(code(() => updateBuildDesign(db, id, 'viewer', pal()))).toBe(403);
+		expect(code(() => updateBuildDesign(db, id, 'owner', { palette: { slots: {} } }))).toBe(400);
+		expect(
+			code(() =>
+				updateBuildDesign(db, id, 'owner', {
+					palette: { label: 'x', slots: { ghost: { name: 'a', material: 'PETG', hex: '#000000' } } }
+				})
+			)
+		).toBe(400);
+		expect(
+			code(() =>
+				updateBuildDesign(db, id, 'owner', {
+					palette: { label: 'x', slots: { primary: { name: 'a', material: 'PETG', hex: 'red' } } }
+				})
+			)
+		).toBe(400);
+		updateBuildDesign(db, id, 'editor', pal());
+		expect(view(id).filaments.find((f) => f.key === 'accent')!.hex).toBe('#cc2200');
 	});
 });

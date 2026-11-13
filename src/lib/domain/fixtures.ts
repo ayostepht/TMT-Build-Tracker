@@ -20,6 +20,8 @@ export function makeView(
 		name: p.name,
 		section: p.section,
 		role: design?.partRoles[p.slug] ?? p.defaultRole,
+		defaultRole: p.defaultRole,
+		locked: false,
 		bomGrams: p.bomGrams,
 		qty: p.qty,
 		walls: p.walls,
@@ -79,7 +81,8 @@ export function makeView(
 			tpu: r.tpu,
 			spools: r.recommendedSpools,
 			recommendedSpools: r.recommendedSpools,
-			spoolmanSpoolId: null
+			spoolmanSpoolId: null,
+			kit: true
 		})),
 		parts,
 		state,

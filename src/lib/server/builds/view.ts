@@ -76,8 +76,17 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 	const tpl = db.select().from(templates).where(eq(templates.id, b.templateId)).get();
 	if (!tpl) return null;
 
-	const design = (b.design ?? null) as { partRoles?: Record<string, string> } | null;
+	const design = (b.design ?? null) as {
+		partRoles?: Record<string, string>;
+		lockedParts?: unknown;
+	} | null;
 	const partRoles = design?.partRoles ?? {};
+	// Optional string[]; anything else means nothing is locked. Unknown slugs are ignored below.
+	const lockedSlugs = new Set(
+		Array.isArray(design?.lockedParts)
+			? (design.lockedParts as unknown[]).filter((x): x is string => typeof x === 'string')
+			: []
+	);
 
 	const tRoles = new Map(
 		db
@@ -102,7 +111,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 				tpu: t?.tpu ?? materialFamily(f.material) === 'tpu',
 				spools: f.spools,
 				recommendedSpools: t?.recommendedSpools ?? 1,
-				spoolmanSpoolId: f.spoolmanSpoolId
+				spoolmanSpoolId: f.spoolmanSpoolId,
+				kit: !!t
 			};
 		});
 	// keep template role order
@@ -127,6 +137,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			name: p.name,
 			section: p.section,
 			role: partRoles[p.slug] ?? p.defaultRole,
+			defaultRole: p.defaultRole,
+			locked: lockedSlugs.has(p.slug),
 			bomGrams: p.bomGrams,
 			qty: p.qty,
 			walls: p.walls,

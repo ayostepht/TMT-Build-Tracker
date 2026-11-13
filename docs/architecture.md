@@ -47,6 +47,12 @@ Sections match the subagents in `.claude/agents/`:
 
 ## Build state (`build-state`)
 
+- Design locks and slot removal (#34): `PartDef.defaultRole`, `PartDef.locked` (from
+  `builds.design.lockedParts`), `FilamentRole.kit` (template slot, not removable).
+  `server/builds/role-keys.ts` `remapRoleKey` moves role-keyed grams (plates, part profiles,
+  upload `filamentMap`) when a slot is removed. `design.update` activity payload parts:
+  `palette {label, reset, kept}` (label "previous" = undo), `locked`/`unlocked`,
+  `lockedAdded`, `removed` + `replacedBy`.
 - `domain/guards.ts`: the one `isObj` / `Obj` plain-object guard; server, printer, kit pack
   and Spoolman modules import it instead of defining their own.
 - **Mutations:** `mutateBuild` (users) / `mutateBuildSystem` (printer-driven) in
@@ -346,6 +352,13 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   Generator with locked slots (`generateFromLocked`, `paletteVariations`), `softOfPrimary`,
   colored tires 4 of 6. Brand matching: a preferred brand wins only within
   `max(best + 6, 10)` ΔE; preferred brands list in localStorage `tmt.preferredBrands.v2`.
+- **Palette reset, locks, remove (#34)**: `PATCH /api/builds/[id]/design` applies, in one
+  `mutateBuild` transaction: `addRole`, `palette {label, slots, reset?}`, `partRoles`,
+  `lock {slugs, locked}`, `removeRole` + `replaceWith`, `removeRoles` (unused slots; palette
+  Undo). Domain helpers in `domain/design.ts`: `paletteReset`, `removeImpact`,
+  `replacementOptions`, `sameFilament`. `RemoveColorDialog` (shared Dialog, Cancel first) is
+  hosted by `SlotPanel`; the lock toggle is in `PartSheet`, badges in `PartSheet`/`PartList`
+  (not in 3D); `DesignWorkspace.live` previews the reset.
 - **Swatch picker** (`domain/swatch-picker.ts`): `exclusionReason` (TPU 95A only, no
   silk/matte/…), a Type select (`type`: `''` standard, `'all'`, or one subtype id from
   `filamentSubtypes()` in `palettes.ts`, built from `EXCLUDED_FILAMENTS` + `hardnesses()`;

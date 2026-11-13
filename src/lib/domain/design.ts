@@ -132,3 +132,76 @@ export function partsByRole(
 	}
 	return m;
 }
+
+// ---- Palette reset, "Lock color" and removing an in-use color
+
+/**
+ * What applying a palette does to part-level color changes: every unlocked part that is not on its
+ * kit slot goes back there (`reset`); locked parts keep their color (`kept`, all locked parts).
+ */
+export function paletteReset(view: Pick<BuildView, 'allParts'>): {
+	reset: PartDef[];
+	kept: PartDef[];
+} {
+	const reset: PartDef[] = [];
+	const kept: PartDef[] = [];
+	for (const p of view.allParts) {
+		if (p.locked) kept.push(p);
+		else if (p.role !== p.defaultRole) reset.push(p);
+	}
+	return { reset, kept };
+}
+
+export interface RemoveImpactPart {
+	part: PartDef;
+	/** The part belongs to a variant option that is not chosen: not in the 3D view or totals, but it moves too. */
+	inactive: boolean;
+}
+
+/** Every part on a slot (chosen options first), whether or not its variant is active: all of them move when it is removed. */
+export function removeImpact(
+	view: Pick<BuildView, 'allParts' | 'parts'>,
+	key: string
+): RemoveImpactPart[] {
+	const active = new Set(view.parts.map((p) => p.slug));
+	return view.allParts
+		.filter((p) => p.role === key)
+		.map((part) => ({ part, inactive: !active.has(part.slug) }))
+		.sort((a, b) => Number(a.inactive) - Number(b.inactive));
+}
+
+export interface ReplacementOption {
+	filament: FilamentRole;
+	ok: boolean;
+	/** Set when `ok` is false: the first affected part that cannot use this slot, and why. */
+	reason: string | null;
+}
+
+/** The other slots a removed slot's parts could move to; a slot is blocked when any of those parts cannot use its material. */
+export function replacementOptions(
+	view: Pick<BuildView, 'allParts' | 'filaments'>,
+	key: string
+): ReplacementOption[] {
+	const affected = view.allParts.filter((p) => p.role === key);
+	return view.filaments
+		.filter((f) => f.key !== key)
+		.map((filament) => {
+			for (const p of affected) {
+				const reason = roleBlockedReason(p, filament);
+				if (reason) return { filament, ok: false, reason };
+			}
+			return { filament, ok: true, reason: null };
+		});
+}
+
+/** Do two filaments look the same (name, material, color)? Used to reuse a slot that already holds a locked part's color. */
+export function sameFilament(
+	a: { name: string; material: string; hex: string },
+	b: { name: string; material: string; hex: string }
+): boolean {
+	return (
+		a.name.trim().toLowerCase() === b.name.trim().toLowerCase() &&
+		a.material.trim().toLowerCase() === b.material.trim().toLowerCase() &&
+		a.hex.toLowerCase() === b.hex.toLowerCase()
+	);
+}

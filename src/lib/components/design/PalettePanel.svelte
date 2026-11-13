@@ -7,7 +7,8 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import type { BuildView } from '#lib/domain/types.ts';
-	import { updateFilament } from '#lib/client/api.ts';
+	import { setBuildDesign } from '#lib/client/api.ts';
+	import { effectivePartRoles, paletteReset } from '#lib/domain/design.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import { toasts } from '#lib/components/toast.svelte.ts';
 	import { isHex, normHex } from '#lib/domain/color.ts';
@@ -249,7 +250,19 @@
 	const togglePreview = (id: string, label: string, r: ResolvedPalette) =>
 		onpreview(preview?.id === id ? null : previewOf(id, label, r));
 
-	/** Commit the palette currently shown in the 3D preview. */
+	/** What applying a palette does to part-level changes: unlocked parts go back to their kit slot, locked ones stay. */
+	const plan = $derived(paletteReset(view));
+	const planNote = $derived.by(() => {
+		const n = plan.reset.length;
+		const m = plan.kept.length;
+		const bits = [
+			...(n ? [`Resets ${n} part ${n === 1 ? 'change' : 'changes'}`] : []),
+			...(m ? [`${m} locked kept`] : [])
+		];
+		return bits.join(' · ');
+	});
+
+	/** Commit the palette currently shown in the 3D preview (one call: colors, part reset, locked parts kept). */
 	async function apply(next: PalettePreview) {
 		const label = next.label;
 		const before = view.filaments
@@ -259,27 +272,41 @@
 			ctx.error = 'This build has no slots a palette can fill.';
 			return;
 		}
+		const beforeRoles = effectivePartRoles(view);
+		const beforeKeys = new Set(view.filaments.map((f) => f.key));
+		const slots = Object.fromEntries(
+			Object.entries(next.slots).map(([k, v]) => [
+				k,
+				{ name: v.name, material: v.material, hex: v.hex }
+			])
+		);
 		busy = true;
 		onpreview(next); // keep showing it until the saved view arrives
-		const ok = await ctx.act(async () => {
-			for (const [key, v] of Object.entries(next.slots)) await updateFilament(ctx.id, key, v);
-		});
+		const ok = await ctx.act(() =>
+			setBuildDesign(ctx.id, { palette: { label, slots, reset: true } })
+		);
 		onpreview(null);
 		busy = false;
-		if (ok)
-			toasts.push(`Applied ${label}`, {
-				label: 'Undo',
-				run: async () => {
-					await ctx.act(async () => {
-						for (const b of before)
-							await updateFilament(ctx.id, b.key, {
-								name: b.name,
-								material: b.material,
-								hex: b.hex
-							});
-					});
-				}
-			});
+		if (!ok) return;
+		// Locked parts may have moved to slots added for them: Undo takes those away again.
+		const added = ctx.view.filaments.map((f) => f.key).filter((k) => !beforeKeys.has(k));
+		toasts.push(`Applied ${label}`, {
+			label: 'Undo',
+			run: async () => {
+				await ctx.act(() =>
+					setBuildDesign(ctx.id, {
+						palette: {
+							label: 'previous',
+							slots: Object.fromEntries(
+								before.map((b) => [b.key, { name: b.name, material: b.material, hex: b.hex }])
+							)
+						},
+						partRoles: beforeRoles,
+						...(added.length ? { removeRoles: added } : {})
+					})
+				);
+			}
+		});
 	}
 
 	const missing = $derived(SLOTS.filter((s) => !slotMap[s]));
@@ -586,6 +613,9 @@
 					<span class="muted small">Previewing</span>
 					<b>{preview.label}</b>
 				</p>
+				{#if planNote}
+					<p class="muted small pnote" data-testid="palette-reset-note">{planNote}</p>
+				{/if}
 				<ul class="brows" aria-label="Filaments in this palette">
 					{#each previewRows as row (row.slot)}
 						<li title="{SLOT_LABEL[row.slot]}: {row.name}">
@@ -1089,6 +1119,9 @@
 		gap: var(--sp-1);
 		min-width: 0;
 		flex: 1 1 180px;
+	}
+	.pnote {
+		margin: 0;
 	}
 	.bt {
 		margin: 0;

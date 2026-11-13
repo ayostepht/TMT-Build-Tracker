@@ -157,10 +157,29 @@ export interface DesignRoleInput {
 	hex: string;
 }
 
-/** Edit a build's colors: move parts between slots, add a slot, remove an unused one. */
+/** A slot's filament as a palette writes it. */
+export interface PaletteSlotInput {
+	name: string;
+	material: string;
+	hex: string;
+}
+
+/**
+ * Edit a build's colors in one call: move parts between slots, add a slot, apply a palette (`reset`: unlocked
+ * parts go back to their kit slot, locked ones keep their color), "Lock color" on/off, or remove a slot
+ * (`replaceWith` is required while parts use it; `removeRoles` drops unused ones, e.g. Undo of an auto-added slot).
+ */
 export const setBuildDesign = (
 	id: string,
-	patch: { partRoles?: Record<string, string>; addRole?: DesignRoleInput; removeRole?: string }
+	patch: {
+		partRoles?: Record<string, string>;
+		addRole?: DesignRoleInput;
+		palette?: { label: string; slots: Record<string, PaletteSlotInput>; reset?: boolean };
+		lock?: { slugs: string[]; locked: boolean };
+		removeRole?: string;
+		replaceWith?: string;
+		removeRoles?: string[];
+	}
 ) => call('PATCH', `${b(id)}/design`, patch);
 
 export const createDesign = (input: { buildId: string; name: string; isPublic: boolean }) =>
