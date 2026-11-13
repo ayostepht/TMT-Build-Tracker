@@ -362,10 +362,14 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - **Swatch picker** (`domain/swatch-picker.ts`): `exclusionReason` (TPU 95A only, no
   silk/matte/…), a Type select (`type`: `''` standard, `'all'`, or one subtype id from
   `filamentSubtypes()` in `palettes.ts`, built from `EXCLUDED_FILAMENTS` + `hardnesses()`;
-  no subtypes = standard, unit-tested; options from `typeOptions()`, counts before the
-  duplicate collapse; the subtype filter runs before collapse and the cross-brand merge;
+  no subtypes = standard, unit-tested; options from `typeOptions()` (which types exist), counts from
+  `typeOptionsListed()` / `listedCount()` (what the grid lists for that Type and brand filter,
+  after the collapse and merge; search not counted); lists of 16 or fewer hide "Closest to the
+  current color" and open the neutrals; Recently used shows only the listed Type; the subtype filter runs before collapse and the cross-brand merge;
   `showAll` = `'all'`; session state only, preselects the current pick's subtype), look-alike merge across brands (`mergeAcrossBrands`,
   ΔE2000 < 3), OKLCH hue families (`colorFamily`), `approx` flag from `hexSource === 'image'`.
+- **Stage credit** (`ModelStage.svelte`): at 640 px or narrower the credit is a band under the
+  canvas (`.view` above it); wider, an overlay.
 - **Parts:** `PartSheet` (part chip + slot strip over the stage), `PartList` (role filter
   chips, sticky groups). `share/DesignActions` above the tabs ("Saved automatically",
   Saved designs, Share / Save as design).

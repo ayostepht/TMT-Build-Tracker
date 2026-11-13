@@ -250,10 +250,8 @@ Route each to the agent named in brackets.
   activity doesn't mention the auto-added lock slots it removes.
 - a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
-  over: the picker's Type counts differ from the swatches listed (r53: "98A (8)" lists 13,
-  "90A (19)" lists 14); at 390 the 3D model covers part of the stage credit line (r53);
-  class-only field styles in components were not audited for `--line` borders;
-  adjacent `.pill-link` hit bands can overlap on touch; "MakeGood · CC0" credit wraps over the chair at 360 px;
+  over: class-only field styles in components were not audited for `--line` borders;
+  adjacent `.pill-link` hit bands can overlap on touch;
   `share/ApplyDesign` uses raw fetch (add `listDesigns` to `client/api.ts`);
   `editableTargets` lacks `kind` (can't tell builds from drafts); no "start a draft from
   this design"; draft cards have no 3D snapshot. Not yet raised with the maintainer: a

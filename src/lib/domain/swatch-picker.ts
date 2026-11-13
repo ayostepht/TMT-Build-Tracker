@@ -95,8 +95,9 @@ const hardnessKey = (id: string) => {
 
 /**
  * The Type select's options for a material's swatch list: the default first (95A for TPU, PETG otherwise), each
- * subtype that occurs (with its count), then All types. Counts are raw swatches of `brands`
- * (empty: all), before same-looking ones collapse.
+ * subtype that occurs (with its count), then All types. Counts here are raw swatches of `brands`
+ * (empty: all), before same-looking ones collapse: use them to learn which types exist, and
+ * {@link typeOptionsListed} for the numbers shown next to the Type select.
  */
 export function typeOptions(
 	items: SwatchTuple[],
@@ -124,6 +125,33 @@ export function typeOptions(
 		...subs,
 		{ id: TYPE_ALL, label: 'All types' }
 	];
+}
+
+/** How many swatches the picker grid lists for a type (after duplicates collapse and brands merge). */
+export function listedCount(
+	items: SwatchTuple[],
+	type: string,
+	brands: string[] = [],
+	preferred: string[] = []
+): number {
+	const r = computePicker(items, { type, brands, preferred });
+	return r.neutrals.length + r.colorful.length;
+}
+
+/**
+ * The Type select's options with the numbers the grid will really list for that type under the same
+ * brand filter (not raw catalog rows): types come from the whole list so they stay put when a brand is
+ * picked, counts follow `brands`. A search is not part of the count.
+ */
+export function typeOptionsListed(
+	items: SwatchTuple[],
+	family: string,
+	brands: string[] = [],
+	preferred: string[] = []
+): TypeOption[] {
+	return typeOptions(items, family).map((o) =>
+		o.id === TYPE_ALL ? o : { ...o, count: listedCount(items, o.id, brands, preferred) }
+	);
 }
 
 /** Why this swatch is not offered by default ('' when it is). */

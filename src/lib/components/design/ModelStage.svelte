@@ -66,28 +66,30 @@
 
 <div class="stage" role="group" aria-label={label} tabindex="-1" bind:this={box}>
 	{#if model}
-		<ChairViewer
-			bind:this={viewer}
-			{model}
-			{colors}
-			{hidden}
-			{selected}
-			{dimOthers}
-			{placements}
-			{onpick}
-			{onready}
-			{autoRotate}
-		>
-			{#snippet fallback()}
-				<div class="empty">
-					<strong>3D preview is not available in this browser</strong>
-					<p class="muted">Colors still work: use the part list and the color slots.</p>
-				</div>
-			{/snippet}
-		</ChairViewer>
-		<button type="button" class="reset btn sm" class:raised onclick={() => viewer?.resetView()}>
-			Reset view
-		</button>
+		<div class="view">
+			<ChairViewer
+				bind:this={viewer}
+				{model}
+				{colors}
+				{hidden}
+				{selected}
+				{dimOthers}
+				{placements}
+				{onpick}
+				{onready}
+				{autoRotate}
+			>
+				{#snippet fallback()}
+					<div class="empty">
+						<strong>3D preview is not available in this browser</strong>
+						<p class="muted">Colors still work: use the part list and the color slots.</p>
+					</div>
+				{/snippet}
+			</ChairViewer>
+			<button type="button" class="reset btn sm" class:raised onclick={() => viewer?.resetView()}>
+				Reset view
+			</button>
+		</div>
 		<KitCredit class="credit" />
 	{:else}
 		<div class="empty" data-testid="no-model">
@@ -108,6 +110,8 @@
 <style>
 	.stage {
 		position: relative;
+		display: grid;
+		grid-template-rows: minmax(0, 1fr) auto;
 		width: 100%;
 		height: 100%;
 		min-height: 220px;
@@ -129,7 +133,13 @@
 		margin: 0;
 		max-width: 38ch;
 	}
+	.view {
+		position: relative;
+		min-height: 0;
+		grid-row: 1;
+	}
 	.stage :global(.credit) {
+		grid-row: 2;
 		position: absolute;
 		left: 10px;
 		bottom: 8px;
@@ -140,12 +150,35 @@
 	.reset {
 		position: absolute;
 		right: 10px;
-		bottom: 46px; /* above the two credit lines, so the credit never runs over the chair at 360 px */
+		bottom: 46px; /* above the two credit lines, which float over the lower left of the stage */
 		opacity: 0.9;
 	}
 	.reset.raised {
 		bottom: auto;
 		top: 10px;
+	}
+	/* Phones: the chair is large and centred, so the credit gets its own band under the canvas
+	   instead of floating over the model; "Reset view" then sits in the corner of the canvas. */
+	@media (max-width: 640px) {
+		.view :global(.chair-viewer) {
+			min-height: 0;
+		}
+		.stage :global(.credit) {
+			position: static;
+			max-width: none;
+			white-space: normal;
+			padding: 6px 10px 7px;
+			border-top: 1px solid var(--line);
+			background: var(--card);
+			opacity: 1;
+			color: var(--muted);
+		}
+		.reset {
+			bottom: 10px;
+		}
+		.reset.raised {
+			bottom: auto;
+		}
 	}
 	.stage:focus {
 		outline: none;
