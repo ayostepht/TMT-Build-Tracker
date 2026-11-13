@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-13 (plate 9 retry fixes reviewed on the `edge` image, see item 0; public, 0.9.0 released; test copy on
-r52 = `edge` 3ec52a7, the published image. No agents or work in progress)._
+_Last updated: 2026-11-13 (0.9.1 release in preparation, see item 0; `edge` is the default
+branch; test copy on r52 = `edge` 3ec52a7, the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -10,26 +10,30 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **On `edge`, reviewed by the maintainer on Unraid (r52, 2026-11-13): all four checks passed.** From the
-   plate 9 retry report (r50 / v0.9.0; live data consistent, no repair needed): #18 (a
-   Failed/Partial log, run delete/edit/undo keep parts on a live printer job Printing;
-   Printing takes the printer's start and estimate; a newly linked job replaces a stale
-   Printing state; printer estimates bounded by `sanePrintSeconds`; `UnloggedNotice` on the
-   confirm step and after a "Link to plate…" pick; `e2e/plate-retry.spec.ts`;
-   `e2e/log-plate.spec.ts` race fixed), #19 ("Where is it printing?" sheet no longer widens
-   with a long file name), #20 (edge flow: PRs merge into `edge`, which publishes the `edge`
-   image; Dependabot targets `edge`), #21 (minimatch override, GHSA-g3hv-75wg-m249), #22
-   (README compose sample, no release numbers in the README, CONTRIBUTING edge flow).
-   **Next:** the maintainer merges `edge` into `main`; tagging a release stays their call. Decided: Success on a live plate still prints
-   the parts; keep-Printing needs a live printer job. Open: the notice also shows for
-   auto-linked jobs (question to the maintainer); two linked jobs on one plate can show it
-   twice [printers]; possible SSE gap: after API edits a client-side navigation showed stale
-   state until reload (seen in log-plate), unconfirmed [build-state]; vite's optional esbuild
-   peer is invalid in `npm ls` (cosmetic; a devDependency `esbuild ^0.28` would fix it).
-   Maintainer: dismiss the esbuild (drizzle-kit) and deepmerge Dependabot alerts (not
-   reachable; the minimatch alert closes once the fix reaches the default branch). Cloud
-   sessions: use the "TMT-Build-Tracker" environment (setup script installs deps and the
-   Playwright browser; `deb.debian.org` allowed for Docker builds, see dev-environments).
+0. **0.9.1 (2026-11-13), in preparation.** Contents on `edge`: #18 (plate retry: live printer
+   job keeps the plate Printing, printer start time and estimate, `sanePrintSeconds`,
+   `UnloggedNotice`), #19 (phone sheet overflow), #21 (minimatch override), #22 (README compose
+   sample, no release numbers), #26 (a built-in MakeGood layout counts as the chosen bed:
+   `layoutBed` → `view.layoutPrinter`). The maintainer reviewed #18/#19 on Unraid (r52, all
+   four checks passed) and released #26 without a separate review (minor). Release steps:
+   release PR into `edge` (version 0.9.1, CHANGELOG `[0.9.1]`, upgrade fixture
+   `fixtures/v0.9.1/`) → "Promote edge to main" (the first promotion: watch whether the
+   dispatched checks satisfy `main`'s required checks; it also removes the agent docs from
+   `main`) → the maintainer merges it with a merge commit → tag `v0.9.1` on `main` (the
+   maintainer's yes) → deploy `0.9.1` to the test copy.
+   **Branch model (maintainer, 2026-11-13):** `edge` is the default branch and is protected;
+   pull requests (Dependabot too) target `edge`, which publishes the `edge` image; `main` is
+   updated only by the promote workflow and stays clean (`.github/main-exclude.txt`).
+   Decided: Success on a live plate still prints the parts; keep-Printing needs a live
+   printer job; the X1 / P1 / A1 implied bed uses the X1 keep-out and 4 AMS slots (revisit if
+   A1 owners report problems; the maintainer has no X1). Open: the unlogged notice also shows
+   for auto-linked jobs (unanswered); two linked jobs on one plate can show it twice
+   [printers]; possible SSE gap after API edits (seen in log-plate, unconfirmed)
+   [build-state]; vite's optional esbuild peer is invalid in `npm ls` (cosmetic); optional
+   hardening: a protected `promote` Environment limited to `edge` (then add `environment:` to
+   promote.yml). Maintainer: dismiss the esbuild (drizzle-kit) and deepmerge Dependabot alerts.
+   Cloud sessions: use the "TMT-Build-Tracker" environment (setup script installs deps and the
+   Playwright browser; Docker checks per dev-environments).
 1. **Public since 2026-11-12: 0.9.0.** The maintainer made the repository public; `go-public`
    was merged, `v0.9.0` tagged, CI in full mode (`CI_FULL=true`). `main` is protected and
    work lands through pull requests (see CLAUDE.md "The repository is public"). Image
