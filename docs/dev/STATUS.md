@@ -196,11 +196,10 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
   `feat/one-piece-push-handle`): publish release `kitpack-makegood-tmt-revb-1.0.2` with
   `makegood-tmt-revb-1.0.2.kitpack` (sha256 3aaa44d6…10b1, 32,070,463 B; the file was sent
   to the maintainer from the cloud session; rebuilding changes the sha256) before merging,
-  the index already points at it. Decide: where the TPU grip goes on the one-piece handle
-  (the 3D view shows it floating at the multi-part position; maintainer "not sure" whether
-  the grip is used); keep the extra H2D plate 22 ("Bambu H2D / H2S (22 plates)",
-  "Hand-tuned by MakeGood" is then slightly off) or drop it so the part lands under
-  "Other"; confirm the THIRD_PARTY wording of the NonCommercial term. Not yet run: the
+  the index already points at it. Decided (maintainer, 2026-11-13): the grip stays in the
+  one-piece option on its own TPU plate (different material); keep the extra H2D plate 22.
+  Cosmetic, open: the 3D view shows the grip at its multi-part position, above the shorter
+  handle. Confirm the THIRD_PARTY wording of the NonCommercial term. Not yet run: the
   Docker image build + empty-data start + 1.0.1 → 1.0.2 upgrade in the image (the cloud
   helper image's apt step failed and a diagnostic re-run was refused; do it on Unraid
   in the deploy rehearsal). An orphaned agent preview server may still listen on port
