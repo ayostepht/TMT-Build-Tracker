@@ -358,7 +358,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   Undo). Domain helpers in `domain/design.ts`: `paletteReset`, `removeImpact`,
   `replacementOptions`, `sameFilament`. `RemoveColorDialog` (shared Dialog, Cancel first) is
   hosted by `SlotPanel`; the lock toggle is in `PartSheet`, badges in `PartSheet`/`PartList`
-  (not in 3D); `DesignWorkspace.live` previews the reset.
+  (not in 3D); `DesignWorkspace.live` previews the reset. A lock covers exactly the slugs sent (the client sends the
+  tapped part only; "Both sides" applies to colour moves, not locks). `roleLabel(key, f, all)`
+  (`domain/labels.ts`): kit roles keep their label; a non-kit slot that collides with a kit
+  label or another added slot gets " · added" / " · added N"; slot lists pass the build's
+  filaments.
 - **Swatch picker** (`domain/swatch-picker.ts`): `exclusionReason` (TPU 95A only, no
   silk/matte/…), a Type select (`type`: `''` standard, `'all'`, or one subtype id from
   `filamentSubtypes()` in `palettes.ts`, built from `EXCLUDED_FILAMENTS` + `hardnesses()`;

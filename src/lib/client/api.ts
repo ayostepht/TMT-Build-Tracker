@@ -166,7 +166,7 @@ export interface PaletteSlotInput {
 
 /**
  * Edit a build's colors in one call: move parts between slots, add a slot, apply a palette (`reset`: unlocked
- * parts go back to their kit slot, locked ones keep their color), "Lock color" on/off, or remove a slot
+ * parts go back to their kit slot, locked ones keep their color), "Lock part color" on/off, or remove a slot
  * (`replaceWith` is required while parts use it; `removeRoles` drops unused ones, e.g. Undo of an auto-added slot).
  */
 export const setBuildDesign = (

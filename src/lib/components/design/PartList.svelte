@@ -97,7 +97,7 @@
 					onclick={() => (roleFilter = roleFilter === f.key ? null : f.key)}
 				>
 					<Swatch hex={f.hex} tpu={f.tpu} size="mini" />
-					{roleLabel(f.key, f)}
+					{roleLabel(f.key, f, view.filaments)}
 					<span class="muted">{n}</span>
 				</button>
 			{/each}
@@ -124,7 +124,7 @@
 							{#if p.locked}<span
 									class="pl-lock ds-badge ds-badge--sm"
 									data-testid="part-row-locked"
-									title="Color locked: a palette leaves it alone"
+									title="Part color locked: a palette leaves it alone"
 								>
 									<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
 										<rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" />
@@ -138,7 +138,7 @@
 									</svg>Locked</span
 								>{/if}
 							{#if noPreview.includes(p.slug)}<span class="tag">no 3D preview</span>{/if}
-							<span class="muted slotname">{roleLabel(p.role, f)}</span>
+							<span class="muted slotname">{roleLabel(p.role, f, view.filaments)}</span>
 						</button>
 					</li>
 				{/each}

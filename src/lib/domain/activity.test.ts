@@ -321,8 +321,8 @@ describe('design.update palette, lock and removal sentences', () => {
 	});
 
 	it('describes locks, unlocks and locked parts moved to a new slot', () => {
-		expect(d({ locked: ['Wing Left'] })).toBe(`${who} locked the color of Wing Left`);
-		expect(d({ unlocked: ['A', 'B'] })).toBe(`${who} unlocked the color of A and B`);
+		expect(d({ locked: ['Wing Left'] })).toBe(`${who} locked the part color of Wing Left`);
+		expect(d({ unlocked: ['A', 'B'] })).toBe(`${who} unlocked the part color of A and B`);
 		expect(
 			d({
 				lockedAdded: [{ key: 'c1', name: 'Overture Red', material: 'PETG', parts: ['Wing Left'] }]
@@ -383,6 +383,6 @@ describe('design.update palette, lock and removal sentences', () => {
 	});
 
 	it('strips control characters from names', () => {
-		expect(d({ locked: ['A\u0001B'] })).toBe(`${who} locked the color of AB`);
+		expect(d({ locked: ['A\u0001B'] })).toBe(`${who} locked the part color of AB`);
 	});
 });

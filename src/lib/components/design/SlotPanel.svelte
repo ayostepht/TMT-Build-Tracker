@@ -66,7 +66,7 @@
 		removing = null;
 		if (ok)
 			announce?.(
-				`Removed ${roleLabel(f.key, f)}. ${n} ${n === 1 ? 'part' : 'parts'} moved to ${roleLabel(replaceWith, to)}`
+				`Removed ${roleLabel(f.key, f, view.filaments)}. ${n} ${n === 1 ? 'part' : 'parts'} moved to ${roleLabel(replaceWith, to, view.filaments)}`
 			);
 	}
 </script>
@@ -95,7 +95,7 @@
 						class="big"
 						class:tpu={f.tpu}
 						style="background-color:{f.hex}"
-						aria-label="Change filament for {roleLabel(f.key, f)}"
+						aria-label="Change filament for {roleLabel(f.key, f, view.filaments)}"
 						title="Pick a different filament"
 						onclick={() => onedit?.(f.key)}
 					></button>
@@ -111,8 +111,8 @@
 						onclick={() => onfilter?.(activeRole === f.key ? null : f.key)}
 						title="Show only the parts in this slot"
 					>
-						<b>{roleLabel(f.key, f)}</b>
-						{#if roleLabel(f.key, f) !== filamentLabel(f, f.key)}<span class="fname"
+						<b>{roleLabel(f.key, f, view.filaments)}</b>
+						{#if roleLabel(f.key, f, view.filaments) !== filamentLabel(f, f.key)}<span class="fname"
 								>{filamentLabel(f, f.key)}</span
 							>{/if}
 						<span class="muted">{f.material} · {partCount(f)} parts · {fmt(grams)} g</span>
@@ -138,7 +138,7 @@
 									type="button"
 									class="btn sm danger"
 									data-testid="remove-color"
-									aria-label="Remove {roleLabel(f.key, f)}"
+									aria-label="Remove {roleLabel(f.key, f, view.filaments)}"
 									onclick={() => remove(f)}>Remove</button
 								>
 							{/if}

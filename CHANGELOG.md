@@ -9,7 +9,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 ### Added
 
 - An optional one-piece push handle for printers with a bed of about 340 x 320 mm (Bambu H2S, H2D): choose "One piece, H2 series" under the push handle option. It is an experimental community design by jeepxj (CC BY-NC, endorsed by MakeGood) that replaces the push handle top, bottom, brace and pin and keeps the soft grip. It ships in kit pack 1.0.2, which installs by itself on the next start; builds you already have do not change.
-- Lock color: a part can keep its filament when you choose a palette. Turn on "Lock color" in the part card; locked parts show a lock in the part list and the card. A locked part stays on its exact color: if the palette changes its slot, the part moves to a slot that holds its old filament (added for you when needed).
+- Lock part color: a part can keep its filament when you choose a palette. Turn on "Lock part color" in the part card; locked parts show a lock in the part list and the card. A locked part stays on its exact color: if the palette changes its slot, the part moves to a slot that holds its old filament (added for you when needed).
 - Remove a color that parts still use: Remove is now on every color you added. A dialog lists the affected parts and asks which of the design's other filaments replaces it; confirming reassigns them and removes the color in one step, in builds and in Studio drafts. The color's spools on hand and Spoolman link are dropped with it, and the activity log says what changed.
 
 ### Changed
@@ -19,6 +19,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Fixed
 
+- Lock part color: it locks only the part you tapped, even with "Both sides" on (it used to lock the matching parts too, such as a wheel rim on a different color). A slot added for a locked part now reads "Accent PETG · added" instead of repeating the kit slot's name.
 - Filament picker: the number next to each Type now matches the swatches the picker lists for it (same-looking colors count once, as they are listed once), and a short list no longer repeats itself under "Closest to the current color" or hides its neutrals.
 - Design: on phones the MakeGood and handle credit sits in its own band under the 3D view instead of running over the chair.
 - Files: choosing one of MakeGood's plate layouts right after arranging plates for your own bed could be ignored (no "Replace plates?" question, the list snapped back). The choice now always applies.

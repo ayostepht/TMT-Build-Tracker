@@ -23,7 +23,7 @@
 		bothSides?: boolean;
 		noPreview?: boolean;
 		onmove: (role: string) => void;
-		/** "Lock color" toggled: the part (and, with both sides, its peers) keep their filament when a palette is applied. */
+		/** "Lock part color" toggled: only this part keeps its filament when a palette is applied. */
 		onlock?: (locked: boolean) => void;
 		onclose: () => void;
 	} = $props();
@@ -32,7 +32,7 @@
 	const current = $derived(view.filaments.find((f) => f.key === part.role));
 	const peers = $derived(symmetryPeers(view, part.slug).filter((p) => p.slug !== part.slug));
 	const inactive = $derived(!view.parts.some((p) => p.slug === part.slug));
-	const slotName = $derived(roleLabel(part.role, current));
+	const slotName = $derived(roleLabel(part.role, current, view.filaments));
 	const guide = $derived(part.guideRefs.map((g) => `p. ${g.page}`).join(', '));
 	const mats = $derived(part.allowedMaterials.join(' or '));
 	const limited = $derived(options.some((o) => !o.ok));
@@ -45,7 +45,11 @@
 			<b>{part.name}</b><span class="muted">&nbsp;· {slotName}</span>
 		</span>
 		{#if part.locked}
-			<span class="ps-lock ds-badge ds-badge--sm" data-testid="part-locked" title="Color locked">
+			<span
+				class="ps-lock ds-badge ds-badge--sm"
+				data-testid="part-locked"
+				title="Part color locked"
+			>
 				{@render lockIcon()}<span class="ps-lock-text">Locked</span>
 			</span>
 		{/if}
@@ -93,7 +97,7 @@
 				>
 					<span class="lab">
 						<Swatch hex={o.filament.hex} tpu={o.filament.tpu} size="mini" />
-						<span class="rl">{roleLabel(o.filament.key, o.filament)}</span>
+						<span class="rl">{roleLabel(o.filament.key, o.filament, view.filaments)}</span>
 					</span>
 				</button>
 			{/each}
@@ -107,12 +111,12 @@
 			onclick={() => onlock?.(!part.locked)}
 		>
 			{@render lockIcon()}
-			<span>Lock color</span>
+			<span>Lock part color</span>
 		</button>
 		<p class="note muted ps-hint" id="ps-lock-hint">
 			{part.locked
-				? 'Locked: applying a palette leaves this part on its current filament.'
-				: 'Lock to keep this part’s filament when a palette is applied.'}
+				? 'Locked: applying a palette leaves this part on its current filament. Only this part is locked.'
+				: 'Lock to keep this part’s filament when a palette is applied. Only this part is locked, not its matching parts.'}
 		</p>
 	{:else}
 		<p class="note muted">View-only access: colors cannot be changed.</p>

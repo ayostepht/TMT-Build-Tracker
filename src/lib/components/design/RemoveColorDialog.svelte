@@ -34,7 +34,7 @@
 </script>
 
 <Dialog
-	title="Remove {slot ? roleLabel(roleKey, slot) : 'this color'}"
+	title="Remove {slot ? roleLabel(roleKey, slot, view.filaments) : 'this color'}"
 	onclose={oncancel}
 	testid="remove-color-dialog"
 	danger
@@ -72,8 +72,8 @@
 				/>
 				<Swatch hex={f.hex} tpu={f.tpu} size="mini" />
 				<span class="rc-text">
-					<b>{roleLabel(f.key, f)}</b>
-					{#if roleLabel(f.key, f) !== filamentLabel(f, f.key)}<span class="rc-sub"
+					<b>{roleLabel(f.key, f, view.filaments)}</b>
+					{#if roleLabel(f.key, f, view.filaments) !== filamentLabel(f, f.key)}<span class="rc-sub"
 							>{filamentLabel(f, f.key)}</span
 						>{/if}
 					{#if o.reason}<span class="rc-why">{o.reason}</span>{/if}

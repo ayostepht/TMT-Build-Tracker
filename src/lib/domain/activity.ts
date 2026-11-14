@@ -338,9 +338,9 @@ function describeMarked(a: ActivityItem, view: Names): string {
 				bits.push(`kept ${ps.length ? list(ps) : 'locked parts'} on a new color slot (${slot})`);
 			}
 			const locked = names(p.locked);
-			if (locked.length) bits.push(`locked the color of ${list(locked)}`);
+			if (locked.length) bits.push(`locked the part color of ${list(locked)}`);
 			const unlocked = names(p.unlocked);
-			if (unlocked.length) bits.push(`unlocked the color of ${list(unlocked)}`);
+			if (unlocked.length) bits.push(`unlocked the part color of ${list(unlocked)}`);
 			const added = (p.added ?? null) as Obj | null;
 			if (added) bits.push(`added a color: ${str(added.name) ?? 'new color'}`);
 			const removed = obj(p.removed);

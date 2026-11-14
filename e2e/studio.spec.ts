@@ -157,6 +157,7 @@ test('studio draft: lock a part, apply a palette, remove an added color', async 
 	// Lock a part, then apply a palette: the wings reset, the locked part stays.
 	await page.getByRole('tab', { name: 'Parts' }).click();
 	await partRow('seat-center').click();
+	await expect(page.getByTestId('part-lock')).toContainText('Lock part color');
 	await page.getByTestId('part-lock').click();
 	await expect(page.getByTestId('part-lock')).toHaveAttribute('aria-pressed', 'true');
 	await page.getByRole('button', { name: 'Close part details' }).click();
