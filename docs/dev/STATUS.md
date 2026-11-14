@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-13 (0.9.1 released, see item 0; `edge` is the default branch; test
-copy on r53 = `edge` 296cd50 (0.9.1 + #32, #33, #35), the published image)._
+_Last updated: 2026-11-14 (0.9.1 released, see item 0; `edge` is the default branch; test
+copy on r54 = `edge` cfac2e0 (0.9.1 + #32, #33, #35, #36, #38), the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -21,8 +21,8 @@ done. Keep it under ~150 lines.
    the default branch), not at f20a168 on `main`: same app code (only excluded paths
    differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
    e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
-   (checked anonymously 2026-11-13). The test copy runs it (r53 = `edge` 296cd50, which adds
-   #32, #33 and #35 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
+   (checked anonymously 2026-11-13). The test copy runs it (r54 = `edge` cfac2e0, which adds
+   #32, #33, #35, #36 and #38 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
@@ -247,7 +247,12 @@ Route each to the agent named in brackets.
   only, not saved designs); "Use this design" clears them. Follow-ups: a palette or
   single-filament change doesn't check that parts already on the slot accept the new
   material (security-reviewer Low, pre-existing in `updateFilament`); the palette Undo
-  activity doesn't mention the auto-added lock slots it removes.
+  activity doesn't mention the auto-added lock slots it removes. Open, #39 (seen on r54): "Lock color" follows
+  the "Both sides" switch (on by default) and locks the whole symmetry group, which can hold
+  parts on different filaments (Wheel Rims 1 and 4 / 2 and 3), so one tap locks a part on
+  another color and a palette then adds a slot for each; the button should read "Lock part
+  color" and lock only that part. An added lock slot can carry the same label as a kit
+  slot (two "Accent PETG" chips in the Parts filter).
 - a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
   over: class-only field styles in components were not audited for `--line` borders;
