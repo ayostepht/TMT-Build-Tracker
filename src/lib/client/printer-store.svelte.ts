@@ -25,12 +25,44 @@ export class PrinterStore {
 	private refs = 0;
 	private reloadTimer: ReturnType<typeof setTimeout> | undefined;
 
+	/**
+	 * `follow` (build pages): where the store points now. The build layout keeps ONE build context
+	 * (and so one store) while the user navigates from build to build, so org and build id are read
+	 * again on every `acquire()`; called from a component's `$effect` that also re-runs it when the
+	 * build changes, so a store never keeps serving the build it was created for (issue #42).
+	 */
 	constructor(
-		readonly org: string,
-		readonly buildId?: string
+		public org: string,
+		public buildId?: string,
+		private follow?: () => { org: string; buildId?: string }
 	) {}
 
 	private seq = 0;
+
+	/** Point at the current build/org; drops what was loaded for the previous one. */
+	private retarget() {
+		if (!this.follow) return;
+		const t = this.follow();
+		if (t.org === this.org && t.buildId === this.buildId) return;
+		const orgChanged = t.org !== this.org;
+		this.org = t.org;
+		this.buildId = t.buildId;
+		this.seq++; // an in-flight load of the old build must not land
+		clearTimeout(this.reloadTimer);
+		this.printers = [];
+		this.jobs = [];
+		this.expected = [];
+		this.error = null;
+		this.loaded = false;
+		if (this.refs > 0) {
+			// Other consumers are still mounted: keep listening (on the new org's stream if it changed) and fetch now.
+			if (orgChanged) {
+				this.leave?.();
+				this.leave = joinOrgStream(this.org, this);
+			}
+			void this.load();
+		}
+	}
 
 	async load() {
 		// Overlapping loads (first load + an SSE-triggered reload) can finish out of order: only the newest counts.
@@ -72,6 +104,7 @@ export class PrinterStore {
 
 	/** Start (ref-counted) loading and listening; returns the release function. */
 	acquire(): () => void {
+		this.retarget();
 		this.refs++;
 		if (this.refs === 1) {
 			void this.load();
@@ -199,7 +232,18 @@ const stores = new WeakMap<object, PrinterStore>();
 export function printerStoreFor(key: object, org: string, buildId: string): PrinterStore {
 	let s = stores.get(key);
 	if (!s) {
-		s = new PrinterStore(org, buildId);
+		// The key is a build context: its view (replaced on navigation) says which build the page shows now.
+		const ctx = key as { view?: { build?: { id: string; organizationId: string } } };
+		s = new PrinterStore(
+			org,
+			buildId,
+			ctx.view
+				? () => ({
+						org: ctx.view?.build?.organizationId ?? org,
+						buildId: ctx.view?.build?.id ?? buildId
+					})
+				: undefined
+		);
 		stores.set(key, s);
 	}
 	return s;

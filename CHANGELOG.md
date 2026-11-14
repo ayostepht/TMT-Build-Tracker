@@ -23,6 +23,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 - Filament picker: the number next to each Type now matches the swatches the picker lists for it (same-looking colors count once, as they are listed once), and a short list no longer repeats itself under "Closest to the current color" or hides its neutrals.
 - Design: on phones the MakeGood and handle credit sits in its own band under the 3D view instead of running over the chair.
 - Files: choosing one of MakeGood's plate layouts right after arranging plates for your own bed could be ignored (no "Replace plates?" question, the list snapped back). The choice now always applies.
+- Now printing: moving from one build to another inside the app (for example from the builds menu) could leave the card without its live printer panel (printer name, progress, layer, temperatures, camera, "Not this plate") until you left and reopened the build. The panel now follows the build you are on.
 
 ## [0.9.1] - 2026-11-13
 

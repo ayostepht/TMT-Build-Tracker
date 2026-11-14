@@ -122,3 +122,58 @@ describe('PrinterStore shared org stream', () => {
 		rb();
 	});
 });
+
+describe('PrinterStore follows its build (issue #42)', () => {
+	beforeEach(() => {
+		vi.stubGlobal('EventSource', FakeEventSource);
+		FakeEventSource.all = [];
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('reloads for the new build when the build context moves to another build', async () => {
+		const target = { org: 'o6', buildId: 'a' };
+		const s = new PrinterStore('o6', 'a', () => target);
+		const r1 = s.acquire();
+		calls[0]({ printers: [], jobs: [{ id: 'job-a' }] });
+		await vi.waitFor(() => expect(s.jobs).toHaveLength(1));
+
+		// The layout keeps its context and the page its components: only the build changes.
+		target.buildId = 'b';
+		r1();
+		const r2 = s.acquire();
+		expect(s.buildId).toBe('b');
+		expect(s.jobs).toHaveLength(0); // nothing of build a is shown for build b
+		expect(calls).toHaveLength(2); // and build b's jobs are fetched
+		calls[1]({ printers: [], jobs: [{ id: 'job-b' }] });
+		await vi.waitFor(() => expect(s.jobs).toEqual([{ id: 'job-b' }]));
+		r2();
+	});
+
+	it('drops a response still in flight for the previous build', async () => {
+		const target = { org: 'o7', buildId: 'a' };
+		const s = new PrinterStore('o7', 'a', () => target);
+		const r1 = s.acquire();
+		target.buildId = 'b';
+		const other = s.acquire(); // a second consumer re-runs its effect first
+		calls[0]({ printers: [], jobs: [{ id: 'job-a' }] }); // late answer for a
+		calls[1]({ printers: [], jobs: [{ id: 'job-b' }] });
+		await vi.waitFor(() => expect(s.jobs).toEqual([{ id: 'job-b' }]));
+		r1();
+		other();
+	});
+
+	it('moves to the new org stream when the org changes while consumers are mounted', () => {
+		const target = { org: 'o8', buildId: 'a' };
+		const s = new PrinterStore('o8', 'a', () => target);
+		const r1 = s.acquire();
+		target.org = 'o9';
+		const r2 = s.acquire();
+		expect(FakeEventSource.all.map((e) => e.url)).toEqual([
+			'/api/printers/events?org=o8',
+			'/api/printers/events?org=o9'
+		]);
+		expect(FakeEventSource.all[0].closed).toBe(true);
+		r1();
+		r2();
+	});
+});
