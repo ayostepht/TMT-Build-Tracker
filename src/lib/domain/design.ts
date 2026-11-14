@@ -133,7 +133,7 @@ export function partsByRole(
 	return m;
 }
 
-// ---- Palette reset, "Lock color" and removing an in-use color
+// ---- Palette reset, "Lock part color" and removing an in-use color
 
 /**
  * What applying a palette does to part-level color changes: every unlocked part that is not on its

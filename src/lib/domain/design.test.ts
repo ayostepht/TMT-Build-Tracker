@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { roleLabel } from './labels.ts';
 import {
 	applyPartRole,
 	designColors,
@@ -170,5 +171,30 @@ describe('removeImpact and replacementOptions', () => {
 			ok: true,
 			reason: null
 		});
+	});
+});
+
+describe('roleLabel for added slots', () => {
+	const kit = (key: string, name: string, material: string) => ({ key, name, material, kit: true });
+	const add = (key: string, name: string, material: string) => ({
+		key,
+		name,
+		material,
+		kit: false
+	});
+	it('keeps kit labels and distinct added labels as they are', () => {
+		const all = [kit('accent', 'Accent PETG', 'PETG'), add('x', 'Overture Blue', 'PETG')];
+		expect(roleLabel('accent', all[0], all)).toBe('Accent PETG');
+		expect(roleLabel('x', all[1], all)).toBe('PETG Overture Blue');
+	});
+	it('tells an added slot apart from the kit slot it copied, without renaming the filament', () => {
+		const all = [kit('accent', 'Accent PETG', 'PETG'), add('accent-2', 'Accent PETG', 'PETG')];
+		expect(roleLabel('accent-2', all[1], all)).toBe('Accent PETG · added');
+		expect(all[1].name).toBe('Accent PETG');
+	});
+	it('numbers added slots that share a label', () => {
+		const all = [add('a', 'Accent PETG', 'PETG'), add('b', 'Accent PETG', 'PETG')];
+		expect(roleLabel('a', all[0], all)).toBe('Accent PETG · added');
+		expect(roleLabel('b', all[1], all)).toBe('Accent PETG · added 2');
 	});
 });

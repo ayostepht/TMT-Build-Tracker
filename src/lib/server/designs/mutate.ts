@@ -51,7 +51,7 @@ function hexOf(v: unknown): string {
  *   same name/material/hex, else a new one, reported as `lockedAdded`). Without `reset` (Undo) only the
  *   filaments are written.
  * - `partRoles: { slug: roleKey }`: move parts.
- * - `lock: { slugs, locked }`: "Lock color" on or off (`design.lockedParts`).
+ * - `lock: { slugs, locked }`: "Lock part color" on or off (exactly the parts listed; never expanded to symmetry peers) (`design.lockedParts`).
  * - `removeRole: key` (+ `replaceWith: key`): remove a slot. A used slot needs `replaceWith`; all its parts
  *   (also those of unchosen options) move there, and grams keyed to it follow. Its spools and Spoolman link go.
  * - `removeRoles: [key]`: remove slots that are unused by now (Undo of an auto-added lock slot).

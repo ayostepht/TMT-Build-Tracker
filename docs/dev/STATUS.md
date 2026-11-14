@@ -240,19 +240,18 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 Route each to the agent named in brackets.
 
 - **Design studio** [design-studio-ui]: #34 (2026-11-13): re-applying a palette resets
-  unlocked parts to their kit slot; "Lock color" keeps a part's exact colour (locked parts on
-  a recoloured slot move to a slot with their old filament, reused or auto-added); a used
+  unlocked parts to their kit slot; "Lock part color" keeps one part's exact colour (locked
+  parts on a recoloured slot move to a slot with their old filament, reused or auto-added;
+  since #39 a lock covers only the tapped part, "Both sides" never applies to locks); a used
   non-kit colour is removed through a replacement dialog (spools and Spoolman link dropped,
   role-keyed grams remapped). Locks live in `builds.design.lockedParts` (builds and drafts
-  only, not saved designs); "Use this design" clears them. Follow-ups: a palette or
-  single-filament change doesn't check that parts already on the slot accept the new
-  material (security-reviewer Low, pre-existing in `updateFilament`); the palette Undo
-  activity doesn't mention the auto-added lock slots it removes. Open, #39 (seen on r54): "Lock color" follows
-  the "Both sides" switch (on by default) and locks the whole symmetry group, which can hold
-  parts on different filaments (Wheel Rims 1 and 4 / 2 and 3), so one tap locks a part on
-  another color and a palette then adds a slot for each; the button should read "Lock part
-  color" and lock only that part. An added lock slot can carry the same label as a kit
-  slot (two "Accent PETG" chips in the Parts filter).
+  only, not saved designs); "Use this design" clears them. An added slot whose label matches
+  a kit slot or another added slot shows " · added" / " · added N" (`roleLabel(key, f, all)`).
+  Follow-ups: a palette or single-filament change doesn't check that parts already on the
+  slot accept the new material (security-reviewer Low, pre-existing in `updateFilament`);
+  the palette Undo activity doesn't mention the auto-added lock slots it removes; the
+  designs gallery pages (`/designs`, `/designs/[slug]`) call `roleLabel` without the
+  filament list, so a saved design with a clashing added slot still shows two equal labels.
 - a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
   over: class-only field styles in components were not audited for `--line` borders;

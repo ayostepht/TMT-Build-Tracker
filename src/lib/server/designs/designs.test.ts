@@ -426,7 +426,7 @@ describe('removing a color that is in use', () => {
 	});
 });
 
-describe('Lock color', () => {
+describe('Lock part color', () => {
 	it('locks and unlocks parts, logs part names, and ignores a repeat', () => {
 		const id = mk();
 		updateBuildDesign(db, id, 'editor', {
@@ -435,7 +435,7 @@ describe('Lock color', () => {
 		expect(lockedOf(id)).toEqual(['wing-left', 'wing-right']);
 		let v = view(id);
 		expect(describeActivity(last(v, 'design.update'), v)).toBe(
-			'User editor locked the color of Wing Left and Wing Right'
+			'User editor locked the part color of Wing Left and Wing Right'
 		);
 		const n = activityCount(id);
 		updateBuildDesign(db, id, 'editor', { lock: { slugs: ['wing-left'], locked: true } });
@@ -444,7 +444,7 @@ describe('Lock color', () => {
 		expect(lockedOf(id)).toEqual(['wing-right']);
 		v = view(id);
 		expect(describeActivity(last(v, 'design.update'), v)).toBe(
-			'User editor unlocked the color of Wing Left'
+			'User editor unlocked the part color of Wing Left'
 		);
 		// the roles and filaments survive a lock write
 		expect(v.filaments).toHaveLength(4);
@@ -460,6 +460,35 @@ describe('Lock color', () => {
 		expect(code(() => updateBuildDesign(db, id, 'owner', { lock: { slugs: ['wing-left'] } }))).toBe(
 			400
 		);
+	});
+
+	it('locks only the listed part, never its symmetry peer, and a palette adds at most one slot', () => {
+		const id = mk();
+		// Wing Left and Wing Right share a symmetry group but sit on different slots.
+		updateBuildDesign(db, id, 'owner', {
+			partRoles: { 'wing-left': 'primary', 'wing-right': 'accent' }
+		});
+		updateBuildDesign(db, id, 'owner', { lock: { slugs: ['wing-left'], locked: true } });
+		expect(lockedOf(id)).toEqual(['wing-left']);
+		const v = view(id);
+		expect(describeActivity(last(v, 'design.update'), v)).toBe(
+			'User owner locked the part color of Wing Left'
+		);
+		updateBuildDesign(db, id, 'owner', {
+			palette: {
+				label: 'Sunset',
+				reset: true,
+				slots: {
+					primary: { name: 'Sun Orange', material: 'PETG', hex: '#ff8800' },
+					accent: { name: 'Sun Red', material: 'PETG', hex: '#cc2200' }
+				}
+			}
+		});
+		expect(view(id).filaments).toHaveLength(5);
+		expect(lockedOf(id)).toEqual(['wing-left']);
+		expect(rolesOfBuild(id)['wing-right']).toBe('accent');
+		updateBuildDesign(db, id, 'owner', { lock: { slugs: ['wing-left'], locked: false } });
+		expect(lockedOf(id)).toEqual([]);
 	});
 
 	it('a locked part can still be moved by hand', () => {

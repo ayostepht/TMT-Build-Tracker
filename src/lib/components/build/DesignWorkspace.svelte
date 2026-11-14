@@ -7,8 +7,7 @@
 		designColors,
 		hiddenSlugs,
 		paletteReset,
-		roleBlockedReason,
-		symmetryPeers
+		roleBlockedReason
 	} from '#lib/domain/design.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import { getArrangement, setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
@@ -107,7 +106,7 @@
 	let origin: 'row' | 'canvas' = 'canvas';
 	/** slug → role the user just chose, shown at once while the save is in flight. */
 	let pending = $state<Record<string, string>>({});
-	/** slug → "Lock color" the user just chose, shown at once while the save is in flight. */
+	/** slug → "Lock part color" the user just chose, shown at once while the save is in flight. */
 	let pendingLock = $state<Record<string, boolean>>({});
 	let ready = $state<{ rendered: string[]; unplaced: string[] } | null>(null);
 	let stage = $state<ReturnType<typeof ModelStage>>();
@@ -226,7 +225,7 @@
 		if (!Object.keys(r.changes).length) return;
 		const to = live.filaments.find((f) => f.key === role);
 		const n = Object.keys(r.changes).length;
-		announce = `${part.name}${n > 1 ? ` and ${n - 1} matching part${n > 2 ? 's' : ''}` : ''} moved to ${roleLabel(role, to)}`;
+		announce = `${part.name}${n > 1 ? ` and ${n - 1} matching part${n > 2 ? 's' : ''}` : ''} moved to ${roleLabel(role, to, live.filaments)}`;
 		pending = { ...pending, ...r.changes };
 		await ctx.act(() => setBuildDesign(ctx.id, { partRoles: r.changes }));
 		const next = { ...pending };
@@ -234,15 +233,15 @@
 		pending = next;
 	}
 
+	// A lock covers only the tapped part: "Both sides" applies to colour moves, never to locks.
 	async function lock(on: boolean) {
 		if (!part) return;
-		const slugs = (bothSides ? symmetryPeers(live, part.slug) : [part]).map((p) => p.slug);
-		const n = slugs.length;
-		announce = `${part.name}${n > 1 ? ` and ${n - 1} matching part${n > 2 ? 's' : ''}` : ''} color ${on ? 'locked' : 'unlocked'}`;
-		pendingLock = { ...pendingLock, ...Object.fromEntries(slugs.map((s) => [s, on])) };
-		await ctx.act(() => setBuildDesign(ctx.id, { lock: { slugs, locked: on } }));
+		const slug = part.slug;
+		announce = `${part.name} part color ${on ? 'locked' : 'unlocked'}`;
+		pendingLock = { ...pendingLock, [slug]: on };
+		await ctx.act(() => setBuildDesign(ctx.id, { lock: { slugs: [slug], locked: on } }));
 		const next = { ...pendingLock };
-		for (const s of slugs) if (next[s] === on) delete next[s];
+		if (next[slug] === on) delete next[slug];
 		pendingLock = next;
 	}
 
@@ -250,7 +249,8 @@
 		optimistic = { ...optimistic, [role]: v };
 		announce = `${roleLabel(
 			role,
-			live.filaments.find((f) => f.key === role)
+			live.filaments.find((f) => f.key === role),
+			live.filaments
 		)} is now ${v.name}, ${v.material}`;
 		await ctx.act(() => updateFilament(ctx.id, role, v));
 		if (optimistic[role] === v) {
@@ -377,7 +377,7 @@
 		{#if picker?.mode === 'edit' && pickerSlot}
 			<div class="pickhost">
 				<SwatchPicker
-					title={roleLabel(pickerSlot.key, pickerSlot)}
+					title={roleLabel(pickerSlot.key, pickerSlot, live.filaments)}
 					family={pickerSlot.tpu ? 'tpu' : 'petg'}
 					current={{ name: pickerSlot.name, material: pickerSlot.material, hex: pickerSlot.hex }}
 					slotMaterial={pickerSlot.material}
