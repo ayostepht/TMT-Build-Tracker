@@ -7,6 +7,18 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r54** (published `sha-cfac2e0` = `edge` cfac2e0, same digest, 2026-11-14): palette re-apply
+  resets part colors, "Lock color", removing a used color with a replacement (#36); picker
+  Type counts match the grid, phone stage credit in a band under the 3D view (#38); docs
+  (#37). No migration. Rehearsal clean: health 0.9.1, row counts equal in 37 tables, the
+  live build's rows identical; the kit pack reinstalled there only because a rehearsal copies
+  `tmt.db` without the `uploads/kitpack` marker (live logged nothing: current on 1.0.2).
+  Checks on a copy of the live data (360, 390, 1440): reset note "Resets 2 part changes ·
+  2 locked kept", locked parts kept their filament on an added slot, Undo restored all;
+  remove dialog (2 parts, Cancel focused, TPU slots disabled with "needs PETG", activity
+  "removed …; its 2 parts now use …", no Remove on kit slots); Type counts equal the grid;
+  credit band readable at 360. Found by the maintainer on the phone: #39 (lock spreads to a
+  mirrored part on another color). Rollback: re-tag `r53` as `test`, no restore.
 - **r53** (published `sha-296cd50` = `edge` 296cd50, same digest, 2026-11-13): 0.9.1 (#18, #19,
   #21, #22, #26, #27), picker Type filter (#32), one-piece push handle with kit pack 1.0.2
   (#33), layout-picker race fix and CI e2e limit (#35). No migration. Rehearsal clean: health
