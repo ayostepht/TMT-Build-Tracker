@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-14 (0.9.1 released, see item 0; `edge` is the default branch; test
-copy on r54 = `edge` cfac2e0 (0.9.1 + #32, #33, #35, #36, #38), the published image)._
+copy on r55 = `edge` 08e1558 (0.9.1 + #32, #33, #35, #36, #38, #41, #43), the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -21,8 +21,8 @@ done. Keep it under ~150 lines.
    the default branch), not at f20a168 on `main`: same app code (only excluded paths
    differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
    e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
-   (checked anonymously 2026-11-13). The test copy runs it (r54 = `edge` cfac2e0, which adds
-   #32, #33, #35, #36 and #38 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
+   (checked anonymously 2026-11-13). The test copy runs it (r55 = `edge` 08e1558, which adds
+   #32, #33, #35, #36, #38, #41 and #43 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
@@ -322,7 +322,10 @@ Route each to the agent named in brackets.
   in-app build-to-build navigation, and the printer store was cached per context with a
   fixed build, so the next build's Now printing card lost its live panel and camera until
   reopened; the store now follows `ctx.view.build` on `acquire()` (spec
-  `printer-live-resume`). Not proven to be the exact path on the maintainer's phone: if it
+  `printer-live-resume`). r55 (2026-11-14, copy of live data, real printer printing): draft →
+  builds menu → the printing build without a reload shows the live panel (state, progress,
+  layer, time left) and requests the camera at once at 390 and 1440 (camera request blocked
+  in the check, so no Cmd 386 was sent). Not proven to be the exact path on the maintainer's phone: if it
   recurs on a build reached straight from the landing, look further. Follow-ups: optionally
   `{#key}` the build layout on the build id for a clean slate [app-shell]; in NowCard's
   manual block, prefer the printer's remaining time when a live job exists and check why

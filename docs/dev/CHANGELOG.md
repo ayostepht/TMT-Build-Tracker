@@ -7,6 +7,16 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r55** (published `sha-08e1558` = `edge` 08e1558, same digest, 2026-11-14): "Lock part color"
+  locks only the tapped part, clashing added slots read "· added" (#41); Now printing keeps
+  its live panel after in-app build-to-build navigation (#43); docs (#40). No migration.
+  Rehearsal clean (kit marker copied in, so no reinstall line; row counts equal in 37
+  tables). Checks on a copy of the live data (390, 1440): with Both sides on, one rim locked
+  alone; Fire Truck added one slot "Accent PETG · added"; activity "locked the part color
+  of Wheel Rims 1 and 4"; Undo restored all. Real printer printing: draft → builds menu →
+  the printing build showed the live panel without a reload and requested the camera
+  (blocked in the check, no printer command sent). Live build unchanged. Rollback: re-tag
+  `r54` as `test`, no restore.
 - **r54** (published `sha-cfac2e0` = `edge` cfac2e0, same digest, 2026-11-14): palette re-apply
   resets part colors, "Lock color", removing a used color with a replacement (#36); picker
   Type counts match the grid, phone stage credit in a band under the 3D view (#38); docs
