@@ -318,7 +318,17 @@ Route each to the agent named in brackets.
   aligned on `main` (component-level; moving the rule to `.btn.ghost` in `app.css` is an
   optional follow-up [design-studio-ui]); nothing shows a toast without changing data, so toast-over-dialog was checked with a
   synthetic toast (fine on phone and desktop).
-- **Printers** [printers]: OctoEverywhere shared link for Elegoo works live (status, camera,
+- **Printers** [printers]: #42 fixed (2026-11-14): the build layout keeps one context across
+  in-app build-to-build navigation, and the printer store was cached per context with a
+  fixed build, so the next build's Now printing card lost its live panel and camera until
+  reopened; the store now follows `ctx.view.build` on `acquire()` (spec
+  `printer-live-resume`). Not proven to be the exact path on the maintainer's phone: if it
+  recurs on a build reached straight from the landing, look further. Follow-ups: optionally
+  `{#key}` the build layout on the build id for a clean slate [app-shell]; in NowCard's
+  manual block, prefer the printer's remaining time when a live job exists and check why
+  `estSource` was not `printer` [build-state]; `camera-enable.test.ts` "a stalled open
+  stream…" timed out once under load (5 s), passed 4/4 alone.
+- OctoEverywhere shared link for Elegoo works live (status, camera,
   with the reconnect backoff fix; re-checked on r44: 6 fresh loads, first `camera/snapshot`
   200 every time, so the r43 502s were not reproduced). `share-link.ts` `HOST_RE` only accepts
   `shared-[a-z0-9]{8,64}`; revisit if a real link is rejected. Small follow-ups:

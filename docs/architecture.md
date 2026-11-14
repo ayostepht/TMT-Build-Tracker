@@ -325,7 +325,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   to the address (host and port) or link they were saved for; changing the destination
   needs its own secret re-entered.
 
-- **Client store** (`client/printer-store.svelte.ts`): one `OrgStream` (a single
+- **Client store** (`client/printer-store.svelte.ts`): `printerStoreFor(ctx, …)` keeps one store per
+  build context and retargets it to `ctx.view.build` on each `acquire()` (the build layout
+  reuses its context across build-to-build navigation): drops in-flight loads, clears jobs,
+  reloads, rejoins the org stream if the org changed. One `OrgStream` (a single
   `EventSource`, the window listeners and the 30 s poll) per organization, reference
   counted and shared by every `PrinterStore` on the page; stores still load their own
   data. `CameraTile` takes a `name` for its labels; its enlarged view is a `ds-modal`
