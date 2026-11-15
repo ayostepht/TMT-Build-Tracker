@@ -228,10 +228,19 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 	// Build tabs.
 	await page.goto(`/builds/${buildId}`);
 	const tabs = page.getByRole('navigation', { name: 'Build sections' });
-	for (const t of ['Overview', 'Design', 'Print', 'Files', 'Finish', 'Activity', 'Settings'])
+	for (const t of [
+		'Overview',
+		'Design',
+		'Print',
+		'Files',
+		'Finish',
+		'Activity',
+		'Stats',
+		'Settings'
+	])
 		await expect(tabs.getByRole('link', { name: t, exact: true })).toBeVisible();
 	await expect(tabs.getByRole('link', { name: 'Plates' })).toHaveCount(0);
-	// Order: Overview, Design, Print, Files, Finish, Activity, Settings.
+	// Order: Overview, Design, Print, Files, Finish, Activity, Stats, Settings.
 	expect((await tabs.getByRole('link').allTextContents()).map((t) => t.trim())).toEqual([
 		'Overview',
 		'Design',
@@ -239,9 +248,10 @@ test('navigation: Builds menu, back to the build on phones, chapter tabs', async
 		'Files',
 		'Finish',
 		'Activity',
+		'Stats',
 		'⚙ Settings'
 	]);
-	// A phone's bottom bar fits all seven without sideways scroll, targets at least 40px.
+	// A phone's bottom bar fits all eight without sideways scroll, targets at least 40px.
 	const boxes = await tabs.getByRole('link').evaluateAll((els) =>
 		els.map((e) => {
 			const r = e.getBoundingClientRect();
