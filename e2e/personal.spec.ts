@@ -50,6 +50,6 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	await page.getByRole('combobox', { name: 'Chapter' }).selectOption({ label: 'My builds' });
 	await expect(page.getByRole('heading', { level: 1, name: 'My builds' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Solo chair' })).toHaveCount(0);
-	await page.goto(`/builds/${buildId}`);
+	await page.goto(`/builds/${buildId}/activity`);
 	await expect(page.locator('.activity')).toContainText(`moved this build to ${chapterName}`);
 });

@@ -132,7 +132,7 @@ test('a not-connected printer: dialog, no confirm prompt, prefilled log, saved n
 	await expect(table).toContainText('Garage printer');
 
 	// The activity sentences name the printer too.
-	await page.getByRole('link', { name: 'Overview' }).click();
+	await page.getByRole('link', { name: 'Activity', exact: true }).click();
 	await expect(page.locator('body')).toContainText('on Garage printer');
 
 	// "Somewhere else" starts plainly; the log sheet offers the printer but is not prefilled.

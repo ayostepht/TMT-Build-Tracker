@@ -176,7 +176,7 @@ test('assembly progress and checks update live for a second user', async ({ page
 	await expect(step(page)).toHaveAttribute('data-done', 'true');
 	await expect(step(page).getByLabel('Handle front sits flat (no warp gap)')).toBeChecked();
 	await expect(step(page)).toContainText('Done by Eddie Editor');
-	await page.goto(buildUrl);
+	await page.goto(`${buildUrl}/activity`);
 	await expect(page.locator('.activity')).toContainText(
 		'Eddie Editor marked step "Handles onto the frame" done'
 	);
@@ -279,7 +279,7 @@ test('handoff: fill the form, mark handed off, and the summary leaves the contac
 	await page.getByTestId('ask-confirm').click();
 	await expect(page.getByRole('heading', { name: 'Handed off' })).toBeVisible();
 	await expect(page.getByTestId('build-phase')).toHaveText('done');
-	await page.goto(`/builds/${buildId}`);
+	await page.goto(`/builds/${buildId}/activity`);
 	await expect(page.locator('.activity')).toContainText(
 		'marked the chair as handed off to Riverside Clinic'
 	);

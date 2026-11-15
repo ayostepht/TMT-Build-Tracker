@@ -75,7 +75,7 @@ test('removing a used color: dialog lists the parts, Cancel changes nothing, Con
 	}
 
 	// The removal is in the activity log (stable fragments only).
-	await page.goto(`/builds/${buildId}`);
+	await page.goto(`/builds/${buildId}/activity`);
 	const activity = page.locator('.activity');
 	await expect(activity).toContainText(/removed/i);
 	await expect(activity).toContainText('Cherry Red');
