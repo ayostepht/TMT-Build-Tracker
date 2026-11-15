@@ -13,6 +13,7 @@
 		files: 'M6 3h8l4 4v14H6zM14 3v4h4',
 		finish: 'M4 12.5l5 5L20 6.5',
 		activity: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 2',
+		stats: 'M5 20V11M12 20V4M19 20v-6',
 		settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4v6M9 14v6'
 	};
 	const settings = $derived<Tab>({
@@ -46,6 +47,7 @@
 						icon: 'activity',
 						href: resolve('/(app)/builds/[id]/activity', { id })
 					},
+					{ label: 'Stats', icon: 'stats', href: resolve('/(app)/builds/[id]/stats', { id }) },
 					settings
 				]
 	);
@@ -53,6 +55,7 @@
 		t.exact ? page.url.pathname === t.href : page.url.pathname.startsWith(t.href);
 
 	let nav: HTMLElement | undefined = $state();
+	let row: HTMLElement | undefined = $state();
 	let fadeStart = $state(false);
 	let fadeEnd = $state(false);
 
@@ -72,6 +75,12 @@
 			nav.scrollLeft = Math.max(0, target);
 		}
 		measure();
+		// Phone: below ~352px the bottom bar scrolls inside itself; keep the active tab in view.
+		if (row && row.scrollWidth > row.clientWidth) {
+			const cur = row.querySelector<HTMLElement>('[aria-current="page"]');
+			if (cur)
+				row.scrollLeft = Math.max(0, cur.offsetLeft - (row.clientWidth - cur.offsetWidth) / 2);
+		}
 		const ro = new ResizeObserver(measure);
 		ro.observe(nav);
 		return () => ro.disconnect();
@@ -92,7 +101,7 @@
 	bind:this={nav}
 	onscroll={measure}
 >
-	<div class="tb-in" style="--n:{tabs.length}">
+	<div class="tb-in" style="--n:{tabs.length}" bind:this={row}>
 		{#each tabs as t (t.href)}
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 			<a href={t.href} aria-current={here(t) ? 'page' : undefined} aria-label={t.name}>
@@ -118,7 +127,11 @@
 		}
 		.tb-in {
 			display: grid;
-			grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+			/* 8 tabs: equal columns; below 8 x 44px the row scrolls sideways inside itself. */
+			grid-template-columns: repeat(var(--n), minmax(44px, 1fr));
+			overflow-x: auto;
+			overscroll-behavior-x: contain;
+			scrollbar-width: none;
 			position: fixed;
 			left: 0;
 			right: 0;
@@ -135,7 +148,7 @@
 			gap: 3px;
 			min-height: 56px;
 			padding: 6px 2px;
-			font: 600 var(--fs-sm)/1.1 var(--f-display);
+			font: 600 var(--fs-xs)/1.1 var(--f-display);
 			letter-spacing: 0.01em;
 			border-bottom: 0;
 			border-top: 3px solid transparent;
@@ -143,6 +156,9 @@
 		}
 		.tb-in a[aria-current='page'] {
 			border-top-color: var(--accent);
+		}
+		.tb-in::-webkit-scrollbar {
+			display: none;
 		}
 		.tb-ic {
 			display: block;
