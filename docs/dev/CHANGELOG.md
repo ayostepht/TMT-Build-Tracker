@@ -7,6 +7,21 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r56** (published `sha-7bb5843` = `edge` 7bb5843, same digest, CI push run test/e2e/image
+  green, 2026-11-15): Activity tab (#48); grams for every plate and part (#49); kept vs lost
+  filament and time, Partial logs with per-part results, dated spool adds, Spare after To
+  print (#50). Migrations `0001_grams_everywhere` and `0002_spool_adds` applied (journal
+  1 → 3; drizzle prints no log line, checked in `__drizzle_migrations` and `pragma
+  table_info`). Rehearsal clean on a copy of the backup: health ok, integrity and FK checks
+  clean, row counts equal in 37 tables, `spool_adds` = `[]` on every row. Checks on that copy
+  (390, 1440, read-only, camera and non-GET API calls blocked): Overview rows show Used / To
+  print / Spare and the Spools total with +; history reads "Starting spools 4.9 kg", Settings
+  shows the four starting counts; the 6 old Failed runs show as 500 g + 1,435 g lost
+  (= 1,935 g failed), and every total matches r55 on the same backup (9.6 kg used, per-role
+  used, to print, spare, ~181 h left). Only change: logged hours 338.1 h → 338.2 h
+  (266.55 + 71.6, rounding). Print, Activity, Settings load without errors. Live after the
+  swap: health ok, same schema and row counts, no restarts. Rollback: stop, restore
+  `tmt-backup-pre-r56.db` (move aside `-wal`/`-shm`), re-tag `r55` as `test`.
 - **r55** (published `sha-08e1558` = `edge` 08e1558, same digest, 2026-11-14): "Lock part color"
   locks only the tapped part, clashing added slots read "· added" (#41); Now printing keeps
   its live panel after in-app build-to-build navigation (#43); docs (#40). No migration.
