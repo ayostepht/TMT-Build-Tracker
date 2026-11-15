@@ -42,7 +42,8 @@
 		name = 'plateLayout',
 		printerName = 'printer',
 		orgId = '',
-		disabled = false,
+		disabled: disabledIn = false,
+		blocked = null,
 		allowUpload = false,
 		bedPanel = true,
 		printer = null,
@@ -59,6 +60,8 @@
 		/** Chapter or My builds whose printers are offered first in the bed picker. */
 		orgId?: string;
 		disabled?: boolean;
+		/** A live printer job blocks changing the plates: the reason (shown by the parent); locks every control. */
+		blocked?: string | null;
 		allowUpload?: boolean;
 		/** Show the bed picker under "Arrange for my bed". */
 		bedPanel?: boolean;
@@ -76,6 +79,7 @@
 		preload?: { layouts: PlateLayoutInfo[]; current: string | null } | null;
 	} = $props();
 
+	const disabled = $derived(disabledIn || !!blocked);
 	const ARRANGE = '__arrange__';
 	const ARRANGED = 'arranged';
 	const UPLOAD = '__upload__';

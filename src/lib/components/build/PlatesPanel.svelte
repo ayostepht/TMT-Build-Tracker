@@ -31,6 +31,7 @@
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 	import AskDialog from '#lib/components/AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
+	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { withStartedConfirm } from '#lib/client/plate-guard.ts';
 
 	/** Setup wizard: plate pictures only, no print log or slicer grams. */
@@ -230,6 +231,27 @@
 			removingTpl = false;
 		}
 	}
+
+	// A live printer job blocks changing the plates: say so up front (same sentence as the server's
+	// refusal) and lock the controls. The server still refuses.
+	const pstore = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
+	$effect(() => pstore.acquire());
+	const blocked = $derived.by(() => {
+		const st = ctx.view.started;
+		if (!st || st.liveJobs <= 0) return null;
+		const job = pstore.jobs.find(
+			(j) => j.buildId === ctx.id && (j.status === 'printing' || j.status === 'paused')
+		);
+		const plate = job?.plateNumber ?? st.printingPlates[0] ?? null;
+		const on = job?.printerName ? ` on ${job.printerName}` : '';
+		const what =
+			plate != null
+				? `Plate ${plate} is printing${on}`
+				: on
+					? `A print is running${on}`
+					: 'A print is running';
+		return `${what}. Re-arranging would renumber the plates; wait until the print finishes.`;
+	});
 
 	/** A live printer job blocks re-arranging: the sentence to show, no override. */
 	let refused = $state<string | null>(null);
@@ -466,13 +488,18 @@
 					Colors changed: re-arrange plates?
 				{/if}
 			</span>
-			<button class="btn sm primary" type="button" disabled={rearranging} onclick={rearrange}
-				>Re-arrange plates</button
+			<button
+				class="btn sm primary"
+				type="button"
+				disabled={rearranging || !!blocked}
+				onclick={rearrange}>Re-arrange plates</button
 			>
 		</div>
 	{/if}
-	{#if refused}
-		<p class="refused" role="alert" data-testid="plates-refused" bind:this={refusedEl}>{refused}</p>
+	{#if refused && !blocked}
+		<p class="refused" role="alert" data-testid="plates-refused" bind:this={refusedEl}>
+			{refused}
+		</p>
 	{/if}
 	{#if planWarnings.length}
 		<details
@@ -489,11 +516,15 @@
 		</details>
 	{/if}
 	{#if ctx.canEdit}
+		{#if blocked}
+			<p class="refused" role="alert" data-testid="plates-refused">{blocked}</p>
+		{/if}
 		<PlateLayoutPicker
 			buildId={ctx.id}
 			orgId={ctx.view.build.organizationId}
 			{printer}
 			allowUpload
+			{blocked}
 			{preload}
 			plateCount={ctx.view.plates.length}
 			onchanged={() => (layoutsSeq++, arrRev++, ctx.refresh())}
@@ -523,6 +554,7 @@
 		<PlateUpload
 			bind:this={upload}
 			view={ctx.view}
+			{blocked}
 			initialFile={ctx.slicedFile}
 			oninitial={() => (ctx.slicedFile = null)}
 			onclose={closeUpload}

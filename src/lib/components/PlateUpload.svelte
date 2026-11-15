@@ -22,12 +22,15 @@
 	 */
 	let {
 		view,
+		blocked = null,
 		onclose,
 		ondone,
 		initialFile = null,
 		oninitial
 	}: {
 		view: BuildView;
+		/** A live printer job blocks renumbering the plates: the reason. */
+		blocked?: string | null;
 		onclose: () => void;
 		ondone: (msg: string) => void;
 		/** A file already chosen elsewhere (the kit drop zone); uploaded right away. */
@@ -51,6 +54,8 @@
 	/** What to do with the file: take its plates as sliced, or learn per-part data and keep my plates. */
 	let outcome = $state<'plates' | 'template'>('plates');
 	let arrangeNow = $state(false);
+	// Only a change that renumbers the plates is blocked; learning a print template alone is not.
+	const locked = $derived(blocked && (outcome === 'plates' || arrangeNow) ? blocked : null);
 	/** Object keys the user keeps to the one mapped part instead of all its twins. */
 	let single = $state<Record<string, boolean>>({});
 	const hasArranged = $derived(view.plates.some((p) => p.source === 'arranged'));
@@ -482,6 +487,7 @@
 				They are converted to part logs when you apply; part statuses stay as they are.
 			</p>
 		{/if}
+		{#if locked}<p class="blocked" role="alert" data-testid="upload-blocked">{locked}</p>{/if}
 		<div class="actions">
 			<button class="btn" type="button" onclick={cancel} disabled={phase === 'applying'}
 				>Cancel</button
@@ -490,7 +496,7 @@
 				class="btn primary"
 				type="button"
 				onclick={apply}
-				disabled={phase === 'applying' || mappedTotal === 0}
+				disabled={phase === 'applying' || mappedTotal === 0 || !!locked}
 				data-testid="apply-upload"
 				>{phase === 'applying'
 					? 'Applying…'
@@ -503,6 +509,16 @@
 </section>
 
 <style>
+	.blocked {
+		margin: var(--sp-3) 0 0;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
+		background: var(--warn-soft);
+		color: var(--warn);
+		font-size: var(--fs-md);
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
 	/* The content of the upload sheet (a ds-modal): the sheet is the surface, this pads and spaces it */
 	.upload {
 		display: grid;
