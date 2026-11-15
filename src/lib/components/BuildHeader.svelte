@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { overallProgress, filamentStats, timeStats, timeLeftText } from '#lib/domain/index.ts';
+	import { overallProgress } from '#lib/domain/index.ts';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { buildKpis } from '#lib/domain/kpis.ts';
@@ -12,11 +12,6 @@
 	/** The Design tab is a work area: drop the progress stats so the chair starts near the top. */
 	const compact = $derived(page.route.id === '/(app)/builds/[id]/design');
 	const prog = $derived(overallProgress(ctx.view));
-	const fil = $derived(filamentStats(ctx.view));
-	const time = $derived(timeStats(ctx.view));
-	const tl = $derived(timeLeftText(time));
-	const usedKg = $derived(fil.reduce((a, s) => a + s.used, 0) / 1000);
-	const estKg = $derived(fil.reduce((a, s) => a + s.used + s.need, 0) / 1000);
 	/** The four Stats headline numbers, from the same function as the Stats tab so the text matches. */
 	const k = $derived(buildKpis(ctx.view, new Date(ctx.now)));
 	/** Phones: shorter labels and no detail line, so four cards fit across. */
@@ -35,6 +30,8 @@
 			value: String(k.parts.printed),
 			unit: narrow ? `/ ${k.parts.total}` : `of ${k.parts.total}`,
 			detail: k.parts.detail,
+			est: false,
+			full: k.parts.detail,
 			name: `Parts printed: ${k.parts.label}`,
 			split: [
 				{ value: k.parts.printed, tone: 'good' as const },
@@ -46,7 +43,9 @@
 			label: narrow ? 'Time' : 'Printing time',
 			value: k.time.value,
 			unit: 'h',
-			detail: k.time.detail,
+			detail: k.time.est ?? k.time.detail,
+			est: k.time.est !== null,
+			full: `${k.time.detail}${k.time.est ? `. ${k.time.est}` : ''}`,
 			name: `Printing time: ${k.time.label} logged`,
 			split: [
 				{ value: k.time.goodH, tone: 'good' as const },
@@ -58,7 +57,9 @@
 			label: narrow ? 'Filament' : 'Filament used',
 			value: k.filament.value,
 			unit: k.filament.unit,
-			detail: k.filament.detail,
+			detail: k.filament.est,
+			est: true,
+			full: `${k.filament.detail}. ${k.filament.est}`,
 			name: `Filament used: ${k.filament.label}`,
 			split: [
 				{ value: k.filament.keptKg, tone: 'good' as const },
@@ -71,6 +72,8 @@
 			value: k.finish.label,
 			unit: undefined,
 			detail: k.finish.detail,
+			est: false,
+			full: k.finish.detail,
 			name: `Projected finish: ${k.finish.label}`,
 			split: undefined
 		}
@@ -83,6 +86,8 @@
 	);
 	/** Phones: the header is one line; the kicker and the progress numbers sit behind a tap. */
 	let details = $state(false);
+	/** The details line holds only what the cards don't show; with nothing to say it is gone. */
+	const hasDetails = $derived(prog.printing > 0 || prog.reprint > 0 || !!b.deliveryDate);
 	const syncText = $derived(
 		!ctx.canEdit && ctx.sync === 'on'
 			? 'Live · read only'
@@ -119,9 +124,9 @@
 				class="bh-kpi"
 				href={resolve('/(app)/builds/[id]/stats', { id: ctx.id })}
 				data-testid="header-kpi-{c.key}"
-				aria-label="{c.name}. {c.detail}. Open Stats"
+				aria-label="{c.name}. {c.full}. Open Stats"
 			>
-				<span class:bh-long={narrow && c.value.length > 7} class="bh-kpi-in">
+				<span class:bh-est={c.est} class:bh-long={narrow && c.value.length > 7} class="bh-kpi-in">
 					<StatTile
 						compact
 						label={c.label}
@@ -134,7 +139,7 @@
 			</a>
 		{/each}
 	</nav>
-	{#if !compact}
+	{#if !compact && hasDetails}
 		<button
 			type="button"
 			class="bh-more"
@@ -148,17 +153,8 @@
 		>
 		<div class="overall" id="build-details">
 			<div class="overall-top">
-				<span><b class="num">{prog.printed} of {prog.total}</b> parts printed</span>
-				<span><b class="num">{prog.printing}</b> printing</span>
-				<span><b class="num">{prog.reprint}</b> to reprint</span>
-				<span
-					><b class="num">{usedKg.toFixed(1)} kg</b> used of ~{estKg.toFixed(1)} kg estimated</span
-				>
-				<span title={tl.hint ?? undefined}
-					><b class="num">{tl.text}</b> of printing left{#if tl.kind === 'estimate'}<em class="est"
-							>(estimate)</em
-						>{:else if tl.hint}<em class="est">({tl.hint})</em>{/if}</span
-				>
+				{#if prog.printing > 0}<span><b class="num">{prog.printing}</b> printing</span>{/if}
+				{#if prog.reprint > 0}<span><b class="num">{prog.reprint}</b> to reprint</span>{/if}
 				{#if b.deliveryDate}<span>Deliver by <b class="num">{b.deliveryDate}</b></span>{/if}
 			</div>
 		</div>
@@ -271,6 +267,14 @@
 		}
 		/* Phones: label, value and bar only; the detail sentence is in each card's link name. */
 		.bh-kpi :global(.st-detail) {
+			display: none;
+		}
+		/* Time and Filament keep their one-line estimate ("30.5 h of ~382 h"); it truncates first. */
+		.bh-est :global(.st-detail) {
+			display: block;
+		}
+		/* The Design tab is a work area: no cards on phones. */
+		.bh.compact .bh-kpis {
 			display: none;
 		}
 		.bh-kpi :global(.st-tile) {

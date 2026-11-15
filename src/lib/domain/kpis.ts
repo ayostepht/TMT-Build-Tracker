@@ -23,6 +23,9 @@ const hoursText = (h: number, whole: boolean) => `${num(h, whole ? 0 : 1)} h`;
 /** Grams as "840 g" or, from 1000 g, "1.2 kg". */
 const gramsText = (g: number) => (g >= 1000 ? `${num(g / 1000, 1)} kg` : `${num(g, 0)} g`);
 
+/** Grams as kilograms: "0.35 kg" under 1 kg (two decimals), "8.4 kg" from there (one). */
+const kgText = (g: number) => `${num(g / 1000, g < 1000 ? 2 : 1)} kg`;
+
 export interface BuildKpis {
 	parts: { printed: number; total: number; label: string; detail: string };
 	time: {
@@ -36,6 +39,8 @@ export interface BuildKpis {
 		label: string;
 		/** "267 h good · 72 h failed". */
 		detail: string;
+		/** Logged of the estimated total: "30.5 h of ~382 h"; null while no plate has a time. */
+		est: string | null;
 	};
 	filament: {
 		usedKg: number;
@@ -48,6 +53,8 @@ export interface BuildKpis {
 		label: string;
 		/** "1 kg in parts · 200 g lost". */
 		detail: string;
+		/** Used of the estimated total: "0.35 kg of ~8.4 kg". */
+		est: string;
 	};
 	finish: {
 		projection: Projection;
@@ -118,7 +125,11 @@ export function buildKpis(view: BuildView, now: Date = new Date()): BuildKpis {
 			failedH,
 			value: num(loggedH, whole ? 0 : 1),
 			label: hoursText(loggedH, whole),
-			detail: `${hoursText(goodH, whole)} good · ${hoursText(failedH, whole)} failed`
+			detail: `${hoursText(goodH, whole)} good · ${hoursText(failedH, whole)} failed`,
+			est:
+				t.known && t.totalSec > 0
+					? `${hoursText(loggedH, whole)} of ~${hoursText(t.totalSec / 3600, t.totalSec / 3600 >= 100)}`
+					: null
 		},
 		filament: {
 			usedKg: kg(useG),
@@ -127,7 +138,8 @@ export function buildKpis(view: BuildView, now: Date = new Date()): BuildKpis {
 			value: useG >= 1000 ? num(useG / 1000, 1) : num(useG, 0),
 			unit: useG >= 1000 ? 'kg' : 'g',
 			label: gramsText(useG),
-			detail: `${gramsText(keptG)} in parts · ${gramsText(lostG)} lost`
+			detail: `${gramsText(keptG)} in parts · ${gramsText(lostG)} lost`,
+			est: `${kgText(useG)} of ~${kgText(useG + fil.reduce((a, f) => a + Math.max(0, f.need), 0))}`
 		},
 		finish
 	};

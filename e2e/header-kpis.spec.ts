@@ -102,7 +102,9 @@ test('build header: four Stats cards on every build tab, live, linking to Stats'
 		await page.setViewportSize({ width: 360, height: 800 });
 		await page.goto(`/builds/${buildId}${tab}`);
 		await page.waitForLoadState('networkidle');
-		await expect(strip, tab || 'overview').toBeVisible();
+		// Phones: the Design tab is a work area and drops the cards.
+		if (tab === '/design') await expect(strip).toBeHidden();
+		else await expect(strip, tab || 'overview').toBeVisible();
 		expect(
 			await page.evaluate(
 				() => document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -202,4 +204,22 @@ test.describe('workspace Stats builds table on a phone', () => {
 		});
 		await shot(page, 'workspace-stats-table-390');
 	});
+});
+
+test('time and filament cards carry an estimate line; Design hides the cards on phones', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	const { buildId } = await ownerWithBuild(page, 'hdrest');
+	await page.goto(`/builds/${buildId}`);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByTestId('header-kpi-time')).toContainText(/\d h of ~[\d,.]+ h/);
+	await expect(page.getByTestId('header-kpi-filament')).toContainText(/kg of ~[\d,.]+ kg/);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(page.getByTestId('header-kpi-time')).toContainText(/of ~/);
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByTestId('header-kpis')).toBeHidden();
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await expect(page.getByTestId('header-kpis')).toBeVisible();
 });

@@ -63,4 +63,11 @@ describe('buildKpis', () => {
 		expect(k.time.label).toBe('0 h');
 		expect(k.filament.label).toBe('0 g');
 	});
+	it('gives the estimate lines for time and filament', () => {
+		const k = buildKpis(withRuns([{ plateNumber: 1, result: 'Success', hours: 2 }]), NOW);
+		expect(k.time.est).toMatch(/^2 h of ~[\d,.]+ h$/);
+		expect(k.filament.est).toMatch(/^[\d,.]+ kg of ~[\d,.]+ kg$/);
+		const none = buildKpis(makeView(), NOW);
+		expect(none.filament.est).toMatch(/^0 kg of ~/);
+	});
 });

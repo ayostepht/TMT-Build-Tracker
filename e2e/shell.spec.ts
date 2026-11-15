@@ -78,6 +78,13 @@ test.describe('phone', () => {
 		const { buildId } = await ownerWithBuild(page, 'shellmenu');
 		await page.goto(`/builds/${buildId}`);
 		await page.waitForLoadState('networkidle');
+		// Nothing printing, nothing to reprint: no details line and no toggle.
+		await expect(page.getByTestId('header-details')).toHaveCount(0);
+		await page.goto(`/builds/${buildId}/print`);
+		await page.waitForLoadState('networkidle');
+		await chooseStatus(page.getByTestId('part-status').first(), 'Printing');
+		await page.goto(`/builds/${buildId}`);
+		await page.waitForLoadState('networkidle');
 		await expect(page.locator('.overall')).toBeHidden();
 		await page.getByTestId('header-details').click();
 		await expect(page.locator('.overall')).toBeVisible();

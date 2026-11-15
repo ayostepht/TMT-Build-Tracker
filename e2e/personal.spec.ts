@@ -18,7 +18,10 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	).toBeVisible();
 
 	const buildId = await createBuild(page, 'Solo chair');
-	await expect(page.locator('.overall-top')).toContainText('of 33');
+	await expect(page.getByTestId('header-kpi-parts')).toHaveAttribute(
+		'aria-label',
+		/Parts printed: 0 of 33/
+	);
 
 	// Settings offers no target yet.
 	await page.goto(`/builds/${buildId}/settings`);

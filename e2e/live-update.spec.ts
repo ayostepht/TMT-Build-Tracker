@@ -13,7 +13,7 @@ test('an editor change shows up on the owner page without a reload', async ({ pa
 
 	await page.goto(`${buildUrl}/activity`);
 	const header = page.locator('.overall-top');
-	await expect(header).toContainText('0 printing');
+	await expect(header).toHaveCount(0);
 	await expect(page.locator('.sync')).toContainText('Live');
 	// Tag the page so a reload would be noticed.
 	await page.evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));
