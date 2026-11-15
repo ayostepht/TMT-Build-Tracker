@@ -12,6 +12,7 @@
 		print: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5',
 		files: 'M6 3h8l4 4v14H6zM14 3v4h4',
 		finish: 'M4 12.5l5 5L20 6.5',
+		activity: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 2',
 		settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4v6M9 14v6'
 	};
 	const settings = $derived<Tab>({
@@ -20,7 +21,8 @@
 		icon: 'settings',
 		href: resolve('/(app)/builds/[id]/settings', { id })
 	});
-	// A Studio draft has no tracking tabs: design, files (plates, export) and settings only.
+	// A Studio draft has no tracking tabs (no Overview, Print, Finish, Activity): design, files
+	// (plates, export) and settings only.
 	const tabs = $derived<Tab[]>(
 		draft
 			? [
@@ -39,6 +41,11 @@
 					{ label: 'Print', icon: 'print', href: resolve('/(app)/builds/[id]/print', { id }) },
 					{ label: 'Files', icon: 'files', href: resolve('/(app)/builds/[id]/files', { id }) },
 					{ label: 'Finish', icon: 'finish', href: resolve('/(app)/builds/[id]/finish', { id }) },
+					{
+						label: 'Activity',
+						icon: 'activity',
+						href: resolve('/(app)/builds/[id]/activity', { id })
+					},
 					settings
 				]
 	);

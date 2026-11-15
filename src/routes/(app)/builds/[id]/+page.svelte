@@ -1,13 +1,21 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
+	import { describeActivitySegments } from '#lib/domain/activity.ts';
+	import { getBuildCtx, ago } from '#lib/components/build-context.svelte.ts';
 	import NowPrinting from '#lib/components/NowPrinting.svelte';
 	import FilamentTiles from '#lib/components/FilamentTiles.svelte';
-	import ActivityList from '#lib/components/ActivityList.svelte';
 	import PhaseSuggest from '#lib/components/PhaseSuggest.svelte';
 
 	const ctx = getBuildCtx();
 	const step = $derived(ctx.view.build.setupStep);
+	const last = $derived(ctx.view.activity[0]);
+	const lastText = $derived(
+		last
+			? describeActivitySegments(last, ctx.view)
+					.map((s) => s.text)
+					.join('')
+			: ''
+	);
 </script>
 
 {#if step !== null && ctx.canEdit}
@@ -24,7 +32,15 @@
 <PhaseSuggest />
 <NowPrinting />
 <FilamentTiles />
-<ActivityList />
+{#if last}
+	<p class="last" data-testid="last-change">
+		<span class="last-t">Last change: {lastText}</span>
+		<time datetime={last.at}>{ago(last.at, ctx.now)}</time>
+		<a class="pill-link" href={resolve('/(app)/builds/[id]/activity', { id: ctx.id })}
+			>All activity <span class="btn-arrow" aria-hidden="true">→</span></a
+		>
+	</p>
+{/if}
 <p class="foot">
 	Estimates use each part's BOM weight until you enter slicer grams for a plate, then the slicer
 	grams (per run where a plate prints more than once). Filament used only counts finished prints you
@@ -32,6 +48,22 @@
 </p>
 
 <style>
+	.last {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 12px;
+		margin: 0;
+		color: var(--muted);
+		font-size: var(--fs-md);
+	}
+	.last-t {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.last time {
+		white-space: nowrap;
+	}
 	.cont {
 		grid-auto-flow: column;
 		align-items: center;

@@ -29,7 +29,7 @@ const overflow = (page: Page) =>
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-	test('top bar is one row, the build header one line, six tabs sit in a bottom bar', async ({
+	test('top bar is one row, the build header one line, seven tabs sit in a bottom bar', async ({
 		page
 	}) => {
 		const { buildId } = await ownerWithBuild(page, 'shell');
@@ -59,7 +59,7 @@ test.describe('phone', () => {
 		console.log('PRINT-METRICS', JSON.stringify(m));
 		expect(m.topbar, 'one-row top bar').toBeLessThanOrEqual(56);
 		expect(m.header, 'one-line build header').toBeLessThanOrEqual(56);
-		expect(m.links).toHaveLength(6);
+		expect(m.links).toHaveLength(7);
 		for (const l of m.links) {
 			expect(l.l).toBeGreaterThanOrEqual(0);
 			expect(l.r).toBeLessThanOrEqual(390.5);
@@ -96,12 +96,12 @@ test.describe('phone', () => {
 	});
 
 	for (const width of [360, 390]) {
-		test(`no sideways scroll at ${width}px on Overview, Print, Files, Finish, Settings`, async ({
+		test(`no sideways scroll at ${width}px on Overview, Print, Files, Finish, Activity, Settings`, async ({
 			page
 		}) => {
 			const { buildId } = await ownerWithBuild(page, `ov${width}`);
 			await page.setViewportSize({ width, height: 844 });
-			for (const path of ['', '/print', '/files', '/finish', '/settings']) {
+			for (const path of ['', '/print', '/files', '/finish', '/activity', '/settings']) {
 				await page.goto(`/builds/${buildId}${path}`);
 				await page.waitForLoadState('networkidle');
 				const o = await overflow(page);
@@ -112,7 +112,7 @@ test.describe('phone', () => {
 						return { l: b.left, r: b.right, h: b.height };
 					})
 				);
-				expect(links).toHaveLength(6);
+				expect(links).toHaveLength(7);
 				for (const l of links) {
 					expect(l.l).toBeGreaterThanOrEqual(0);
 					expect(l.r).toBeLessThanOrEqual(width + 0.5);

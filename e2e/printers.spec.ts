@@ -126,8 +126,14 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	await prompt.getByTestId('confirm-grams').fill('38');
 	await prompt.getByTestId('confirm-log').click();
 	await expect(prompt).toBeHidden({ timeout: 15_000 });
-	await expect(page.locator('body')).toContainText('logged a successful print of plate 1');
-	await expect(page.locator('body')).toContainText('Shop Centauri started printing plate 1');
+	// The Overview shows only the latest change; the full list is on the Activity tab.
+	await expect(page.getByTestId('last-change')).toContainText(
+		'logged a successful print of plate 1'
+	);
+	await page.goto(`/builds/${buildId}/activity`);
+	await expect(page.locator('.activity')).toContainText('logged a successful print of plate 1');
+	await expect(page.locator('.activity')).toContainText('Shop Centauri started printing plate 1');
+	await page.goto(`/builds/${buildId}`);
 
 	// Unlinked file: offers "Link to plate…".
 	mock.set({ printStatus: 0, machineStatus: [0], progress: 0, file: '' });
@@ -157,8 +163,10 @@ test('printer: add, test connection, live status, job links to a plate, finish, 
 	mock.printing('TMT-Test-chair-plate-1.3mf', 20, { ticks: 2 * 3600, totalTicks: 7200 });
 	await page.waitForTimeout(1500);
 	mock.set({ printStatus: 9, machineStatus: [0], progress: 100 });
-	await page.goto(`/builds/${buildId}`);
-	await expect(page.locator('body')).toContainText('logged automatically', { timeout: 20_000 });
+	await page.goto(`/builds/${buildId}/activity`);
+	await expect(page.locator('.activity')).toContainText('logged automatically', {
+		timeout: 20_000
+	});
 	const runs = { view: await (await page.request.get(`/api/builds/${buildId}/view`)).json() };
 	const auto = runs.view.runs.filter((r: { note: string }) => r.note.includes('automatically'));
 	expect(auto).toHaveLength(1);
@@ -538,8 +546,9 @@ test('a plate cancelled before it started logs nothing; one stopped at 40% offer
 	await expect.poll(status, { timeout: 15_000 }).toBe('To print');
 	await expect(page.getByTestId('confirm-print-log')).toHaveCount(0);
 	expect((await view()).runs).toHaveLength(0);
-	await page.reload();
-	await expect(page.locator('body')).toContainText('before it started; nothing was logged');
+	await page.goto(`/builds/${buildId}/activity`);
+	await expect(page.locator('.activity')).toContainText('before it started; nothing was logged');
+	await page.goto(`/builds/${buildId}`);
 	idle();
 	await page.waitForTimeout(500);
 

@@ -536,7 +536,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   filament or variant entry.
 
 - Build tabs (nested routes): Overview · Design · Print (tracking, logs, now printing) ·
-  Files (bed/printer, plates, sliced file, export, kit status) · Finish · Settings.
+  Files (bed/printer, plates, sliced file, export, kit status) · Finish · Activity · Settings.
+  Activity (`/activity`, since 2026-11-15) lists up to the 50 entries the view loads
+  (`ActivityList` `limit`/`heading` props); the Overview keeps one "Last change … · All
+  activity" line; drafts have no Activity tab (the route redirects to Design). The phone bar
+  is a 7-column grid (`--n` in `TabBar.svelte`).
   `/print#plates|#export|#settings` redirect client-side to `/files#…`. The older tab URLs
   (`/parts`, `/plates`, `/assembly`, `/handoff`) were removed on 2026-11-11 and are 404s.
 - Setup wizard (`builds/[id]/setup`): `?step=` takes 1–5 or
