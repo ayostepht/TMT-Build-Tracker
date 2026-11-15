@@ -750,7 +750,7 @@ export function confirmJob(
 		...(typeof o.note === 'string' ? { note: o.note } : {}),
 		...(typeof o.date === 'string' ? { date: o.date } : {})
 	};
-	const runId = addRun(db, job.buildId, userId, merged);
+	const { runId } = addRun(db, job.buildId, userId, merged);
 	db.update(printerJobs).set({ runId }).where(eq(printerJobs.id, jobId)).run();
 	emitPrinterEvent(orgId, { type: 'job', printerId: printer.id });
 	return runId;

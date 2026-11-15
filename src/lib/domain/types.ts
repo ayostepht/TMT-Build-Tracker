@@ -26,6 +26,17 @@ export type BuildPhase = (typeof BUILD_PHASES)[number];
 
 export type TeamRole = 'owner' | 'editor' | 'viewer';
 
+/** One "added a spool" entry on a filament slot, as the view shows it. */
+export interface SpoolAddView {
+	id: string;
+	kg: number;
+	/** ms since the epoch */
+	at: number;
+	userId: string | null;
+	userName: string | null;
+	note?: string;
+}
+
 /** A filament slot in this build: a template role with the build's chosen filament. */
 export interface FilamentRole {
 	key: string; // template role key: primary | accent | soft | tire | …
@@ -33,7 +44,9 @@ export interface FilamentRole {
 	material: string; // e.g. "PETG", "TPU 95A"
 	hex: string;
 	tpu: boolean;
-	spools: number; // spools on hand (1 kg each)
+	spools: number; // starting spools (kg, 1 kg each): the stock the build began with
+	/** Spools added after the start, oldest first; total stock = `spools` + their kg (`stockKg`). */
+	spoolAdds?: SpoolAddView[];
 	recommendedSpools: number;
 	spoolmanSpoolId: number | null;
 	/** True for the template's own slots (primary, accent, soft, tire, …): they can be recoloured but never removed. */

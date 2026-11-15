@@ -5,11 +5,22 @@
  * where each part is its own unit printed `plate.runs` times. Grams come from ONE place,
  * `partGrams` / `plateGrams` (typed > sliced file > your slice > MakeGood BOM, see below);
  * `estPerRun` delegates to them. Used: logged grams, plus the estimate for printed runs
- * that were logged without grams. A running print still counts as to print.
+ * that were logged without grams, split into kept (successful runs and those estimates) and
+ * lost (failed runs, and older Partial rows). A running print still counts as to print.
  */
+import { runTargets } from './actions.ts';
 import { fmtH } from './format.ts';
 import { paceOf, type Pace } from './pace.ts';
-import type { BuildView, GramsInfo, GramsSource, PartDef, Plate, PrintRun } from './types.ts';
+import type {
+	BuildView,
+	FilamentRole,
+	GramsInfo,
+	GramsSource,
+	PartDef,
+	Plate,
+	PrintRun,
+	PrintRunInput
+} from './types.ts';
 
 export interface Unit {
 	plate: number; // 0 for parts that are on no plate
@@ -93,6 +104,83 @@ export function roleShares(view: BuildView, u: Unit): Record<string, number> {
 	if (!fg) return { [u.role]: 1 };
 	const total = Object.values(fg).reduce((a, b) => a + b, 0);
 	return Object.fromEntries(Object.entries(fg).map(([r, g]) => [r, g / total]));
+}
+
+/**
+ * Relative weights of parts for splitting a print between them (grams, hours): each part's
+ * own weight for all copies (`partGrams`); a part without a weight takes the average of the
+ * known ones (1 when none is known), so every part still gets a share. Pure.
+ */
+export function partWeights(view: BuildView, slugs: string[]): Record<string, number> {
+	const w = slugs.map((s) => partGrams(view, s).total);
+	const known = w.filter((x) => x > 0);
+	const fill = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
+	return Object.fromEntries(slugs.map((s, i) => [s, w[i] > 0 ? w[i] : fill]));
+}
+
+/** The share (0 to 1) of `subset` in the weight of `all` (see `partWeights`). */
+export function weightShare(view: BuildView, all: string[], subset: string[]): number {
+	const w = partWeights(view, all);
+	const total = all.reduce((a, s) => a + w[s], 0);
+	if (!(total > 0)) return 0;
+	const mine = new Set(subset);
+	return all.filter((s) => mine.has(s)).reduce((a, s) => a + w[s], 0) / total;
+}
+
+type RunLike = Pick<
+	PrintRunInput,
+	| 'plateNumber'
+	| 'partSlug'
+	| 'partSlugs'
+	| 'grams'
+	| 'date'
+	| 'result'
+	| 'hours'
+	| 'printer'
+	| 'note'
+>;
+
+/** Unrounded weights by role for the parts a run covers (the file's roles for a whole plate). */
+function runRoleWeights(view: BuildView, run: RunLike): Record<string, number> {
+	const slugs = runTargets(view, run as PrintRun | PrintRunInput).filter((s) => view.state[s]);
+	const roleOf = (s: string) => view.allParts.find((p) => p.slug === s)?.role;
+	const plate =
+		run.plateNumber == null ? null : view.plates.find((p) => p.number === run.plateNumber);
+	const wholePlate = plate && slugs.length === plate.parts.length;
+	// The parts' roles decide which roles the file's grams go to (see plateFileRoleGrams).
+	const fileWeights =
+		wholePlate && plate
+			? plateFileRoleGrams(
+					plate,
+					plate.parts.flatMap((s) => (view.state[s] ? [roleOf(s) ?? ''] : []))
+				)
+			: null;
+	if (fileWeights) return fileWeights;
+	const weights: Record<string, number> = {};
+	for (const s of slugs) {
+		const role = roleOf(s);
+		if (!role) continue;
+		// The part's own weight for all its copies (partGrams); 1 when unknown so it still gets a share.
+		weights[role] = (weights[role] ?? 0) + (partGrams(view, s).total || 1);
+	}
+	return weights;
+}
+
+/**
+ * Split the grams of a logged run across filament roles (to deduct from linked spools). A whole
+ * plate follows its file's grams per role; otherwise the parts' weights by role. Rounded to 0.1 g. Pure.
+ */
+export function runRoleGrams(view: BuildView, run: RunLike): Record<string, number> {
+	const grams = run.grams ?? 0;
+	if (!(grams > 0)) return {};
+	const weights = runRoleWeights(view, run);
+	const total = Object.values(weights).reduce((a, b) => a + b, 0);
+	if (!(total > 0)) return {};
+	return Object.fromEntries(
+		Object.entries(weights)
+			.filter(([, w]) => w > 0)
+			.map(([k, w]) => [k, Math.round(((grams * w) / total) * 10) / 10])
+	);
 }
 
 // ---- Grams: one source order for parts, plates and units ---------------------------------------
@@ -235,17 +323,98 @@ function unitLogged(view: BuildView, u: Unit): PrintRun[] {
 	return [...unitEntries(view, u), ...partLog];
 }
 
+export interface Use {
+	/** Grams that ended up in printed parts: successful runs, plus the estimate for done runs no Success log covers. */
+	kept: number;
+	/** Grams of prints that did not make parts: failed runs and older Partial rows. */
+	lost: number;
+}
+
 /**
- * Grams used: every logged gram (failed prints used filament too), plus the estimate for each
- * run of a finished unit that no successful log with grams stands for (a Success logged without
- * grams, or a part marked Printed by hand).
+ * Grams used by a unit, as kept and lost. Every logged gram counts (failed prints used filament
+ * too): Success runs are kept, Failed and older Partial rows are lost. A finished unit also keeps
+ * the estimate for each run that no successful log with grams stands for (a Success logged
+ * without grams, or a part marked Printed by hand).
  */
-export function unitUsed(view: BuildView, u: Unit): number {
+export function unitUse(view: BuildView, u: Unit): Use {
 	const log = unitLogged(view, u);
-	const logged = log.reduce((a, r) => a + (Number(r.grams) || 0), 0);
-	if (!unitDone(view, u)) return logged;
-	const measured = log.filter((r) => r.result === 'Success' && Number(r.grams) > 0).length;
-	return logged + estPerRun(view, u) * Math.max(0, u.runs - measured);
+	let kept = 0;
+	let lost = 0;
+	for (const r of log) {
+		const g = Number(r.grams) || 0;
+		if (r.result === 'Success') kept += g;
+		else lost += g;
+	}
+	if (unitDone(view, u)) {
+		const measured = log.filter((r) => r.result === 'Success' && Number(r.grams) > 0).length;
+		kept += estPerRun(view, u) * Math.max(0, u.runs - measured);
+	}
+	return { kept, lost };
+}
+
+/** Grams used: kept plus lost. */
+export function unitUsed(view: BuildView, u: Unit): number {
+	const { kept, lost } = unitUse(view, u);
+	return kept + lost;
+}
+
+/**
+ * `unitUse` by filament role. A whole-plate run follows the unit's role shares; a run of some of
+ * the plate's parts (a Partial's two halves) follows those parts' own roles.
+ */
+export function unitUseByRole(view: BuildView, u: Unit): Record<string, Use> {
+	const out: Record<string, Use> = {};
+	const add = (role: string, kept: number, lost: number) => {
+		const cur = (out[role] ??= { kept: 0, lost: 0 });
+		cur.kept += kept;
+		cur.lost += lost;
+	};
+	const shares = roleShares(view, u);
+	const pl = plateByNumber(view, u.plate);
+	const log = unitLogged(view, u);
+	for (const r of log) {
+		const g = Number(r.grams) || 0;
+		if (!g) continue;
+		const subset =
+			!!pl &&
+			!pl.perPartRuns &&
+			r.plateNumber === pl.number &&
+			!r.partSlug &&
+			runTargets(view, r).length < pl.parts.length;
+		let by = subset ? runRoleWeights(view, r) : shares;
+		let total = Object.values(by).reduce((a, b) => a + b, 0);
+		if (!(total > 0)) {
+			by = shares;
+			total = 1;
+		}
+		for (const [role, w] of Object.entries(by)) {
+			const part = (g * w) / total;
+			add(role, r.result === 'Success' ? part : 0, r.result === 'Success' ? 0 : part);
+		}
+	}
+	if (unitDone(view, u)) {
+		const measured = log.filter((r) => r.result === 'Success' && Number(r.grams) > 0).length;
+		const extra = estPerRun(view, u) * Math.max(0, u.runs - measured);
+		if (extra > 0) for (const [role, w] of Object.entries(shares)) add(role, extra * w, 0);
+	}
+	return out;
+}
+
+/**
+ * Share of a single-run plate that is still to print: after a Partial the printed parts are
+ * done, so only the unprinted parts' weight counts. 1 for multi-run, per-part and untouched units.
+ */
+function unprintedShare(view: BuildView, u: Unit): number {
+	if (u.runs !== 1 || u.parts.length < 2) return 1;
+	const pl = plateByNumber(view, u.plate);
+	if (!pl || pl.perPartRuns) return 1;
+	const left = u.parts.filter((p) => view.state[p.slug]?.status !== 'Printed').map((p) => p.slug);
+	if (left.length === 0 || left.length === u.parts.length) return 1;
+	return weightShare(
+		view,
+		u.parts.map((p) => p.slug),
+		left
+	);
 }
 
 export function unitRunsLeft(view: BuildView, u: Unit): number {
@@ -255,19 +424,34 @@ export function unitRunsLeft(view: BuildView, u: Unit): number {
 }
 
 export function unitLeft(view: BuildView, u: Unit): number {
-	return estPerRun(view, u) * unitRunsLeft(view, u);
+	return estPerRun(view, u) * unitRunsLeft(view, u) * unprintedShare(view, u);
+}
+
+/** Stock on hand in kg: the starting spools plus every spool added since (2 decimals). */
+export function stockKg(f: Pick<FilamentRole, 'spools' | 'spoolAdds'>): number {
+	const adds = (f.spoolAdds ?? []).reduce((a, x) => a + (Number(x.kg) || 0), 0);
+	return Math.round(((Number(f.spools) || 0) + adds) * 100) / 100;
 }
 
 export interface FilamentStat {
 	role: string;
+	/** Everything printed so far: `keptG + lostG`. */
 	used: number;
+	/** Part of `used` that ended up in printed parts. */
+	keptG: number;
+	/** Part of `used` lost to failed prints (and older Partial logs). */
+	lostG: number;
 	need: number; // still to print
 	total: number;
 	/** Parts of this role that are still to print and have no weight at all (left out of `need` and `total`). */
 	unknownParts: string[];
 	/** `unknownParts.length` (kept for existing readers). */
 	unweighed: number;
-	haveGrams: number; // spools on hand * 1000
+	haveGrams: number; // stock on hand (`stockKg`) * 1000
+	/** The starting spools (kg). */
+	startKg: number;
+	/** Spools added since the start (kg). */
+	addedKg: number;
 	short: boolean;
 	shortByGrams: number;
 }
@@ -277,9 +461,19 @@ export function filamentStats(view: BuildView): FilamentStat[] {
 	return view.filaments.map((f) => {
 		const share = (u: Unit) => roleShares(view, u)[f.key] ?? 0;
 		const us = all.filter((u) => share(u) > 0);
-		const used = us.reduce((a, u) => a + unitUsed(view, u) * share(u), 0);
+		let keptG = 0;
+		let lostG = 0;
+		for (const u of all) {
+			const use = unitUseByRole(view, u)[f.key];
+			if (use) {
+				keptG += use.kept;
+				lostG += use.lost;
+			}
+		}
+		const used = keptG + lostG;
 		const need = us.reduce((a, u) => a + unitLeft(view, u) * share(u), 0);
-		const haveGrams = (Number(f.spools) || 0) * 1000;
+		const haveGrams = stockKg(f) * 1000;
+		const startKg = Number(f.spools) || 0;
 		const unknownParts = [
 			...new Set(
 				all
@@ -296,11 +490,15 @@ export function filamentStats(view: BuildView): FilamentStat[] {
 		return {
 			role: f.key,
 			used,
+			keptG,
+			lostG,
 			need,
 			total: us.reduce((a, u) => a + estTotal(view, u) * share(u), 0),
 			unknownParts,
 			unweighed: unknownParts.length,
 			haveGrams,
+			startKg,
+			addedKg: Math.round((stockKg(f) - startKg) * 100) / 100,
 			short: spare < 0,
 			shortByGrams: Math.max(0, -spare)
 		};
@@ -311,6 +509,10 @@ export interface TimeStats {
 	totalSec: number;
 	leftSec: number;
 	loggedHours: number;
+	/** Part of `loggedHours` in successful runs. */
+	keptHours: number;
+	/** Part of `loggedHours` in failed runs (and older Partial logs). */
+	lostHours: number;
 	paceRatio: number | null; // actual / estimated, once >= 12 h of timed successful runs
 	adjustedLeftSec: number | null;
 	/** The full pace calibration (ratio, sample hours, text); null before enough timed runs. */
@@ -344,6 +546,14 @@ function plateRunsLeft(view: BuildView, pl: Plate): number {
 		);
 	}
 	if (pl.parts.every((s) => state(s) === 'Printed')) return 0;
+	// After a Partial on a single-run plate only the unprinted parts' share is still to print.
+	if (pl.runs <= 1 && pl.parts.some((s) => state(s) === 'Printed')) {
+		return weightShare(
+			view,
+			pl.parts,
+			pl.parts.filter((s) => state(s) !== 'Printed')
+		);
+	}
 	return Math.max(1, pl.runs - wins((r) => !r.partSlug));
 }
 
@@ -363,14 +573,22 @@ export function timeStats(view: BuildView): TimeStats {
 			if (pl.estRough) rough = true;
 		}
 	}
-	let loggedHours = 0;
-	for (const r of view.runs) loggedHours += Number(r.hours) || 0;
+	let keptHours = 0;
+	let lostHours = 0;
+	for (const r of view.runs) {
+		const h = Number(r.hours) || 0;
+		if (r.result === 'Success') keptHours += h;
+		else lostHours += h;
+	}
+	const loggedHours = keptHours + lostHours;
 	const pace = paceOf(view);
 	const paceRatio = pace ? pace.ratio : null;
 	return {
 		totalSec,
 		leftSec,
 		loggedHours,
+		keptHours,
+		lostHours,
 		paceRatio,
 		adjustedLeftSec: paceRatio ? leftSec * paceRatio : null,
 		pace,

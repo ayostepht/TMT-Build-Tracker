@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
@@ -110,11 +110,35 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 				hex: f.hex,
 				tpu: t?.tpu ?? materialFamily(f.material) === 'tpu',
 				spools: f.spools,
+				spoolAdds: (f.spoolAdds ?? []).map((a) => ({
+					id: a.id,
+					kg: a.kg,
+					at: a.at,
+					userId: a.userId,
+					userName: null as string | null,
+					...(a.note ? { note: a.note } : {})
+				})),
 				recommendedSpools: t?.recommendedSpools ?? 1,
 				spoolmanSpoolId: f.spoolmanSpoolId,
 				kit: !!t
 			};
 		});
+	// Who added each spool.
+	const adderIds = [
+		...new Set(filaments.flatMap((f) => f.spoolAdds.map((a) => a.userId)).filter((x) => !!x))
+	] as string[];
+	if (adderIds.length) {
+		const names = new Map(
+			db
+				.select({ id: user.id, name: user.name })
+				.from(user)
+				.where(inArray(user.id, adderIds))
+				.all()
+				.map((u) => [u.id, u.name])
+		);
+		for (const f of filaments)
+			for (const a of f.spoolAdds) a.userName = (a.userId && names.get(a.userId)) || null;
+	}
 	// keep template role order
 	const order = [...tRoles.keys()];
 	// Colors added in the Design tab come after the template's own slots.

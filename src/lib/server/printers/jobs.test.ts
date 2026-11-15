@@ -842,7 +842,7 @@ describe('cancelled or failed prints', () => {
 			result: 'Success',
 			grams: 140
 		});
-		const failed = addRun(db, buildId, 'owner', {
+		const { runId: failed } = addRun(db, buildId, 'owner', {
 			plateNumber: 13,
 			partSlug: 'rims-1-4',
 			date: '2026-11-04',

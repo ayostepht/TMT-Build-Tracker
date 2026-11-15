@@ -188,10 +188,10 @@ describe('describeActivity', () => {
 	it('filaments use labels from the view', () => {
 		const f = view.filaments[0];
 		expect(say('filament.spools', { role: f.key, spools: 5 })).toBe(
-			`Steph set ${filamentLabel(f)} spools to 5`
+			`Steph set ${filamentLabel(f)} starting spools to 5 kg`
 		);
 		expect(say('filament.spools', { role: f.key, spools: 4.5 })).toBe(
-			`Steph set ${filamentLabel(f)} spools to 4.5`
+			`Steph set ${filamentLabel(f)} starting spools to 4.5 kg`
 		);
 		expect(say('filament.update', { role: f.key, hex: '#112233' })).toContain('#112233');
 	});
@@ -393,5 +393,55 @@ describe('design.update palette, lock and removal sentences', () => {
 
 	it('strips control characters from names', () => {
 		expect(d({ locked: ['A\u0001B'] })).toBe(`${who} locked the part color of AB`);
+	});
+});
+
+describe('Partial with per-part results and spool adds', () => {
+	const f = view.filaments[0];
+	it('describes a split run.add with both halves', () => {
+		const t = say('run.add', {
+			plateNumber: 3,
+			split: true,
+			result: 'Partial',
+			kept: [part.slug],
+			lost: [part2.slug],
+			keptGrams: 162.4,
+			lostGrams: 40
+		});
+		expect(t).toBe(
+			`Steph logged a partial print of plate 3: ${part.name} printed (162 g), ${part2.name} flagged for reprint (40 g lost)`
+		);
+		const segs = describeActivitySegments(
+			act('run.add', { plateNumber: 3, split: true, kept: [part.slug], lost: [part2.slug] }),
+			view
+		);
+		expect(segs.filter((x) => x.part).map((x) => x.part)).toEqual([part.slug, part2.slug]);
+		expect(segs.find((x) => x.plate === 3)).toBeTruthy();
+	});
+	it('describes the undo of a split', () => {
+		expect(
+			say('run.undo', { plateNumber: 3, split: true, result: 'Partial', runIds: ['a', 'b'] })
+		).toBe('Steph undid a partial print of plate 3 (both of its logs)');
+		expect(say('run.undo', { plateNumber: 3, result: 'Success' })).toBe(
+			'Steph undid a successful print of plate 3'
+		);
+	});
+	it('describes spool adds and removals', () => {
+		expect(say('filament.stock.add', { role: f.key, kg: 1, note: 'restock' })).toBe(
+			`Steph added 1 kg of ${filamentLabel(f)} (restock)`
+		);
+		expect(say('filament.stock.add', { role: f.key, kg: 0.5 })).toBe(
+			`Steph added 0.5 kg of ${filamentLabel(f)}`
+		);
+		expect(say('filament.stock.remove', { role: f.key, kg: 2 })).toBe(
+			`Steph removed an added spool of ${filamentLabel(f)} (2 kg)`
+		);
+		// a note cannot forge a link marker
+		const forged = say('filament.stock.add', {
+			role: f.key,
+			kg: 1,
+			note: '\u0001part:x\u0002y\u0003'
+		});
+		expect([...forged].some((ch) => ch.charCodeAt(0) <= 3)).toBe(false);
 	});
 });

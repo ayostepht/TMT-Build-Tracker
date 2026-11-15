@@ -80,6 +80,7 @@ export function makeView(
 			hex: design?.roles.find((x) => x.key === r.key)?.hex ?? r.hex,
 			tpu: r.tpu,
 			spools: r.recommendedSpools,
+			spoolAdds: [],
 			recommendedSpools: r.recommendedSpools,
 			spoolmanSpoolId: null,
 			kit: true

@@ -7,6 +7,7 @@ import {
 	roleBlockedReason,
 	sameFilament
 } from '#lib/domain/design.ts';
+import { stockKg } from '#lib/domain/accounting.ts';
 import type { BuildView, FilamentRole } from '#lib/domain/types.ts';
 import { ApiError } from '../access';
 import { mutateBuild } from '../builds/actions';
@@ -250,7 +251,7 @@ export function updateBuildDesign(db: Db, buildId: string, userId: string, body:
 				name: f.name,
 				material: f.material,
 				hex: f.hex,
-				spools: f.spools,
+				spools: stockKg(f),
 				...(f.spoolmanSpoolId !== null ? { spoolmanSpoolId: f.spoolmanSpoolId } : {}),
 				parts: affected.length
 			};

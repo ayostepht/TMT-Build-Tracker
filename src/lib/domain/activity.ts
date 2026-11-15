@@ -173,7 +173,11 @@ function describeMarked(a: ActivityItem, view: Names): string {
 						: p.partSlug
 							? part(p.partSlug)
 							: 'a part';
-			if (a.kind === 'run.undo') return `${who} undid a ${adj} print of ${target}`;
+			const split = p.split === true;
+			if (a.kind === 'run.undo')
+				return split
+					? `${who} undid a partial print of ${target} (both of its logs)`
+					: `${who} undid a ${adj} print of ${target}`;
 			if (a.kind === 'run.update') {
 				const bits: string[] = [];
 				if ('result' in p) bits.push(`the result to ${(str(p.result) ?? 'unknown').toLowerCase()}`);
@@ -187,6 +191,15 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			}
 			if (a.kind === 'run.delete')
 				return `${who} deleted a ${adj} print of ${target} from the log${recomputedText(p.recomputed, part)}`;
+			if (split) {
+				// A Partial with per-part results: one sentence for the printed and the failed half.
+				const ok = Array.isArray(p.kept) ? p.kept : [];
+				const lost = Array.isArray(p.lost) ? p.lost : [];
+				const kg = num(p.keptGrams);
+				const lg = num(p.lostGrams);
+				const on = str(p.printer);
+				return `${who} logged a partial print of ${target}${on ? ` on ${on}` : ''}: ${parts(ok)} printed${kg !== null ? ` (${fmt(kg)} g)` : ''}, ${parts(lost)} flagged for reprint${lg !== null ? ` (${fmt(lg)} g lost)` : ''}`;
+			}
 			let grams = num(p.grams);
 			if (grams === null) grams = view.runs.find((r) => r.id === p.runId)?.grams ?? null;
 			const on = str(p.printer);
@@ -268,7 +281,16 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			const s = num(p.spools);
 			return s === null
 				? `${who} updated spools for ${fil(p.role)}`
-				: `${who} set ${fil(p.role)} spools to ${fmtSpools(s)}`;
+				: `${who} set ${fil(p.role)} starting spools to ${fmtSpools(s)} kg`;
+		}
+		case 'filament.stock.add': {
+			const kg = num(p.kg);
+			const note = str(p.note);
+			return `${who} added ${kg !== null ? `${fmtSpools(kg)} kg` : 'a spool'} of ${fil(p.role)}${note ? ` (${note})` : ''}`;
+		}
+		case 'filament.stock.remove': {
+			const kg = num(p.kg);
+			return `${who} removed an added spool of ${fil(p.role)}${kg !== null ? ` (${fmtSpools(kg)} kg)` : ''}`;
 		}
 		case 'filament.update': {
 			const bits: string[] = [];

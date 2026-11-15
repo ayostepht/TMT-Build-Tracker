@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { estPerRun, filamentStats, plateFileRoleGrams, roleShares, units } from './accounting';
+import {
+	estPerRun,
+	filamentStats,
+	partWeights,
+	plateFileRoleGrams,
+	roleShares,
+	stockKg,
+	timeStats,
+	units
+} from './accounting';
 import { splitGramsByRole } from './spool-split';
 import { makeView, run } from './fixtures';
 import type { BuildView } from './types';
@@ -164,5 +173,117 @@ describe('the plate parts decide the roles of a sliced file grams', () => {
 		const split = splitGramsByRole(none, { plateNumber: N, grams: 90, result: 'Success' } as never);
 		expect(Object.keys(split)).toEqual(['accent']);
 		expect(split.accent).toBe(90);
+	});
+});
+
+describe('kept and lost, stock and what is left after a Partial', () => {
+	const sum = (v: BuildView, k: 'keptG' | 'lostG' | 'used' | 'need') =>
+		filamentStats(v).reduce((t, f) => t + f[k], 0);
+	const base = makeView();
+	const N = multiPlate(base);
+	const slugs = base.plates.find((p) => p.number === N)!.parts;
+	const weigh = (v: BuildView, g: number[]): BuildView => ({
+		...v,
+		state: Object.fromEntries(
+			Object.entries(v.state).map(([k, st]) => {
+				const i = slugs.indexOf(k);
+				return [k, i >= 0 ? { ...st, manualGrams: g[i] ?? 10 } : st];
+			})
+		)
+	});
+	const printed = (v: BuildView, who: string[]): BuildView => ({
+		...v,
+		state: {
+			...v.state,
+			...Object.fromEntries(
+				who.map((k) => [k, { ...v.state[k], status: 'Printed' as const, printedOn: '2026-03-01' }])
+			)
+		}
+	});
+
+	it('counts Success as kept, Failed and older Partial rows as lost; used is their sum', () => {
+		const v = {
+			...base,
+			runs: [
+				run({ plateNumber: N, result: 'Success', grams: 100 }),
+				run({ plateNumber: N, result: 'Failed', grams: 30 }),
+				run({ plateNumber: N, result: 'Partial', grams: 20 })
+			]
+		};
+		expect(sum(v, 'keptG')).toBeCloseTo(100);
+		expect(sum(v, 'lostG')).toBeCloseTo(50);
+		expect(sum(v, 'used')).toBeCloseTo(150);
+	});
+
+	it('keeps the estimate of a finished plate that was logged without grams as kept', () => {
+		const v = printed({ ...base, runs: [run({ plateNumber: N, result: 'Success' })] }, slugs);
+		const est = estPerRun(v, unit(v, N));
+		expect(sum(v, 'keptG')).toBeCloseTo(est);
+		expect(sum(v, 'lostG')).toBe(0);
+	});
+
+	it('puts the two halves of a Partial on their own parts roles', () => {
+		const v0 = withRoles(base, N, ['primary', 'tire']);
+		const v = {
+			...weigh(v0, [100, 100]),
+			runs: [
+				run({ plateNumber: N, partSlugs: [slugs[0]], result: 'Success', grams: 80 }),
+				run({ plateNumber: N, partSlugs: slugs.slice(1), result: 'Failed', grams: 20 })
+			]
+		};
+		const roleOf = (s: string) => v.parts.find((p) => p.slug === s)!.role;
+		const [r0, r1] = [roleOf(slugs[0]), roleOf(slugs[1])];
+		expect(r0).not.toBe(r1);
+		expect(stat(v, r0).keptG).toBeCloseTo(80);
+		expect(stat(v, r0).lostG).toBe(0);
+		expect(stat(v, r1).lostG).toBeCloseTo(20);
+		expect(stat(v, r1).keptG).toBe(0);
+	});
+
+	it('stock is the starting spools plus every add; haveGrams, spare and short follow it', () => {
+		const f0 = base.filaments[0];
+		expect(stockKg({ spools: 2, spoolAdds: [] })).toBe(2);
+		expect(stockKg({ spools: 2 })).toBe(2);
+		const adds = [
+			{ id: 'a', kg: 1.5, at: 1, userId: null, userName: null },
+			{ id: 'b', kg: 0.25, at: 2, userId: null, userName: null }
+		];
+		expect(stockKg({ spools: 2, spoolAdds: adds })).toBe(3.75);
+		const v = {
+			...base,
+			filaments: base.filaments.map((f) =>
+				f.key === f0.key ? { ...f, spools: 0, spoolAdds: adds } : f
+			)
+		};
+		const st = stat(v, f0.key);
+		expect([st.haveGrams, st.startKg, st.addedKg]).toEqual([1750, 0, 1.75]);
+		expect(st.short).toBe(st.need > 1750);
+		const none = { ...v, filaments: v.filaments.map((f) => ({ ...f, spoolAdds: [] })) };
+		expect(stat(none, f0.key).haveGrams).toBe(0);
+	});
+
+	it('after a Partial only the unprinted parts are still to print', () => {
+		const v = weigh(base, [100, 100]);
+		const before = sum(v, 'need');
+		const after = sum(printed(v, [slugs[0]]), 'need');
+		const total = slugs.reduce((t, s) => t + partWeights(v, [s])[s], 0);
+		const share = partWeights(v, slugs)[slugs[0]] / total;
+		expect(before - after).toBeCloseTo(estPerRun(v, unit(v, N)) * share, 5);
+		expect(sum(printed(v, slugs), 'need')).toBeLessThan(after);
+		// untouched and fully printed plates are as before
+		expect(sum(printed(v, []), 'need')).toBeCloseTo(before);
+	});
+
+	it('splits logged hours into kept and lost', () => {
+		const v = {
+			...base,
+			runs: [
+				run({ plateNumber: N, result: 'Success', hours: 5 }),
+				run({ plateNumber: N, result: 'Failed', hours: 2 }),
+				run({ plateNumber: N, result: 'Partial', hours: 1 })
+			]
+		};
+		const t = timeStats(v);
+		expect([t.keptHours, t.lostHours, t.loggedHours]).toEqual([5, 3, 8]);
 	});
 });

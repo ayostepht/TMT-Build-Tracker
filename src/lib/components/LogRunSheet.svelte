@@ -14,7 +14,10 @@
 		hoursFromSeconds,
 		parseDur,
 		partGrams,
+		partialPrefill,
+		partialTicksOk,
 		plateGrams,
+		progressGrams,
 		recomputeParts,
 		runInfo,
 		runTargets,
@@ -26,9 +29,10 @@
 		weakestGramsSource
 	} from '#lib/domain/index.ts';
 	import { parseGrams } from '#lib/domain/logrun.ts';
-	import { deleteRun, logRun, undoRun, updateRun } from '#lib/client/api.ts';
+	import { deleteRun, logRun, undoRun, updateRun, type PartialSplitBody } from '#lib/client/api.ts';
 	import { focusIn } from '#lib/client/focus.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
+	import PartialParts from './PartialParts.svelte';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { toasts } from './toast.svelte.ts';
 
@@ -78,6 +82,15 @@
 	let durEdited = $state(false);
 	let grams = $state('');
 	let gramsEdited = $state(false);
+	/** Partial: which parts printed OK, and the grams of each half. */
+	let ticked = $state<string[]>([]);
+	let keptG = $state('');
+	let keptEdited = $state(false);
+	let lostG = $state('');
+	let lostEdited = $state(false);
+	/** "How far did it get?" (%), typed when no printer reported progress. */
+	let pct = $state('');
+	let pctEdited = $state(false);
 	let note = $state('');
 	let picked = $state('');
 	let busy = $state(false);
@@ -118,6 +131,29 @@
 	const pickable = $derived(!!plate?.perPartRuns && slugs.length > 1);
 	const partOf = (slug: string) => ctx.view.parts.find((p) => p.slug === slug);
 	const pickedSlug = $derived(plate?.perPartRuns ? picked || slugs[0] : null);
+	// Partial = "some parts of the plate printed OK": offered where those parts can be told apart (a
+	// single-run plate of two or more parts), and when editing an older Partial row.
+	const splittable = $derived(
+		!editRun && !!plate && !plate.perPartRuns && slugs.length >= 2 && plate.runs <= 1
+	);
+	const resultOptions = $derived(
+		RUN_RESULTS.filter((r) => r !== 'Partial' || splittable || editRun?.result === 'Partial')
+	);
+	const splitMode = $derived(result === 'Partial' && splittable);
+	const ticksOk = $derived(partialTicksOk(slugs, ticked));
+	/** The linked or most recent printer job of this plate that is not logged yet, with its progress. */
+	const progressJob = $derived.by(() => {
+		const jobs = pstore.jobs.filter(
+			(j) =>
+				j.buildId === ctx.id &&
+				j.runId == null &&
+				j.progress != null &&
+				(plateNumber != null
+					? j.plateNumber === plateNumber
+					: (j.partSlugs ?? []).some((s) => slugs.includes(s)))
+		);
+		return jobs.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))[0] ?? null;
+	});
 
 	const finDate = $derived.by(() => {
 		const d = fin ? new Date(fin) : new Date();
@@ -177,13 +213,55 @@
 		);
 		return info ? `Print ${info.run} of ${info.of}. ` : '';
 	});
-	// A failed print did not use the plate's grams: leave it empty (counts as 0 g) unless typed.
+	// How far the print got (0 to 100): the printer's progress, else what the maker types (empty for
+	// Failed, 100 for Partial).
+	const jobProgress = $derived(progressJob?.progress ?? null);
+	const pctShown = $derived(pctEdited ? pct : result === 'Partial' ? '100' : '');
+	const pctNum = $derived.by(() => {
+		const t = pctShown.trim().replace(',', '.');
+		if (!/^(\d+\.?\d*|\.\d+)$/.test(t)) return null;
+		return Math.min(100, Number(t));
+	});
+	const progressNow = $derived(jobProgress ?? pctNum);
+	const showPct = $derived(
+		!editRun &&
+			!!plate &&
+			slicerDefault != null &&
+			jobProgress == null &&
+			(result === 'Failed' || splitMode)
+	);
+	// A failed print did not use all of the plate's grams: prefill the share that went by (printer
+	// progress or the typed %), else leave it empty (counts as 0 g) unless typed.
+	const failedPrefill = $derived(
+		result === 'Failed' && !editRun ? progressGrams(slicerDefault, progressNow) : null
+	);
 	const gramsShown = $derived(
 		gramsEdited
 			? grams
-			: slicerDefault != null && result !== 'Failed' && !editRun
-				? String(slicerDefault)
-				: ''
+			: failedPrefill != null
+				? String(failedPrefill)
+				: slicerDefault != null && result !== 'Failed' && !editRun
+					? String(slicerDefault)
+					: ''
+	);
+	const splitPre = $derived(
+		splitMode ? partialPrefill(ctx.view, slugs, ticked, slicerDefault, progressNow) : null
+	);
+	const keptShown = $derived(
+		keptEdited ? keptG : splitPre?.keptGrams != null ? String(splitPre.keptGrams) : ''
+	);
+	const lostShown = $derived(
+		lostEdited ? lostG : splitPre?.lostGrams != null ? String(splitPre.lostGrams) : ''
+	);
+	const keptParsed = $derived(parseGrams(keptShown));
+	const lostParsed = $derived(parseGrams(lostShown));
+	const keptInvalid = $derived(keptParsed !== null && Number.isNaN(keptParsed));
+	const lostInvalid = $derived(lostParsed !== null && Number.isNaN(lostParsed));
+	const fromProgress = $derived(
+		(failedPrefill != null && !gramsEdited) ||
+			(splitPre != null &&
+				(!keptEdited || !lostEdited) &&
+				(splitPre.keptGrams ?? splitPre.lostGrams) != null)
 	);
 
 	const durSeconds = $derived(dur.trim() === '' ? null : parseDur(dur));
@@ -201,7 +279,7 @@
 			partSlugs: subset,
 			date: editRun ? editDate : toLocalInput(finDate).slice(0, 10) || today(),
 			result: res,
-			grams: gramsParsed,
+			grams: splitMode ? null : gramsParsed,
 			hours: hoursFromSeconds(durSeconds),
 			printer: printer || null,
 			note: note.trim()
@@ -254,9 +332,12 @@
 			? editChanges.length
 				? `Saving: ${sentence(editChanges)}.`
 				: 'Saving changes the log only; part statuses stay as they are.'
-			: runLine + runOutcomeSummary(ctx.view, buildInput(result))
+			: runLine +
+					(splitMode && !ticksOk
+						? 'Tick the parts that printed OK, or choose Success or Failed.'
+						: runOutcomeSummary(ctx.view, buildInput(result), splitMode ? ticked : null))
 	);
-	const canSave = $derived(!!result && !durInvalid && !busy);
+	const canSave = $derived(!!result && !durInvalid && !busy && (!splitMode || ticksOk));
 
 	function recalc() {
 		if (!durEdited) dur = durText(startedAt ? elapsedSeconds(startedAt, finDate) : planned);
@@ -274,6 +355,13 @@
 		note = '';
 		grams = '';
 		gramsEdited = false;
+		ticked = [];
+		keptG = '';
+		keptEdited = false;
+		lostG = '';
+		lostEdited = false;
+		pct = '';
+		pctEdited = false;
 		durEdited = false;
 		confirmDelete = !!editRun && deleteFirst;
 		keepStatuses = false;
@@ -362,8 +450,8 @@
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
 		if (!canSave || !result) return;
-		if (gramsInvalid) {
-			document.getElementById(`${uid}-g`)?.focus();
+		if (splitMode ? keptInvalid || lostInvalid : gramsInvalid) {
+			document.getElementById(`${uid}-${splitMode ? (keptInvalid ? 'gk' : 'gl') : 'g'}`)?.focus();
 			return;
 		}
 		busy = true;
@@ -391,17 +479,29 @@
 			}
 			return;
 		}
-		const input = { ...buildInput(result), result } as PrintRunInput;
+		const input = {
+			...buildInput(result),
+			result,
+			...(splitMode
+				? {
+						split: {
+							keptSlugs: slugs.filter((s) => ticked.includes(s)),
+							keptGrams: keptParsed,
+							lostGrams: lostParsed
+						}
+					}
+				: {})
+		} as PrintRunInput & { split?: PartialSplitBody };
 		const before = snapshotParts(ctx.view, slugs);
 		try {
-			const runId = await logRun(ctx.id, input);
+			const { id: runId, ids } = await logRun(ctx.id, input);
 			await ctx.refresh();
 			const buildId = ctx.id;
 			open = false;
 			toasts.push(`Logged ${label()} · ${result}`, {
 				label: 'Undo',
 				run: async () => {
-					const ok = await ctx.act(() => undoRun(buildId, runId, before));
+					const ok = await ctx.act(() => undoRun(buildId, runId, before, ids));
 					if (ok) toasts.push('Undone');
 				}
 			});
@@ -434,16 +534,31 @@
 				<fieldset class="res">
 					<legend>Result</legend>
 					<div class="ds-seg ds-seg--fill lrs-seg" role="group" aria-label="Result">
-						{#each RUN_RESULTS as r (r)}
+						{#each resultOptions as r (r)}
 							<button
 								type="button"
 								data-v={r}
 								aria-pressed={result === r}
-								onclick={() => (result = r)}>{r}</button
+								onclick={() => {
+									// Each result starts its own "how far" (empty for Failed, 100 for Partial).
+									if (result !== r) pctEdited = false;
+									result = r;
+								}}>{r}</button
 							>
 						{/each}
 					</div>
 				</fieldset>
+
+				{#if splitMode}
+					<PartialParts
+						bind:ticked
+						parts={slugs.map((s) => ({
+							slug: s,
+							name: partOf(s)?.name ?? s,
+							label: filLabel(ctx.filament(partOf(s)?.role ?? ''), partOf(s)?.role)
+						}))}
+					/>
+				{/if}
 
 				{#if pickable}
 					<label class="f" for="{uid}-part"
@@ -502,35 +617,110 @@
 					{:else if planned && !durEdited}<small>{plannedLabel}; edit if different.</small>{/if}
 				</label>
 
-				<label class="f" for="{uid}-g"
-					>Filament used (g)
-					<input
-						id="{uid}-g"
-						type="text"
-						inputmode="decimal"
-						autocomplete="off"
-						placeholder={result === 'Failed'
-							? 'optional'
-							: gramsInfo.perRun > 0
-								? `${gramsInfo.source === 'bom' ? 'BOM ' : gramsInfo.unknown.length ? '≥ ' : ''}~${fmt(gramsInfo.perRun)}`
-								: 'g'}
-						aria-invalid={gramsInvalid}
-						aria-describedby={gramsInvalid ? `${uid}-gerr` : undefined}
-						value={gramsShown}
-						oninput={(e) => {
-							grams = e.currentTarget.value;
-							gramsEdited = true;
-						}}
-					/>
-					{#if gramsInvalid}<small class="err" id="{uid}-gerr" role="alert"
+				{#if showPct}
+					<label class="f" for="{uid}-pct"
+						>{result === 'Partial'
+							? 'How far did the failed parts get? (%)'
+							: 'How far did it get? (%)'}
+						<input
+							id="{uid}-pct"
+							data-testid="log-progress"
+							type="text"
+							inputmode="decimal"
+							autocomplete="off"
+							placeholder={result === 'Failed' ? 'e.g. 40' : '100'}
+							value={pctShown}
+							oninput={(e) => {
+								pct = e.currentTarget.value;
+								pctEdited = true;
+							}}
+						/>
+						<small>Used to estimate the grams; edit them below if you know better.</small>
+					</label>
+				{/if}
+
+				{#if splitMode}
+					<div class="pair">
+						<label class="f" for="{uid}-gk"
+							>Kept (g)
+							<input
+								id="{uid}-gk"
+								data-testid="log-grams-kept"
+								type="text"
+								inputmode="decimal"
+								autocomplete="off"
+								placeholder="g"
+								aria-invalid={keptInvalid}
+								value={keptShown}
+								oninput={(e) => {
+									keptG = e.currentTarget.value;
+									keptEdited = true;
+								}}
+							/>
+						</label>
+						<label class="f" for="{uid}-gl"
+							>Lost (g)
+							<input
+								id="{uid}-gl"
+								data-testid="log-grams-lost"
+								type="text"
+								inputmode="decimal"
+								autocomplete="off"
+								placeholder="g"
+								aria-invalid={lostInvalid}
+								value={lostShown}
+								oninput={(e) => {
+									lostG = e.currentTarget.value;
+									lostEdited = true;
+								}}
+							/>
+						</label>
+					</div>
+					{#if keptInvalid || lostInvalid}<small class="err" role="alert"
 							>Enter the grams as a number, 0 or more (for example 162.5).</small
 						>
-					{:else if result === 'Failed' && !gramsEdited}<small
-							>Optional: grams actually used. Left empty it counts as 0 g.</small
+					{:else if fromProgress}<small
+							>Kept is the ticked parts' full weight; Lost is the others' share at {fmt(
+								progressNow ?? 0
+							)}%. Edit if different.</small
 						>
-					{:else if slicerDefault != null && !gramsEdited && !editRun}<small>{gramsSource}</small
+					{:else}<small
+							>Kept: filament in the parts that printed OK. Lost: what the others used.</small
 						>{/if}
-				</label>
+				{:else}
+					<label class="f" for="{uid}-g"
+						>Filament used (g)
+						<input
+							id="{uid}-g"
+							type="text"
+							inputmode="decimal"
+							autocomplete="off"
+							placeholder={result === 'Failed'
+								? 'optional'
+								: gramsInfo.perRun > 0
+									? `${gramsInfo.source === 'bom' ? 'BOM ' : gramsInfo.unknown.length ? '≥ ' : ''}~${fmt(gramsInfo.perRun)}`
+									: 'g'}
+							aria-invalid={gramsInvalid}
+							aria-describedby={gramsInvalid ? `${uid}-gerr` : undefined}
+							value={gramsShown}
+							oninput={(e) => {
+								grams = e.currentTarget.value;
+								gramsEdited = true;
+							}}
+						/>
+						{#if gramsInvalid}<small class="err" id="{uid}-gerr" role="alert"
+								>Enter the grams as a number, 0 or more (for example 162.5).</small
+							>
+						{:else if result === 'Failed' && !gramsEdited && failedPrefill != null}<small
+								>Estimated from {fmt(progressNow ?? 0)}% progress; edit if different.</small
+							>
+						{:else if result === 'Failed' && !gramsEdited}<small
+								>Optional: grams actually used. Left empty it counts as 0 g.</small
+							>
+						{:else if slicerDefault != null && !gramsEdited && !editRun}<small>{gramsSource}</small
+							>{/if}
+					</label>
+				{/if}
 
 				{#if showPrinter}
 					<label class="f" for="{uid}-pr"
@@ -663,6 +853,11 @@
 	}
 	textarea {
 		resize: vertical;
+	}
+	.pair {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--sp-5);
 	}
 	.inline {
 		display: flex;
