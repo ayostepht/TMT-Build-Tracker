@@ -239,16 +239,20 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
-- **Grams and accounting** (#45 done 2026-11-15, #46 next): one grams source order
-  everywhere, "Add weight" for parts without one (13 kit parts have no BOM weight), plate
-  headers show grams, Overview shows "≥/≤" plus the parts without weight. Migration
-  `0001_grams_everywhere` (additive) needs the usual rehearsal on deploy. Open:
-  `BuildHeader` "kg used of ~X kg estimated" has no missing-weight hint [app-shell]; per-part
-  (twin) plates store no per-part file grams, so "overrides file" shows only on whole plates
-  [plates-3mf]. #46 (maintainer decisions 2026-11-15): kept vs lost grams and hours; Partial
-  logs pick which parts succeeded (kept + printed) vs failed (lost + reprint); Failed grams
-  prefilled from progress; spool adds with a dated history (`build_filaments.spool_adds`,
-  migration 0002); Spare next to To print. #47 (charts) after #46.
+- **Grams and accounting** (#45 and #46 done 2026-11-15): one grams source order
+  everywhere, "Add weight" for parts without one, plate headers show grams. #46: used grams
+  and hours split into kept vs lost (older Partial rows count as lost); Partial logs (manual
+  sheet and printer-job confirm) tick the parts that printed OK and save a Success run plus
+  a Failed run, undone together; Failed grams prefill from printer progress or a "%" field;
+  spools added over time with a dated history (`build_filaments.spool_adds`), stock =
+  starting + added; Spare sits after To print. Migrations `0001_grams_everywhere` and
+  `0002_spool_adds` (both additive) need the usual rehearsal on the next test-copy deploy.
+  Open: `BuildHeader` "kg used of ~X kg estimated" has no missing-weight hint [app-shell];
+  per-part (twin) plates store no per-part file grams [plates-3mf]; the shell phone
+  Overview test flaked once before a pre-hydration-tap hardening, watch it [e2e-playwright].
+- **Stats and charts** (#47, in progress on `feat/stats-charts`): hand-built SVG chart
+  components (`src/lib/components/charts/`, ~6.5 KB gzip, no dependency) are done; next a
+  per-build Stats tab and a workspace Stats page, opened as a PR for review (not merged).
 
 - **Design studio** [design-studio-ui]: #34 (2026-11-13): re-applying a palette resets
   unlocked parts to their kit slot; "Lock part color" keeps one part's exact colour (locked

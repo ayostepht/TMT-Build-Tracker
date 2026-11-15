@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
-	import { fmt, fmtSpools, type FilamentStat } from '#lib/domain/index.ts';
+	import { fmt, fmtSpools, stockKg, type FilamentStat } from '#lib/domain/index.ts';
 	import type { BuildView, FilamentRole } from '#lib/domain/types.ts';
 	import { setBuildDesign } from '#lib/client/api.ts';
 	import { removeImpact } from '#lib/domain/design.ts';
@@ -118,7 +118,7 @@
 						<span class="muted">{f.material} · {partCount(f)} parts · {fmt(grams)} g</span>
 					</button>
 					<div class="need" class:short={!draft && s?.short && grams > 0}>
-						Needs {fmtSpools(grams / 1000)} kg{#if !draft}, have {fmtSpools(f.spools)}{/if}
+						Needs {fmtSpools(grams / 1000)} kg{#if !draft}, have {fmtSpools(stockKg(f))} kg{/if}
 						{#if grams > 0 && !draft}
 							{#if spare < 0}<span class="flag">short</span>{:else}<span class="ok">ok</span>{/if}
 						{/if}

@@ -328,6 +328,9 @@ const buildId = () =>
 		.notNull()
 		.references(() => builds.id, { onDelete: 'cascade' });
 
+/** One "added a spool" entry on a build filament slot (kg, ms timestamp). */
+export type SpoolAdd = { id: string; kg: number; at: number; userId: string | null; note?: string };
+
 export const buildFilaments = sqliteTable(
 	'build_filaments',
 	{
@@ -337,6 +340,11 @@ export const buildFilaments = sqliteTable(
 		material: text('material').notNull(),
 		hex: text('hex').notNull(),
 		spools: real('spools').notNull().default(0),
+		/** Spools added after the start (kg each); total stock = spools + sum of these. */
+		spoolAdds: text('spool_adds', { mode: 'json' })
+			.$type<SpoolAdd[]>()
+			.notNull()
+			.default(sql`'[]'`),
 		spoolmanSpoolId: integer('spoolman_spool_id')
 	},
 	(t) => [primaryKey({ columns: [t.buildId, t.roleKey] })]

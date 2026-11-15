@@ -485,7 +485,7 @@ test.describe('footer and compact Overview (phone)', () => {
 		await expect(page).toHaveURL(/\/terms$/);
 	});
 
-	test('Overview: compact filament rows, spools field opens from the row and saves', async ({
+	test('Overview: compact filament rows, spool + opens from the row and saves', async ({
 		page
 	}) => {
 		const { buildId } = await ownerWithBuild(page, 'ovspool');
@@ -497,24 +497,27 @@ test.describe('footer and compact Overview (phone)', () => {
 		expect((await first.boundingBox())!.height, 'about two lines').toBeLessThanOrEqual(92);
 		const o = await overflow(page);
 		expect(o.scroll).toBeLessThanOrEqual(o.client);
-		const toggle = first.getByRole('button');
+		const toggle = first.locator('.ft-head');
 		await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-		await expect(first.locator('input[type="number"]')).toHaveCount(0);
-		await toggle.click();
-		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-		const field = first.locator('input[type="number"]');
-		await field.fill('7');
-		await field.blur();
-		await page.reload();
-		await page.waitForLoadState('networkidle');
-		await page.getByTestId('filament-tile').first().getByRole('button').click();
-		await expect(
-			page.getByTestId('filament-tile').first().locator('input[type="number"]')
-		).toHaveValue('7');
+		await expect(first.getByTestId('spool-add')).toHaveCount(0);
+		// A tap that lands before the page has hydrated is lost: retry until the row is open.
+		await expect(async () => {
+			if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+			await expect(toggle).toHaveAttribute('aria-expanded', 'true', { timeout: 1500 });
+		}).toPass();
+		const before = await first.getByTestId('spool-total').innerText();
+		await first.getByTestId('spool-add').click();
+		await expect(first.getByTestId('spool-form')).toBeVisible();
+		await first.getByTestId('spool-kg').fill('2');
+		await first.getByTestId('spool-save').click();
+		await expect(first.getByTestId('spool-add-row')).toHaveCount(1);
+		await expect(first.getByTestId('spool-total')).not.toHaveText(before);
+		const o2 = await overflow(page);
+		expect(o2.scroll).toBeLessThanOrEqual(o2.client);
 	});
 });
 
-test('Overview on desktop shows the spools field in every filament row', async ({ page }) => {
+test('Overview on desktop shows the spools total and + in every filament row', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const { buildId } = await ownerWithBuild(page, 'ovwide');
 	await page.goto(`/builds/${buildId}`);
@@ -522,8 +525,7 @@ test('Overview on desktop shows the spools field in every filament row', async (
 	const rows = page.getByTestId('filament-tile');
 	const n = await rows.count();
 	expect(n).toBeGreaterThanOrEqual(2);
-	for (let i = 0; i < n - 1; i++)
-		await expect(rows.nth(i).locator('input[type="number"]')).toBeVisible();
+	for (let i = 0; i < n - 1; i++) await expect(rows.nth(i).getByTestId('spool-add')).toBeVisible();
 	expect((await rows.first().boundingBox())!.height).toBeLessThanOrEqual(80);
 });
 

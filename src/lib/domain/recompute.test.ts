@@ -88,3 +88,39 @@ describe('recomputeParts', () => {
 		expect(out.map((p) => p.slug)).toEqual(['headrest-mount']);
 	});
 });
+
+describe('a Partial logged as two runs', () => {
+	const plate = makeView().plates.find(
+		(p) => !p.perPartRuns && p.runs === 1 && p.parts.length >= 2
+	)!;
+	const [a, ...rest] = plate.parts;
+	const ok = run({
+		plateNumber: plate.number,
+		partSlugs: [a],
+		result: 'Success',
+		date: '2026-03-01'
+	});
+	const bad = run({
+		plateNumber: plate.number,
+		partSlugs: rest,
+		result: 'Failed',
+		date: '2026-03-01'
+	});
+
+	it('prints the ticked parts and flags the rest for reprint', () => {
+		const v = logAll([ok, bad]);
+		expect(v.state[a].status).toBe('Printed');
+		for (const s of rest) expect(v.state[s].status).toBe('Reprint');
+	});
+	it('deleting the Failed half sends only its parts back to To print', () => {
+		const v = logAll([ok, bad]);
+		const out = recomputeParts(v, without(v, bad.id), rest);
+		expect(out.map((p) => [p.slug, p.status])).toEqual(rest.map((s) => [s, 'To print']));
+		expect(recomputeParts(v, without(v, bad.id), [a])).toEqual([]);
+	});
+	it('deleting the Success half sends the ticked parts back, the failed ones stay Reprint', () => {
+		const v = logAll([ok, bad]);
+		const out = recomputeParts(v, without(v, ok.id), [a, ...rest]);
+		expect(out.map((p) => [p.slug, p.status])).toEqual([[a, 'To print']]);
+	});
+});

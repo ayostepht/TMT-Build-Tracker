@@ -108,6 +108,28 @@ Sections match the subagents in `.claude/agents/`:
   inferred for older rows by `gramsSourceOf` (`server/builds/view.ts`). `updatePart`
   `manualGrams` (0-20000 g, 0/null clears, activity `part.grams`, drafts refused);
   request-supplied part slugs go through `hasPart` (own keys only).
+- **Kept vs lost** (#46, `domain/accounting.ts`): `unitUse`/`unitUseByRole` split used grams
+  into kept (Success runs, plus the estimate for done runs no Success log covers) and lost
+  (Failed runs and older Partial rows); `used = keptG + lostG`, and `TimeStats` has
+  `keptHours`/`lostHours`. `stockKg(f)` = `spools` (starting kg) + Σ `spoolAdds[].kg`;
+  `haveGrams` comes from it, as do `SlotPanel` and `RemoveColorDialog`. `partWeights` and
+  `weightShare` give the shared per-part weighting; `runRoleGrams` lives here
+  (`spool-split.ts` re-exports it). On a single-run, non-perPart plate with some parts
+  Printed, `unitLeft` and the time left count only the unprinted parts' share.
+- **Partial with per-part results** (#46): `logrun.ts` `splitPartial` turns one Partial into a
+  Success run (ticked parts) and a Failed run (the rest), both with `partSlugs`; hours and
+  `estSeconds` split by weight. `partialPrefill`: Kept = ticked parts' full share, Lost =
+  the rest × progress %. `runOutcome` in `server/builds/actions.ts` saves both in one
+  `mutateBuild` with one `run.add` row (`split: true`, `runIds`); `addRun` returns
+  `{runId, runIds}`; `undoRun` takes `runIds` (cap 10, this build only) and writes one
+  `run.undo`. Offered only for ≥2 targets, not perPartRuns, runs ≤ 1. `PartialParts.svelte`
+  is shared by `LogRunSheet` and `ConfirmPrintLog`. Run grams are capped at `MAX_RUN_GRAMS`
+  (100000).
+- **Spool adds** (#46): `build_filaments.spool_adds` JSON (`SpoolAdd` in `app.schema.ts`);
+  `addSpool`/`removeSpoolAdd` (POST `api/builds/[id]/filaments/[role]/stock`, DELETE
+  `.../stock/[addId]`) go through `mutateBuild` (kg 0.01-99, note ≤ 200 chars with control
+  characters collapsed, ≤ 100 adds per slot, drafts refused); activity
+  `filament.stock.add`/`.remove`; `view.ts` resolves the adder's name.
 - **Filament by role** (`domain/accounting.ts`): a sliced file's grams per role
   (`Plate.filamentGrams`) go through `plateFileRoleGrams(plate, partRoles)`, which keeps
   only roles that a part on the plate has (a file's slot → role map can disagree with the
@@ -281,6 +303,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   an ended, unlogged job: in `ExpectedConfirm` before linking, and after linking for every
   linked running job (`PrinterJobs`, Printers page), always derived from store jobs, never
   local state. `ConfirmPrintLog` exposes `#confirm-log-<jobId>` as its scroll target.
+- **Partial job confirm** (#46): `confirmJobRuns` (`printers/jobs.ts`) passes a validated
+  `split` to `addRun` and returns `{runId, runIds}` (`confirmJob` wraps it); the job's
+  `run_id` is the kept run, and the confirm route syncs Spoolman for every id.
+  `ConfirmPrintLog` offers Partial with `PartialParts` and Kept/Lost grams prefilled from the
+  job's progress (100 for a finished job). Nothing is sent to the printer.
 - **Client store** (`client/printer-store.svelte.ts`): sequence-guarded `load()`, refetch on
   SSE reopen / visibilitychange / online / focus, 30 s poll, "Printer status unavailable ·
   Retry".
@@ -463,6 +490,7 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - Migrations: `0001_grams_everywhere` (2026-11-15, #45: `build_parts.manual_grams`,
   `build_plates.slicer_grams_source`) follows the baseline; `baseline-upgrade.test.ts` reads
   the journal length and ignores columns listed in `POST_BASELINE_COLUMNS`.
+  `0002_spool_adds` (2026-11-15, #46: `build_filaments.spool_adds`, default `'[]'`).
 - Baseline: `drizzle/0000_red_apocalypse.sql` (the 14 earlier migrations
   were squashed on 2026-11-11). `runMigrations` (`db/index.ts`) first calls
   `upgradeLegacyChain` (`db/baseline-upgrade.ts`): a database at the complete old chain
@@ -545,8 +573,11 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - r47: the signed-in layout has a footer (`app-footer`: Help, About, Privacy, Terms) and
   About in the account menu. The workspace page lists Builds first, then `LandingBoard`
   (Now printing, Next up). `FilamentTiles.svelte` renders the Overview filaments as one
-  card of compact rows; `matchMedia(min-width: 900px)` switches between phone rows (spools
-  field behind an `aria-expanded` row button) and a desktop grid (field inline).
+  card of compact rows; `matchMedia(min-width: 900px)` switches between phone rows (details
+  behind an `aria-expanded` row button) and a desktop grid. Columns: Filament · Used (with
+  lost) · To print · Spare · bar (kept, hatched lost, to print) · Spools (total toggles the
+  history; + adds a spool). Starting spools are edited only in Settings ("Starting spools
+  (kg)"); print time reads "X h logged (Y good · Z failed)".
 - Start buttons: with an enabled printer `StartOnPrinter` ("Printing on <printer>",
   primary, helper line) comes first and `PlateControl`'s plain start reads "Not on a
   connected printer" (its `aria-label` stays "Start printing plate N"). Nothing is sent
