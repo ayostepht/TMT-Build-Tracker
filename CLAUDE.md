@@ -134,6 +134,9 @@ maintainer it's done.
 **End of session (and before a context reset):** fold the agents' STATUS notes into
 `docs/dev/STATUS.md` (rewrite in place, delete what's done), add a `docs/dev/CHANGELOG.md` entry
 per deploy, update the touched `docs/architecture.md` sections, commit them with the work.
+Before committing docs you edited, run `npx prettier --write <the files>`: CI checks their
+formatting (a code span split across two lines is a common failure). This is the one tool
+the orchestrator runs itself (maintainer, 2026-11-15).
 
 **Ask the maintainer** before: merging someone else's pull request, tagging a release, deploying,
 deleting anything, schema changes on the test copy, revisiting a STATUS decision, changing
