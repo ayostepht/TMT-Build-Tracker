@@ -84,6 +84,10 @@
 	--bed-text: #655f55;
 	--scrim: rgb(0 0 0 / 0.5);
 	--scrim-strong: rgb(10 12 24 / 0.72);
+	--chart-good: #1a6fb5;
+	--chart-bad: #c0334a;
+	--chart-todo: #8790ab;
+	--chart-grid: #d3d7e2;
 	--f-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
 	--f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--f-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
@@ -115,6 +119,10 @@
 		--bed-text: #e4e7ec;
 		--scrim: rgb(0 0 0 / 0.5);
 		--scrim-strong: rgb(10 12 24 / 0.72);
+		--chart-good: #55aef0;
+		--chart-bad: #ff7d8f;
+		--chart-todo: #6f7898;
+		--chart-grid: #333a56;
 		color-scheme: dark;
 	}
 }
@@ -143,6 +151,10 @@
 	--bed-text: #e4e7ec;
 	--scrim: rgb(0 0 0 / 0.5);
 	--scrim-strong: rgb(10 12 24 / 0.72);
+	--chart-good: #55aef0;
+	--chart-bad: #ff7d8f;
+	--chart-todo: #6f7898;
+	--chart-grid: #333a56;
 	color-scheme: dark;
 }
 :root {

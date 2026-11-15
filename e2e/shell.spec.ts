@@ -29,7 +29,7 @@ const overflow = (page: Page) =>
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-	test('top bar is one row, the build header one line, seven tabs sit in a bottom bar', async ({
+	test('top bar is one row, the build header one line, eight tabs sit in a bottom bar', async ({
 		page
 	}) => {
 		const { buildId } = await ownerWithBuild(page, 'shell');
@@ -59,7 +59,7 @@ test.describe('phone', () => {
 		console.log('PRINT-METRICS', JSON.stringify(m));
 		expect(m.topbar, 'one-row top bar').toBeLessThanOrEqual(56);
 		expect(m.header, 'one-line build header').toBeLessThanOrEqual(56);
-		expect(m.links).toHaveLength(7);
+		expect(m.links).toHaveLength(8);
 		for (const l of m.links) {
 			expect(l.l).toBeGreaterThanOrEqual(0);
 			expect(l.r).toBeLessThanOrEqual(390.5);
@@ -112,7 +112,7 @@ test.describe('phone', () => {
 						return { l: b.left, r: b.right, h: b.height };
 					})
 				);
-				expect(links).toHaveLength(7);
+				expect(links).toHaveLength(8);
 				for (const l of links) {
 					expect(l.l).toBeGreaterThanOrEqual(0);
 					expect(l.r).toBeLessThanOrEqual(width + 0.5);
@@ -529,7 +529,7 @@ test('Overview on desktop shows the spools total and + in every filament row', a
 	expect((await rows.first().boundingBox())!.height).toBeLessThanOrEqual(80);
 });
 
-test('Help is a top-level item after Printers on phones, 44px tall, current on /help', async ({
+test('Help is a top-level item after Stats on phones, 44px tall, current on /help', async ({
 	page
 }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -537,7 +537,8 @@ test('Help is a top-level item after Printers on phones, 44px tall, current on /
 	await openNav(page);
 	const labels = await page.locator('nav[aria-label="Main"] > a').allInnerTexts();
 	expect(labels.at(-1)).toBe('Help');
-	expect(labels.slice(-2, -1)[0]).toMatch(/^Printers/);
+	expect(labels.slice(-2, -1)[0]).toBe('Stats');
+	expect(labels.slice(-3, -2)[0]).toMatch(/^Printers/);
 	for (const link of await page.locator('nav[aria-label="Main"] .navlink').all())
 		expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 	await expect(page.locator('#menu-account a', { hasText: /^(Help|About)$/ })).toHaveCount(0);

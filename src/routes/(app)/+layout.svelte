@@ -92,6 +92,9 @@
 			? resolve('/(app)/teams/[slug]/members', { slug: workspace.slug })
 			: null
 	);
+	const statsHref = $derived(
+		workspace ? resolve('/(app)/teams/[slug]/stats', { slug: workspace.slug }) : null
+	);
 	const integrationsHref = $derived(
 		workspace ? resolve('/(app)/teams/[slug]/integrations', { slug: workspace.slug }) : null
 	);
@@ -285,6 +288,14 @@
 									>{printingCount}</span
 								><span class="live-txt">&nbsp;printing</span></span
 							>{/if}</a
+					>
+				{/if}
+				{#if statsHref}
+					<a
+						class="navlink"
+						href={statsHref}
+						data-testid="nav-stats"
+						aria-current={page.url.pathname === statsHref ? 'page' : undefined}>Stats</a
 					>
 				{/if}
 				<a
@@ -690,7 +701,7 @@
 			min-width: 0;
 			max-width: 160px;
 		}
-		@container topbar (max-width: 1120px) {
+		@container topbar (max-width: 1180px) {
 			.live-txt {
 				position: absolute;
 				width: 1px;
@@ -700,7 +711,7 @@
 				white-space: nowrap;
 			}
 		}
-		@container topbar (max-width: 1040px) {
+		@container topbar (max-width: 1100px) {
 			.ws-long {
 				position: absolute;
 				width: 1px;
@@ -713,7 +724,7 @@
 				display: inline;
 			}
 		}
-		@container topbar (max-width: 990px) {
+		@container topbar (max-width: 1050px) {
 			.brand-text {
 				position: absolute;
 				width: 1px;
