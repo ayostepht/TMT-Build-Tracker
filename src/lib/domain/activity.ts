@@ -129,6 +129,12 @@ function describeMarked(a: ActivityItem, view: Names): string {
 				? `${who} set ${part(p.slug)} to ${to}`
 				: `${who} changed the status of ${part(p.slug)}`;
 		}
+		case 'part.grams': {
+			const g = num(p.manualGrams);
+			return g !== null
+				? `${who} set the weight of ${part(p.slug)} to ${fmt(g)} g`
+				: `${who} cleared the entered weight of ${part(p.slug)}`;
+		}
 		case 'part.update': {
 			const bits: string[] = [];
 			if (p.comps) bits.push('ticked off components');

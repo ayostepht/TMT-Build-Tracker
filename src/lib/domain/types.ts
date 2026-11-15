@@ -80,6 +80,8 @@ export interface PartState {
 	runEstSeconds: number | null; // slicer time for the current run, while Printing
 	comps: Record<string, boolean>; // component index → checked
 	assigneeUserId: string | null;
+	/** Grams the maker typed for the whole part, all copies (the top of the part's grams order). Null/absent = none entered. */
+	manualGrams?: number | null;
 	updatedAt: string; // ISO
 }
 
@@ -94,6 +96,13 @@ export interface Plate {
 	parts: string[]; // part slugs
 	slicerGrams: number | null; // per run, whole plate (when !perPartRuns)
 	slicerByPart: Record<string, number>; // per run, per part (when perPartRuns)
+	/**
+	 * Where `slicerGrams` / `slicerByPart` came from: typed by hand ('user'), a sliced file ('file'), a
+	 * printer job ('printer'). 'slice' (no slicer value): the plate's `filamentGrams` come from the
+	 * build's own slice (print template), not a file of this plate. Null/absent = no value or unknown.
+	 * Older rows without a stored source are inferred by `loadBuildView`.
+	 */
+	gramsSource?: 'user' | 'file' | 'printer' | 'slice' | null;
 	thumbnailPath: string | null; // served via GET /api/builds/[id]/plates/[number]/thumbnail when set
 	filamentGrams: Record<string, number>; // grams per run by filament role key, from a sliced 3MF; {} when unknown
 	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>' | 'arranged'
@@ -104,6 +113,22 @@ export interface Plate {
 	baseEstSource?: 'slicer' | 'learned' | 'profile' | 'estimate' | null;
 	/** The estimate includes a gram-based guess for a part that is on no MakeGood plate. */
 	estRough?: boolean;
+}
+
+/** Where a grams figure comes from. 'slice' = learned from the build's own slice (print template). */
+export type GramsSource = 'user' | 'file' | 'slice' | 'bom' | 'none';
+
+/** Result of `partGrams` / `plateGrams` (domain/accounting.ts). */
+export interface GramsInfo {
+	/** Grams for one print of the plate (or of the part's share of a plate run); 0 when unknown. */
+	perRun: number;
+	/** Grams for all runs / all copies; 0 when unknown. */
+	total: number;
+	source: GramsSource;
+	/** An estimate rather than a typed or sliced number: BOM based, or a total that misses parts. */
+	approx: boolean;
+	/** Slugs of parts with no weight at all (the total leaves them out). */
+	unknown: string[];
 }
 
 /**

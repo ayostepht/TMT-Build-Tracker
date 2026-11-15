@@ -356,6 +356,8 @@ export const buildParts = sqliteTable(
 			.notNull()
 			.default(sql`'{}'`),
 		assigneeUserId: text('assignee_user_id').references(() => user.id, { onDelete: 'set null' }),
+		/** Grams the maker typed for the whole part (all copies). Null = none entered. */
+		manualGrams: real('manual_grams'),
 		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
 			.notNull()
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -377,6 +379,8 @@ export const buildPlates = sqliteTable(
 			.notNull()
 			.default(sql`'[]'`),
 		slicerGrams: real('slicer_grams'),
+		/** Where slicerGrams / slicerByPart came from: 'user' (typed), 'file' (sliced 3MF), 'printer'. Null = older row; the reader infers it. */
+		slicerGramsSource: text('slicer_grams_source').$type<'user' | 'file' | 'printer'>(),
 		/** Time typed in by hand (seconds per run); overrides the file's and every estimated time. */
 		manualEstSeconds: integer('manual_est_seconds'),
 		/** Who set the manual time: 'user' (typed) or 'printer' (from a linked printer job; a typed one is never overwritten by it). */

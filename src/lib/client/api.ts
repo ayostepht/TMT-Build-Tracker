@@ -74,7 +74,12 @@ export const setPartStatus = (id: string, slug: string, status: PartStatus, prin
 export const updatePart = (
 	id: string,
 	slug: string,
-	patch: { comps?: Record<string, boolean>; assigneeUserId?: string | null }
+	patch: {
+		comps?: Record<string, boolean>;
+		assigneeUserId?: string | null;
+		/** Grams for the whole part, all copies (send on its own). null clears. */
+		manualGrams?: number | null;
+	}
 ) => call('PATCH', `${b(id)}/parts/${encodeURIComponent(slug)}`, patch);
 
 export const startPrinting = (id: string, slugs: string[]) =>

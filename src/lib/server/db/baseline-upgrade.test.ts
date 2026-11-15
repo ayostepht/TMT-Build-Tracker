@@ -81,10 +81,23 @@ function seedEveryTable(c: Database.Database) {
 	expect([...done].sort()).toEqual(names);
 }
 
+/** Columns added by migrations after the baseline: the old chain does not have them, so they are not compared. */
+const POST_BASELINE_COLUMNS = new Set([
+	'build_parts.manual_grams',
+	'build_plates.slicer_grams_source'
+]);
+/** Number of migrations in the committed journal (the baseline plus later ones). */
+const JOURNAL_LENGTH = (
+	JSON.parse(readFileSync('./drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] }
+).entries.length;
+
 function contentHashes(c: Database.Database) {
 	const out: Record<string, { n: number; hash: string }> = {};
 	for (const t of tablesOf(c)) {
-		const cols = (c.pragma(`table_info("${t}")`) as { name: string }[]).map((x) => x.name).sort();
+		const cols = (c.pragma(`table_info("${t}")`) as { name: string }[])
+			.map((x) => x.name)
+			.filter((x) => !POST_BASELINE_COLUMNS.has(`${t}.${x}`))
+			.sort();
 		const sel = cols.map((x) => `"${x}"`).join(',');
 		const rows = c.prepare(`SELECT ${sel} FROM "${t}" ORDER BY ${sel}`).all();
 		out[t] = {
@@ -147,7 +160,7 @@ describe('baseline migration and upgrade from the retired 14-migration chain', (
 		const db = openDb(':memory:');
 		runMigrations(db);
 		const c = sqliteOf(db);
-		expect(journal(c)).toHaveLength(1);
+		expect(journal(c)).toHaveLength(JOURNAL_LENGTH);
 		const fk = c.pragma('foreign_key_list("templates")') as { from: string; on_delete: string }[];
 		expect(fk.find((f) => f.from === 'owner_org_id')?.on_delete).toBe('CASCADE');
 		// Exactly the tables schema.ts declares.
@@ -185,7 +198,7 @@ describe('baseline migration and upgrade from the retired 14-migration chain', (
 			).map((r) => ({ ...r, sql: normalizeWs(r.sql) }));
 		expect(dump(c)).toEqual(dump(f));
 		expect(journal(c)).toEqual(journal(f));
-		expect(journal(c)).toHaveLength(1);
+		expect(journal(c)).toHaveLength(JOURNAL_LENGTH);
 		expect(c.pragma('foreign_key_check')).toEqual([]);
 		expect(c.pragma('integrity_check', { simple: true })).toBe('ok');
 		expect(c.pragma('foreign_keys', { simple: true })).toBe(1);

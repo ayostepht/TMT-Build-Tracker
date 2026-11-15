@@ -229,6 +229,9 @@ export function setPartStatus(
 	});
 }
 
+/** Upper bound for a typed part weight (all copies), in grams. */
+export const MAX_PART_GRAMS = 20000;
+
 export function updatePart(
 	db: Db,
 	buildId: string,
@@ -254,6 +257,25 @@ export function updatePart(
 			if (a !== null && (typeof a !== 'string' || !view.members.some((m) => m.userId === a)))
 				bad('assignee must be a chapter member');
 			patch.assigneeUserId = a as string | null;
+		}
+		if (body.manualGrams !== undefined) {
+			if (Object.keys(patch).length > 1) bad('Send the weight on its own');
+			const g = body.manualGrams;
+			if (
+				g !== null &&
+				(typeof g !== 'number' || !Number.isFinite(g) || g < 0 || g > MAX_PART_GRAMS)
+			)
+				bad(`manualGrams must be a number from 0 to ${MAX_PART_GRAMS}, or null`);
+			// 0 or null clears the entry (a part with no weight is "unknown", never 0 g).
+			const typed = g ? Math.round(g * 100) / 100 : null;
+			if (typed === null && !view.state[slug].manualGrams)
+				bad('No weight was entered for this part');
+			patch.manualGrams = typed;
+			return {
+				kind: 'part.grams',
+				payload: { slug, manualGrams: typed, ...(typed ? {} : { cleared: true }) },
+				patches: [patch]
+			};
 		}
 		if (Object.keys(patch).length === 1) bad('Nothing to update');
 		void tx;
@@ -574,11 +596,19 @@ export function updatePlate(
 			set.slicerByPart = m;
 		}
 		if (!Object.keys(set).length) bad('Nothing to update');
+		// Grams typed here are the maker's own entry; clearing them clears the source too.
+		if (set.slicerGrams !== undefined || set.slicerByPart !== undefined) {
+			const typed =
+				(set.slicerGrams ?? 0) > 0 || Object.values(set.slicerByPart ?? {}).some((v) => v > 0);
+			set.slicerGramsSource = typed ? 'user' : null;
+		}
 		tx.update(buildPlates)
 			.set(set)
 			.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.number, number)))
 			.run();
-		return { kind: 'plate.slicer', payload: { number, ...set } };
+		const shown: Record<string, unknown> = { ...set };
+		delete shown.slicerGramsSource;
+		return { kind: 'plate.slicer', payload: { number, ...shown } };
 	});
 }
 
