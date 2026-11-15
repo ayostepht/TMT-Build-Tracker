@@ -58,7 +58,7 @@ for (const [width, height] of [
 
 		test('landmarks, one h1, skip link, names, menus, dialog', async ({ page }) => {
 			test.setTimeout(150_000);
-			const { buildId } = await ownerWithBuild(page, 'a11y');
+			const { buildId, chapterUrl } = await ownerWithBuild(page, 'a11y');
 
 			// One <main> and one <h1> on every main route, with a distinct title.
 			const titles = new Map<string, string>();
@@ -70,6 +70,8 @@ for (const [width, height] of [
 				`/builds/${buildId}/files`,
 				`/builds/${buildId}/finish`,
 				`/builds/${buildId}/settings`,
+				`/builds/${buildId}/stats`,
+				`${new URL(chapterUrl).pathname.replace(/\/$/, '')}/stats`,
 				'/builds',
 				'/designs',
 				'/studio',
