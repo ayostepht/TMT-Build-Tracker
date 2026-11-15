@@ -31,6 +31,7 @@
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 	import AskDialog from '#lib/components/AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
+	import { withStartedConfirm } from '#lib/client/plate-guard.ts';
 
 	/** Setup wizard: plate pictures only, no print log or slicer grams. */
 	let { wizard = false }: { wizard?: boolean } = $props();
@@ -230,22 +231,24 @@
 		}
 	}
 
+	/** A live printer job blocks re-arranging: the sentence to show, no override. */
+	let refused = $state<string | null>(null);
+	let refusedEl = $state<HTMLElement>();
+	// The refusal can sit below the fold (or under the tab bar): bring it into the middle of the screen.
+	$effect(() => {
+		if (refused && refusedEl) refusedEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	});
 	async function rearrange() {
 		rearranging = true;
+		refused = null;
 		try {
-			try {
-				await arrangePlates(ctx.id);
-			} catch (e) {
-				if (e instanceof Error && /print log/.test(e.message)) {
-					if (
-						!(await asking.ask(`${e.message}\n\nRe-arrange and convert them?`, {
-							title: 'Re-arrange plates',
-							confirmLabel: 'Re-arrange and convert'
-						}))
-					)
-						return;
-					await arrangePlates(ctx.id, true);
-				} else throw e;
+			const r = await withStartedConfirm(asking, (c) => arrangePlates(ctx.id, c), {
+				title: 'Re-arrange plates',
+				confirmLabel: 'Re-arrange plates'
+			});
+			if (!r.done) {
+				refused = r.refused;
+				return;
 			}
 			notice = 'Plates re-arranged.';
 			await ctx.refresh();
@@ -453,7 +456,10 @@
 	{#if arr?.stale && ctx.canEdit && printer}
 		<div class="stale" role="status" data-testid="stale-banner">
 			<span data-testid="stale-text">
-				{#if arr.template}
+				{#if ctx.view.started.started}
+					Colors changed since these plates were arranged. Your plates were kept because this build
+					has started. Re-arrange when nothing is printing.
+				{:else if arr.template}
 					Colors changed: re-arrange for your new colors using your print template (times and
 					orientations from {arr.template.fileName ?? 'your sliced file'})?
 				{:else}
@@ -464,6 +470,9 @@
 				>Re-arrange plates</button
 			>
 		</div>
+	{/if}
+	{#if refused}
+		<p class="refused" role="alert" data-testid="plates-refused" bind:this={refusedEl}>{refused}</p>
 	{/if}
 	{#if planWarnings.length}
 		<details
@@ -895,6 +904,16 @@
 		color: var(--warn);
 		font-size: var(--fs-md);
 		font-weight: 600;
+	}
+	.refused {
+		margin: var(--sp-4) 0;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
+		background: var(--warn-soft);
+		color: var(--warn);
+		font-size: var(--fs-md);
+		font-weight: 600;
+		overflow-wrap: anywhere;
 	}
 	.warns {
 		margin: var(--sp-4) 0;

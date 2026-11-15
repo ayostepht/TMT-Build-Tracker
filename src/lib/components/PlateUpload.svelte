@@ -7,6 +7,7 @@
 		type UploadResult
 	} from '#lib/client/api.ts';
 	import { untrack } from 'svelte';
+	import { withStartedConfirm } from '#lib/client/plate-guard.ts';
 	import AskDialog from './AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { objectKey } from '#lib/domain/plates-match.ts';
@@ -173,27 +174,33 @@
 
 	async function apply() {
 		if (!up) return;
-		if (
-			attachedRuns > 0 &&
-			!(await asking.ask(
-				`${attachedRuns} print log${attachedRuns === 1 ? ' is' : 's are'} attached to the current plates. ` +
-					'They will be converted to part logs (part statuses stay as they are). Continue?',
-				{ title: 'Convert print logs', confirmLabel: 'Convert and continue' }
-			))
-		)
-			return;
+		const u = up;
 		phase = 'applying';
 		error = null;
 		try {
-			const r = await applyPlateUpload(view.build.id, up.uploadId, {
-				mapping,
-				filamentMap,
-				variantChoices: Object.fromEntries(variantChanges.filter(([g]) => accept[g])),
-				convertRuns: attachedRuns > 0,
-				mode: outcome,
-				arrange: outcome === 'template' && arrangeNow,
-				single
-			});
+			// A started build asks once (renumbering, plate logs converted, parts printing by hand); a live
+			// printer job refuses the change.
+			const res = await withStartedConfirm(
+				asking,
+				(confirm) =>
+					applyPlateUpload(view.build.id, u.uploadId, {
+						mapping,
+						filamentMap,
+						variantChoices: Object.fromEntries(variantChanges.filter(([g]) => accept[g])),
+						convertRuns: confirm,
+						confirm,
+						mode: outcome,
+						arrange: outcome === 'template' && arrangeNow,
+						single
+					}),
+				{ title: 'Change the plates', confirmLabel: 'Change plates' }
+			);
+			if (!res.done) {
+				if (res.refused) error = res.refused;
+				phase = 'review';
+				return;
+			}
+			const r = res.value;
 			const twinNote = r.twinPlates.length
 				? ` Shared source objects were split between their parts on plate${r.twinPlates.length === 1 ? '' : 's'} ${r.twinPlates.map((t) => t.plate).join(', ')}.`
 				: '';

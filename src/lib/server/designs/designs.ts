@@ -298,7 +298,7 @@ export function editableTargets(
 	templateId: string
 ): {
 	workspaces: { id: string; name: string }[];
-	builds: { id: string; name: string; workspaceName: string }[];
+	builds: { id: string; name: string; workspaceName: string; started: boolean }[];
 } {
 	const teams = listTeams(db, userId)
 		.filter((t) => t.role === 'owner' || t.role === 'editor')
@@ -313,6 +313,12 @@ export function editableTargets(
 		.all();
 	return {
 		workspaces: teams,
-		builds: rows.map((r) => ({ id: r.id, name: r.name, workspaceName: byId.get(r.org) ?? '' }))
+		builds: rows.map((r) => ({
+			id: r.id,
+			name: r.name,
+			workspaceName: byId.get(r.org) ?? '',
+			// Started builds ask before a design is applied (see StartedApplyDialog).
+			started: loadBuildView(db, r.id, userId)?.started.started ?? false
+		}))
 	};
 }
