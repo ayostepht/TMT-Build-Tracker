@@ -1,7 +1,7 @@
 import { ApiError, requireEditor } from '#lib/server/access.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
-import { confirmJob, dismissJob, linkJob, unlinkJob } from '#lib/server/printers/jobs.ts';
+import { confirmJobRuns, dismissJob, linkJob, unlinkJob } from '#lib/server/printers/jobs.ts';
 import { syncRunDeduction } from '#lib/server/spoolman/deduct.ts';
 import { printerJobs, printers } from '#lib/server/db/schema.ts';
 import { eq } from 'drizzle-orm';
@@ -33,14 +33,19 @@ export const POST: RequestHandler = (event) =>
 				unlinkJob(db, id, row.org);
 				return {};
 			case 'confirm': {
-				const runId = confirmJob(db, id, row.org, userId, body);
+				const { runId, runIds } = confirmJobRuns(db, id, row.org, userId, body);
 				const job = db
 					.select({ b: printerJobs.buildId })
 					.from(printerJobs)
 					.where(eq(printerJobs.id, id))
 					.get();
-				const sp = job?.b ? await syncRunDeduction(db, job.b, runId) : {};
-				return { runId, spoolmanWarning: sp.warning };
+				let warning: string | undefined;
+				if (job?.b)
+					for (const rid of runIds) {
+						const sp = await syncRunDeduction(db, job.b, rid);
+						warning ??= sp.warning;
+					}
+				return { runId, runIds, spoolmanWarning: warning };
 			}
 			case 'dismiss':
 				dismissJob(db, id, row.org, userId);

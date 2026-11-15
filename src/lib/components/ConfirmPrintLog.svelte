@@ -2,9 +2,10 @@
 	import { untrack } from 'svelte';
 	import { jobAction } from '#lib/client/api.ts';
 	import { plateRunGrams, progressGrams } from '#lib/domain/index.ts';
-	import { parseGrams } from '#lib/domain/logrun.ts';
+	import { parseGrams, partialPrefill, partialTicksOk } from '#lib/domain/logrun.ts';
 	import type { PrinterJobView } from '#lib/printers/status.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
+	import PartialParts from './PartialParts.svelte';
 
 	/** "Confirm print log" for a finished printer job: pre-filled result, grams and hours. */
 	let { job, ondone }: { job: PrinterJobView; ondone: () => Promise<void> | void } = $props();
@@ -31,6 +32,37 @@
 	let result = $state(init.result);
 	let grams = $state(init.grams);
 	let hours = $state(init.hours);
+	// Partial = "some parts of the plate printed OK": offered where those parts can be told apart (a
+	// single-run plate with two or more parts).
+	const plate = $derived(ctx.view.plates.find((p) => p.number === job.plateNumber));
+	const targets = $derived(
+		(job.partSlugs ?? plate?.parts ?? []).filter((s) => ctx.view.state[s] !== undefined)
+	);
+	const splittable = $derived(
+		!!plate && !plate.perPartRuns && plate.runs <= 1 && targets.length >= 2
+	);
+	const splitMode = $derived(result === 'Partial' && splittable);
+	let ticked = $state<string[]>([]);
+	let keptG = $state('');
+	let lostG = $state('');
+	let keptEdited = $state(false);
+	let lostEdited = $state(false);
+	// A finished job ran to 100%; a stopped one only as far as its last progress.
+	const progressNow = $derived(job.status === 'done' ? 100 : (job.progress ?? 0));
+	const splitPre = $derived(
+		splitMode ? partialPrefill(ctx.view, targets, ticked, total, progressNow) : null
+	);
+	const keptShown = $derived(
+		keptEdited ? keptG : splitPre?.keptGrams != null ? String(splitPre.keptGrams) : ''
+	);
+	const lostShown = $derived(
+		lostEdited ? lostG : splitPre?.lostGrams != null ? String(splitPre.lostGrams) : ''
+	);
+	const keptParsed = $derived(parseGrams(keptShown));
+	const lostParsed = $derived(parseGrams(lostShown));
+	const keptInvalid = $derived(keptParsed !== null && Number.isNaN(keptParsed));
+	const lostInvalid = $derived(lostParsed !== null && Number.isNaN(lostParsed));
+	const ticksOk = $derived(partialTicksOk(targets, ticked));
 	let busy = $state(false);
 	let err = $state('');
 
@@ -50,6 +82,26 @@
 	const gramsInvalid = $derived(gramsParsed !== null && Number.isNaN(gramsParsed));
 	let gramsEl: HTMLInputElement | undefined = $state();
 	const log = () => {
+		if (splitMode) {
+			if (!ticksOk) return;
+			if (keptInvalid || lostInvalid) {
+				document.getElementById(keptInvalid ? `gk-${job.id}` : `gl-${job.id}`)?.focus();
+				return;
+			}
+			return run(async () => {
+				const r = await jobAction(job.id, {
+					action: 'confirm',
+					result: 'Partial',
+					split: {
+						keptSlugs: targets.filter((s) => ticked.includes(s)),
+						keptGrams: keptParsed,
+						lostGrams: lostParsed
+					},
+					hours: hours === '' ? null : Number(hours)
+				});
+				if (r.spoolmanWarning) ctx.error = r.spoolmanWarning;
+			});
+		}
 		if (gramsInvalid) {
 			gramsEl?.focus();
 			return;
@@ -81,38 +133,95 @@
 			<label class="field"
 				>Result
 				<select bind:value={result} data-testid="confirm-result">
-					<option>Success</option><option>Failed</option><option>Partial</option>
+					<option>Success</option><option>Failed</option
+					>{#if splittable || result === 'Partial'}<option>Partial</option>{/if}
 				</select>
 			</label>
-			<label class="field"
-				>Grams
-				<input
-					type="text"
-					inputmode="decimal"
-					autocomplete="off"
-					aria-invalid={gramsInvalid}
-					bind:this={gramsEl}
-					bind:value={grams}
-					placeholder={job.status === 'done' ? 'g' : 'optional'}
-					data-testid="confirm-grams"
-				/>
-				{#if gramsInvalid}<small class="err" role="alert"
-						>Enter the grams as a number, 0 or more (for example 162.5).</small
-					>{/if}
-				{#if job.status !== 'done' && init.grams !== ''}<small class="hint"
-						>Estimated from {Math.round(job.progress ?? 0)}% progress; edit if different.</small
-					>{/if}
-			</label>
+			{#if !splitMode}
+				<label class="field"
+					>Grams
+					<input
+						type="text"
+						inputmode="decimal"
+						autocomplete="off"
+						aria-invalid={gramsInvalid}
+						bind:this={gramsEl}
+						bind:value={grams}
+						placeholder={job.status === 'done' ? 'g' : 'optional'}
+						data-testid="confirm-grams"
+					/>
+					{#if gramsInvalid}<small class="err" role="alert"
+							>Enter the grams as a number, 0 or more (for example 162.5).</small
+						>{/if}
+					{#if job.status !== 'done' && init.grams !== ''}<small class="hint"
+							>Estimated from {Math.round(job.progress ?? 0)}% progress; edit if different.</small
+						>{/if}
+				</label>
+			{/if}
 			<label class="field"
 				>Hours
 				<input type="number" min="0" step="0.1" inputmode="decimal" bind:value={hours} />
 			</label>
 		</div>
+		{#if splitMode}
+			<PartialParts
+				bind:ticked
+				parts={targets.map((s) => ({
+					slug: s,
+					name: ctx.view.parts.find((p) => p.slug === s)?.name ?? s
+				}))}
+			/>
+			<div class="cf pair">
+				<label class="field"
+					>Kept (g)
+					<input
+						id="gk-{job.id}"
+						type="text"
+						inputmode="decimal"
+						autocomplete="off"
+						placeholder="g"
+						aria-invalid={keptInvalid}
+						value={keptShown}
+						oninput={(e) => {
+							keptG = e.currentTarget.value;
+							keptEdited = true;
+						}}
+						data-testid="confirm-grams-kept"
+					/>
+				</label>
+				<label class="field"
+					>Lost (g)
+					<input
+						id="gl-{job.id}"
+						type="text"
+						inputmode="decimal"
+						autocomplete="off"
+						placeholder="g"
+						aria-invalid={lostInvalid}
+						value={lostShown}
+						oninput={(e) => {
+							lostG = e.currentTarget.value;
+							lostEdited = true;
+						}}
+						data-testid="confirm-grams-lost"
+					/>
+				</label>
+			</div>
+			{#if keptInvalid || lostInvalid}<small class="err" role="alert"
+					>Enter the grams as a number, 0 or more (for example 162.5).</small
+				>
+			{:else if splitPre && (splitPre.keptGrams ?? splitPre.lostGrams) != null && (!keptEdited || !lostEdited)}<small
+					class="hint"
+					>Kept is the ticked parts' full weight; Lost is the others' share at {Math.round(
+						progressNow
+					)}% progress. Edit if different.</small
+				>{/if}
+		{/if}
 		<div class="acts">
 			<button
 				class="btn primary"
 				type="button"
-				disabled={busy}
+				disabled={busy || (splitMode && !ticksOk)}
 				data-testid="confirm-log"
 				onclick={log}>Log print</button
 			>
@@ -159,6 +268,9 @@
 		background: var(--paper);
 		min-width: 0;
 		font-size: var(--fs-base);
+	}
+	.pair {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 	.hint {
 		color: var(--muted);

@@ -31,6 +31,7 @@ import { subscribePrinterEvents } from './bus';
 import {
 	buildJobs,
 	confirmJob,
+	confirmJobRuns,
 	dismissJob,
 	expectOnPrinterJob,
 	linkJob,
@@ -1036,5 +1037,57 @@ describe('attach run-time estimate', () => {
 		expect(sanePrintSeconds(NaN, 5)).toBeNull();
 		expect(sanePrintSeconds(-1, 100)).toBeNull();
 		expect(sanePrintSeconds(2_592_000, 1)).toBeNull();
+	});
+});
+
+describe('Partial confirm with per-part results (issue 46)', () => {
+	const multi = () => {
+		const v = loadBuildView(db, buildId, 'owner')!;
+		const plate = v.plates.find((p) => !p.perPartRuns && p.parts.length >= 2 && p.runs <= 1)!;
+		return { plate, v };
+	};
+	const finishOn = (plateNumber: number, state: 'failed' | 'done' = 'failed') => {
+		const file = `Plate ${plateNumber} - Test.gcode`;
+		processStatus(db, printerId, printing(file, 40, 1500), at(5));
+		const j = jobs()[0];
+		db.update(printerJobs)
+			.set({ buildId, plateNumber, status: state, progress: 40, finishedAt: at(60) })
+			.where(eq(printerJobs.id, j.id))
+			.run();
+		return j.id;
+	};
+
+	it('a split confirm makes two runs, links the kept one, and logs one activity row', () => {
+		const { plate } = multi();
+		const id = finishOn(plate.number);
+		const kept = [plate.parts[0]];
+		const { runId, runIds } = confirmJobRuns(db, id, 'org1', 'owner', {
+			result: 'Partial',
+			split: { keptSlugs: kept, keptGrams: 20, lostGrams: 5 }
+		});
+		expect(runIds).toHaveLength(2);
+		const runs = db.select().from(printRuns).all();
+		expect(runs).toHaveLength(2);
+		const keptRun = runs.find((r) => r.id === runId)!;
+		expect(keptRun).toMatchObject({ result: 'Success', grams: 20 });
+		expect(runs.find((r) => r.id !== runId)).toMatchObject({ result: 'Failed', grams: 5 });
+		expect(jobs().find((j) => j.id === id)!.runId).toBe(runId);
+		expect(db.select().from(activity).where(eq(activity.kind, 'run.add')).all()).toHaveLength(1);
+	});
+
+	it('rejects a bad split without logging anything', () => {
+		const { plate } = multi();
+		const id = finishOn(plate.number);
+		const bad = (body: Record<string, unknown>) =>
+			expect(() => confirmJobRuns(db, id, 'org1', 'owner', body)).toThrow();
+		bad({ result: 'Failed', split: { keptSlugs: [plate.parts[0]] } });
+		bad({ result: 'Partial', split: { keptSlugs: ['nope'] } });
+		bad({ result: 'Partial', split: { keptSlugs: ['__proto__'] } });
+		bad({ result: 'Partial', split: { keptSlugs: [] } });
+		bad({ result: 'Partial', split: { keptSlugs: plate.parts } });
+		bad({ result: 'Partial', split: { keptSlugs: [plate.parts[0]], keptGrams: -1 } });
+		bad({ result: 'Partial', split: 'x' });
+		expect(db.select().from(printRuns).all()).toHaveLength(0);
+		expect(jobs().find((j) => j.id === id)!.runId).toBeNull();
 	});
 });
