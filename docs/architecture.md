@@ -108,6 +108,14 @@ Sections match the subagents in `.claude/agents/`:
   inferred for older rows by `gramsSourceOf` (`server/builds/view.ts`). `updatePart`
   `manualGrams` (0-20000 g, 0/null clears, activity `part.grams`, drafts refused);
   request-supplied part slugs go through `hasPart` (own keys only).
+- **Stats** (#47, `domain/stats.ts`, pure): `runsByPeriod`, `plateTimes` (shares
+  `timedRun` with `pace.ts`), `filamentBreakdown`, `failureRates`, `progressSeries`,
+  `projectFinish` (28-day rate; fewer than 3 runs → `not-enough`), `buildStatsSummary`
+  (numbers and build names only, no personal data) and `workspaceStats`. Failed = not
+  Success; a split Partial's two rows count as one failed print (paired one-to-one,
+  order-independent). Dates are `YYYY-MM-DD` with Monday weeks. `safeSwatch` only passes
+  `#rrggbb`. `server/stats/workspace.ts` `loadWorkspaceStats`: member-only (404), drafts
+  excluded, `months` clamped 1-24, loads each build with `loadBuildView`, no cache.
 - **Kept vs lost** (#46, `domain/accounting.ts`): `unitUse`/`unitUseByRole` split used grams
   into kept (Success runs, plus the estimate for done runs no Success log covers) and lost
   (Failed runs and older Partial rows); `used = keptG + lostG`, and `TimeStats` has
@@ -387,6 +395,13 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Design studio (`design-studio-ui`)
 
+- **Charts** (#47, `src/lib/components/charts/`): domain-free SVG/CSS components with no
+  library: `ChartFigure` (heading, summary sentence, "Show data" table; every chart sits in
+  one), `StackedBars`, `HBar`, `StepLine`, `StatTile`; helpers in `scale.ts` (`niceTicks`,
+  `unitSuffix`, `edgeAnchor`…). Colours from the `--chart-good/bad/todo/grid` tokens (3:1
+  contrast test); failed/lost is also hatched. Column charts get a button layer
+  (`HitColumns`: roving tabindex, arrows/Home/End, Escape) and a readout line; no
+  hover-only tooltips. Imported only by the Stats routes.
 - **DesignWorkspace** (`components/build/DesignWorkspace.svelte`, also used by the wizard
   and drafts): tabs Colors | Palettes | Parts (leaving Palettes cancels an un-applied
   preview). ≥900 px: fixed-height two panes; <900 px: sticky stage (~34vh) + sticky tabs.
@@ -570,6 +585,13 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   (<900 px): Brand select instead of chips, card grows with content, `.design.pickopen`
   shrinks the pinned stage. Local review tool: `scripts/preview-demo.mjs`
   (`npm run preview:demo`, see `docs/dev/dev-environments.md`).
+- **Stats screens** (#47): `/builds/[id]/stats` (client-computed from the view context;
+  drafts redirect to Design) and `/teams/[slug]/stats` (server load via
+  `loadWorkspaceStats`, `?months=`), each with a route-local `adapt.ts` mapping stats to
+  chart props. `TabBar` has 8 tabs (… Activity · Stats · Settings; scrolls inside itself
+  below 352 px). The workspace layout has a Stats tab and the main nav a Stats link
+  (`nav-stats`) to the current workspace; the top-bar container-query thresholds are
+  1180/1100/1050 px.
 - r47: the signed-in layout has a footer (`app-footer`: Help, About, Privacy, Terms) and
   About in the account menu. The workspace page lists Builds first, then `LandingBoard`
   (Now printing, Next up). `FilamentTiles.svelte` renders the Overview filaments as one
