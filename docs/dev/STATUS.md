@@ -250,13 +250,15 @@ Route each to the agent named in brackets.
   Open: `BuildHeader` "kg used of ~X kg estimated" has no missing-weight hint [app-shell];
   per-part (twin) plates store no per-part file grams [plates-3mf]; the shell phone
   Overview test flaked once before a pre-hydration-tap hardening, watch it [e2e-playwright].
-- **Stats and charts** (#47, PR open for review, not merged): a Stats tab per build and a
+- **Stats and charts** (#47, merged into `edge` 2026-11-15 as #51, not yet on the test copy): a Stats tab per build and a
   workspace Stats page (`?months=3|6|12|24`), hand-built SVG charts (no dependency, only in
   Stats chunks). Open: the workspace page loads every build's full view per request (about
   9 ms per build with 500 runs; 50 builds ≈ 0.5 s) with no cache; if large workspaces show
   up, add a short per-workspace cache or a lighter loader [build-state]. Workspace filament
   and builds-table numbers are all-time totals for builds active in the window (no dated
   grams). The top bar collapses "Chapter settings" ~60 px sooner to fit the Stats link.
+- **Overview on phones** (#53, merged 2026-11-15): filament rows show a chevron that flips
+  when the row is open, so the spools + and history are easier to find.
 
 - **Design studio** [design-studio-ui]: #34 (2026-11-13): re-applying a palette resets
   unlocked parts to their kit slot; "Lock part color" keeps one part's exact colour (locked
