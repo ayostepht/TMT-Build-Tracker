@@ -239,6 +239,11 @@ function plateLabel(number: number, name: string): string {
 
 // ---------- filament ----------
 
+/** A filament hex for an inline style: only `#rrggbb`, else undefined. */
+export function safeSwatch(hex: string | null | undefined): string | undefined {
+	return typeof hex === 'string' && /^#[0-9a-f]{6}$/i.test(hex) ? hex : undefined;
+}
+
 export interface FilamentUse {
 	role: string;
 	name: string;

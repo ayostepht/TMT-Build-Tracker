@@ -46,4 +46,16 @@ describe('build stats adapter', () => {
 		expect(s.failures.rows).toBeNull();
 		expect(s.failures.summary).toMatch(/^No failed prints/);
 	});
+
+	it('gives a swatch only for a #rrggbb hex', () => {
+		const v = makeView();
+		const runs = [run({ plateNumber: 1, date: '2026-11-10', result: 'Success', hours: 5 })];
+		const rows = (hex: string) =>
+			buildStats({ ...v, runs, filaments: v.filaments.map((f) => ({ ...f, hex })) }, NOW).filament
+				?.rows ?? [];
+		expect(rows('#1a2B3c').every((r) => r.swatch === '#1a2B3c')).toBe(true);
+		const bad = rows('red;background:url(x)');
+		expect(bad.length).toBeGreaterThan(0);
+		expect(bad.every((r) => r.swatch === undefined)).toBe(true);
+	});
 });

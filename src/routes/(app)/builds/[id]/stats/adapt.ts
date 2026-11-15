@@ -10,6 +10,7 @@ import {
 	addDays,
 	failureRates,
 	filamentBreakdown,
+	safeSwatch,
 	plateTimes,
 	progressSeries,
 	projectFinish,
@@ -272,7 +273,7 @@ export function buildStats(view: BuildView, now: Date): BuildStats {
 					const spare = f.haveG - f.keptG - f.lostG - f.toPrintG;
 					return {
 						label: f.name,
-						swatch: f.hex,
+						swatch: safeSwatch(f.hex),
 						segments: [
 							{ value: f.keptG, tone: 'good' as const, label: 'in parts' },
 							{ value: f.lostG, tone: 'bad' as const, label: 'lost' },

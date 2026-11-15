@@ -1,7 +1,7 @@
 /** Maps the workspace numbers to chart props: tones, short labels, sentences and tables. Pure. */
 import { formatValue } from '#lib/components/charts/scale.ts';
 import type { Tone } from '#lib/components/charts/tones.ts';
-import { shortDate, type WorkspaceStats } from '#lib/domain/stats.ts';
+import { safeSwatch, shortDate, type WorkspaceStats } from '#lib/domain/stats.ts';
 
 export interface Table {
 	columns: string[];
@@ -107,7 +107,7 @@ export function workspaceCharts(s: WorkspaceStats) {
 				summary: `${s.topFilaments[0].name} leads with ${grams(s.topFilaments[0].keptG + s.topFilaments[0].lostG)}. Builds with prints in ${win}, all-time totals.`,
 				rows: s.topFilaments.map<HRow>((f) => ({
 					label: f.material ? `${f.name} (${f.material})` : f.name,
-					swatch: f.hex,
+					swatch: safeSwatch(f.hex),
 					segments: [
 						{ value: f.keptG, tone: 'good', label: 'in parts' },
 						{ value: f.lostG, tone: 'bad', label: 'lost' }
