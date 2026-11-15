@@ -29,7 +29,7 @@ const overflow = (page: Page) =>
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-	test('top bar is one row, the build header one line, eight tabs sit in a bottom bar', async ({
+	test('top bar is one row, the build header a title row and four cards, eight tabs sit in a bottom bar', async ({
 		page
 	}) => {
 		const { buildId } = await ownerWithBuild(page, 'shell');
@@ -58,7 +58,7 @@ test.describe('phone', () => {
 		});
 		console.log('PRINT-METRICS', JSON.stringify(m));
 		expect(m.topbar, 'one-row top bar').toBeLessThanOrEqual(56);
-		expect(m.header, 'one-line build header').toBeLessThanOrEqual(56);
+		expect(m.header, 'title row plus the four cards').toBeLessThanOrEqual(130);
 		expect(m.links).toHaveLength(8);
 		for (const l of m.links) {
 			expect(l.l).toBeGreaterThanOrEqual(0);
