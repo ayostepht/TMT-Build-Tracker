@@ -692,6 +692,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Release and deployment (`release-pwa`)
 
+- **Docs-only CI fast path** (`.github/workflows/docker.yml`): a `changes` job lists a PR's
+  files (`git diff HEAD^1 HEAD` on the merge checkout). If every file is docs (root-level
+  `*.md`, `.github/**/*.md`, `docs/**`, `.claude/**`, `LICENSE`, `unraid/**`), `test` runs
+  only Prettier (root config pinned) on the changed files and `e2e` is skipped; any other
+  file, including a `.md` under `src/` or `e2e/` (tests read some), runs everything. The
+  same set is the push `paths-ignore`; keep both in sync. If `changes` fails, `test` fails.
 - Version: `src/lib/version.ts` (`APP_VERSION`, the `version` field of `package.json`, inlined
   at build time) is the one source, shown on `/about` and returned by `/api/health` as
   `{ ok: true, version }` (503 stays `{ ok: false }`).

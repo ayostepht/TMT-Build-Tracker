@@ -43,6 +43,7 @@ A change is done when `check`, `lint`, `test` and `build` pass, the end-to-end s
 The workflow is `.github/workflows/docker.yml`:
 
 - A push to `main` or `edge`, or a pull request, runs the `test` job (check, lint, unit tests, route-folder guard). A push that changes only docs runs nothing.
+- A pull request that changes only docs (Markdown files in the repository root or under `.github/`, `docs/`, `.claude/`, `LICENSE`, `unraid/`; a `.md` file under `src/`, `e2e/` and the like counts as code) takes a fast path: `test` only runs `prettier --check` on the changed files and `e2e` is skipped, so a docs-only pull request finishes in about a minute. Formatting still has to pass. One non-docs file in the pull request runs everything. The jobs keep the names `test` and `e2e` and still report a result.
 - The `e2e` job and the Docker image build run on `v*` tags and on manual runs (Actions, then docker, then Run workflow). When the repository variable `CI_FULL=true` is set (Settings, Secrets and variables, Actions, Variables), every push and pull request also runs the end-to-end suite, and every push to `main` or `edge` builds the image.
 - Image tags: a release tag `vX.Y.Z` publishes `latest`, `X.Y.Z` and `X.Y`; a pre-release tag (with a `-`) publishes only its full version; a push to the `edge` branch publishes `edge`; a push to `main` publishes only `sha-<short commit>`; every `edge` build also gets `sha-<short commit>`. Pull requests never publish an image.
 
