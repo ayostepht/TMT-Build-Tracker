@@ -15,6 +15,13 @@
       "when": 1794712173635,
       "tag": "0001_grams_everywhere",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794721924569,
+      "tag": "0002_spool_adds",
+      "breakpoints": true
     }
   ]
 }

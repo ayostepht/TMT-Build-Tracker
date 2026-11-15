@@ -84,7 +84,8 @@ function seedEveryTable(c: Database.Database) {
 /** Columns added by migrations after the baseline: the old chain does not have them, so they are not compared. */
 const POST_BASELINE_COLUMNS = new Set([
 	'build_parts.manual_grams',
-	'build_plates.slicer_grams_source'
+	'build_plates.slicer_grams_source',
+	'build_filaments.spool_adds'
 ]);
 /** Number of migrations in the committed journal (the baseline plus later ones). */
 const JOURNAL_LENGTH = (
