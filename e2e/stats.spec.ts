@@ -158,12 +158,11 @@ test('build Stats: tiles, failure chart, data table and keyboard on a seeded bui
 	await expect(failRow.getByRole('cell').nth(0)).toHaveText('2'); // runs
 	await expect(failRow.getByRole('cell').nth(1)).toHaveText('1'); // failed
 	await expect(failRow.getByRole('cell').nth(2)).toHaveText('50%');
-	// The Partial's lost parts are a failure on its plate. (Runs and rate are not asserted: they
-	// depend on the order two same-day runs come back in, see the report for #47.)
 	const partialRow = failTable
 		.getByRole('row')
 		.filter({ hasText: new RegExp(`\\bP${s.multi.number} `) });
-	await expect(partialRow.getByRole('cell').nth(1)).toHaveText('1');
+	await expect(partialRow.getByRole('cell')).toHaveText(['1', '1', '100%']);
+	await expect(failures.locator('figcaption p')).toContainText('2 of 4 prints failed (50%)');
 
 	// Plate time against the estimate lists the plates that ran as logged.
 	await expect(page.getByTestId('chart-plates')).toContainText(new RegExp(`\\bP${s.b.number} `));
