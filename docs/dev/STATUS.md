@@ -257,10 +257,13 @@ Route each to the agent named in brackets.
   up, add a short per-workspace cache or a lighter loader [build-state]. Workspace filament
   and builds-table numbers are all-time totals for builds active in the window (no dated
   grams). The top bar collapses "Chapter settings" ~60 px sooner to fit the Stats link.
-  From the r57 check on real data: the failures chart groups by plate and drops part-level
-  Failed runs (5 of 6 shown) [build-state]; the time tile rounds good hours to whole hours
-  but failed hours to 0.1 h; at 390 the workspace builds table and the plate-time table are
-  cut off at the card edge and the last x-axis labels overlap [design-studio-ui].
+  The r57 findings (failures chart dropping part-level Failed runs, uneven hour rounding,
+  tables cut off and x-axis labels overlapping at 390) are fixed on `feat/stats-header`.
+- **Build header cards** (`feat/stats-header`, pull request open, ships as r59): four
+  compact cards (Parts, Time, Filament, Finish) from `domain/kpis.ts` link to Stats on
+  every build tab; Time and Filament show a short "of ~estimate" line so nothing truncates
+  at 390. Open: at 1440 the Parts and Finish detail lines end in "…" (full text on hover
+  and in the details line) [app-shell].
 - **Overview on phones** (#53, merged 2026-11-15): filament rows show a chevron that flips
   when the row is open, so the spools + and history are easier to find.
 
