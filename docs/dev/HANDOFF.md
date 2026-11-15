@@ -28,7 +28,7 @@ No migrations.
 
 ## In flight
 
-### `feat/stats-header` (pushed, head be40a7f, no pull request yet)
+### `feat/stats-header` (pushed, head da4b3e7, no pull request yet)
 
 - Stats fixes from the r57 check: chart x-labels thinned by collision (`visibleLabels` in
   `charts/scale.ts`); "Show data" and the workspace builds table scroll inside their card
@@ -38,28 +38,19 @@ No migrations.
   (Stats tiles and header); shared pieces in `domain/stats-core.ts`; `stats.ts` re-exports.
 - Header (`BuildHeader.svelte`): four compact `StatTile` cards (Parts, Time, Filament,
   Finish) linking to Stats on every build tab, four across on phones; Time and Filament show
-  "X of ~estimate"; the details line holds only "N printing · N to reprint · deliver-by" and
-  hides when empty (with its phone caret); cards hidden on the Design tab at ≤760 px; drafts
-  unchanged. About +1.4 KB gzip on build pages. New `e2e/header-kpis.spec.ts`; several specs
-  moved from `.overall-top` text to the Parts card aria-label.
-- **Open, show the maintainer before the pull request** (the old screenshots were lost with
-  the previous container; take new ones at 390 and 1440 px):
-  - a) **Decided** (maintainer, 2026-11-15): on phones the estimate truncated ("30.5 h of …");
-    keep four cards across and show a short "of ~382 h" on its own line under the value.
-  - b) Bug: the Parts card reads "0of 33" (no space before the unit) → `app-shell`, or
-    `design-studio-ui` if it is `StatTile`'s unit spacing.
-  - c) Deliver-by stays in the details line (no card shows it): mention it.
-- Not yet run on the final head: the whole e2e group together (the last fix re-ran only
-  `log-plate`, 8/8). The verifier gate covers it.
-- `app-shell` is fixing a) and b) in a local worktree (not pushed yet), with new screenshots.
-- **Next steps:** (1) review the a/b fix and its screenshots with the maintainer, commit and
-  push to `feat/stats-header`; (2) STATUS and
-  `docs/architecture.md` notes (Stats: `kpis.ts`/`stats-core.ts`, failures rule, rounding,
-  label thinning, table scroll; App shell: header cards), Prettier on the docs; (3)
-  `verifier` in a fresh worktree with a real `npm ci` (a symlinked `node_modules` breaks
-  `npm run check` with ~376 `./$types` errors), full vitest + build + full e2e; (4) pull
-  request into `edge`; (5) merge only with the maintainer's OK; (6) r59 deploy on Unraid
-  (header, no migrations), maintainer signs off, freeze lifts.
+  a short "of ~382 h" line under the value at all widths (full sentence in the aria-label);
+  `StatTile` puts a real space before the unit ("3 of 33"); the details line holds only
+  "N printing · N to reprint · deliver-by" and hides when empty; cards hidden on the Design
+  tab at ≤760 px; drafts unchanged. `e2e/header-kpis.spec.ts` checks no truncation at 390.
+- Maintainer approved the 390/1440 screenshots (2026-11-15). STATUS and
+  `docs/architecture.md` notes are on the branch (merged with `edge` 79c2cec+).
+- Known, not blocking: at 1440 the Parts and Finish detail lines end in "…" (full text on
+  hover and in the details line), a possible small follow-up [app-shell].
+- **Now:** `verifier` is running on da4b3e7 in a fresh worktree (`npm ci`, check, lint, full
+  vitest, build, full e2e). No `security-reviewer` needed (no server, API or auth files).
+- **Next steps:** (1) verifier green → open the pull request into `edge`; red → send the
+  failure to the owning agent; (2) merge only with the maintainer's OK; (3) r59 deploy on
+  Unraid (header, no migrations), maintainer signs off, freeze lifts.
 
 ### `feat/spoolman-filaments` (#59; branch from a71f3ac, nothing written yet)
 
