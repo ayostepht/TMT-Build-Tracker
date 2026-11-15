@@ -22,6 +22,7 @@ import {
 	mutateBuildSystem,
 	syncPlateTime
 } from '../builds/actions';
+import { MAX_RUN_GRAMS, runGramsMessage } from '../builds/actions';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
 import { builds, printerJobs, printers } from '../db/schema';
@@ -756,6 +757,7 @@ export function confirmJobRuns(
 			if (v === undefined || v === null) return null;
 			if (typeof v !== 'number' || !Number.isFinite(v) || v < 0)
 				throw new ApiError(400, `${name} must be a number, 0 or more`);
+			if (v > MAX_RUN_GRAMS) throw new ApiError(400, runGramsMessage(name));
 			return v;
 		};
 		split = {

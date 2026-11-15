@@ -71,6 +71,12 @@ function optNum(v: unknown, field: string): number | null | undefined {
 	if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) bad(`${field} must be a number >= 0`);
 	return v;
 }
+/** Grams of a run, a split half or a part's `grams` field: 0 up to `MAX_RUN_GRAMS`. */
+function optGrams(v: unknown, field: string): number | null | undefined {
+	const n = optNum(v, field);
+	if (n != null && n > MAX_RUN_GRAMS) bad(runGramsMessage(field));
+	return n;
+}
 function dateStr(v: unknown, field: string): string {
 	if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) bad(`${field} must be YYYY-MM-DD`);
 	return v;
@@ -238,6 +244,11 @@ export function setPartStatus(
 
 /** Upper bound for a typed part weight (all copies), in grams. */
 export const MAX_PART_GRAMS = 20000;
+
+/** Upper bound for the grams logged on one run (or one half of a split), in grams. */
+export const MAX_RUN_GRAMS = 100000;
+export const runGramsMessage = (field: string): string =>
+	`${field} must be at most ${MAX_RUN_GRAMS} g`;
 
 export function updatePart(
 	db: Db,
@@ -479,8 +490,8 @@ function splitRequest(
 		bad('Per-part results are for single-run plates; log Success or Failed instead');
 	return {
 		keptSlugs: slugList(body.split.keptSlugs, view, 'keptSlugs'),
-		keptGrams: optNum(body.split.keptGrams, 'keptGrams') ?? null,
-		lostGrams: optNum(body.split.lostGrams, 'lostGrams') ?? null
+		keptGrams: optGrams(body.split.keptGrams, 'keptGrams') ?? null,
+		lostGrams: optGrams(body.split.lostGrams, 'lostGrams') ?? null
 	};
 }
 
@@ -511,7 +522,7 @@ function runOutcome(
 			partSlugs,
 			date: dateStr(body.date, 'date'),
 			result: body.result as PrintRunInput['result'],
-			grams: optNum(body.grams, 'grams') ?? null,
+			grams: optGrams(body.grams, 'grams') ?? null,
 			hours: optNum(body.hours, 'hours') ?? null,
 			printer: optStr(body.printer, 'printer', 100) ?? null,
 			note: typeof body.note === 'string' ? body.note.slice(0, 2000) : ''
@@ -966,7 +977,7 @@ export function updateRun(
 			changed.result = set.result;
 		}
 		if (body.grams !== undefined) {
-			set.grams = optNum(body.grams, 'grams') ?? null;
+			set.grams = optGrams(body.grams, 'grams') ?? null;
 			changed.grams = set.grams;
 		}
 		if (body.hours !== undefined) {
@@ -1168,7 +1179,11 @@ export function addSpool(
 	if (body.note !== undefined && body.note !== null) {
 		if (typeof body.note !== 'string') bad('note must be text');
 		if (body.note.length > 200) bad('note must be at most 200 characters');
-		note = body.note.trim() || null;
+		note =
+			body.note
+				// eslint-disable-next-line no-control-regex
+				.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]+/g, ' ')
+				.trim() || null;
 	}
 	let id = '';
 	mutateBuild(db, buildId, userId, (tx, view, now) => {

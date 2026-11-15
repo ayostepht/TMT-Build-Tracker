@@ -13,7 +13,7 @@ import {
 } from '../db/schema';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
-import { addRun, deleteRun, printingAction, undoRun, updatePart } from './actions';
+import { addRun, deleteRun, MAX_RUN_GRAMS, printingAction, undoRun, updatePart } from './actions';
 import { createBuild } from './create';
 import { loadBuildView } from './view';
 import { snapshotParts } from '../../domain/logrun';
@@ -77,6 +77,29 @@ const body = (n: number, split: unknown, over: object = {}) => ({
 });
 
 describe('Partial with per-part results', () => {
+	it('refuses grams over the cap with 400, for a plain run and for a split', () => {
+		const { id, plate, a } = setup();
+		const status = (fn: () => unknown) => {
+			try {
+				fn();
+			} catch (e) {
+				return (e as ApiError).status;
+			}
+			return 0;
+		};
+		const over = MAX_RUN_GRAMS + 1;
+		const plain = { plateNumber: plate.number, date: '2026-01-02', result: 'Success', grams: over };
+		expect(status(() => addRun(db, id, 'owner', plain))).toBe(400);
+		expect(() => addRun(db, id, 'owner', plain)).toThrow(/at most 100000 g/);
+		for (const f of ['keptGrams', 'lostGrams']) {
+			const split = { keptSlugs: [a], keptGrams: 1, lostGrams: 1, [f]: over };
+			expect(status(() => addRun(db, id, 'owner', body(plate.number, split)))).toBe(400);
+		}
+		expect(db.select().from(printRuns).where(eq(printRuns.buildId, id)).all()).toHaveLength(0);
+		const ok = { ...plain, grams: MAX_RUN_GRAMS };
+		expect(status(() => addRun(db, id, 'owner', ok))).toBe(0);
+	});
+
 	it('makes a Success run for the ticked parts and a Failed run for the rest, in one activity row', () => {
 		const { id, plate, a, b, all } = setup();
 		printingAction(db, id, 'owner', { action: 'start', slugs: all });

@@ -114,6 +114,17 @@ describe('spool adds', () => {
 		expect(status(() => addSpool(db, id, 'owner', key, { kg: 1 }))).toBe(400);
 	});
 
+	it('stores a note without control characters', () => {
+		const id = mk();
+		const key = view(id).filaments[0].key;
+		addSpool(db, id, 'owner', key, { kg: 1, note: ' a\nb\r\n\tc\u0000d\u0001e\u202ef ' });
+		const note = view(id).filaments[0].spoolAdds![0].note!;
+		expect(note).toBe('a b c d e f');
+		expect(acts(id, 'filament.stock.add').at(-1)!.payload).toMatchObject({ note });
+		addSpool(db, id, 'owner', key, { kg: 1, note: '\n\u0000' });
+		expect(view(id).filaments[0].spoolAdds![1].note).toBeUndefined();
+	});
+
 	it('is for owners and editors; viewers 403, outsiders 404, drafts 400', () => {
 		const id = mk();
 		const key = view(id).filaments[0].key;

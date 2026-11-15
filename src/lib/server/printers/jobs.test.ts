@@ -1,3 +1,4 @@
+import { ApiError } from '../access';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { printerFromCatalog } from '#lib/printers/printer.ts';
@@ -1073,6 +1074,31 @@ describe('Partial confirm with per-part results (issue 46)', () => {
 		expect(runs.find((r) => r.id !== runId)).toMatchObject({ result: 'Failed', grams: 5 });
 		expect(jobs().find((j) => j.id === id)!.runId).toBe(runId);
 		expect(db.select().from(activity).where(eq(activity.kind, 'run.add')).all()).toHaveLength(1);
+	});
+
+	it('rejects grams over the cap with 400, plain and split', () => {
+		const { plate } = multi();
+		const id = finishOn(plate.number);
+		const over = 100001;
+		const status = (body: Record<string, unknown>) => {
+			try {
+				confirmJobRuns(db, id, 'org1', 'owner', body);
+			} catch (e) {
+				return (e as ApiError).status;
+			}
+			return 0;
+		};
+		expect(status({ result: 'Success', grams: over })).toBe(400);
+		const keptSlugs = [plate.parts[0]];
+		expect(status({ result: 'Partial', split: { keptSlugs, keptGrams: over } })).toBe(400);
+		expect(status({ result: 'Partial', split: { keptSlugs, lostGrams: over } })).toBe(400);
+		expect(() =>
+			confirmJobRuns(db, id, 'org1', 'owner', {
+				result: 'Partial',
+				split: { keptSlugs, lostGrams: over }
+			})
+		).toThrow(/at most 100000 g/);
+		expect(db.select().from(printRuns).all()).toHaveLength(0);
 	});
 
 	it('rejects a bad split without logging anything', () => {
