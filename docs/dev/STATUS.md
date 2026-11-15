@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-15 (0.9.1 released, see item 0; `edge` is the default branch; test
-copy on r56 = `edge` 7bb5843 (0.9.1 + #32, #33, #35, #36, #38, #41, #43, #48, #49, #50), the published image)._
+copy on r57 = `edge` e1e04f8 (0.9.1 + #32, #33, #35, #36, #38, #41, #43, #48–#55), the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -21,8 +21,8 @@ done. Keep it under ~150 lines.
    the default branch), not at f20a168 on `main`: same app code (only excluded paths
    differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
    e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
-   (checked anonymously 2026-11-13). The test copy runs it (r56 = `edge` 7bb5843, which adds
-   #32, #33, #35, #36, #38, #41, #43, #48, #49 and #50 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
+   (checked anonymously 2026-11-13). The test copy runs it (r57 = `edge` e1e04f8, which adds
+   #32, #33, #35, #36, #38, #41, #43 and #48–#55 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
@@ -250,13 +250,17 @@ Route each to the agent named in brackets.
   Open: `BuildHeader` "kg used of ~X kg estimated" has no missing-weight hint [app-shell];
   per-part (twin) plates store no per-part file grams [plates-3mf]; the shell phone
   Overview test flaked once before a pre-hydration-tap hardening, watch it [e2e-playwright].
-- **Stats and charts** (#47, merged into `edge` 2026-11-15 as #51, not yet on the test copy): a Stats tab per build and a
+- **Stats and charts** (#47, merged into `edge` 2026-11-15 as #51, on the test copy since r57): a Stats tab per build and a
   workspace Stats page (`?months=3|6|12|24`), hand-built SVG charts (no dependency, only in
   Stats chunks). Open: the workspace page loads every build's full view per request (about
   9 ms per build with 500 runs; 50 builds ≈ 0.5 s) with no cache; if large workspaces show
   up, add a short per-workspace cache or a lighter loader [build-state]. Workspace filament
   and builds-table numbers are all-time totals for builds active in the window (no dated
   grams). The top bar collapses "Chapter settings" ~60 px sooner to fit the Stats link.
+  From the r57 check on real data: the failures chart groups by plate and drops part-level
+  Failed runs (5 of 6 shown) [build-state]; the time tile rounds good hours to whole hours
+  but failed hours to 0.1 h; at 390 the workspace builds table and the plate-time table are
+  cut off at the card edge and the last x-axis labels overlap [design-studio-ui].
 - **Overview on phones** (#53, merged 2026-11-15): filament rows show a chevron that flips
   when the row is open, so the spools + and history are easier to find.
 
