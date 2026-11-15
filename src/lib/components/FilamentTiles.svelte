@@ -306,6 +306,22 @@
 						<span class="ft-l1">
 							<span class="ft-who">{@render nameCell()}</span>
 							{@render badge()}
+							<svg
+								class="ft-chev"
+								viewBox="0 0 20 20"
+								width="18"
+								height="18"
+								aria-hidden="true"
+								focusable="false"
+								><path
+									d="M5 7.5l5 5 5-5"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/></svg
+							>
 						</span>
 						<span class="ft-l2">
 							{@render bar()}
@@ -416,6 +432,19 @@
 		align-items: center;
 		gap: var(--sp-4);
 		min-width: 0;
+	}
+	.ft-chev {
+		flex: none;
+		color: var(--muted);
+		transition: transform 0.18s ease;
+	}
+	.ft-head[aria-expanded='true'] .ft-chev {
+		transform: rotate(180deg);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.ft-chev {
+			transition: none;
+		}
 	}
 	.ft-who {
 		display: flex;
