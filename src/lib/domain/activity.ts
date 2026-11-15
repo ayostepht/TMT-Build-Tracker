@@ -394,10 +394,31 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			}
 			return bits.length ? `${who} ${list(bits)}` : `${who} changed the colors`;
 		}
+		// `before` ({roles, partRoles, lockedParts}) is the undo snapshot; it is stored, never rendered.
 		case 'design.apply':
 			return str(p.designName)
-				? `${who} applied the color design "${str(p.designName)}"`
-				: `${who} applied a color design`;
+				? `${who} applied the color design "${str(p.designName)}"${p.mode === 'full' ? ' (colors and part colors replaced)' : ''}`
+				: `${who} applied a color design${p.mode === 'full' ? ' (colors and part colors replaced)' : ''}`;
+		// Colors only: slots and part colors change, plates and progress stay. `skipped` lists slots left
+		// alone: [{ role, name?, reason: 'material' | 'locked' }].
+		case 'design.recolor': {
+			const skipped = (Array.isArray(p.skipped) ? p.skipped : [])
+				.map((x) => obj(x))
+				.filter((x): x is Obj => !!x)
+				.map((x) => {
+					const why =
+						x.reason === 'material'
+							? 'other material'
+							: x.reason === 'locked'
+								? 'locked parts'
+								: null;
+					return `${str(x.name) ?? fil(x.role)}${why ? ` (${why})` : ''}`;
+				});
+			const head = str(p.designName)
+				? `${who} changed the colors to design "${str(p.designName)}"`
+				: `${who} changed the colors to a design`;
+			return `${head} (colors only; plates and progress kept)${skipped.length ? `; left ${list(skipped)} as they were` : ''}`;
+		}
 		// Historical kind: no code writes it any more, but old builds keep these rows and they must still read as a sentence.
 		case 'build.import': {
 			const bits = [

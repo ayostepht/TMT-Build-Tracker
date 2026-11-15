@@ -2,6 +2,7 @@
 import { tmtTemplate } from '../server/seed/tmt.ts';
 import type { TemplateSeed } from '../server/seed/types.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from './variants.ts';
+import { buildStarted } from './started.ts';
 import type { BuildView, PartState, PrintRun } from './types.ts';
 
 export function makeView(
@@ -52,7 +53,7 @@ export function makeView(
 			updatedAt: t0
 		};
 	}
-	return {
+	const view: BuildView = {
 		build: {
 			id: 'b1',
 			organizationId: 'o1',
@@ -115,8 +116,11 @@ export function makeView(
 		printer: null,
 		assembly: { steps: [], items: {} },
 		photos: [],
-		handoff: null
+		handoff: null,
+		started: undefined as never
 	};
+	view.started = buildStarted(view);
+	return view;
 }
 
 let n = 0;
@@ -145,5 +149,6 @@ export function applyPatches(
 ): BuildView {
 	const state = { ...view.state };
 	for (const { slug, ...rest } of patches) state[slug] = { ...state[slug], ...rest } as PartState;
-	return { ...view, state };
+	const next = { ...view, state };
+	return { ...next, started: buildStarted(next) };
 }

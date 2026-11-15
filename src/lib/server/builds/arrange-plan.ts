@@ -254,8 +254,9 @@ export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 /**
  * After a change that moves parts between colors or switches variants or printer:
  * if the build's plates are arranged and no print log hangs on a plate, arrange again.
- * Returns whether plates were rewritten. With plate logs it does nothing (the UI offers
- * "re-arrange" and asks before converting the logs).
+ * Returns whether plates were rewritten. With plate logs, or once the build has started
+ * (`view.started`: any run, part not To print, Printing part or live printer job) it does nothing
+ * (the UI offers "re-arrange" and asks first).
  */
 export function autoRearrange(
 	tx: Db,
@@ -270,6 +271,10 @@ export function autoRearrange(
 		.where(and(eq(builds.id, buildId)))
 		.get();
 	if (b?.layout !== ARRANGED_LAYOUT || hasPlateRuns(view)) return false;
+	// A build that has started printing keeps its plates: rewriting them renumbers plates under a
+	// live printer job and under Printing parts. The plates go stale instead (banner offers a
+	// deliberate "Re-arrange"). Issue #56.
+	if (view.started.started) return false;
 	const plan = planArrangement(view, footprints, layoutHint);
 	if (!plan) return false;
 	writePlan(tx, buildId, plan);

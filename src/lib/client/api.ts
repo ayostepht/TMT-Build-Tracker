@@ -11,6 +11,24 @@ import type { ThreeMfPlate, ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { PartSnapshot } from '#lib/domain/logrun.ts';
 import { clearPrivateCaches } from './private-caches.ts';
 
+/**
+ * A failed API call. `message` is the server's `error` text (so `catch (e) { e.message }` keeps
+ * working); `status` is the HTTP status, `code` the JSON body's `code` (e.g. 'build-started') and
+ * `body` the whole parsed JSON body ({} when the body was not JSON).
+ */
+export class ApiError extends Error {
+	status: number;
+	code: string | null;
+	body: Record<string, unknown>;
+	constructor(message: string, status: number, body: Record<string, unknown> = {}) {
+		super(message);
+		this.name = 'ApiError';
+		this.status = status;
+		this.code = typeof body.code === 'string' ? body.code : null;
+		this.body = body;
+	}
+}
+
 async function call<T = Record<string, never>>(
 	method: string,
 	url: string,
@@ -29,7 +47,12 @@ async function call<T = Record<string, never>>(
 	}
 	// The session is gone: drop cached private kit models (fire and forget, never throws).
 	if (res.status === 401 && url.startsWith('/api/')) void clearPrivateCaches();
-	if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+	if (!res.ok)
+		throw new ApiError(
+			typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
+			res.status,
+			data
+		);
 	return data as T;
 }
 

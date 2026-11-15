@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
+import { buildStarted, type LiveJobs } from '#lib/domain/started.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
 	ActivityItem,
@@ -38,6 +39,7 @@ import {
 	builds,
 	member,
 	printRuns,
+	printerJobs,
 	templateAssemblySteps,
 	templateFilamentRoles,
 	templateGuidePages,
@@ -66,6 +68,22 @@ function defaultLayoutKey(db: Db, templateId: string): string | null {
 			)
 			.get()?.key ?? null
 	);
+}
+
+/** Printer jobs linked to the build that are running right now (printing or paused). */
+export function loadLiveJobs(db: Db, buildId: string): LiveJobs {
+	const rows = db
+		.select({ plateNumber: printerJobs.plateNumber, partSlugs: printerJobs.partSlugs })
+		.from(printerJobs)
+		.where(
+			and(eq(printerJobs.buildId, buildId), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all();
+	return {
+		count: rows.length,
+		slugs: rows.flatMap((r) => r.partSlugs ?? []),
+		plates: rows.map((r) => r.plateNumber).filter((n): n is number => n != null)
+	};
 }
 
 export function loadBuildView(db: Db, buildId: string, userId: string): BuildView | null {
@@ -409,14 +427,15 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			}
 		: null;
 
-	return {
+	const kind = b.kind === 'draft' ? 'draft' : 'build';
+	const result: BuildView = {
 		build: {
 			id: b.id,
 			organizationId: b.organizationId,
 			name: b.name,
 			recipient: b.recipient,
 			hospital: b.hospital,
-			kind: b.kind === 'draft' ? 'draft' : 'build',
+			kind,
 			phase: b.phase as BuildPhase,
 			deliveryDate: b.deliveryDate,
 			createdAt: b.createdAt.toISOString(),
@@ -460,8 +479,12 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		layoutPrinter: b.printer ? null : layoutBed(b.plateLayout ?? defaultLayoutKey(db, tpl.id)),
 		assembly: loadAssembly(db, buildId, tpl.id, variantChoices, parts),
 		photos: loadPhotos(db, buildId),
-		handoff: loadHandoff(db, buildId, access.canEdit)
+		handoff: loadHandoff(db, buildId, access.canEdit),
+		started: undefined as never
 	};
+	// Drafts are never started (buildStarted ignores jobs and runs for them).
+	result.started = buildStarted(result, kind === 'draft' ? undefined : loadLiveJobs(db, buildId));
+	return result;
 }
 
 /**
