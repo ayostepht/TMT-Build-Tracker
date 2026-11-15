@@ -51,6 +51,7 @@ import {
 	loadFootprints,
 	planArrangement,
 	signature,
+	carryManuals,
 	manualTimes,
 	writePlan
 } from './arrange-plan';
@@ -586,6 +587,9 @@ export function applyUpload(
 				cpSync(src, dest);
 				thumb = buildThumbRel(buildId, pl.index);
 			}
+			const manual = manualFor(pl.index, slugs);
+			// grams the maker typed on the same plate win over the file's (shown as "overrides file")
+			const carried = !!manual.typedGrams;
 			tx.insert(buildPlates)
 				.values({
 					buildId,
@@ -595,13 +599,18 @@ export function applyUpload(
 					runs: plan.runs,
 					perPartRuns: plan.perPartRuns,
 					parts: slugs,
-					...manualFor(pl.index, slugs),
-					slicerGrams: pl.grams,
-					// twins: each part's grams per run are the plate's; accounting counts them under the part's own role
-					slicerByPart:
-						plan.perPartRuns && pl.grams
-							? Object.fromEntries(slugs.map((s) => [s, pl.grams as number]))
-							: {},
+					...carryManuals(manual),
+					...(carried
+						? {}
+						: {
+								slicerGrams: pl.grams,
+								// twins: each part's grams per run are the plate's; accounting counts them under the part's own role
+								slicerByPart:
+									plan.perPartRuns && pl.grams
+										? Object.fromEntries(slugs.map((s) => [s, pl.grams as number]))
+										: {},
+								slicerGramsSource: pl.grams ? ('file' as const) : null
+							}),
 					thumbnailPath: thumb,
 					filamentGrams: plan.perPartRuns ? {} : fg,
 					source: `upload:${uploadId}`

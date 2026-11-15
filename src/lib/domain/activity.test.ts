@@ -66,6 +66,14 @@ describe('describeActivity', () => {
 		);
 		expect(say('part.update', { slug: part.slug, comps: true })).toContain('ticked off');
 	});
+	it('part.grams says what was entered or cleared', () => {
+		expect(say('part.grams', { slug: part.slug, manualGrams: 251.5 })).toBe(
+			`Steph set the weight of ${part.name} to 252 g`
+		);
+		expect(say('part.grams', { slug: part.slug, manualGrams: null, cleared: true })).toBe(
+			`Steph cleared the entered weight of ${part.name}`
+		);
+	});
 	it('names the printer on a start and on a logged run', () => {
 		expect(say('printing.start', { slugs: [part.slug], printer: 'Garage printer' })).toBe(
 			`Steph put ${part.name} on Garage printer`
@@ -210,6 +218,7 @@ describe('describeActivitySegments', () => {
 			['build.create', {}],
 			['part.status', { slug: part.slug, to: 'Printing' }],
 			['part.update', { slug: part.slug, assigneeUserId: 'u2' }],
+			['part.grams', { slug: part.slug, manualGrams: 90 }],
 			['printing.start', { slugs: [part.slug, part2.slug] }],
 			['printing.stop', { slugs: [] }],
 			['run.add', { plateNumber: 13, result: 'Success', grams: 40 }],

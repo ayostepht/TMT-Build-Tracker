@@ -12,6 +12,9 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 - Lock part color: a part can keep its filament when you choose a palette. Turn on "Lock part color" in the part card; locked parts show a lock in the part list and the card. A locked part stays on its exact color: if the palette changes its slot, the part moves to a slot that holds its old filament (added for you when needed).
 - Remove a color that parts still use: Remove is now on every color you added. A dialog lists the affected parts and asks which of the design's other filaments replaces it; confirming reassigns them and removes the color in one step, in builds and in Studio drafts. The color's spools on hand and Spoolman link are dropped with it, and the activity log says what changed.
 
+- Enter a part's weight yourself: a part without a weight (the rear caster mounts, for example) now shows "Add weight" in the part list; the grams you type count in the plate, the log sheet and the filament totals and are marked "your entry". Weights now read the same everywhere: your entry, then the weight from your slice, then MakeGood's estimate (marked "~").
+- Plate weights next to the time: every plate header (Print tab, Files tab, the printing and next-up cards) shows its grams beside its hours, marked "~" for an estimate, "from file" for a sliced 3MF, or "your entry" for grams you typed. A plate with parts that have no weight shows the known total as "≥ 417 g · 1 part without weight"; tap the flag to add the missing weights on the spot. The grams you type for a plate now survive re-arranging, and the field on the Files tab says "overrides file 150 g" when it replaces the file's number.
+
 ### Changed
 
 - Recent activity has its own Activity tab (after Finish, before Settings). The Overview now shows only the last change with an "All activity" link, so it stays lighter. Studio drafts have no Activity tab.
@@ -20,6 +23,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Fixed
 
+- Filament used: a print that was marked done with a failed attempt logged and the successful one logged without grams counted only the failed grams; it now uses the estimate for the kept print too. Parts with no weight at all are listed as missing instead of counting as 0 g.
 - Lock part color: it locks only the part you tapped, even with "Both sides" on (it used to lock the matching parts too, such as a wheel rim on a different color). A slot added for a locked part now reads "Accent PETG · added" instead of repeating the kit slot's name.
 - Filament picker: the number next to each Type now matches the swatches the picker lists for it (same-looking colors count once, as they are listed once), and a short list no longer repeats itself under "Closest to the current color" or hides its neutrals.
 - Design: on phones the MakeGood and handle credit sits in its own band under the 3D view instead of running over the chair.

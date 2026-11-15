@@ -1,5 +1,5 @@
 /** Split the grams of a logged run across filament roles (to deduct from linked spools). Pure. */
-import { plateFileRoleGrams } from './accounting.ts';
+import { partGrams, plateFileRoleGrams } from './accounting.ts';
 import { runTargets } from './actions.ts';
 import type { BuildView, PrintRun, PrintRunInput } from './types.ts';
 
@@ -41,8 +41,8 @@ export function splitGramsByRole(
 		for (const s of slugs) {
 			const role = roleOf(s);
 			if (!role) continue;
-			const p = view.allParts.find((x) => x.slug === s);
-			weights[role] = (weights[role] ?? 0) + ((p?.bomGrams ?? 0) * (p?.qty ?? 1) || 1);
+			// The part's own weight for all its copies (partGrams); 1 when unknown so it still gets a share.
+			weights[role] = (weights[role] ?? 0) + (partGrams(view, s).total || 1);
 		}
 	}
 	const total = Object.values(weights).reduce((a, b) => a + b, 0);

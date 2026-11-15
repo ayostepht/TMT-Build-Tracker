@@ -96,11 +96,23 @@ Sections match the subagents in `.claude/agents/`:
 - **Run choice on per-part plates** (`domain/run-choice.ts`): perPartRuns plates (rims,
   plate 13) print one part per physical print. Default (`defaultRunParts`): the part
   already Printing, else the first part not Printed with runs left; never all.
+- **Grams** (#45, `domain/accounting.ts`): `partGrams(view, slug)` and `plateGrams(view, plate)`
+  are the one source order, returning `{perRun, total, source, approx, unknown[]}`. Part:
+  typed `build_parts.manual_grams` (total for all copies) > your slice
+  (`partProfiles.gramsByRole` × qty) > BOM (all copies, never × qty). Plate: typed
+  `slicer_grams` (source 'user') > the file total (source 'file', or 'slice' for arranged or
+  learned plates) > the sum of its parts (weakest source, `approx`, `unknown` lists parts
+  without weight). `estPerRun`, `unitUsed` (logged grams + the estimate for done runs no
+  Success log covers), `filamentStats` (`unknownParts`), `splitGramsByRole`, `now.ts`,
+  `LogRunSheet` and `printer-match.ts` all use them. `build_plates.slicer_grams_source` is
+  inferred for older rows by `gramsSourceOf` (`server/builds/view.ts`). `updatePart`
+  `manualGrams` (0-20000 g, 0/null clears, activity `part.grams`, drafts refused);
+  request-supplied part slugs go through `hasPart` (own keys only).
 - **Filament by role** (`domain/accounting.ts`): a sliced file's grams per role
   (`Plate.filamentGrams`) go through `plateFileRoleGrams(plate, partRoles)`, which keeps
   only roles that a part on the plate has (a file's slot → role map can disagree with the
   design: stray TPU slots on PETG plates). `roleShares`/`filamentStats` use the kept grams
-  renormalized; `estPerRun` stays slicer grams, else the file's full total, else BOM / runs;
+  renormalized; `estPerRun` delegates to the Grams helpers below;
   no overlap → the parts' own roles. `splitGramsByRole` (`spool-split.ts`, Spoolman
   deduction) uses the same helper for whole-plate runs.
 - **Part print logs:** `partRuns(view, slug)` in `logrun.ts` includes whole-plate runs
@@ -148,6 +160,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Plates and 3MF (`plates-3mf`)
 
+- Plate grams (#45): an upload sets `slicer_grams_source='file'`; typed plate grams survive
+  re-layout and re-upload (`manualTimes` → `PlateManuals`, `carryManuals` in
+  `arrange-plan.ts`). `domain/plate-grams.ts` `plateGramsBadge` + `PlateGrams.svelte` show
+  grams per run (with a total for multi-run plates) next to `PlateTime` on the Print tab,
+  NowCard, NextUp and PlatesPanel; a plate with parts without weight shows "≥ N g · k parts
+  without weight" with a quick add form.
 - Files tab layouts: `PlatesPanel` fetches the build's layouts and passes them to
   `PlateLayoutPicker` as `preload`; answers are latest-wins (numbered requests) and
   `onchanged` invalidates older ones. The picker applies a `preload` only when the object
@@ -442,7 +460,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Kit and startup (`kit-and-startup`)
 
-- Migrations: one baseline, `drizzle/0000_red_apocalypse.sql` (the 14 earlier migrations
+- Migrations: `0001_grams_everywhere` (2026-11-15, #45: `build_parts.manual_grams`,
+  `build_plates.slicer_grams_source`) follows the baseline; `baseline-upgrade.test.ts` reads
+  the journal length and ignores columns listed in `POST_BASELINE_COLUMNS`.
+- Baseline: `drizzle/0000_red_apocalypse.sql` (the 14 earlier migrations
   were squashed on 2026-11-11). `runMigrations` (`db/index.ts`) first calls
   `upgradeLegacyChain` (`db/baseline-upgrade.ts`): a database at the complete old chain
   (14 journal rows, hashes in `LEGACY_CHAIN`) is brought to the baseline in one

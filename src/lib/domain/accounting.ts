@@ -2,14 +2,14 @@
  * Filament and print-time accounting.
  *
  * A "unit" is one plate, except a perPartRuns plate (e.g. the wheel rim plate),
- * where each part is its own unit printed `plate.runs` times. Estimate per run:
- * slicer grams entered on the plate if any, else the BOM grams divided by runs.
- * Used: logged grams, or the estimate when the unit is printed with nothing
- * logged. A running print still counts as to print.
+ * where each part is its own unit printed `plate.runs` times. Grams come from ONE place,
+ * `partGrams` / `plateGrams` (typed > sliced file > your slice > MakeGood BOM, see below);
+ * `estPerRun` delegates to them. Used: logged grams, plus the estimate for printed runs
+ * that were logged without grams. A running print still counts as to print.
  */
 import { fmtH } from './format.ts';
 import { paceOf, type Pace } from './pace.ts';
-import type { BuildView, PartDef, Plate, PrintRun } from './types.ts';
+import type { BuildView, GramsInfo, GramsSource, PartDef, Plate, PrintRun } from './types.ts';
 
 export interface Unit {
 	plate: number; // 0 for parts that are on no plate
@@ -95,15 +95,111 @@ export function roleShares(view: BuildView, u: Unit): Record<string, number> {
 	return Object.fromEntries(Object.entries(fg).map(([r, g]) => [r, g / total]));
 }
 
-export function estPerRun(view: BuildView, u: Unit): number {
-	const s = slicerFor(view, u);
-	if (s) return s;
-	// The file's whole total stays the estimate: the plate still uses all of it, filtering
-	// only changes which roles it belongs to.
+// ---- Grams: one source order for parts, plates and units ---------------------------------------
+//
+// Part  (total for ALL copies): typed (`PartState.manualGrams`) > your slice (`partProfiles`,
+//        grams per copy x the part's quantity) > MakeGood BOM (`PartDef.bomGrams` is already the
+//        total for all copies; never multiply it by qty again).
+// Plate (per run): typed plate grams > sliced file (`filamentGrams`, or the build's own slice on
+//        arranged plates) > the sum of its parts. A typed plate total wins for that plate; the
+//        parts still show their own value. A perPartRuns plate sums its parts, each of which
+//        takes its own `slicerByPart` entry first (typed there > typed on the part > file).
+
+const TRUST: Record<GramsSource, number> = { none: 0, bom: 1, slice: 2, file: 3, user: 4 };
+
+/** The least trusted of the known sources ('none' entries are skipped; 'none' when there is nothing). */
+export function weakestGramsSource(sources: GramsSource[]): GramsSource {
+	return sources.reduce<GramsSource>(
+		(a, s) => (s === 'none' ? a : a === 'none' || TRUST[s] < TRUST[a] ? s : a),
+		'none'
+	);
+}
+
+/** The grams of one part: see the order above. `perRun` divides by the plate's runs (1 when on no plate). */
+export function partGrams(view: BuildView, slug: string): GramsInfo {
+	const part =
+		view.parts.find((p) => p.slug === slug) ?? view.allParts.find((p) => p.slug === slug);
+	const none: GramsInfo = { perRun: 0, total: 0, source: 'none', approx: false, unknown: [slug] };
+	if (!part) return none;
+	const plate = view.plates.find((p) => p.parts.includes(slug));
+	const runs = Math.max(1, plate?.runs || 1);
+	const make = (total: number, source: GramsSource): GramsInfo => ({
+		perRun: total / runs,
+		total,
+		source,
+		approx: source === 'bom',
+		unknown: []
+	});
+	const perRunOf = (g: number, source: GramsSource): GramsInfo => ({
+		...make(g * runs, source),
+		perRun: g
+	});
+	const typedHere = positive(view.state[slug]?.manualGrams);
+	const bySlicer = plate?.perPartRuns ? positive(plate.slicerByPart[slug]) : null;
+	if (bySlicer && plate?.gramsSource === 'user') return perRunOf(bySlicer, 'user');
+	if (typedHere) return make(typedHere, 'user');
+	if (bySlicer) return perRunOf(bySlicer, 'file');
+	const learned = Object.values(view.partProfiles?.[slug]?.gramsByRole ?? {}).reduce(
+		(a, g) => a + (g > 0 ? g : 0),
+		0
+	);
+	if (learned > 0) return make(learned * Math.max(1, part.qty ?? 1), 'slice');
+	const bom = positive(part.bomGrams);
+	if (bom) return make(bom, 'bom');
+	return none;
+}
+
+/**
+ * The grams of one print of a plate (and of all its runs). A perPartRuns plate adds its parts: `perRun`
+ * is one round of every part, `total` everything. `unknown` lists parts that have no weight when the
+ * plate's number comes from its parts; a typed or file total leaves it empty (it covers them).
+ */
+export function plateGrams(view: BuildView, plate: Plate): GramsInfo {
+	const runs = Math.max(1, plate.runs || 1);
+	const slugs = plate.parts.filter((s) => view.parts.some((p) => p.slug === s));
+	if (!plate.perPartRuns) {
+		const typed = positive(plate.slicerGrams);
+		if (typed)
+			return {
+				perRun: typed,
+				total: typed * runs,
+				source: plate.gramsSource === 'user' ? 'user' : 'file',
+				approx: false,
+				unknown: []
+			};
+		const file = fileGrams(plate).reduce((a, [, g]) => a + g, 0);
+		if (file > 0)
+			return {
+				perRun: file,
+				total: file * runs,
+				source: plate.gramsSource === 'slice' ? 'slice' : 'file',
+				approx: false,
+				unknown: []
+			};
+	}
+	const infos = slugs.map((s) => partGrams(view, s));
+	const known = infos.filter((i) => i.source !== 'none');
+	const unknown = infos.filter((i) => i.source === 'none').flatMap((i) => i.unknown);
+	const total = known.reduce((a, i) => a + i.total, 0);
+	const source = weakestGramsSource(known.map((i) => i.source));
+	return {
+		perRun: plate.perPartRuns ? known.reduce((a, i) => a + i.perRun, 0) : total / runs,
+		total,
+		source,
+		approx: known.some((i) => i.approx) || unknown.length > 0,
+		unknown
+	};
+}
+
+/** Grams of one unit (a whole plate, one part of a perPartRuns plate, or a part on no plate). */
+function unitGrams(view: BuildView, u: Unit): GramsInfo {
 	const pl = plateByNumber(view, u.plate);
-	const file = pl && !pl.perPartRuns ? fileGrams(pl) : [];
-	if (file.length) return file.reduce((a, [, g]) => a + g, 0);
-	return u.parts.reduce((a, p) => a + (p.bomGrams || 0), 0) / u.runs;
+	if (pl && !pl.perPartRuns) return plateGrams(view, pl);
+	return partGrams(view, u.parts[0].slug);
+}
+
+export function estPerRun(view: BuildView, u: Unit): number {
+	return unitGrams(view, u).perRun;
 }
 
 export function estTotal(view: BuildView, u: Unit): number {
@@ -131,17 +227,25 @@ export function unitWins(view: BuildView, u: Unit, extra: PrintRun[] = []): numb
 	).length;
 }
 
-function unitLoggedG(view: BuildView, u: Unit): number {
+function unitLogged(view: BuildView, u: Unit): PrintRun[] {
 	const slugs = new Set(u.parts.map((p) => p.slug));
 	const partLog = view.runs.filter(
 		(r) => r.plateNumber == null && r.partSlug != null && slugs.has(r.partSlug)
 	);
-	return [...unitEntries(view, u), ...partLog].reduce((a, r) => a + (Number(r.grams) || 0), 0);
+	return [...unitEntries(view, u), ...partLog];
 }
 
+/**
+ * Grams used: every logged gram (failed prints used filament too), plus the estimate for each
+ * run of a finished unit that no successful log with grams stands for (a Success logged without
+ * grams, or a part marked Printed by hand).
+ */
 export function unitUsed(view: BuildView, u: Unit): number {
-	const g = unitLoggedG(view, u);
-	return g > 0 ? g : unitDone(view, u) ? estTotal(view, u) : 0;
+	const log = unitLogged(view, u);
+	const logged = log.reduce((a, r) => a + (Number(r.grams) || 0), 0);
+	if (!unitDone(view, u)) return logged;
+	const measured = log.filter((r) => r.result === 'Success' && Number(r.grams) > 0).length;
+	return logged + estPerRun(view, u) * Math.max(0, u.runs - measured);
 }
 
 export function unitRunsLeft(view: BuildView, u: Unit): number {
@@ -159,7 +263,10 @@ export interface FilamentStat {
 	used: number;
 	need: number; // still to print
 	total: number;
-	unweighed: number; // unfinished units with no estimate at all
+	/** Parts of this role that are still to print and have no weight at all (left out of `need` and `total`). */
+	unknownParts: string[];
+	/** `unknownParts.length` (kept for existing readers). */
+	unweighed: number;
 	haveGrams: number; // spools on hand * 1000
 	short: boolean;
 	shortByGrams: number;
@@ -173,13 +280,26 @@ export function filamentStats(view: BuildView): FilamentStat[] {
 		const used = us.reduce((a, u) => a + unitUsed(view, u) * share(u), 0);
 		const need = us.reduce((a, u) => a + unitLeft(view, u) * share(u), 0);
 		const haveGrams = (Number(f.spools) || 0) * 1000;
+		const unknownParts = [
+			...new Set(
+				all
+					.filter((u) => !unitDone(view, u))
+					.flatMap((u) => unitGrams(view, u).unknown)
+					.filter(
+						(s) =>
+							view.state[s]?.status !== 'Printed' &&
+							view.parts.find((p) => p.slug === s)?.role === f.key
+					)
+			)
+		];
 		const spare = haveGrams - used - need;
 		return {
 			role: f.key,
 			used,
 			need,
 			total: us.reduce((a, u) => a + estTotal(view, u) * share(u), 0),
-			unweighed: us.filter((u) => !unitDone(view, u) && !estPerRun(view, u)).length,
+			unknownParts,
+			unweighed: unknownParts.length,
 			haveGrams,
 			short: spare < 0,
 			shortByGrams: Math.max(0, -spare)

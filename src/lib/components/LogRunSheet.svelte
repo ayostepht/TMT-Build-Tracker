@@ -2,6 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import {
 		RUN_RESULTS,
+		type GramsInfo,
 		type PrintRun,
 		type PrintRunInput,
 		type RunResult
@@ -12,6 +13,8 @@
 		fmt,
 		hoursFromSeconds,
 		parseDur,
+		partGrams,
+		plateGrams,
 		recomputeParts,
 		runInfo,
 		runTargets,
@@ -19,7 +22,8 @@
 		snapshotParts,
 		startedOnPrinter,
 		toLocalInput,
-		today
+		today,
+		weakestGramsSource
 	} from '#lib/domain/index.ts';
 	import { parseGrams } from '#lib/domain/logrun.ts';
 	import { deleteRun, logRun, undoRun, updateRun } from '#lib/client/api.ts';
@@ -120,21 +124,36 @@
 		return isNaN(d.getTime()) ? new Date() : new Date(Math.min(d.getTime(), Date.now()));
 	});
 
-	const slicerDefault = $derived.by(() => {
-		if (!plate) return null;
-		const v = plate.perPartRuns ? plate.slicerByPart[pickedSlug ?? slugs[0]] : plate.slicerGrams;
-		// Grams are stored as decimals; keep two places so the prefill is a tidy number.
-		if (typeof v === 'number' && v > 0) return Math.round(v * 100) / 100;
-		if (quick && !plate.perPartRuns) {
-			const sum = Object.values(plate.filamentGrams).reduce((a, b) => a + b, 0);
-			if (sum > 0) return Math.round(sum);
+	// The grams this print is expected to use, from the one source order (see domain/accounting.ts).
+	const gramsInfo = $derived.by((): GramsInfo => {
+		if (plate) {
+			return plate.perPartRuns
+				? partGrams(ctx.view, pickedSlug ?? slugs[0])
+				: plateGrams(ctx.view, plate);
 		}
-		return null;
+		const infos = slugs.map((s) => partGrams(ctx.view, s));
+		return {
+			perRun: infos.reduce((a, i) => a + i.total, 0),
+			total: infos.reduce((a, i) => a + i.total, 0),
+			source: weakestGramsSource(infos.map((i) => i.source)),
+			approx: infos.some((i) => i.approx),
+			unknown: infos.flatMap((i) => i.unknown)
+		};
+	});
+	// Prefill only a real number (typed, slicer or your slice), never a BOM guess or a partial total.
+	const slicerDefault = $derived.by(() => {
+		const i = gramsInfo;
+		if (!plate || !(i.perRun > 0) || i.unknown.length) return null;
+		if (i.source === 'bom' || i.source === 'none') return null;
+		// Grams are stored as decimals; keep two places so the prefill is a tidy number.
+		return Math.round(i.perRun * 100) / 100;
 	});
 	const gramsSource = $derived(
-		plate?.estSource === 'learned' && plate.slicerGrams == null
-			? 'From your slice; edit if different.'
-			: 'From your slicer; edit if different.'
+		gramsInfo.source === 'user'
+			? 'Your entered weight; edit if different.'
+			: gramsInfo.source === 'slice'
+				? 'From your slice; edit if different.'
+				: 'From your slicer; edit if different.'
 	);
 	/** The plate's own time per run, used when the print has no start time. */
 	const planned = $derived(quick && !startedAt && plate?.estSeconds ? plate.estSeconds : null);
@@ -157,14 +176,6 @@
 			plate.perPartRuns ? pickedSlug || undefined : undefined
 		);
 		return info ? `Print ${info.run} of ${info.of}. ` : '';
-	});
-	const bomEstimate = $derived.by(() => {
-		if (plate?.perPartRuns) {
-			const g = partOf(pickedSlug ?? slugs[0])?.bomGrams ?? 0;
-			return g / Math.max(1, plate.runs);
-		}
-		const runs = Math.max(1, plate?.runs ?? 1);
-		return slugs.reduce((a, s) => a + (partOf(s)?.bomGrams ?? 0), 0) / (plate ? runs : 1);
 	});
 	// A failed print did not use the plate's grams: leave it empty (counts as 0 g) unless typed.
 	const gramsShown = $derived(
@@ -500,8 +511,8 @@
 						autocomplete="off"
 						placeholder={result === 'Failed'
 							? 'optional'
-							: bomEstimate > 0
-								? `BOM ~${fmt(bomEstimate)}`
+							: gramsInfo.perRun > 0
+								? `${gramsInfo.source === 'bom' ? 'BOM ' : gramsInfo.unknown.length ? '≥ ' : ''}~${fmt(gramsInfo.perRun)}`
 								: 'g'}
 						aria-invalid={gramsInvalid}
 						aria-describedby={gramsInvalid ? `${uid}-gerr` : undefined}
