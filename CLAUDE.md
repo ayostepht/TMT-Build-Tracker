@@ -8,6 +8,7 @@ mobility trainer) chairs: teams ("chapters") plan, print, assemble and hand off 
 | File | What it holds | Who reads it |
 | --- | --- | --- |
 | `CLAUDE.md` (this) | Rules, stack gotchas, conventions, how work is done | Everyone |
+| `docs/dev/HANDOFF.md` | Baton between orchestrator sessions: work in flight, branches, open questions, next step | Orchestrator, first thing every session |
 | `docs/dev/STATUS.md` | Current state, open items, decisions, next steps | Orchestrator, every session |
 | `docs/architecture.md` | Where code lives and how each area works | Subagents, for their section |
 | `docs/dev/dev-environments.md` | Machines, setup, e2e locking, deploy outline | Orchestrator on a new machine |
@@ -21,8 +22,25 @@ mobility trainer) chairs: teams ("chapters") plan, print, assemble and hand off 
 
 _Subagents: skip this section; follow "Subagent contract" below._
 
-**Start of session:** read `docs/dev/STATUS.md`, then `CLAUDE.local.md`. If `CLAUDE.local.md`
-is missing, follow "New machine" in `docs/dev/dev-environments.md` before anything else.
+**Start of session:** `git fetch origin`, then read the latest `docs/dev/HANDOFF.md` (on
+`origin/edge`, or on a newer open `docs/handoff-…` branch if one exists:
+`git show origin/edge:docs/dev/HANDOFF.md`), then `docs/dev/STATUS.md`, then `CLAUDE.local.md`.
+The checkout may be on an old branch, so read the handoff from the remote, not the working
+tree. If `CLAUDE.local.md` is missing, follow "New machine" in `docs/dev/dev-environments.md`
+before anything else. Tell the maintainer in a few lines what the handoff says is next.
+
+**Handoff doc** (maintainer, 2026-11-15): keep `docs/dev/HANDOFF.md` current and committed.
+It holds what the next session needs to pick up the work: rules in force for now (e.g. a
+merge freeze), branches and pull requests in flight with their head commits and what is
+left on each, questions waiting for the maintainer, and the exact next step. Rewrite it in
+place (it describes now, not history; durable facts go to STATUS). Update and push it
+whenever a pull request opens or merges, a plan or decision changes, before a context reset
+and at the end of the session. Never keep it only in the scratchpad or a worktree: those
+are lost when a cloud container ends or a chat is archived. Commit it straight to `edge`
+when protection allows (docs-only under `docs/dev/`); otherwise push it on a
+`docs/handoff-…` branch with a pull request into `edge` and say so to the maintainer. It
+is public like the rest of the repo: no private values, no machine paths that only exist in
+one container (name branches, not worktree folders), no unfixed security problems.
 
 **You do:** talk to the maintainer, plan, split work, brief subagents, read their reports,
 decide, update `docs/dev/STATUS.md` / `docs/dev/CHANGELOG.md` / `docs/architecture.md`, commit,
@@ -131,7 +149,8 @@ before a deploy when the agents ran their relevant specs (maintainer, 2026-11-08
 changes, look at one desktop and one phone screenshot from the report before telling the
 maintainer it's done.
 
-**End of session (and before a context reset):** fold the agents' STATUS notes into
+**End of session (and before a context reset):** rewrite `docs/dev/HANDOFF.md` and push it
+(see "Handoff doc"), fold the agents' STATUS notes into
 `docs/dev/STATUS.md` (rewrite in place, delete what's done), add a `docs/dev/CHANGELOG.md` entry
 per deploy, update the touched `docs/architecture.md` sections, commit them with the work.
 Before committing docs you edited, run `npx prettier --write <the files>`: CI checks their
