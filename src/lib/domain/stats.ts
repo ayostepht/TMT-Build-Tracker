@@ -102,9 +102,9 @@ interface Attempt {
 	counts: boolean;
 }
 
-function isSplitPair(a: PrintRun, b: PrintRun | undefined): boolean {
+/** A Success and a Failed row that together are one split Partial (either may come first). */
+function isSplitPair(a: PrintRun, b: PrintRun): boolean {
 	return (
-		!!b &&
 		a.result === 'Success' &&
 		b.result === 'Failed' &&
 		a.plateNumber != null &&
@@ -119,11 +119,21 @@ function isSplitPair(a: PrintRun, b: PrintRun | undefined): boolean {
 	);
 }
 
+/**
+ * Pairs are matched one to one whatever the row order (runs of one day are ordered by random id).
+ * Each Failed row takes the first unpaired Success row that fits it.
+ */
 function attempts(runs: PrintRun[]): Attempt[] {
+	const kept = new Set<number>();
+	runs.forEach((f) => {
+		if (f.result !== 'Failed') return;
+		const si = runs.findIndex((s, i) => !kept.has(i) && isSplitPair(s, f));
+		if (si >= 0) kept.add(si);
+	});
 	return runs.map((run, i) => ({
 		run,
 		failed: run.result !== 'Success',
-		counts: !isSplitPair(run, runs[i + 1])
+		counts: !kept.has(i)
 	}));
 }
 

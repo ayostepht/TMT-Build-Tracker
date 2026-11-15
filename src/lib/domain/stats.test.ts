@@ -544,3 +544,62 @@ describe('workspaceStats', () => {
 		expect(w.failingPlates).toEqual([]); // 2 prints each, never 3 together
 	});
 });
+
+describe('split Partial pairing is order independent', () => {
+	const mk = (failedFirst: boolean, extra: Partial<PrintRun>[] = []) => {
+		const v = makeView();
+		const pl = multiPartPlate(v);
+		const ok = {
+			plateNumber: pl.number,
+			partSlugs: [pl.parts[0]],
+			result: 'Success' as const,
+			hours: 6,
+			printer: 'CC1',
+			date: '2026-11-01'
+		};
+		const bad = {
+			plateNumber: pl.number,
+			partSlugs: pl.parts.slice(1),
+			result: 'Failed' as const,
+			hours: 2,
+			printer: 'CC1',
+			date: '2026-11-01'
+		};
+		return withRuns([...(failedFirst ? [bad, ok] : [ok, bad]), ...extra], v);
+	};
+	it('failureRates is identical either way', () => {
+		const a = failureRates(mk(false));
+		const b = failureRates(mk(true));
+		expect(b).toEqual(a);
+		expect(a.total).toEqual({ runs: 1, failed: 1, rate: 1 });
+		expect(a.byPlate[0]).toMatchObject({ runs: 1, failed: 1, rate: 1 });
+		expect(a.byPrinter[0]).toMatchObject({ runs: 1, failed: 1, hours: 8, failedHours: 2 });
+	});
+	it('buildStatsSummary and workspaceStats are identical either way', () => {
+		const a = buildStatsSummary(mk(false));
+		const b = buildStatsSummary(mk(true));
+		const byHours = (r: typeof a.runs) => [...r].sort((x, y) => x.hours - y.hours);
+		expect(byHours(b.runs)).toEqual(byHours(a.runs));
+		expect(a.runs.filter((r) => r.counts && !r.good)).toHaveLength(1);
+		expect(a.runs.filter((r) => r.counts)).toHaveLength(1);
+		const wa = workspaceStats([{ ...a, id: 'x' }], { now: NOW });
+		const wb = workspaceStats([{ ...b, id: 'x' }], { now: NOW });
+		expect(wb.printers).toEqual(wa.printers);
+		expect(wb.failingPlates).toEqual(wa.failingPlates);
+	});
+	it('does not merge unrelated same-day runs on one plate', () => {
+		const v = makeView();
+		const pl = multiPartPlate(v);
+		const base = { plateNumber: pl.number, date: '2026-11-01', printer: 'CC1' };
+		const rows: Partial<PrintRun>[] = [
+			{ ...base, result: 'Success', hours: 5 },
+			{ ...base, result: 'Failed', hours: 1 },
+			{ ...base, partSlugs: [pl.parts[0]], result: 'Success', note: 'a' },
+			{ ...base, partSlugs: pl.parts.slice(1), result: 'Failed', note: 'b' }
+		];
+		for (const order of [rows, [...rows].reverse()]) {
+			const out = failureRates(withRuns(order, v));
+			expect(out.total).toEqual({ runs: 4, failed: 2, rate: 0.5 });
+		}
+	});
+});
