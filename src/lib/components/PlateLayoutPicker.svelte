@@ -14,6 +14,7 @@
 	import AskDialog from './AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { focusIn } from '#lib/client/focus.ts';
+	import { withStartedConfirm } from '#lib/client/plate-guard.ts';
 
 	const asking = createAsk();
 
@@ -41,7 +42,8 @@
 		name = 'plateLayout',
 		printerName = 'printer',
 		orgId = '',
-		disabled = false,
+		disabled: disabledIn = false,
+		blocked = null,
 		allowUpload = false,
 		bedPanel = true,
 		printer = null,
@@ -58,6 +60,8 @@
 		/** Chapter or My builds whose printers are offered first in the bed picker. */
 		orgId?: string;
 		disabled?: boolean;
+		/** A live printer job blocks changing the plates: the reason (shown by the parent); locks every control. */
+		blocked?: string | null;
 		allowUpload?: boolean;
 		/** Show the bed picker under "Arrange for my bed". */
 		bedPanel?: boolean;
@@ -75,6 +79,7 @@
 		preload?: { layouts: PlateLayoutInfo[]; current: string | null } | null;
 	} = $props();
 
+	const disabled = $derived(disabledIn || !!blocked);
 	const ARRANGE = '__arrange__';
 	const ARRANGED = 'arranged';
 	const UPLOAD = '__upload__';
@@ -89,6 +94,13 @@
 	let editBed = $state(false); // build mode: the bed picker is open although the build has a printer
 	let pending = $state<{ key: string; name: string; plates: number } | null>(null);
 	let error = $state<string | null>(null);
+	/** A live printer job blocks changing the plates: the sentence to show, no override. */
+	let refused = $state<string | null>(null);
+	let refusedEl = $state<HTMLElement>();
+	// The refusal can sit below the fold (or under the tab bar): bring it into the middle of the screen.
+	$effect(() => {
+		if (refused && refusedEl) refusedEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	});
 	let layoutSelect = $state<HTMLSelectElement>();
 	const uid = $props.id();
 	/** Close the replace confirmation; focus goes back to the layout select (the confirm panel disappears). */
@@ -157,26 +169,23 @@
 	const note = $derived(layouts.find((l) => l.key === value)?.printerNote);
 	const bedChanged = $derived(JSON.stringify(bed) !== printerKey);
 
-	async function runApply(apply: (convert: boolean) => Promise<unknown>): Promise<boolean> {
-		try {
-			await apply(false);
-		} catch (e) {
-			if (e instanceof Error && /print log/.test(e.message)) {
-				if (
-					!(await asking.ask(`${e.message}\n\nSwitch layout and convert them?`, {
-						title: 'Switch layout',
-						confirmLabel: 'Switch and convert'
-					}))
-				)
-					return false;
-				await apply(true);
-			} else throw e;
-		}
-		return true;
+	/**
+	 * Plate-replacing calls on a started build ask once (renumbering, logs converted, parts printing by
+	 * hand); with a printer job live they are refused with no override (`refused`).
+	 */
+	async function runApply(apply: (confirm: boolean) => Promise<unknown>): Promise<boolean> {
+		refused = null;
+		const r = await withStartedConfirm(asking, apply, {
+			title: 'Change the plates',
+			confirmLabel: 'Change plates'
+		});
+		if (!r.done) refused = r.refused;
+		return r.done;
 	}
 
 	async function change(picked: string) {
 		error = null;
+		refused = null;
 		value = picked;
 		if (!buildId) return;
 		if (value === UPLOAD) {
@@ -382,6 +391,9 @@
 			</div>
 		</div>
 	{/if}
+	{#if refused}<p class="refused" role="alert" data-testid="plates-refused" bind:this={refusedEl}>
+			{refused}
+		</p>{/if}
 	{#if error}<span class="err" role="alert">{error}</span>{/if}
 </div>
 
@@ -429,6 +441,16 @@
 	.hint {
 		font-size: var(--fs-xs);
 		color: var(--muted);
+	}
+	.refused {
+		margin: var(--sp-3) 0 0;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
+		background: var(--warn-soft);
+		color: var(--warn);
+		font-size: var(--fs-md);
+		font-weight: 600;
+		overflow-wrap: anywhere;
 	}
 	.err {
 		font-size: var(--fs-xs);

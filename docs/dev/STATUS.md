@@ -264,6 +264,15 @@ Route each to the agent named in brackets.
 - **Overview on phones** (#53, merged 2026-11-15): filament rows show a chevron that flips
   when the row is open, so the spools + and history are easier to find.
 
+- **Started builds** (#56, on `fix/design-apply-started`): once a build has started (any
+  run, a part not To print, anything Printing, or a live printer job), colour, palette,
+  part-slot, variant and printer changes no longer re-arrange its plates (they go stale and
+  the banner says they were kept). Applying a design asks "Colors only" (keeps plates,
+  files, progress, logs, spools, locks) or "Colors and print files" (full replace, keeps
+  locks, refused while printing); palette reset asks; Undo after apply. Re-arrange, layout
+  switch and "Use these plates" are refused while a printer job is live and ask first on a
+  started build. Open: wizard header "Skip setup" clipped at 390 [app-shell]; a part
+  Printing by hand with no arranged plate doesn't block full replace (by design for now).
 - **Design studio** [design-studio-ui]: #34 (2026-11-13): re-applying a palette resets
   unlocked parts to their kit slot; "Lock part color" keeps one part's exact colour (locked
   parts on a recoloured slot move to a slot with their old filament, reused or auto-added;

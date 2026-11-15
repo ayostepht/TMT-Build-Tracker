@@ -8,10 +8,21 @@ import {
 	sameFilament
 } from '#lib/domain/design.ts';
 import { stockKg } from '#lib/domain/accounting.ts';
+import {
+	designSnapshot,
+	fullReplaceBlock,
+	planRecolor,
+	type ApplyMode,
+	type ApplyPreview,
+	type RecolorPlan
+} from '#lib/domain/design-apply.ts';
+import { startedSummary } from '#lib/domain/started.ts';
 import type { BuildView, FilamentRole } from '#lib/domain/types.ts';
-import { ApiError } from '../access';
+import { ApiError, buildAccess } from '../access';
 import { mutateBuild } from '../builds/actions';
 import { remapRoleKey } from '../builds/role-keys';
+import { BuildStartedError } from '../builds/started-guard';
+import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
 import { buildFilaments, builds, colorDesigns } from '../db/schema';
 import { canSeeDesign } from './access';
@@ -46,6 +57,8 @@ function hexOf(v: unknown): string {
  * Parts of the body run in this order inside one transaction:
  *
  * - `addRole: { key?, name, material, hex }`: add a slot.
+ * - `confirm: true`: needed with `palette.reset` on a build that has started printing (otherwise 409
+ *   `build-started`, see `BuildStartedError`); the activity row then carries `before` (the undo snapshot).
  * - `palette: { label, slots: { [roleKey]: { name, material, hex } }, reset?: true }`: set those slots'
  *   filaments. With `reset`, every unlocked part goes back to its kit slot, and a locked part sitting on a
  *   slot whose filament changes moves to a slot holding its old filament (an existing non-kit slot with the
@@ -125,6 +138,14 @@ export function updateBuildDesign(db: Db, buildId: string, userId: string, body:
 			if (!entries.length || entries.length > 20) bad('palette.slots needs 1 to 20 colors');
 			const label = raw.label === undefined ? 'new' : str(raw.label, 'label', 200);
 			const reset = raw.reset === true;
+			if (reset && view.started.started) {
+				if (body.confirm !== true)
+					throw new BuildStartedError(
+						view.started,
+						'This build has started printing. Applying a palette this way sends part colors back to the kit slots.'
+					);
+				payload.before = designSnapshot(view);
+			}
 			const before = new Map(filaments.map((f) => [f.key, { ...f }]));
 			const changed = new Set<string>();
 			for (const [key, v] of entries) {
@@ -306,32 +327,169 @@ export function updateBuildDesign(db: Db, buildId: string, userId: string, body:
 	});
 }
 
+export interface ApplyDesignOptions {
+	/** `colors`: slot filaments only. `full`: also every part's slot. Required on a build that has started. */
+	mode?: ApplyMode;
+	/** `full` on a started build (not printing) needs this, else 409 `build-started`. */
+	confirm?: boolean;
+}
+
+function visibleDesign(db: Db, designId: string, userId: string) {
+	const d = db.select().from(colorDesigns).where(eq(colorDesigns.id, designId)).get();
+	if (!d || !canSeeDesign(db, d, userId)) throw new ApiError(404, 'Not found');
+	return d;
+}
+
 /**
- * Replace a build's colors with a saved design: slot names, materials and hexes
- * (spools on hand are kept for slots the build already has) and every part's
- * slot. Editors and owners of the build; the design must be visible to them and
- * be for the same template.
+ * Apply a saved design to a build (editors and owners of the build; the design must be visible to them and
+ * be for the same template).
+ *
+ * - Build not started (nothing printed, nothing printing, no live job): replaces the colors and every part's
+ *   slot, as always (`mode` `colors` recolors only).
+ * - Build started: needs a `mode`, else 409 `build-started` (the UI then asks). `colors` changes the slots'
+ *   filaments only (`recolorOnly`; returns what it did). `full` also moves parts; it is refused (409) while a
+ *   plate is printing or a printer job is live, and needs `confirm: true` otherwise.
  */
 export function applyDesignToBuild(
 	db: Db,
 	designId: string,
 	buildId: string,
-	userId: string
-): void {
-	const d = db.select().from(colorDesigns).where(eq(colorDesigns.id, designId)).get();
-	if (!d || !canSeeDesign(db, d, userId)) throw new ApiError(404, 'Not found');
+	userId: string,
+	opts: ApplyDesignOptions = {}
+): RecolorPlan | null {
+	const d = visibleDesign(db, designId, userId);
+	let result: RecolorPlan | null = null;
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		if (view.build.templateId !== d.templateId)
 			bad('That design is for a different kit than this build');
-		replaceColors(tx, view, d);
-		return { kind: 'design.apply', payload: { designId: d.id, designName: d.name } };
+		if (opts.mode !== undefined && opts.mode !== 'colors' && opts.mode !== 'full')
+			bad('mode must be colors or full');
+		const mode: ApplyMode = opts.mode ?? 'full';
+		if (view.started.started) {
+			if (opts.mode === undefined)
+				throw new BuildStartedError(
+					view.started,
+					'This build has started printing. Choose how to apply the design.'
+				);
+			if (mode === 'full') {
+				const block = fullReplaceBlock(view.started);
+				if (block)
+					throw new BuildStartedError(
+						view.started,
+						`${block} Replacing print files is not possible now. Apply the colors only, or wait for the print to finish.`
+					);
+				if (opts.confirm !== true)
+					throw new BuildStartedError(
+						view.started,
+						'This build has started printing. Confirm to replace its colors and print files.'
+					);
+			}
+		}
+		if (mode === 'colors') {
+			result = recolorOnly(tx, view, d);
+			if (!result.changes.length) return { kind: 'design.recolor', skip: true };
+			return {
+				kind: 'design.recolor',
+				payload: {
+					designId: d.id,
+					designName: d.name,
+					changed: result.changes.map((c) => c.key),
+					...(result.skipped.length ? { skipped: result.skipped } : {}),
+					before: designSnapshot(view)
+				}
+			};
+		}
+		const lockedAdded = replaceColors(tx, view, d);
+		return {
+			kind: 'design.apply',
+			payload: {
+				designId: d.id,
+				designName: d.name,
+				mode: 'full',
+				...(lockedAdded.length ? { lockedAdded } : {}),
+				before: designSnapshot(view)
+			}
+		};
 	});
+	return result;
 }
 
-function replaceColors(tx: Db, view: BuildView, d: typeof colorDesigns.$inferSelect): void {
+/** Dry run of `applyDesignToBuild`: what "Colors only" would do and whether "full" is allowed. Writes nothing. */
+export function previewApplyDesign(
+	db: Db,
+	designId: string,
+	buildId: string,
+	userId: string
+): ApplyPreview {
+	const d = visibleDesign(db, designId, userId);
+	const access = buildAccess(db, buildId, userId);
+	if (!access) throw new ApiError(404, 'Not found');
+	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
+	const view = loadBuildView(db, buildId, userId);
+	if (!view) throw new ApiError(404, 'Not found');
+	if (view.build.templateId !== d.templateId)
+		bad('That design is for a different kit than this build');
+	return {
+		...planRecolor(view, d),
+		started: view.started,
+		summary: startedSummary(view.started),
+		fullBlocked: fullReplaceBlock(view.started)
+	};
+}
+
+/**
+ * "Colors only": write the target filament's `name`, `material` and `hex` on the slots `planRecolor` picked.
+ * Part slots, locks, plates, files, runs, spools, `spool_adds` and the Spoolman link are not touched, and
+ * the kind (`design.recolor`) is outside `REARRANGE_KINDS`, so no plate is rebuilt.
+ */
+function recolorOnly(tx: Db, view: BuildView, d: typeof colorDesigns.$inferSelect): RecolorPlan {
+	const plan = planRecolor(view, d);
+	if (!plan.changes.length) return plan;
+	for (const c of plan.changes)
+		tx.update(buildFilaments)
+			.set({ name: c.name, material: c.material, hex: c.hex })
+			.where(and(eq(buildFilaments.buildId, view.build.id), eq(buildFilaments.roleKey, c.key)))
+			.run();
+	const byKey = new Map(plan.changes.map((c) => [c.key, c]));
+	const roles = view.filaments.map((f) => {
+		const c = byKey.get(f.key);
+		return {
+			key: f.key,
+			name: c?.name ?? f.name,
+			material: c?.material ?? f.material,
+			hex: c?.hex ?? f.hex
+		};
+	});
+	const row = tx
+		.select({ design: builds.design })
+		.from(builds)
+		.where(eq(builds.id, view.build.id))
+		.get();
+	tx.update(builds)
+		.set({
+			design: { ...((row?.design ?? {}) as Obj), roles, partRoles: effectivePartRoles(view) }
+		})
+		.where(eq(builds.id, view.build.id))
+		.run();
+	return plan;
+}
+
+/**
+ * "Colors and print files": slot names, materials and hexes (spools on hand stay on the slot key) and every
+ * part's slot. Locked parts keep their exact color: they stay on their slot, or, when that slot's filament
+ * changes, move to a slot that holds the old filament (an existing non-kit one, else a new one; returned).
+ */
+function replaceColors(
+	tx: Db,
+	view: BuildView,
+	d: typeof colorDesigns.$inferSelect
+): { key: string; name: string; material: string; parts: string[] }[] {
 	const have = new Map(view.filaments.map((f) => [f.key, f]));
+	const changed = new Set<string>();
 	for (const r of d.roles) {
-		if (have.has(r.key)) {
+		const cur = have.get(r.key);
+		if (cur) {
+			if (!sameFilament(cur, r)) changed.add(r.key);
 			tx.update(buildFilaments)
 				.set({ name: r.name, material: r.material, hex: r.hex.toLowerCase() })
 				.where(and(eq(buildFilaments.buildId, view.build.id), eq(buildFilaments.roleKey, r.key)))
@@ -352,6 +510,7 @@ function replaceColors(tx: Db, view: BuildView, d: typeof colorDesigns.$inferSel
 	const keys = new Set([...have.keys(), ...d.roles.map((r) => r.key)]);
 	const partRoles: Record<string, string> = {};
 	for (const p of view.allParts) {
+		if (p.locked) continue;
 		const r = d.partRoles[p.slug];
 		partRoles[p.slug] =
 			r &&
@@ -367,8 +526,60 @@ function replaceColors(tx: Db, view: BuildView, d: typeof colorDesigns.$inferSel
 		...d.roles,
 		...view.filaments.filter((f) => !d.roles.some((r) => r.key === f.key))
 	].map((r) => ({ key: r.key, name: r.name, material: r.material, hex: r.hex.toLowerCase() }));
+
+	// Locked parts: keep the exact color.
+	const lockedAdded: { key: string; name: string; material: string; parts: string[] }[] = [];
+	const byOld = new Map<string, string[]>();
+	for (const p of view.allParts)
+		if (p.locked && changed.has(p.role)) byOld.set(p.role, [...(byOld.get(p.role) ?? []), p.slug]);
+	for (const p of view.allParts) if (p.locked) partRoles[p.slug] = p.role;
+	for (const [oldKey, slugs] of byOld) {
+		const old = have.get(oldKey)!;
+		let target = roles.find(
+			(r) =>
+				!changed.has(r.key) &&
+				!view.filaments.find((f) => f.key === r.key)?.kit &&
+				sameFilament(r, old)
+		);
+		if (!target) {
+			const key = newRoleKey(
+				roles.map((r) => r.key),
+				old.name
+			);
+			tx.insert(buildFilaments)
+				.values({
+					buildId: view.build.id,
+					roleKey: key,
+					name: old.name,
+					material: old.material,
+					hex: old.hex,
+					spools: 0
+				})
+				.run();
+			target = { key, name: old.name, material: old.material, hex: old.hex };
+			roles.push(target);
+			lockedAdded.push({
+				key,
+				name: old.name,
+				material: old.material,
+				parts: slugs.map((s) => view.allParts.find((p) => p.slug === s)!.name)
+			});
+		}
+		for (const s of slugs) partRoles[s] = target.key;
+	}
+	const lockedParts = view.allParts.filter((p) => p.locked).map((p) => p.slug);
 	tx.update(builds)
-		.set({ design: { id: d.id, slug: d.slug, name: d.name, roles, partRoles } })
+		.set({
+			design: {
+				id: d.id,
+				slug: d.slug,
+				name: d.name,
+				roles,
+				partRoles,
+				...(lockedParts.length ? { lockedParts } : {})
+			}
+		})
 		.where(eq(builds.id, view.build.id))
 		.run();
+	return lockedAdded;
 }

@@ -445,3 +445,50 @@ describe('Partial with per-part results and spool adds', () => {
 		expect([...forged].some((ch) => ch.charCodeAt(0) <= 3)).toBe(false);
 	});
 });
+
+describe('design.recolor and design.apply modes', () => {
+	it('says colors only, plates and progress kept', () => {
+		expect(say('design.recolor', { designName: 'Sunset' })).toBe(
+			'Steph changed the colors to design "Sunset" (colors only; plates and progress kept)'
+		);
+	});
+	it('lists skipped slots with the reason', () => {
+		const text = say('design.recolor', {
+			designName: 'Sunset',
+			skipped: [
+				{ role: 'tire', name: 'Tire', reason: 'material' },
+				{ role: 'accent', reason: 'locked' }
+			]
+		});
+		expect(text).toContain(
+			'(colors only; plates and progress kept); left Tire (other material) and '
+		);
+		expect(text).toContain('(locked parts) as they were');
+	});
+	it('does not render the before snapshot and strips control characters', () => {
+		const text = say('design.recolor', {
+			designName: 'Sun\u0001set\u0003',
+			before: { roles: [{ key: 'primary', hex: '#123456' }], partRoles: {}, lockedParts: [] }
+		});
+		expect(text).toBe(
+			'Steph changed the colors to design "Sunset" (colors only; plates and progress kept)'
+		);
+		expect(text).not.toContain('123456');
+	});
+	it('marks a full apply', () => {
+		expect(
+			say('design.apply', {
+				designName: 'Sunset',
+				mode: 'full',
+				before: { roles: [], partRoles: {}, lockedParts: [] }
+			})
+		).toBe('Steph applied the color design "Sunset" (colors and part colors replaced)');
+		// Not started: no snapshot, so no suffix even if the server sends mode: 'full'.
+		expect(say('design.apply', { designName: 'Sunset', mode: 'full' })).toBe(
+			'Steph applied the color design "Sunset"'
+		);
+		expect(say('design.apply', { designName: 'Sunset' })).toBe(
+			'Steph applied the color design "Sunset"'
+		);
+	});
+});

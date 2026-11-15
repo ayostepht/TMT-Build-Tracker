@@ -262,6 +262,24 @@ export interface TemplateModelInfo {
 	slugs: string[];
 }
 
+export interface StartedInfo {
+	started: boolean;
+	/** Logged print runs. */
+	runs: number;
+	/** Active parts with status Printed. */
+	printed: number;
+	/** Active parts that are not "To print" (Printing, Printed or Reprint). */
+	notToPrint: number;
+	/** Active parts with status Printing, plus parts on a live job. */
+	printingParts: number;
+	/** Plate numbers that are printing right now (a Printing part sits on it, or a live job names it), ascending. */
+	printingPlates: number[];
+	/** Live linked printer jobs. */
+	liveJobs: number;
+	/** Active parts in the build (for "22 of 64"). */
+	totalParts: number;
+}
+
 export interface BuildView {
 	build: BuildSummary;
 	role: TeamRole;
@@ -297,6 +315,8 @@ export interface BuildView {
 	partProfiles?: Record<string, PartProfileInfo>;
 	/** Summary of the print template; null/absent when nothing was learned. */
 	printTemplate?: PrintTemplateInfo | null;
+	/** Whether the build has started printing (see `buildStarted`); `started.started` is false for drafts. */
+	started: StartedInfo;
 }
 
 /** Per-part data learned from a sliced file, as it applies to the build's current colors. */

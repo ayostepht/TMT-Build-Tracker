@@ -74,11 +74,11 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await page.keyboard.press('Escape');
 	await expect(dlg).toHaveCount(0);
 
-	// Apply a saved design to this build: asks first, keeps print progress.
+	// Apply a saved design to this build: asks first (the build has not started, so no started-build dialog).
 	await page.getByTestId('open-apply').click();
 	await page.getByTestId('apply-design-select').selectOption({ label: 'E2E Blues (mine)' });
 	await page.getByRole('button', { name: 'Apply this design…' }).click();
-	await expect(page.getByTestId('apply-design')).toContainText('Your print progress');
+	await expect(page.getByTestId('apply-design')).toContainText('re-arranged for the new colors');
 	await page.getByRole('button', { name: 'Replace colors' }).click();
 	await expect(page.getByTestId('apply-dialog')).toHaveCount(0);
 	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');

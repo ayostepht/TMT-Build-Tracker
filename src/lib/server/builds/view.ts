@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
+import { buildStarted, type LiveJobs } from '#lib/domain/started.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
 	ActivityItem,
@@ -38,6 +39,7 @@ import {
 	builds,
 	member,
 	printRuns,
+	printerJobs,
 	templateAssemblySteps,
 	templateFilamentRoles,
 	templateGuidePages,
@@ -66,6 +68,81 @@ function defaultLayoutKey(db: Db, templateId: string): string | null {
 			)
 			.get()?.key ?? null
 	);
+}
+
+/** Printer jobs linked to the build that are running right now (printing or paused). */
+export function loadLiveJobs(db: Db, buildId: string): LiveJobs {
+	const rows = db
+		.select({ plateNumber: printerJobs.plateNumber, partSlugs: printerJobs.partSlugs })
+		.from(printerJobs)
+		.where(
+			and(eq(printerJobs.buildId, buildId), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all();
+	return {
+		count: rows.length,
+		slugs: rows.flatMap((r) => r.partSlugs ?? []),
+		plates: rows.map((r) => r.plateNumber).filter((n): n is number => n != null)
+	};
+}
+
+/**
+ * Ids of the given builds that have started printing, in a handful of batched queries (no
+ * `loadBuildView` per build). Same definition as `buildStarted`: a logged run, a part that is not
+ * "To print" (parts of inactive variants are ignored), or a live (printing / paused) linked job.
+ * Drafts are never started.
+ */
+export function startedBuildIds(db: Db, buildIds: string[]): Set<string> {
+	const started = new Set<string>();
+	if (!buildIds.length) return started;
+	const rows = db
+		.select({
+			id: builds.id,
+			kind: builds.kind,
+			templateId: builds.templateId,
+			choices: builds.variantChoices
+		})
+		.from(builds)
+		.where(inArray(builds.id, buildIds))
+		.all()
+		.filter((r) => r.kind !== 'draft');
+	if (!rows.length) return started;
+	const ids = rows.map((r) => r.id);
+	for (const r of db
+		.selectDistinct({ id: printRuns.buildId })
+		.from(printRuns)
+		.where(inArray(printRuns.buildId, ids))
+		.all())
+		started.add(r.id);
+	for (const r of db
+		.selectDistinct({ id: printerJobs.buildId })
+		.from(printerJobs)
+		.where(
+			and(inArray(printerJobs.buildId, ids), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all())
+		if (r.id) started.add(r.id);
+
+	const groupsByTemplate = new Map(
+		db
+			.select({ id: templates.id, groups: templates.variantGroups })
+			.from(templates)
+			.where(inArray(templates.id, [...new Set(rows.map((r) => r.templateId))]))
+			.all()
+			.map((t) => [t.id, t.groups ?? []])
+	);
+	const inactiveByBuild = new Map<string, Set<string>>();
+	for (const r of rows) {
+		const groups = groupsByTemplate.get(r.templateId) ?? [];
+		inactiveByBuild.set(r.id, inactiveSlugs(groups, resolveChoices(groups, r.choices)));
+	}
+	for (const r of db
+		.select({ id: buildParts.buildId, slug: buildParts.partSlug })
+		.from(buildParts)
+		.where(and(inArray(buildParts.buildId, ids), ne(buildParts.status, 'To print')))
+		.all())
+		if (!inactiveByBuild.get(r.id)?.has(r.slug)) started.add(r.id);
+	return started;
 }
 
 export function loadBuildView(db: Db, buildId: string, userId: string): BuildView | null {
@@ -409,14 +486,15 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			}
 		: null;
 
-	return {
+	const kind = b.kind === 'draft' ? 'draft' : 'build';
+	const result: BuildView = {
 		build: {
 			id: b.id,
 			organizationId: b.organizationId,
 			name: b.name,
 			recipient: b.recipient,
 			hospital: b.hospital,
-			kind: b.kind === 'draft' ? 'draft' : 'build',
+			kind,
 			phase: b.phase as BuildPhase,
 			deliveryDate: b.deliveryDate,
 			createdAt: b.createdAt.toISOString(),
@@ -460,8 +538,12 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		layoutPrinter: b.printer ? null : layoutBed(b.plateLayout ?? defaultLayoutKey(db, tpl.id)),
 		assembly: loadAssembly(db, buildId, tpl.id, variantChoices, parts),
 		photos: loadPhotos(db, buildId),
-		handoff: loadHandoff(db, buildId, access.canEdit)
+		handoff: loadHandoff(db, buildId, access.canEdit),
+		started: undefined as never
 	};
+	// Drafts are never started (buildStarted ignores jobs and runs for them).
+	result.started = buildStarted(result, kind === 'draft' ? undefined : loadLiveJobs(db, buildId));
+	return result;
 }
 
 /**
