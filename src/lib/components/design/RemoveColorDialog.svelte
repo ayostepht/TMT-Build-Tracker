@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
 	import { removeImpact, replacementOptions } from '#lib/domain/design.ts';
-	import { fmtSpools } from '#lib/domain/index.ts';
+	import { fmtSpools, stockKg } from '#lib/domain/index.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import Dialog from './share/Dialog.svelte';
@@ -28,7 +28,7 @@
 	const slot = $derived(view.filaments.find((f) => f.key === roleKey));
 	const impact = $derived(removeImpact(view, roleKey));
 	const options = $derived(sortRoles(replacementOptions(view, roleKey), (o) => o.filament.key));
-	const stock = $derived(!!slot && (slot.spools > 0 || slot.spoolmanSpoolId !== null));
+	const stock = $derived(!!slot && (stockKg(slot) > 0 || slot.spoolmanSpoolId !== null));
 	let chosen = $state('');
 	const n = $derived(impact.length);
 </script>
@@ -84,8 +84,8 @@
 
 	{#if stock && slot}
 		<p class="rc-note">
-			Its {slot.spools > 0
-				? `${fmtSpools(slot.spools)} spools on hand`
+			Its {stockKg(slot) > 0
+				? `${fmtSpools(stockKg(slot))} kg on hand`
 				: 'stock'}{slot.spoolmanSpoolId !== null ? ' and Spoolman link' : ''} are dropped with it.
 		</p>
 	{/if}

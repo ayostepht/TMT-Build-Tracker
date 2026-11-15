@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
@@ -110,11 +110,35 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 				hex: f.hex,
 				tpu: t?.tpu ?? materialFamily(f.material) === 'tpu',
 				spools: f.spools,
+				spoolAdds: (f.spoolAdds ?? []).map((a) => ({
+					id: a.id,
+					kg: a.kg,
+					at: a.at,
+					userId: a.userId,
+					userName: null as string | null,
+					...(a.note ? { note: a.note } : {})
+				})),
 				recommendedSpools: t?.recommendedSpools ?? 1,
 				spoolmanSpoolId: f.spoolmanSpoolId,
 				kit: !!t
 			};
 		});
+	// Who added each spool.
+	const adderIds = [
+		...new Set(filaments.flatMap((f) => f.spoolAdds.map((a) => a.userId)).filter((x) => !!x))
+	] as string[];
+	if (adderIds.length) {
+		const names = new Map(
+			db
+				.select({ id: user.id, name: user.name })
+				.from(user)
+				.where(inArray(user.id, adderIds))
+				.all()
+				.map((u) => [u.id, u.name])
+		);
+		for (const f of filaments)
+			for (const a of f.spoolAdds) a.userName = (a.userId && names.get(a.userId)) || null;
+	}
 	// keep template role order
 	const order = [...tRoles.keys()];
 	// Colors added in the Design tab come after the template's own slots.
@@ -168,6 +192,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			runEstSeconds: s.runEstSeconds,
 			comps: s.comps,
 			assigneeUserId: s.assigneeUserId,
+			manualGrams: s.manualGrams,
 			updatedAt: s.updatedAt.toISOString()
 		};
 	}
@@ -181,6 +206,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			runEstSeconds: null,
 			comps: {},
 			assigneeUserId: null,
+			manualGrams: null,
 			updatedAt: b.createdAt.toISOString()
 		};
 	}
@@ -299,6 +325,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			parts: p.parts,
 			slicerGrams: p.slicerGrams,
 			slicerByPart: p.slicerByPart,
+			gramsSource: gramsSourceOf(p, arrangedEst.get(p.number)?.gramsByRole, !!learnedPlate(p)),
 			thumbnailPath: p.thumbnailPath,
 			filamentGrams:
 				p.source === 'arranged' || learnedPlate(p)
@@ -437,6 +464,41 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 	};
 }
 
+/**
+ * Where a plate's grams come from. A stored source wins. Older rows have none: grams on an uploaded
+ * plate that match the file's own total (or, on a perPartRuns plate, are the same for every part, as
+ * an upload writes them) came from the file; anything else was typed. With no slicer grams, a plate
+ * whose `filamentGrams` come from the build's own slice (arranged / learned) reads 'slice'.
+ */
+export function gramsSourceOf(
+	p: {
+		source: string | null;
+		slicerGrams: number | null;
+		slicerByPart: Record<string, number>;
+		perPartRuns: boolean;
+		filamentGrams: Record<string, number> | null;
+		slicerGramsSource: 'user' | 'file' | 'printer' | null;
+	},
+	arrangedGrams: Record<string, number> | undefined,
+	learned: boolean
+): 'user' | 'file' | 'printer' | 'slice' | null {
+	const typed = p.perPartRuns
+		? Object.values(p.slicerByPart)
+		: p.slicerGrams
+			? [p.slicerGrams]
+			: [];
+	const has = typed.some((v) => v > 0);
+	if (!has) {
+		const own = Object.values(p.source === 'arranged' || learned ? (arrangedGrams ?? {}) : {});
+		return own.some((g) => g > 0) ? 'slice' : null;
+	}
+	if (p.slicerGramsSource) return p.slicerGramsSource;
+	if (!p.source?.startsWith('upload:')) return 'user';
+	if (p.perPartRuns) return new Set(typed).size === 1 ? 'file' : 'user';
+	const fileTotal = Object.values(p.filamentGrams ?? {}).reduce((a, b) => a + b, 0);
+	return fileTotal > 0 && Math.abs(fileTotal - (p.slicerGrams ?? 0)) < 0.5 ? 'file' : 'user';
+}
+
 /** Persist domain patches onto build_parts. */
 export function applyPatches(db: Db, buildId: string, patches: PartPatch[], now: Date): void {
 	for (const { slug, ...p } of patches) {
@@ -447,6 +509,7 @@ export function applyPatches(db: Db, buildId: string, patches: PartPatch[], now:
 		if ('runEstSeconds' in p) set.runEstSeconds = p.runEstSeconds ?? null;
 		if (p.comps !== undefined) set.comps = p.comps;
 		if ('assigneeUserId' in p) set.assigneeUserId = p.assigneeUserId ?? null;
+		if ('manualGrams' in p) set.manualGrams = p.manualGrams ?? null;
 		db.update(buildParts)
 			.set(set)
 			.where(and(eq(buildParts.buildId, buildId), eq(buildParts.partSlug, slug)))

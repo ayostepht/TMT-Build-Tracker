@@ -74,7 +74,12 @@ export const setPartStatus = (id: string, slug: string, status: PartStatus, prin
 export const updatePart = (
 	id: string,
 	slug: string,
-	patch: { comps?: Record<string, boolean>; assigneeUserId?: string | null }
+	patch: {
+		comps?: Record<string, boolean>;
+		assigneeUserId?: string | null;
+		/** Grams for the whole part, all copies (send on its own). null clears. */
+		manualGrams?: number | null;
+	}
 ) => call('PATCH', `${b(id)}/parts/${encodeURIComponent(slug)}`, patch);
 
 export const startPrinting = (id: string, slugs: string[]) =>
@@ -90,8 +95,22 @@ export const setPrintStart = (id: string, slugs: string[], when: Date | string) 
 export const setRunEstimate = (id: string, slugs: string[], seconds: number | null) =>
 	call('POST', `${b(id)}/printing`, { action: 'setEstimate', slugs, seconds });
 
-export const logRun = (id: string, input: PrintRunInput) =>
-	call<{ id: string }>('POST', `${b(id)}/runs`, input).then((r) => r.id);
+/**
+ * A Partial's per-part results: the parts that printed OK become a Success run, the rest a Failed
+ * run (grams of each half; hours and run time split by the parts' estimated grams).
+ */
+export interface PartialSplitBody {
+	keptSlugs: string[];
+	keptGrams: number | null;
+	lostGrams: number | null;
+}
+/** Logs a run; with `split` (result Partial) two runs are made. `id` is the printed one, `ids` all of them. */
+export const logRun = (id: string, input: PrintRunInput & { split?: PartialSplitBody }) =>
+	call<{ id: string; ids?: string[]; spoolmanWarning?: string }>(
+		'POST',
+		`${b(id)}/runs`,
+		input
+	).then((r) => ({ id: r.id, ids: r.ids ?? [r.id], spoolmanWarning: r.spoolmanWarning }));
 export const deleteRun = (id: string, runId: string, { recompute = true } = {}) =>
 	call('DELETE', `${b(id)}/runs/${encodeURIComponent(runId)}${recompute ? '' : '?recompute=0'}`);
 
@@ -113,6 +132,18 @@ export const updateFilament = (
 	patch: { spools?: number; name?: string; hex?: string; material?: string }
 ) => call('PATCH', `${b(id)}/filaments/${encodeURIComponent(role)}`, patch);
 
+/** Add a spool to a color's stock (kg 0.01 to 99, optional note up to 200 characters). Returns the add's id. */
+export const addSpool = (id: string, role: string, body: { kg: number; note?: string }) =>
+	call<{ id: string }>('POST', `${b(id)}/filaments/${encodeURIComponent(role)}/stock`, body).then(
+		(r) => r.id
+	);
+/** Remove one earlier add from a color's stock. */
+export const removeSpoolAdd = (id: string, role: string, addId: string) =>
+	call(
+		'DELETE',
+		`${b(id)}/filaments/${encodeURIComponent(role)}/stock/${encodeURIComponent(addId)}`
+	);
+
 /** Generic printing action (start | stop | setStart | setEstimate). `seconds` undefined/null clears the estimate. */
 export const printing = (
 	id: string,
@@ -130,8 +161,12 @@ export const printing = (
 export const getView = (id: string) => call<BuildView>('GET', `${b(id)}/view`);
 
 /** Delete a run and restore the affected parts to `parts` (their state before the run was logged). */
-export const undoRun = (id: string, runId: string, parts: PartSnapshot[]) =>
-	call('POST', `${b(id)}/runs/${encodeURIComponent(runId)}/undo`, { parts });
+/** Undo a just-logged run; pass `runIds` (from `logRun`) to remove both runs of a split Partial. */
+export const undoRun = (id: string, runId: string, parts: PartSnapshot[], runIds?: string[]) =>
+	call('POST', `${b(id)}/runs/${encodeURIComponent(runId)}/undo`, {
+		parts,
+		...(runIds && runIds.length > 1 ? { runIds } : {})
+	});
 
 /** Correct a past print log; changing result, part or date re-derives the affected parts' statuses. */
 export const updateRun = (
@@ -698,6 +733,8 @@ export const jobAction = (
 		| {
 				action: 'confirm';
 				result?: 'Success' | 'Failed' | 'Partial';
+				/** With result Partial: which parts printed OK and the grams of each half (see `PartialSplitBody`). */
+				split?: PartialSplitBody;
 				grams?: number | null;
 				hours?: number | null;
 				note?: string;

@@ -22,6 +22,7 @@ import {
 	mutateBuildSystem,
 	syncPlateTime
 } from '../builds/actions';
+import { MAX_RUN_GRAMS, runGramsMessage } from '../builds/actions';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
 import { builds, printerJobs, printers } from '../db/schema';
@@ -708,6 +709,20 @@ export function confirmJob(
 	userId: string,
 	body: unknown
 ): string {
+	return confirmJobRuns(db, jobId, orgId, userId, body).runId;
+}
+
+/**
+ * Like `confirmJob`, but also returns every run created: a Partial with `split` (which parts
+ * printed OK, and the grams of each half) makes two, and `printer_jobs.run_id` points at the kept one.
+ */
+export function confirmJobRuns(
+	db: Db,
+	jobId: string,
+	orgId: string,
+	userId: string,
+	body: unknown
+): { runId: string; runIds: string[] } {
 	const { job, printer } = getJobForOrg(db, jobId, orgId);
 	if (!job.buildId || job.plateNumber == null)
 		throw new ApiError(400, 'Link the job to a plate first');
@@ -724,6 +739,33 @@ export function confirmJob(
 				: 'Failed';
 	const view = loadBuildView(db, job.buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
+	let split: { keptSlugs: string[]; keptGrams: number | null; lostGrams: number | null } | null =
+		null;
+	if (o.split !== undefined && o.split !== null) {
+		const sp = o.split as Record<string, unknown>;
+		if (typeof sp !== 'object' || Array.isArray(sp))
+			throw new ApiError(400, 'split must be an object');
+		if (result !== 'Partial') throw new ApiError(400, 'Per-part results belong to a Partial print');
+		const kept = sp.keptSlugs;
+		if (
+			!Array.isArray(kept) ||
+			kept.length > 200 ||
+			kept.some((x) => typeof x !== 'string' || !Object.hasOwn(view.state, x))
+		)
+			throw new ApiError(400, 'keptSlugs must list parts of this build');
+		const g = (v: unknown, name: string) => {
+			if (v === undefined || v === null) return null;
+			if (typeof v !== 'number' || !Number.isFinite(v) || v < 0)
+				throw new ApiError(400, `${name} must be a number, 0 or more`);
+			if (v > MAX_RUN_GRAMS) throw new ApiError(400, runGramsMessage(name));
+			return v;
+		};
+		split = {
+			keptSlugs: kept as string[],
+			keptGrams: g(sp.keptGrams, 'keptGrams'),
+			lostGrams: g(sp.lostGrams, 'lostGrams')
+		};
+	}
 	const elapsed =
 		job.startedAt && job.finishedAt
 			? (job.finishedAt.getTime() - job.startedAt.getTime()) / 1000
@@ -745,15 +787,16 @@ export function confirmJob(
 	);
 	const merged = {
 		...base,
-		...(o.grams !== undefined ? { grams: o.grams } : {}),
+		...(o.grams !== undefined && !split ? { grams: o.grams } : {}),
 		...(o.hours !== undefined ? { hours: o.hours } : {}),
 		...(typeof o.note === 'string' ? { note: o.note } : {}),
-		...(typeof o.date === 'string' ? { date: o.date } : {})
+		...(typeof o.date === 'string' ? { date: o.date } : {}),
+		...(split ? { split } : {})
 	};
-	const runId = addRun(db, job.buildId, userId, merged);
+	const { runId, runIds } = addRun(db, job.buildId, userId, merged);
 	db.update(printerJobs).set({ runId }).where(eq(printerJobs.id, jobId)).run();
 	emitPrinterEvent(orgId, { type: 'job', printerId: printer.id });
-	return runId;
+	return { runId, runIds };
 }
 
 export function dismissJob(db: Db, jobId: string, orgId: string, userId?: string): void {

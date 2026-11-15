@@ -16,6 +16,7 @@
 	import RoleChip from './RoleChip.svelte';
 	import PlateControl from './PlateControl.svelte';
 	import PlateTime from './PlateTime.svelte';
+	import PlateGrams from './PlateGrams.svelte';
 	import PrinterLive from './PrinterLive.svelte';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 
@@ -47,8 +48,10 @@
 	);
 
 	const slicerShown = $derived(item.slicerGrams);
-	const bomRun = $derived(
-		item.parts.reduce((a, p) => a + (p.bomGrams ?? 0) / Math.max(1, plate?.runs ?? 1), 0)
+	const gramsHint = $derived(
+		item.gramsPerRun
+			? `${item.gramsSource === 'bom' ? 'BOM ' : item.gramsUnknown.length ? '≥ ' : ''}~${fmt(item.gramsPerRun)}`
+			: 'g'
 	);
 	const elapsedMs = $derived(item.startedAt ? ctx.now - Date.parse(item.startedAt) : 0);
 	// Pace-adjusted when the time is the slicer's, learned or an estimate and no printer reports its own.
@@ -112,8 +115,7 @@
 		</div>
 		<div class="now-meta">
 			{#each item.roles as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
-			{#if item.gramsPerRun}<span class="num">~{fmt(item.gramsPerRun)} g</span>{/if}
-			{#if plate}<PlateTime plate={headPlate(plate)} />{/if}
+			{#if plate}<PlateGrams {plate} /><PlateTime plate={headPlate(plate)} />{/if}
 		</div>
 	</div>
 	<div class="now-parts">
@@ -158,7 +160,7 @@
 						min="0"
 						step="1"
 						value={slicerShown ?? ''}
-						placeholder={bomRun ? `BOM ~${fmt(bomRun)}` : 'g'}
+						placeholder={gramsHint}
 						disabled={!ctx.canEdit}
 						onchange={(e) => {
 							const raw = e.currentTarget.value;

@@ -90,8 +90,8 @@
 	<section class="card" data-testid="settings-filament">
 		<h2>Filament</h2>
 		<p class="muted">
-			The colors this build uses, and how many spools you have of each. Colors are chosen in the
-			Design tab.
+			The colors this build uses, and the spools you started with. Colors are chosen in the Design
+			tab. Add more spools later from the Overview with the + button.
 		</p>
 		{#each ctx.view.filaments as f (f.key)}
 			<div class="fil-role" data-role={f.key}>
@@ -100,7 +100,7 @@
 					<span class="fil-name">{filamentLabel(f, f.key)}</span>
 				</div>
 				<label class="field"
-					>Spools (kg)
+					>Starting spools (kg)
 					<input
 						type="number"
 						min="0"

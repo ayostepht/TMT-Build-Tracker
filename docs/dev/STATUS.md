@@ -239,6 +239,21 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
+- **Grams and accounting** (#45 and #46 done 2026-11-15): one grams source order
+  everywhere, "Add weight" for parts without one, plate headers show grams. #46: used grams
+  and hours split into kept vs lost (older Partial rows count as lost); Partial logs (manual
+  sheet and printer-job confirm) tick the parts that printed OK and save a Success run plus
+  a Failed run, undone together; Failed grams prefill from printer progress or a "%" field;
+  spools added over time with a dated history (`build_filaments.spool_adds`), stock =
+  starting + added; Spare sits after To print. Migrations `0001_grams_everywhere` and
+  `0002_spool_adds` (both additive) need the usual rehearsal on the next test-copy deploy.
+  Open: `BuildHeader` "kg used of ~X kg estimated" has no missing-weight hint [app-shell];
+  per-part (twin) plates store no per-part file grams [plates-3mf]; the shell phone
+  Overview test flaked once before a pre-hydration-tap hardening, watch it [e2e-playwright].
+- **Stats and charts** (#47, in progress on `feat/stats-charts`): hand-built SVG chart
+  components (`src/lib/components/charts/`, ~6.5 KB gzip, no dependency) are done; next a
+  per-build Stats tab and a workspace Stats page, opened as a PR for review (not merged).
+
 - **Design studio** [design-studio-ui]: #34 (2026-11-13): re-applying a palette resets
   unlocked parts to their kit slot; "Lock part color" keeps one part's exact colour (locked
   parts on a recoloured slot move to a slot with their old filament, reused or auto-added;

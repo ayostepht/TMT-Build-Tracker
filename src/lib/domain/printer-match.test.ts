@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { fileMentionsBuild, matchPlate, normalizeFileName } from './printer-match.ts';
+import {
+	fileMentionsBuild,
+	matchPlate,
+	normalizeFileName,
+	plateRunGrams
+} from './printer-match.ts';
+import { plateGrams } from './accounting.ts';
+import { makeView } from './fixtures.ts';
 
 const plates = [
 	{ number: 1, name: 'Handle Left' },
@@ -36,5 +43,65 @@ describe('helpers', () => {
 	it('spots the build name', () => {
 		expect(fileMentionsBuild('TMT-Columbus-Elegoo-plain.3mf', 'Columbus')).toBe(true);
 		expect(fileMentionsBuild('TMT-Other.3mf', 'Columbus')).toBe(false);
+	});
+});
+
+describe('plateRunGrams', () => {
+	it('uses the shared plate calculation and returns null when nothing is known', () => {
+		const v = makeView();
+		const plain = v.plates.find((p) => !p.perPartRuns)!;
+		const typed = {
+			...v,
+			plates: v.plates.map((p) =>
+				p === plain ? { ...p, slicerGrams: 42.5, gramsSource: 'user' as const } : p
+			)
+		};
+		expect(plateRunGrams(typed, plain.number)).toBe(42.5);
+		expect(plateRunGrams(v, 9999)).toBeNull();
+		const empty = {
+			...v,
+			plates: v.plates.map((p) => (p === plain ? { ...p, slicerGrams: null, parts: [] } : p))
+		};
+		expect(plateRunGrams(empty, plain.number)).toBeNull();
+	});
+	it('falls back to the BOM like the rest of the app', () => {
+		const v = makeView();
+		const plain = v.plates.find((p) => !p.perPartRuns && p.parts.length)!;
+		const g = plateRunGrams(
+			{ ...v, plates: v.plates.map((p) => (p === plain ? { ...p, slicerGrams: null } : p)) },
+			plain.number
+		);
+		const v2 = {
+			...v,
+			plates: v.plates.map((p) => (p === plain ? { ...p, slicerGrams: null } : p))
+		};
+		expect(g).toBe(
+			plateGrams(
+				v2,
+				v2.plates.find((p) => p.number === plain.number)!
+			).perRun || null
+		);
+	});
+	it('sums only the printed parts of a per-part plate', () => {
+		const v = makeView();
+		const src = v.plates.find((p) => p.parts.length >= 3)!;
+		const [a, b, c] = src.parts;
+		const view = {
+			...v,
+			plates: v.plates.map((p) =>
+				p === src
+					? {
+							...p,
+							perPartRuns: true,
+							runs: 1,
+							slicerByPart: { [a]: 10, [b]: 20, [c]: 40 },
+							gramsSource: 'file' as const
+						}
+					: p
+			)
+		};
+		expect(plateRunGrams(view, src.number, [a, b])).toBe(30);
+		expect(plateRunGrams(view, src.number, [c])).toBe(40);
+		expect(plateRunGrams(view, src.number, [a, b])).not.toBe(70);
 	});
 });

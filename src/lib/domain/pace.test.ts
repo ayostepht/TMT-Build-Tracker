@@ -132,3 +132,30 @@ describe('pace', () => {
 		expect(multi.total).toBe('19 h total');
 	});
 });
+
+describe('pace with a split Partial', () => {
+	it('uses the scaled estSeconds of the printed half, not the whole plate time', () => {
+		const v = makeView();
+		const plate = v.plates.find((p) => !p.perPartRuns && p.runs === 1 && p.parts.length >= 2)!;
+		const est = plate.estSeconds ?? 36000;
+		const withEst = {
+			...v,
+			plates: v.plates.map((p) => (p.number === plate.number ? { ...p, estSeconds: est } : p))
+		};
+		// The printed half took half the plate time and was planned as half of it: on pace.
+		const r = run({
+			plateNumber: plate.number,
+			partSlugs: [plate.parts[0]],
+			result: 'Success',
+			hours: Math.round((est / 3600 / 2) * 1.1 * 10) / 10 + 0.05,
+			estSeconds: Math.round(est / 2)
+		});
+		const many = Array.from({ length: 6 }, (_, i) => ({ ...r, id: `s${i}` }));
+		const p = paceOf({ ...withEst, runs: many })!;
+		expect(p).not.toBeNull();
+		expect(p.ratio).toBeGreaterThan(1.05);
+		expect(p.ratio).toBeLessThan(1.2);
+		// Without the scaled time a subset run is ignored, so there would be no pace at all.
+		expect(paceOf({ ...withEst, runs: many.map((x) => ({ ...x, estSeconds: null })) })).toBeNull();
+	});
+});

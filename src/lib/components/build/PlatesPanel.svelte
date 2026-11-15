@@ -21,6 +21,7 @@
 	import RunTable from '#lib/components/RunTable.svelte';
 	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
 	import PlateTime from '#lib/components/PlateTime.svelte';
+	import PlateGrams from '#lib/components/PlateGrams.svelte';
 	import PlateControl from '#lib/components/PlateControl.svelte';
 	import SlicerInput from '#lib/components/SlicerInput.svelte';
 	import SlicerTimeInput from '#lib/components/SlicerTimeInput.svelte';
@@ -311,12 +312,18 @@
 	const rolesOf = (pl: Plate) => [...new Set(pl.parts.map(roleOf))];
 	const status = (slug: string) => ctx.view.state[slug]?.status;
 
-	function slicerTotal(pl: Plate): number {
-		const per = pl.perPartRuns
-			? Object.values(pl.slicerByPart).reduce((a, b) => a + b, 0)
-			: (pl.slicerGrams ?? 0);
-		return per * pl.runs;
+	/** The grams field's label: says whose number it holds (typed, or read from the file). */
+	function gramsLabel(pl: Plate, per: boolean, name?: string): string {
+		const base = `${name ?? 'Grams'}${per ? ' per run' : ''}`;
+		const has = pl.perPartRuns ? Object.keys(pl.slicerByPart).length > 0 : !!pl.slicerGrams;
+		if (!has) return base;
+		return `${base} · ${pl.gramsSource === 'user' ? 'your entry' : pl.gramsSource === 'file' ? 'from file' : 'entered'}`;
 	}
+	/** Grams per run the uploaded file gave this plate, when a typed entry now overrides it. */
+	const fileGramsOf = (pl: Plate) =>
+		pl.gramsSource === 'user' && !pl.perPartRuns
+			? Object.values(pl.filamentGrams).reduce((a, b) => a + b, 0)
+			: 0;
 	function saveTime(pl: Plate, seconds: number | null) {
 		return ctx.act(() => updatePlate(ctx.id, pl.number, { manualEstSeconds: seconds }));
 	}
@@ -592,11 +599,7 @@
 					>{draft ? `${pl.parts.length} parts` : `${done}/${pl.parts.length} printed`}</span
 				>
 				{#each rolesOf(pl) as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
-				{#if slicerTotal(pl)}
-					<span class="meta num" title="From your slicer grams"
-						>~{fmt(slicerTotal(pl))} g (slicer)</span
-					>
-				{/if}
+				<PlateGrams plate={pl} />
 				<PlateTime plate={pl} />
 				{#if pl.runNote || pl.runs > 1}
 					<span class="meta" style="color:var(--warn);font-weight:600"
@@ -686,16 +689,22 @@
 					{#if pl.perPartRuns}
 						{#each pl.parts as slug (slug)}
 							<SlicerInput
-								label="Slicer {filLabel(ctx.filament(roleOf(slug)), partOf(slug)?.name)} per run"
+								label={gramsLabel(
+									pl,
+									true,
+									filLabel(ctx.filament(roleOf(slug)), partOf(slug)?.name)
+								)}
 								value={pl.slicerByPart[slug]}
 								onsave={(v) => saveSlicer(pl, slug, v)}
 							/>
 						{/each}
 					{:else}
 						<SlicerInput
-							label={pl.runs > 1 ? 'Slicer per run' : 'Slicer'}
+							label={gramsLabel(pl, pl.runs > 1)}
 							value={pl.slicerGrams}
-							title="Grams your slicer shows for this plate{pl.runs > 1 ? ' (one run)' : ''}"
+							title="Grams for this plate{pl.runs > 1
+								? ' (one run)'
+								: ''}: type what your slicer shows; it wins over the file and the parts' weights"
 							onsave={(v) => saveSlicer(pl, null, v)}
 						/>
 					{/if}
@@ -713,8 +722,13 @@
 							{fmtH(pl.baseEstSeconds)}</span
 						>
 					{/if}
+					{#if fileGramsOf(pl) > 0}
+						<span class="meta" data-testid="grams-override"
+							>overrides file {fmt(fileGramsOf(pl))} g</span
+						>
+					{/if}
 					{#if !pl.slicerGrams && !Object.keys(pl.slicerByPart).length}
-						<span class="meta">Using BOM weights until you enter slicer grams.</span>
+						<span class="meta">Using the parts' weights until you enter grams.</span>
 					{/if}
 					<span style="margin-left:auto"><PlateControl plate={pl} alwaysLog /></span>
 				</div>
