@@ -144,4 +144,22 @@ test('applying a design to a started build asks first', async ({ page }) => {
 	// The plates did not move under the build: they are stale until re-arranged.
 	const full = await api(page, 'GET', `/api/builds/${reprint}/view`);
 	expect(JSON.stringify(full.body.plates)).toBe(JSON.stringify(before.body.plates));
+
+	// 3. The setup wizard's Colors step asks the same way ("Use design" on a started build).
+	const wiz = await startedBuild(page, chapterUrl, 'Wizard build', 'Reprint');
+	expect((await api(page, 'PATCH', `/api/builds/${wiz}/setup`, { step: 3 })).status).toBe(200);
+	await page.goto(`/builds/${wiz}/setup?step=colors`);
+	await page.getByTestId('design-start-select').selectOption({ label: 'Shots design (mine)' });
+	await page.getByRole('button', { name: 'Use design' }).click();
+	await dlg.waitFor();
+	await dlg.getByTestId('started-apply-summary').waitFor();
+	await expect(dlg.getByTestId('started-apply-colors')).toBeVisible();
+	await shots(page, 'wizard-dialog');
+	await dlg.getByTestId('started-apply-colors').click();
+	await expect(dlg).toHaveCount(0);
+	await expect(page.getByText(/Applied the colors of "Shots design"/)).toBeVisible();
+	const wv = await api(page, 'GET', `/api/builds/${wiz}/view`);
+	expect(wv.body.filaments.find((f: { key: string }) => f.key === 'primary')).toMatchObject({
+		name: 'Ocean'
+	});
 });

@@ -396,9 +396,8 @@ function describeMarked(a: ActivityItem, view: Names): string {
 		}
 		// `before` ({roles, partRoles, lockedParts}) is the undo snapshot; it is stored, never rendered.
 		case 'design.apply':
-			return str(p.designName)
-				? `${who} applied the color design "${str(p.designName)}"${p.mode === 'full' ? ' (colors and part colors replaced)' : ''}`
-				: `${who} applied a color design${p.mode === 'full' ? ' (colors and part colors replaced)' : ''}`;
+			// Only a started build stores `before`; a plain apply on a not-started build reads without the suffix.
+			return `${who} applied ${str(p.designName) ? `the color design "${str(p.designName)}"` : 'a color design'}${p.mode === 'full' && obj(p.before) ? ' (colors and part colors replaced)' : ''}`;
 		// Colors only: slots and part colors change, plates and progress stay. `skipped` lists slots left
 		// alone: [{ role, name?, reason: 'material' | 'locked' }].
 		case 'design.recolor': {

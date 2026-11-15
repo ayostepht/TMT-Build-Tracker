@@ -476,8 +476,16 @@ describe('design.recolor and design.apply modes', () => {
 		expect(text).not.toContain('123456');
 	});
 	it('marks a full apply', () => {
+		expect(
+			say('design.apply', {
+				designName: 'Sunset',
+				mode: 'full',
+				before: { roles: [], partRoles: {}, lockedParts: [] }
+			})
+		).toBe('Steph applied the color design "Sunset" (colors and part colors replaced)');
+		// Not started: no snapshot, so no suffix even if the server sends mode: 'full'.
 		expect(say('design.apply', { designName: 'Sunset', mode: 'full' })).toBe(
-			'Steph applied the color design "Sunset" (colors and part colors replaced)'
+			'Steph applied the color design "Sunset"'
 		);
 		expect(say('design.apply', { designName: 'Sunset' })).toBe(
 			'Steph applied the color design "Sunset"'
