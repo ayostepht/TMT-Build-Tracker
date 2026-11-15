@@ -23,13 +23,15 @@
 		compact?: boolean;
 	} = $props();
 
+	/** A real space between value and unit (text, copy, screen readers); the visible gap is the unit margin. */
+	const SPACE = ' ';
 	const sum = $derived((split ?? []).reduce((s, x) => s + Math.max(0, x.value), 0));
 </script>
 
 <div class="ds-card ds-card--compact st-tile" class:st-compact={compact}>
 	<p class="st-label" title={compact ? label : undefined}>{label}</p>
 	<p class="st-value">
-		{value}{#if unit}<span class="st-unit">{unit}</span>{/if}
+		{value}{#if unit}<span class="st-sp">{SPACE}</span><span class="st-unit">{unit}</span>{/if}
 	</p>
 	{#if split && sum > 0}
 		<div class="st-split" aria-hidden="true">
@@ -70,6 +72,10 @@
 		color: var(--ink);
 		font-variant-numeric: tabular-nums;
 		overflow-wrap: anywhere;
+	}
+	/* A real space for text, copy and screen readers; the gap you see is the unit's margin. */
+	.st-sp {
+		font-size: 0;
 	}
 	.st-unit {
 		margin-left: var(--sp-3);

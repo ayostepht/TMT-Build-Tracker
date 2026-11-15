@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
  * the Stats tab. Screenshots go to HEADER_SHOTS when it is set.
  */
 const SHOTS = process.env.HEADER_SHOTS;
+test.use({ deviceScaleFactor: SHOTS ? 2 : 1 });
 const origin = (page: Page) => ({ origin: new URL(page.url()).origin });
 
 function day(back: number) {
@@ -155,6 +156,9 @@ test('build header: four Stats cards on every build tab, live, linking to Stats'
 	}
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.emulateMedia({ colorScheme: 'light' });
+	await page.goto(`/builds/${buildId}/stats`);
+	await page.waitForLoadState('networkidle');
+	await shot(page, 'stats-390-light');
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
 	await shot(page, 'design-390-light');
@@ -213,10 +217,19 @@ test('time and filament cards carry an estimate line; Design hides the cards on 
 	const { buildId } = await ownerWithBuild(page, 'hdrest');
 	await page.goto(`/builds/${buildId}`);
 	await page.waitForLoadState('networkidle');
-	await expect(page.getByTestId('header-kpi-time')).toContainText(/\d h of ~[\d,.]+ h/);
-	await expect(page.getByTestId('header-kpi-filament')).toContainText(/kg of ~[\d,.]+ kg/);
+	await expect(page.getByTestId('header-kpi-parts')).toHaveText(/^\s*Parts printed\s*0 of 33/);
+	await expect(page.getByTestId('header-kpi-time')).toContainText(/\d h\s+of ~[\d,.]+ h/);
+	await expect(page.getByTestId('header-kpi-filament')).toContainText(/k?g\s+of ~[\d,.]+ kg/);
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect(page.getByTestId('header-kpi-time')).toContainText(/of ~/);
+	// Phones: the estimate is its own short line, never cut off.
+	for (const k of ['time', 'filament']) {
+		const est = page.getByTestId(`header-kpi-${k}`).locator('.st-detail');
+		await expect(est).toHaveText(/^of ~[\d,.]+ (h|kg)$/);
+		expect(await est.evaluate((e) => e.scrollWidth <= e.clientWidth), `${k} estimate fits`).toBe(
+			true
+		);
+	}
+	await expect(page.getByTestId('header-kpi-parts')).toHaveText(/0 \/ 33/);
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
 	await expect(page.getByTestId('header-kpis')).toBeHidden();

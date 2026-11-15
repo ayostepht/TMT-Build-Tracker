@@ -23,6 +23,8 @@
 		mq.addEventListener('change', set);
 		return () => mq.removeEventListener('change', set);
 	});
+	/** "30.5 h of ~382 h" -> "of ~382 h": the value above already says what is logged. */
+	const shortEst = (e: string) => e.replace(/^.*? of ~/, 'of ~');
 	const cards = $derived([
 		{
 			key: 'parts',
@@ -43,7 +45,7 @@
 			label: narrow ? 'Time' : 'Printing time',
 			value: k.time.value,
 			unit: 'h',
-			detail: k.time.est ?? k.time.detail,
+			detail: k.time.est ? shortEst(k.time.est) : k.time.detail,
 			est: k.time.est !== null,
 			full: `${k.time.detail}${k.time.est ? `. ${k.time.est}` : ''}`,
 			name: `Printing time: ${k.time.label} logged`,
@@ -57,7 +59,7 @@
 			label: narrow ? 'Filament' : 'Filament used',
 			value: k.filament.value,
 			unit: k.filament.unit,
-			detail: k.filament.est,
+			detail: shortEst(k.filament.est),
 			est: true,
 			full: `${k.filament.detail}. ${k.filament.est}`,
 			name: `Filament used: ${k.filament.label}`,
@@ -269,7 +271,7 @@
 		.bh-kpi :global(.st-detail) {
 			display: none;
 		}
-		/* Time and Filament keep their one-line estimate ("30.5 h of ~382 h"); it truncates first. */
+		/* Time and Filament keep a short estimate line ("of ~382 h") under the value. */
 		.bh-est :global(.st-detail) {
 			display: block;
 		}
