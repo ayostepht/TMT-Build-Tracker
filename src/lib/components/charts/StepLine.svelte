@@ -1,7 +1,15 @@
 <script lang="ts">
 	import ChartLegend from './ChartLegend.svelte';
 	import HitColumns from './HitColumns.svelte';
-	import { formatValue, labelStep, linearScale, niceTicks, truncate } from './scale.ts';
+	import {
+		edgeAnchor,
+		formatValue,
+		labelStep,
+		unitSuffix,
+		linearScale,
+		niceTicks,
+		truncate
+	} from './scale.ts';
 	import { chartLabelledBy } from './tones.ts';
 
 	/**
@@ -97,7 +105,7 @@
 	);
 	function describe(i: number): string {
 		const v = valueAt(i);
-		const u = unit ? ` ${unit}` : '';
+		const u = unitSuffix(unit);
 		if (!v) return `${xs[i]}: no value`;
 		return `${xs[i]}: ${formatValue(v.y)}${u}${v.projected ? ' (projected)' : ''}`;
 	}
@@ -180,8 +188,11 @@
 			{/each}
 			{#each xs as x, i (i)}
 				{#if (n - 1 - i) % step === 0}
-					<text x={px(i)} y={H - 8} text-anchor="middle" class="sl-tick"
-						>{truncate(x, 12)}<title>{x}</title></text
+					<text
+						x={px(i)}
+						y={H - 8}
+						text-anchor={edgeAnchor(px(i), truncate(x, 12).length * 6.4, W)}
+						class="sl-tick">{truncate(x, 12)}<title>{x}</title></text
 					>
 				{/if}
 			{/each}

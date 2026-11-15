@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+	edgeAnchor,
 	formatValue,
 	labelStep,
 	linearScale,
 	niceCeil,
 	niceTicks,
 	rovingIndex,
-	truncate
+	truncate,
+	unitSuffix
 } from './scale.ts';
 
 describe('niceCeil', () => {
@@ -87,5 +89,20 @@ describe('labels and keys', () => {
 		expect(rovingIndex('End', 0, 5)).toBe(4);
 		expect(rovingIndex('a', 0, 5)).toBeNull();
 		expect(rovingIndex('ArrowRight', 0, 0)).toBeNull();
+	});
+});
+
+describe('unitSuffix and edgeAnchor', () => {
+	it('hugs % and spaces other units', () => {
+		expect(`${formatValue(50)}${unitSuffix('%')}`).toBe('50%');
+		expect(`${formatValue(12)}${unitSuffix('h')}`).toBe('12 h');
+		expect(unitSuffix('g')).toBe(' g');
+		expect(unitSuffix('')).toBe('');
+		expect(unitSuffix(undefined)).toBe('');
+	});
+	it('anchors edge labels inside the frame', () => {
+		expect(edgeAnchor(100, 30, 200)).toBe('middle');
+		expect(edgeAnchor(190, 30, 200)).toBe('end');
+		expect(edgeAnchor(5, 30, 200)).toBe('start');
 	});
 });

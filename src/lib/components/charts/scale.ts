@@ -47,6 +47,19 @@ export function formatValue(v: number, digits = 1): string {
 	return v.toLocaleString('en-US', { maximumFractionDigits: digits });
 }
 
+/** Unit suffix for a value: `%` hugs the number ("50%"), other units keep a space ("12 h"). */
+export function unitSuffix(unit: string | undefined): string {
+	if (!unit) return '';
+	return unit === '%' ? '%' : ` ${unit}`;
+}
+
+/** Text anchor that keeps a label of about `labelPx` centred on `x` inside 0..width. */
+export function edgeAnchor(x: number, labelPx: number, width: number): 'start' | 'middle' | 'end' {
+	if (x + labelPx / 2 > width) return 'end';
+	if (x - labelPx / 2 < 0) return 'start';
+	return 'middle';
+}
+
 /** Keep every `step`-th label so labels of about `labelPx` fit in slots of `slotPx`. */
 export function labelStep(slotPx: number, labelPx: number): number {
 	if (slotPx <= 0) return 1;

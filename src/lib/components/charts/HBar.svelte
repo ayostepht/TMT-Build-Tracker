@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { formatValue } from './scale.ts';
+	import { formatValue, unitSuffix } from './scale.ts';
 	import { chartLabelledBy, type Tone } from './tones.ts';
 
 	/**
@@ -32,7 +32,7 @@
 		Math.max(max ?? 0, ...rows.map((r) => Math.max(total(r), r.marker?.value ?? 0)), 1e-9)
 	);
 	const pct = (v: number) => Math.min(100, (Math.max(0, v) / scaleMax) * 100);
-	const u = $derived(unit ? ` ${unit}` : '');
+	const u = $derived(unitSuffix(unit));
 </script>
 
 <ul class="hb-list" role="img" aria-labelledby={labelledby}>

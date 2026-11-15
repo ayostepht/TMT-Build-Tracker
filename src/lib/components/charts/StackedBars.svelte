@@ -2,7 +2,15 @@
 	import ChartLegend from './ChartLegend.svelte';
 	import Hatch from './Hatch.svelte';
 	import HitColumns from './HitColumns.svelte';
-	import { formatValue, labelStep, linearScale, niceTicks, truncate } from './scale.ts';
+	import {
+		edgeAnchor,
+		formatValue,
+		labelStep,
+		unitSuffix,
+		linearScale,
+		niceTicks,
+		truncate
+	} from './scale.ts';
 	import { chartLabelledBy, toneFill, type Tone } from './tones.ts';
 
 	/**
@@ -39,7 +47,7 @@
 	const axis = $derived(niceTicks(Math.max(max ?? 0, ...totals)));
 	const tickLabels = $derived(
 		axis.ticks.map((t, i) =>
-			i === axis.ticks.length - 1 && unit ? `${formatValue(t)} ${unit}` : formatValue(t)
+			i === axis.ticks.length - 1 && unit ? `${formatValue(t)}${unitSuffix(unit)}` : formatValue(t)
 		)
 	);
 	const left = $derived(10 + Math.max(...tickLabels.map((t) => t.length)) * 6.6);
@@ -65,7 +73,7 @@
 	}
 	function describe(i: number): string {
 		const parts = series.map(
-			(s) => `${formatValue(s.values[i] ?? 0)}${unit ? ' ' + unit : ''} ${s.label}`
+			(s) => `${formatValue(s.values[i] ?? 0)}${unitSuffix(unit)} ${s.label}`
 		);
 		return `${categories[i]}: ${parts.join(', ')}`;
 	}
@@ -110,8 +118,11 @@
 					{/if}
 				{/each}
 				{#if (n - 1 - i) % step === 0}
-					<text x={left + i * slot + slot / 2} y={H - 8} text-anchor="middle" class="sb-tick"
-						>{truncate(c, 12)}<title>{c}</title></text
+					<text
+						x={left + i * slot + slot / 2}
+						y={H - 8}
+						text-anchor={edgeAnchor(left + i * slot + slot / 2, truncate(c, 12).length * 6.4, W)}
+						class="sb-tick">{truncate(c, 12)}<title>{c}</title></text
 					>
 				{/if}
 			{/each}
