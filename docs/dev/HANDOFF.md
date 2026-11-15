@@ -18,7 +18,7 @@ _Updated 2026-11-15. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
 
 ## State of `edge`
 
-`origin/edge` = a71f3ac. Merged 2026-11-15: #50 (#46 accounting), #51 (#47 Stats), #52/#57
+`origin/edge` = 39b20ba. Merged 2026-11-15: #60 (this handoff doc; allowed during the freeze), #50 (#46 accounting), #51 (#47 Stats), #52/#57
 (r56/r57 docs), #53 (chevron), #54 (CI docs fast path), #55 (Prettier rule), #58 (#56
 design change on a started build). The test copy runs r57 = `edge` e1e04f8 (no #56 yet).
 Next deploy, r58 = #56 + the header pull request, after the header merges. No migrations in
@@ -42,14 +42,16 @@ either.
   moved from `.overall-top` text to the Parts card aria-label.
 - **Open, show the maintainer before the pull request** (the old screenshots were lost with
   the previous container; take new ones at 390 and 1440 px):
-  - a) On phones the estimate truncates ("30.5 h of …", "0.35 kg of …" at 390 px). Options:
-    estimate on desktop only; "of ~382 h" on its own line; 2×2 cards on phones.
+  - a) **Decided** (maintainer, 2026-11-15): on phones the estimate truncated ("30.5 h of …");
+    keep four cards across and show a short "of ~382 h" on its own line under the value.
   - b) Bug: the Parts card reads "0of 33" (no space before the unit) → `app-shell`, or
     `design-studio-ui` if it is `StatTile`'s unit spacing.
   - c) Deliver-by stays in the details line (no card shows it): mention it.
 - Not yet run on the final head: the whole e2e group together (the last fix re-ran only
   `log-plate`, 8/8). The verifier gate covers it.
-- **Next steps:** (1) resolve a/b with the maintainer and the owning agent; (2) STATUS and
+- `app-shell` is fixing a) and b) in a local worktree (not pushed yet), with new screenshots.
+- **Next steps:** (1) review the a/b fix and its screenshots with the maintainer, commit and
+  push to `feat/stats-header`; (2) STATUS and
   `docs/architecture.md` notes (Stats: `kpis.ts`/`stats-core.ts`, failures rule, rounding,
   label thinning, table scroll; App shell: header cards), Prettier on the docs; (3)
   `verifier` in a fresh worktree with a real `npm ci` (a symlinked `node_modules` breaks
