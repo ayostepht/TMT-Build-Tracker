@@ -12,7 +12,7 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
   filament and time, Partial logs with per-part results, dated spool adds, Spare after To
   print (#50). Migrations `0001_grams_everywhere` and `0002_spool_adds` applied (journal
   1 → 3; drizzle prints no log line, checked in `__drizzle_migrations` and `pragma
-  table_info`). Rehearsal clean on a copy of the backup: health ok, integrity and FK checks
+table_info`). Rehearsal clean on a copy of the backup: health ok, integrity and FK checks
   clean, row counts equal in 37 tables, `spool_adds` = `[]` on every row. Checks on that copy
   (390, 1440, read-only, camera and non-GET API calls blocked): Overview rows show Used / To
   print / Spare and the Spools total with +; history reads "Starting spools 4.9 kg", Settings
