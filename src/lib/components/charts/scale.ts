@@ -60,6 +60,34 @@ export function edgeAnchor(x: number, labelPx: number, width: number): 'start' |
 	return 'middle';
 }
 
+/** Horizontal extent [left, right] of a label of `labelPx` at `x`, as `edgeAnchor` places it. */
+export function labelExtent(x: number, labelPx: number, width: number): [number, number] {
+	const a = edgeAnchor(x, labelPx, width);
+	if (a === 'end') return [x - labelPx, x];
+	if (a === 'start') return [x, x + labelPx];
+	return [x - labelPx / 2, x + labelPx / 2];
+}
+
+/**
+ * Which labels to draw so none overlaps its neighbour (`gap` px apart at least). The first and the
+ * last are always kept (when they would collide with each other the last wins); the labels between
+ * are taken from the end backwards, each one only if it clears every label already kept.
+ * `xs[i]` is the centre of label i, `widths[i]` its width, `width` the chart width.
+ */
+export function visibleLabels(xs: number[], widths: number[], width: number, gap = 6): boolean[] {
+	const n = xs.length;
+	const show = new Array<boolean>(n).fill(false);
+	if (n === 0) return show;
+	const ext = xs.map((x, i) => labelExtent(x, widths[i] ?? 0, width));
+	const kept: number[] = [n - 1];
+	const clear = (i: number) =>
+		kept.every((k) => ext[i][1] + gap <= ext[k][0] || ext[k][1] + gap <= ext[i][0]);
+	if (n > 1 && clear(0)) kept.push(0);
+	for (let i = n - 2; i >= 1; i--) if (clear(i)) kept.push(i);
+	for (const k of kept) show[k] = true;
+	return show;
+}
+
 /** Keep every `step`-th label so labels of about `labelPx` fit in slots of `slotPx`. */
 export function labelStep(slotPx: number, labelPx: number): number {
 	if (slotPx <= 0) return 1;

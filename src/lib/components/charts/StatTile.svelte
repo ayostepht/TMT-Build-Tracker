@@ -11,20 +11,23 @@
 		value,
 		unit,
 		detail,
-		split
+		split,
+		compact = false
 	}: {
 		label: string;
 		value: string;
 		unit?: string;
 		detail?: string;
 		split?: { value: number; tone: Tone }[];
+		/** Small header-card variant: one line each for label and detail, smaller value. */
+		compact?: boolean;
 	} = $props();
 
 	const sum = $derived((split ?? []).reduce((s, x) => s + Math.max(0, x.value), 0));
 </script>
 
-<div class="ds-card ds-card--compact st-tile">
-	<p class="st-label">{label}</p>
+<div class="ds-card ds-card--compact st-tile" class:st-compact={compact}>
+	<p class="st-label" title={compact ? label : undefined}>{label}</p>
 	<p class="st-value">
 		{value}{#if unit}<span class="st-unit">{unit}</span>{/if}
 	</p>
@@ -37,7 +40,7 @@
 			{/each}
 		</div>
 	{/if}
-	{#if detail}<p class="st-detail">{detail}</p>{/if}
+	{#if detail}<p class="st-detail" title={compact ? detail : undefined}>{detail}</p>{/if}
 </div>
 
 <style>
@@ -78,6 +81,34 @@
 		font-size: var(--fs-sm);
 		color: var(--muted);
 		overflow-wrap: anywhere;
+	}
+	.st-compact {
+		padding: var(--sp-4) var(--sp-4);
+		gap: var(--sp-2);
+		border-radius: var(--r-md);
+	}
+	.st-compact .st-label,
+	.st-compact .st-detail {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		overflow-wrap: normal;
+		font-size: var(--fs-xs);
+	}
+	.st-compact .st-label {
+		letter-spacing: 0.2px;
+	}
+	.st-compact .st-value {
+		font-size: var(--fs-xl);
+		white-space: nowrap;
+		overflow-wrap: normal;
+	}
+	.st-compact .st-unit {
+		margin-left: var(--sp-1);
+		font-size: var(--fs-sm);
+	}
+	.st-compact .st-split {
+		height: 5px;
 	}
 	.st-split {
 		display: flex;
