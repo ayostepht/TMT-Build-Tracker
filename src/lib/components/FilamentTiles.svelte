@@ -2,6 +2,7 @@
 	import { fmt, fmtH, filamentStats, timeStats, timeLeftText } from '#lib/domain/index.ts';
 	import { updateFilament } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
+	import { resolve } from '$app/paths';
 	import Swatch from './Swatch.svelte';
 	import SpoolRemaining from './SpoolRemaining.svelte';
 
@@ -20,6 +21,8 @@
 		mq.addEventListener('change', on);
 		return () => mq.removeEventListener('change', on);
 	});
+	const printUrl = $derived(resolve('/(app)/builds/[id]/print', { id: ctx.id }));
+	const nameOf = (slug: string) => ctx.view.allParts.find((p) => p.slug === slug)?.name ?? slug;
 	let openRole = $state<string | null>(null);
 
 	function saveSpools(role: string, raw: string) {
@@ -54,8 +57,22 @@
 						class="ds-badge ft-verdict"
 						class:ds-badge--ok={spare >= 0}
 						class:ds-badge--bad={spare < 0}
-						>{#if spare >= 0}{fmt(spare)} g spare{:else}short {fmt(-spare)} g{/if}</span
+						>{#if spare >= 0}{s.unknownParts.length ? '≤ ' : ''}{fmt(spare)} g spare{:else}short {s
+								.unknownParts.length
+								? '≥ '
+								: ''}{fmt(-spare)} g{/if}</span
 					>
+				{/snippet}
+				{#snippet gap()}
+					{#if s.unknownParts.length}
+						<span class="ft-gap" data-testid="unknown-weights">
+							{s.unknownParts.length}
+							{s.unknownParts.length === 1 ? 'part' : 'parts'} without weight, not counted:
+							{#each s.unknownParts as slug, i (slug)}{i ? ', ' : ' '}<a
+									href="{printUrl}#part-{slug}">{nameOf(slug)}</a
+								>{/each}. Add a weight on the Print tab.
+						</span>
+					{/if}
 				{/snippet}
 				{#snippet bar()}
 					<span class="ft-bar" title="Used, then still to print, against spools on hand">
@@ -89,15 +106,16 @@
 						<div class="ft-who">{@render nameCell()}</div>
 						<span class="ft-num"><span class="sr-only">Used </span>{fmt(s.used)} g</span>
 						<span class="ft-num"
-							><span class="sr-only">To print </span>{fmt(s.need)} g{s.unweighed
-								? ` (+${s.unweighed} unweighed)`
-								: ''}</span
+							><span class="sr-only">To print </span>{s.unknownParts.length ? '≥ ' : ''}{fmt(
+								s.need
+							)} g</span
 						>
 						{@render bar()}
 						{@render field()}
 						<span class="ft-spare"><span class="sr-only">Spare </span>{@render badge()}</span>
 					</div>
 					<div class="ft-sub">
+						{@render gap()}
 						<SpoolRemaining role={s.role} />
 						{#if spare < 0}<span class="ft-more">Get {more} more spool{more > 1 ? 's' : ''}.</span
 							>{/if}
@@ -117,15 +135,14 @@
 						<span class="ft-l2">
 							{@render bar()}
 							<span class="ft-mono"
-								>{fmt(s.used)} g used · {fmt(s.need)} g to print{s.unweighed
-									? ` (+${s.unweighed} unweighed)`
-									: ''}</span
+								>{fmt(s.used)} g used · {s.unknownParts.length ? '≥ ' : ''}{fmt(s.need)} g to print</span
 							>
 						</span>
 						<span class="sr-only">{f?.spools ?? 0} kg of spools on hand. Tap to edit.</span>
 					</button>
 					{#if isOpen}
 						<div class="ft-edit" id="ft-edit-{s.role}">
+							{@render gap()}
 							{@render field()}
 							{#if spare < 0}<span class="ft-more">Get {more} more spool{more > 1 ? 's' : ''}.</span
 								>{/if}
@@ -288,6 +305,18 @@
 		width: 7ch;
 		min-height: 40px;
 	}
+	.ft-gap {
+		font-size: var(--fs-xs);
+		line-height: 1.35;
+		color: var(--muted);
+	}
+	.ft-gap a {
+		color: var(--ink);
+		text-decoration: underline;
+	}
+	.ft-edit .ft-gap {
+		flex-basis: 100%;
+	}
 	.ft-more {
 		font-size: var(--fs-sm);
 		color: var(--muted);
@@ -360,7 +389,8 @@
 		.ft-sub:has(> *) {
 			display: flex;
 			gap: var(--sp-5);
-			padding: 0 var(--sp-6) 8px;
+			padding: 0 var(--sp-6) 6px;
+			margin-top: -4px;
 		}
 		.ft-time {
 			padding: 10px var(--sp-6);

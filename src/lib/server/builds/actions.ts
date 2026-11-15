@@ -73,9 +73,14 @@ function dateStr(v: unknown, field: string): string {
 	if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) bad(`${field} must be YYYY-MM-DD`);
 	return v;
 }
+/** A request-supplied slug is a part of this build (own keys only: `constructor`, `__proto__` are not). */
+function hasPart(view: BuildView, slug: unknown): slug is string {
+	return typeof slug === 'string' && Object.hasOwn(view.state, slug);
+}
 function slugList(v: unknown, view: BuildView, field = 'slugs'): string[] {
 	if (!Array.isArray(v) || v.length === 0) bad(`${field} must be a non-empty array`);
-	for (const s of v) if (typeof s !== 'string' || !view.state[s]) bad(`Unknown part in ${field}`);
+	for (const s of v)
+		if (typeof s !== 'string' || !hasPart(view, s)) bad(`Unknown part in ${field}`);
 	return [...new Set(v as string[])];
 }
 
@@ -212,7 +217,7 @@ export function setPartStatus(
 	if (printedOn !== undefined && status !== 'Printed')
 		bad('printedOn only applies when restoring a part to Printed');
 	mutateBuild(db, buildId, userId, (_tx, view, now) => {
-		if (!view.state[slug]) throw new ApiError(404, 'Unknown part');
+		if (!hasPart(view, slug)) throw new ApiError(404, 'Unknown part');
 		if (printedOn !== undefined && !validPrintedOn(printedOn, now))
 			bad('printedOn must be a date (YYYY-MM-DD) between 2020-01-01 and today');
 		return {
@@ -241,7 +246,7 @@ export function updatePart(
 ): void {
 	if (!isObj(body)) bad('Invalid body');
 	mutateBuild(db, buildId, userId, (tx, view) => {
-		if (!view.state[slug]) throw new ApiError(404, 'Unknown part');
+		if (!hasPart(view, slug)) throw new ApiError(404, 'Unknown part');
 		const patch: PartPatch = { slug };
 		if (body.comps !== undefined) {
 			if (!isObj(body.comps)) bad('comps must be an object');
@@ -465,7 +470,7 @@ function runOutcome(
 		if (plateNumber !== null && !view.plates.some((p) => p.number === plateNumber))
 			bad('Unknown plate');
 		const partSlug = optStr(body.partSlug, 'partSlug') ?? null;
-		if (partSlug && !view.state[partSlug]) bad('Unknown part');
+		if (partSlug && !hasPart(view, partSlug)) bad('Unknown part');
 		const partSlugs =
 			body.partSlugs === undefined || body.partSlugs === null
 				? null
@@ -576,6 +581,8 @@ export function updatePlate(
 		if (!plate) throw new ApiError(404, 'Unknown plate');
 		const set: Partial<typeof buildPlates.$inferInsert> = {};
 		const g = optNum(body.slicerGrams, 'slicerGrams');
+		if (g !== undefined && g !== null && g > MAX_PART_GRAMS)
+			bad(`slicerGrams must be at most ${MAX_PART_GRAMS}`);
 		if (g !== undefined) set.slicerGrams = g;
 		if (body.manualEstSeconds !== undefined) {
 			const m = body.manualEstSeconds;
@@ -590,7 +597,8 @@ export function updatePlate(
 			for (const [k, v] of Object.entries(body.slicerByPart)) {
 				if (!plate.parts.includes(k)) bad('Part is not on this plate');
 				if (v === null) continue; // null clears the entry
-				if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) bad('Grams must be >= 0');
+				if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > MAX_PART_GRAMS)
+					bad(`Grams must be between 0 and ${MAX_PART_GRAMS}`);
 				m[k] = v;
 			}
 			set.slicerByPart = m;
@@ -695,7 +703,7 @@ export function undoRun(
 		for (const raw of rawParts) {
 			if (!isObj(raw) || typeof raw.slug !== 'string') bad('Invalid part snapshot');
 			const slug = raw.slug;
-			if (!allowed.includes(slug) || !view.state[slug]) bad('Part is not affected by this run');
+			if (!allowed.includes(slug) || !hasPart(view, slug)) bad('Part is not affected by this run');
 			// Printing again on a live job: the snapshot is of an older attempt, keep the live state.
 			const keep = live.has(slug) && view.state[slug].status === 'Printing';
 			if (!(PART_STATUSES as readonly unknown[]).includes(raw.status)) bad('Invalid status');
@@ -862,7 +870,7 @@ export function updateRun(
 		}
 		if (body.partSlug !== undefined) {
 			const s = optStr(body.partSlug, 'partSlug') ?? null;
-			if (s && !view.state[s]) bad('Unknown part');
+			if (s && !hasPart(view, s)) bad('Unknown part');
 			if (s === null && old.plateNumber === null) bad('A part log needs a part');
 			const pl =
 				old.plateNumber === null ? null : view.plates.find((x) => x.number === old.plateNumber);

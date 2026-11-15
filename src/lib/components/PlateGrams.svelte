@@ -50,7 +50,7 @@
 			{#if badge.total}<span class="base">{' · ' + badge.total}</span>{/if}
 		{/if}
 		{#if badge.flag}
-			{#if badge.main}<span class="base">{' · '}</span>{/if}
+			{#if badge.main}<span class="base">&#32;·&#32;</span>{/if}
 			{#if ctx.canEdit && badge.unknown.length}
 				<button
 					class="pill-link gflag"

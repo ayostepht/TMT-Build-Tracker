@@ -111,6 +111,35 @@ describe('updatePart manualGrams', () => {
 	});
 });
 
+describe('request-supplied keys', () => {
+	it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty'])(
+		'part slug %s is a 404 and writes no activity',
+		(slug) => {
+			const id = mk();
+			const n = () => db.select().from(activity).where(eq(activity.buildId, id)).all().length;
+			const before = n();
+			for (const body of [{ manualGrams: 5 }, { comps: { 0: true } }]) {
+				expect(() => updatePart(db, id, 'owner', slug, body)).toThrow(
+					expect.objectContaining({ status: 404 })
+				);
+			}
+			expect(n()).toBe(before);
+		}
+	);
+
+	it('plate grams over the cap are a 400', () => {
+		const id = mk();
+		const slug = view(id).plates.find((p) => p.number === 13)!.parts[0];
+		expect(() => updatePlate(db, id, 'owner', 10, { slicerGrams: 20001 })).toThrow(
+			expect.objectContaining({ status: 400 })
+		);
+		expect(() => updatePlate(db, id, 'owner', 13, { slicerByPart: { [slug]: 1e9 } })).toThrow(
+			expect.objectContaining({ status: 400 })
+		);
+		updatePlate(db, id, 'owner', 10, { slicerGrams: 20000 });
+	});
+});
+
 describe('updatePlate sets the grams source', () => {
 	const src = (id: string, n: number) =>
 		db

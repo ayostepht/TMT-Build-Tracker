@@ -239,6 +239,17 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
+- **Grams and accounting** (#45 done 2026-11-15, #46 next): one grams source order
+  everywhere, "Add weight" for parts without one (13 kit parts have no BOM weight), plate
+  headers show grams, Overview shows "≥/≤" plus the parts without weight. Migration
+  `0001_grams_everywhere` (additive) needs the usual rehearsal on deploy. Open:
+  `BuildHeader` "kg used of ~X kg estimated" has no missing-weight hint [app-shell]; per-part
+  (twin) plates store no per-part file grams, so "overrides file" shows only on whole plates
+  [plates-3mf]. #46 (maintainer decisions 2026-11-15): kept vs lost grams and hours; Partial
+  logs pick which parts succeeded (kept + printed) vs failed (lost + reprint); Failed grams
+  prefilled from progress; spool adds with a dated history (`build_filaments.spool_adds`,
+  migration 0002); Spare next to To print. #47 (charts) after #46.
+
 - **Design studio** [design-studio-ui]: #34 (2026-11-13): re-applying a palette resets
   unlocked parts to their kit slot; "Lock part color" keeps one part's exact colour (locked
   parts on a recoloured slot move to a slot with their old filament, reused or auto-added;

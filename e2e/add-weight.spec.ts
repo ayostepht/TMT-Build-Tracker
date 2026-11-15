@@ -14,8 +14,8 @@ async function openPrint(page: Page, buildId: string) {
 
 /** Parts still to print without a weight, summed over the filament tiles on Overview. */
 const unweighed = async (page: Page) => {
-	const texts = await page.getByText(/\(\+\d+ unweighed\)/).allInnerTexts();
-	return texts.reduce((a, t) => a + Number(/\+(\d+) unweighed/.exec(t)![1]), 0);
+	const texts = await page.getByTestId('unknown-weights').allInnerTexts();
+	return texts.reduce((a, t) => a + Number(/^\s*(\d+) parts? without weight/.exec(t)![1]), 0);
 };
 
 test('Add weight on a part with no weight flows into the part row, the plate log and Overview', async ({
@@ -27,6 +27,8 @@ test('Add weight on a part with no weight flows into the part row, the plate log
 	await page.getByRole('link', { name: 'Overview' }).click();
 	const before = await unweighed(page);
 	expect(before).toBeGreaterThan(0);
+	await expect(page.getByTestId('unknown-weights').first()).toContainText('not counted');
+	await expect(page.getByText(/≥ [\d,]+ g/).first()).toBeVisible();
 
 	await openPrint(page, buildId);
 	const r = row(page, SLUG);
