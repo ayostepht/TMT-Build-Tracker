@@ -106,6 +106,11 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await page.getByRole('link', { name: 'Overview' }).click();
 	await expect(header).toContainText('1 of 33');
 	await expect(page.getByText('Nothing on the printer')).toBeVisible();
+	// Overview keeps only the latest change; the full list is on the Activity tab.
+	await expect(page.getByTestId('last-change')).toContainText('Olive Owner');
+	await expect(page.locator('.activity')).toHaveCount(0);
+	await page.getByRole('link', { name: 'All activity' }).click();
+	await expect(page).toHaveURL(/\/activity$/);
 	await expect(page.locator('.activity')).toContainText('Olive Owner logged a successful print');
 	await expect(page.locator('.activity')).toContainText('Olive Owner undid a successful print');
 	await expect(page.locator('.activity')).toContainText(`Olive Owner set ${name} to Printing`);

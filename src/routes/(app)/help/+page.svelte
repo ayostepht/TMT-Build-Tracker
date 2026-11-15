@@ -69,8 +69,11 @@
 			</li>
 		</ol>
 		<p class="muted">
-			The tabs of a build are Overview · Design · Print · Files · Finish · Settings. Want to try
-			colors first? <b>Studio</b> in the top bar makes drafts you can recolor and export without a build.
+			The tabs of a build are Overview · Design · Print · Files · Finish · Activity · Settings. The <b
+				>Activity</b
+			>
+			tab lists recent changes to the build. Want to try colors first? <b>Studio</b> in the top bar makes
+			drafts you can recolor and export without a build.
 		</p>
 	</section>
 

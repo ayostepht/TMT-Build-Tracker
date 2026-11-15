@@ -14,6 +14,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Changed
 
+- Recent activity has its own Activity tab (after Finish, before Settings). The Overview now shows only the last change with an "All activity" link, so it stays lighter. Studio drafts have no Activity tab.
 - Choosing a palette now resets every part-level color change: unlocked parts go back to their kit colors, as the Apply bar says ("Resets N part changes · M locked kept"). Applying a palette is one saved change in the activity log, and Undo restores the colors and the parts together.
 - Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG", and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
 
