@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-15 (0.9.1 released, see item 0; `edge` is the default branch; test
-copy on r57 = `edge` e1e04f8 (0.9.1 + #32, #33, #35, #36, #38, #41, #43, #48–#55), the published image)._
+copy on r58 = `edge` a71f3ac (0.9.1 + #32, #33, #35, #36, #38, #41, #43, #48–#55, #58), the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -21,8 +21,8 @@ done. Keep it under ~150 lines.
    the default branch), not at f20a168 on `main`: same app code (only excluded paths
    differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
    e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
-   (checked anonymously 2026-11-13). The test copy runs it (r57 = `edge` e1e04f8, which adds
-   #32, #33, #35, #36, #38, #41, #43 and #48–#55 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
+   (checked anonymously 2026-11-13). The test copy runs it (r58 = `edge` a71f3ac, which adds
+   #32, #33, #35, #36, #38, #41, #43, #48–#55 and #58 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
@@ -264,7 +264,7 @@ Route each to the agent named in brackets.
 - **Overview on phones** (#53, merged 2026-11-15): filament rows show a chevron that flips
   when the row is open, so the spools + and history are easier to find.
 
-- **Started builds** (#56, on `fix/design-apply-started`): once a build has started (any
+- **Started builds** (#56, merged 2026-11-15 as #58, on the test copy since r58): once a build has started (any
   run, a part not To print, anything Printing, or a live printer job), colour, palette,
   part-slot, variant and printer changes no longer re-arrange its plates (they go stale and
   the banner says they were kept). Applying a design asks "Colors only" (keeps plates,
