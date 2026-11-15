@@ -18,11 +18,13 @@ _Updated 2026-11-15. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
 
 ## State of `edge`
 
-`origin/edge` = a71f3ac. Merged 2026-11-15: #50 (#46 accounting), #51 (#47 Stats), #52/#57
-(r56/r57 docs), #53 (chevron), #54 (CI docs fast path), #55 (Prettier rule), #58 (#56
-design change on a started build). The test copy runs r57 = `edge` e1e04f8 (no #56 yet).
-Next deploy, r58 = #56 + the header pull request, after the header merges. No migrations in
-either.
+`origin/edge` = 39b20ba (docs only on top of a71f3ac). Merged 2026-11-15: #50 (#46
+accounting), #51 (#47 Stats), #52/#57 (r56/r57 docs), #53 (chevron), #54 (CI docs fast
+path), #55 (Prettier rule), #58 (#56 design change on a started build), #60 (this handoff).
+The test copy runs r58 = `edge` a71f3ac (#56 included; deployed 2026-11-15 at the
+maintainer's request, rehearsal clean). The r58 docs (CHANGELOG, STATUS, this file) are on
+`docs/r58`, a pull request into `edge` held by the freeze. Next deploy, r59 = the header pull
+request, after it merges. No migrations.
 
 ## In flight
 
@@ -54,8 +56,8 @@ either.
   label thinning, table scroll; App shell: header cards), Prettier on the docs; (3)
   `verifier` in a fresh worktree with a real `npm ci` (a symlinked `node_modules` breaks
   `npm run check` with ~376 `./$types` errors), full vitest + build + full e2e; (4) pull
-  request into `edge`; (5) merge only with the maintainer's OK; (6) r58 deploy on Unraid
-  (#56 + header, no migrations), maintainer signs off, freeze lifts.
+  request into `edge`; (5) merge only with the maintainer's OK; (6) r59 deploy on Unraid
+  (header, no migrations), maintainer signs off, freeze lifts; then merge `docs/r58`.
 
 ### `feat/spoolman-filaments` (#59; branch from a71f3ac, nothing written yet)
 
