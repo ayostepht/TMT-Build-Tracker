@@ -7,6 +7,25 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r57** (published `sha-e1e04f8` = `edge` e1e04f8, digest `sha256:db5363093c3e…5945e1`, same
+  as `edge`; CI push run changes/test/e2e/image green, 2026-11-15; `edge` 11a41f6 adds docs only):
+  Stats tab per build and workspace Stats page (#51); chevron on phone filament rows (#53);
+  CI docs-only fast path (#54); docs (#52, #55). No migration (journal stays at 3; schema and
+  row counts equal to the backup). Rehearsal clean on a copy of the backup (health ok, no
+  startup errors). Checks on that copy (390, 1440, read-only, camera and non-GET API calls
+  blocked): chevron on all 4 phone rows, rotates 180° when open; 8 tabs at 390, no
+  horizontal page scroll. Build Stats against the Overview: 338 h logged (Overview 338.2 h),
+  267 h good / 71.6 h lost (Overview 266.6 / 71.6), 9.6 kg used with 7.7 kg in parts and
+  1.9 kg lost (= 500 g + 1,435 g), 22 of 33 parts (= header); failures chart lists P9 ×2,
+  P16, P13 ×2; "Show data" opens a table on every chart. Workspace Stats (3/6/12/24 months):
+  builds table lists the one build (no draft), printers chart the Elegoo 193.2 h and "Unknown"
+  145 h (manual logs). Noted, not blocking: the failures chart leaves out a part-level
+  Failed run (no plate), so its rows add up to 5 of the 6 failed prints; the tiles round
+  good hours to 267 h but failed to 71.6 h; at 390 the builds table and plate-time table are
+  cut off at the card edge, and the last x-axis labels overlap ("Nov 19Nov 24"). Live
+  after the swap: health ok, no restarts, the running plate 16 job still linked and
+  printing. Rollback: stop, restore `tmt-backup-pre-r57.db` (move aside `-wal`/`-shm`),
+  re-tag `r56` as `test`.
 - **r56** (published `sha-7bb5843` = `edge` 7bb5843, same digest, CI push run test/e2e/image
   green, 2026-11-15): Activity tab (#48); grams for every plate and part (#49); kept vs lost
   filament and time, Partial logs with per-part results, dated spool adds, Spare after To
