@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
 import { buildStarted, type LiveJobs } from '#lib/domain/started.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
@@ -84,6 +84,65 @@ export function loadLiveJobs(db: Db, buildId: string): LiveJobs {
 		slugs: rows.flatMap((r) => r.partSlugs ?? []),
 		plates: rows.map((r) => r.plateNumber).filter((n): n is number => n != null)
 	};
+}
+
+/**
+ * Ids of the given builds that have started printing, in a handful of batched queries (no
+ * `loadBuildView` per build). Same definition as `buildStarted`: a logged run, a part that is not
+ * "To print" (parts of inactive variants are ignored), or a live (printing / paused) linked job.
+ * Drafts are never started.
+ */
+export function startedBuildIds(db: Db, buildIds: string[]): Set<string> {
+	const started = new Set<string>();
+	if (!buildIds.length) return started;
+	const rows = db
+		.select({
+			id: builds.id,
+			kind: builds.kind,
+			templateId: builds.templateId,
+			choices: builds.variantChoices
+		})
+		.from(builds)
+		.where(inArray(builds.id, buildIds))
+		.all()
+		.filter((r) => r.kind !== 'draft');
+	if (!rows.length) return started;
+	const ids = rows.map((r) => r.id);
+	for (const r of db
+		.selectDistinct({ id: printRuns.buildId })
+		.from(printRuns)
+		.where(inArray(printRuns.buildId, ids))
+		.all())
+		started.add(r.id);
+	for (const r of db
+		.selectDistinct({ id: printerJobs.buildId })
+		.from(printerJobs)
+		.where(
+			and(inArray(printerJobs.buildId, ids), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all())
+		if (r.id) started.add(r.id);
+
+	const groupsByTemplate = new Map(
+		db
+			.select({ id: templates.id, groups: templates.variantGroups })
+			.from(templates)
+			.where(inArray(templates.id, [...new Set(rows.map((r) => r.templateId))]))
+			.all()
+			.map((t) => [t.id, t.groups ?? []])
+	);
+	const inactiveByBuild = new Map<string, Set<string>>();
+	for (const r of rows) {
+		const groups = groupsByTemplate.get(r.templateId) ?? [];
+		inactiveByBuild.set(r.id, inactiveSlugs(groups, resolveChoices(groups, r.choices)));
+	}
+	for (const r of db
+		.select({ id: buildParts.buildId, slug: buildParts.partSlug })
+		.from(buildParts)
+		.where(and(inArray(buildParts.buildId, ids), ne(buildParts.status, 'To print')))
+		.all())
+		if (!inactiveByBuild.get(r.id)?.has(r.slug)) started.add(r.id);
+	return started;
 }
 
 export function loadBuildView(db: Db, buildId: string, userId: string): BuildView | null {
