@@ -6,10 +6,34 @@ import type {
 	PrinterPublic,
 	PrinterStatus
 } from '#lib/printers/status.ts';
+import type {
+	ApplyMode,
+	ApplyPreview,
+	KeptStockSlot,
+	SkippedSlot
+} from '#lib/domain/design-apply.ts';
 import type { BuildPhase, BuildView, PartStatus, PrintRunInput } from '#lib/domain/types.ts';
 import type { ThreeMfPlate, ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { PartSnapshot } from '#lib/domain/logrun.ts';
 import { clearPrivateCaches } from './private-caches.ts';
+
+/**
+ * A failed API call. `message` is the server's `error` text (so `catch (e) { e.message }` keeps
+ * working); `status` is the HTTP status, `code` the JSON body's `code` (e.g. 'build-started') and
+ * `body` the whole parsed JSON body ({} when the body was not JSON).
+ */
+export class ApiError extends Error {
+	status: number;
+	code: string | null;
+	body: Record<string, unknown>;
+	constructor(message: string, status: number, body: Record<string, unknown> = {}) {
+		super(message);
+		this.name = 'ApiError';
+		this.status = status;
+		this.code = typeof body.code === 'string' ? body.code : null;
+		this.body = body;
+	}
+}
 
 async function call<T = Record<string, never>>(
 	method: string,
@@ -29,7 +53,12 @@ async function call<T = Record<string, never>>(
 	}
 	// The session is gone: drop cached private kit models (fire and forget, never throws).
 	if (res.status === 401 && url.startsWith('/api/')) void clearPrivateCaches();
-	if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+	if (!res.ok)
+		throw new ApiError(
+			typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
+			res.status,
+			data
+		);
 	return data as T;
 }
 
@@ -214,6 +243,8 @@ export const setBuildDesign = (
 		removeRole?: string;
 		replaceWith?: string;
 		removeRoles?: string[];
+		/** Needed with `palette.reset` on a build that has started printing (else 409 `build-started`). */
+		confirm?: boolean;
 	}
 ) => call('PATCH', `${b(id)}/design`, patch);
 
@@ -241,9 +272,33 @@ export const listDesigns = (templateId: string) =>
 		`/api/designs?templateId=${encodeURIComponent(templateId)}`
 	);
 
-/** Replace a build's colors with a saved design. */
-export const applyDesign = (id: string, buildId: string) =>
-	call('POST', `/api/designs/${encodeURIComponent(id)}/apply`, { buildId });
+export interface ApplyDesignResult {
+	/** Slots whose filament changed ("Colors only"). */
+	changed?: number;
+	skipped?: SkippedSlot[];
+	keptStock?: KeptStockSlot[];
+}
+
+/**
+ * Apply a saved design to a build. A build that has started needs `mode` (else `ApiError` 409 code
+ * 'build-started'); `full` there also needs `confirm`.
+ */
+export const applyDesign = (
+	id: string,
+	buildId: string,
+	opts: { mode?: ApplyMode; confirm?: boolean } = {}
+) =>
+	call<ApplyDesignResult>('POST', `/api/designs/${encodeURIComponent(id)}/apply`, {
+		buildId,
+		...opts
+	});
+
+/** Dry run for the started-build dialog: what "Colors only" would do, whether full is allowed. Writes nothing. */
+export const previewApplyDesign = (id: string, buildId: string) =>
+	call<ApplyPreview>('POST', `/api/designs/${encodeURIComponent(id)}/apply`, {
+		buildId,
+		dryRun: true
+	});
 
 /** Upload the PNG preview of a design you wrote (up to 2 MB). */
 export async function uploadDesignSnapshot(id: string, png: Blob): Promise<void> {
@@ -282,10 +337,12 @@ export const buildPlateLayouts = (buildId: string) =>
 		'GET',
 		`${b(buildId)}/plates/layouts`
 	);
-export const setPlateLayout = (buildId: string, key: string, convertRuns = false) =>
+/** `confirm` answers the "this build has started" / "print logs will be converted" prompt (409 `build-started`). */
+export const setPlateLayout = (buildId: string, key: string, confirm = false) =>
 	call<{ plates: number; convertedRuns: number }>('POST', `${b(buildId)}/plates/layout`, {
 		key,
-		convertRuns
+		convertRuns: confirm,
+		confirm
 	});
 
 export type UploadedPlate = Omit<ThreeMfPlate, 'thumbnail'> & { hasThumbnail: boolean };
@@ -345,6 +402,8 @@ export const applyPlateUpload = (
 		filamentMap: Record<string, string | null>;
 		variantChoices?: Record<string, string>;
 		convertRuns?: boolean;
+		/** Answers the 409 `build-started` prompt (the build has started printing). */
+		confirm?: boolean;
 		/** 'plates' (default): the file's plates become the build's plates. 'template': keep my plates, learn per-part data. */
 		mode?: 'plates' | 'template';
 		/** Template mode: arrange the plates for the build's printer right away with the learned data. */
@@ -468,13 +527,13 @@ export const setPrinter = (
 	printer: import('#lib/domain/types.ts').BuildPrinter | null
 ) => call('PATCH', `${b(id)}/printer`, { printer });
 
-/** Arrange the build's plates for its printer; `convertRuns` confirms converting plate print logs. */
-export const arrangePlates = (id: string, convertRuns = false) =>
+/** Arrange the build's plates for its printer; `confirm` answers the 409 `build-started` prompt (also converts plate logs). */
+export const arrangePlates = (id: string, confirm = false) =>
 	call<{
 		plates: number;
 		convertedRuns: number;
 		warnings: import('#lib/domain/arrange.ts').ArrangeWarning[];
-	}>('POST', `${b(id)}/plates/arrange`, { convertRuns });
+	}>('POST', `${b(id)}/plates/arrange`, { convertRuns: confirm, confirm });
 
 export type ArrangementDto = import('#lib/domain/arrange.ts').ArrangementInfo;
 export const getArrangement = (id: string) => call<ArrangementDto>('GET', `${b(id)}/arrangement`);

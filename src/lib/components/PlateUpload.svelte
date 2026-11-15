@@ -7,6 +7,7 @@
 		type UploadResult
 	} from '#lib/client/api.ts';
 	import { untrack } from 'svelte';
+	import { withStartedConfirm } from '#lib/client/plate-guard.ts';
 	import AskDialog from './AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
 	import { objectKey } from '#lib/domain/plates-match.ts';
@@ -21,12 +22,15 @@
 	 */
 	let {
 		view,
+		blocked = null,
 		onclose,
 		ondone,
 		initialFile = null,
 		oninitial
 	}: {
 		view: BuildView;
+		/** A live printer job blocks renumbering the plates: the reason. */
+		blocked?: string | null;
 		onclose: () => void;
 		ondone: (msg: string) => void;
 		/** A file already chosen elsewhere (the kit drop zone); uploaded right away. */
@@ -50,6 +54,8 @@
 	/** What to do with the file: take its plates as sliced, or learn per-part data and keep my plates. */
 	let outcome = $state<'plates' | 'template'>('plates');
 	let arrangeNow = $state(false);
+	// Only a change that renumbers the plates is blocked; learning a print template alone is not.
+	const locked = $derived(blocked && (outcome === 'plates' || arrangeNow) ? blocked : null);
 	/** Object keys the user keeps to the one mapped part instead of all its twins. */
 	let single = $state<Record<string, boolean>>({});
 	const hasArranged = $derived(view.plates.some((p) => p.source === 'arranged'));
@@ -173,27 +179,33 @@
 
 	async function apply() {
 		if (!up) return;
-		if (
-			attachedRuns > 0 &&
-			!(await asking.ask(
-				`${attachedRuns} print log${attachedRuns === 1 ? ' is' : 's are'} attached to the current plates. ` +
-					'They will be converted to part logs (part statuses stay as they are). Continue?',
-				{ title: 'Convert print logs', confirmLabel: 'Convert and continue' }
-			))
-		)
-			return;
+		const u = up;
 		phase = 'applying';
 		error = null;
 		try {
-			const r = await applyPlateUpload(view.build.id, up.uploadId, {
-				mapping,
-				filamentMap,
-				variantChoices: Object.fromEntries(variantChanges.filter(([g]) => accept[g])),
-				convertRuns: attachedRuns > 0,
-				mode: outcome,
-				arrange: outcome === 'template' && arrangeNow,
-				single
-			});
+			// A started build asks once (renumbering, plate logs converted, parts printing by hand); a live
+			// printer job refuses the change.
+			const res = await withStartedConfirm(
+				asking,
+				(confirm) =>
+					applyPlateUpload(view.build.id, u.uploadId, {
+						mapping,
+						filamentMap,
+						variantChoices: Object.fromEntries(variantChanges.filter(([g]) => accept[g])),
+						convertRuns: confirm,
+						confirm,
+						mode: outcome,
+						arrange: outcome === 'template' && arrangeNow,
+						single
+					}),
+				{ title: 'Change the plates', confirmLabel: 'Change plates' }
+			);
+			if (!res.done) {
+				if (res.refused) error = res.refused;
+				phase = 'review';
+				return;
+			}
+			const r = res.value;
 			const twinNote = r.twinPlates.length
 				? ` Shared source objects were split between their parts on plate${r.twinPlates.length === 1 ? '' : 's'} ${r.twinPlates.map((t) => t.plate).join(', ')}.`
 				: '';
@@ -475,6 +487,7 @@
 				They are converted to part logs when you apply; part statuses stay as they are.
 			</p>
 		{/if}
+		{#if locked}<p class="blocked" role="alert" data-testid="upload-blocked">{locked}</p>{/if}
 		<div class="actions">
 			<button class="btn" type="button" onclick={cancel} disabled={phase === 'applying'}
 				>Cancel</button
@@ -483,7 +496,7 @@
 				class="btn primary"
 				type="button"
 				onclick={apply}
-				disabled={phase === 'applying' || mappedTotal === 0}
+				disabled={phase === 'applying' || mappedTotal === 0 || !!locked}
 				data-testid="apply-upload"
 				>{phase === 'applying'
 					? 'Applying…'
@@ -496,6 +509,16 @@
 </section>
 
 <style>
+	.blocked {
+		margin: var(--sp-3) 0 0;
+		padding: var(--sp-4) var(--sp-5);
+		border-radius: var(--r-md);
+		background: var(--warn-soft);
+		color: var(--warn);
+		font-size: var(--fs-md);
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
 	/* The content of the upload sheet (a ds-modal): the sheet is the surface, this pads and spaces it */
 	.upload {
 		display: grid;

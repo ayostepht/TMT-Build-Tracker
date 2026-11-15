@@ -296,7 +296,7 @@ describe('applyDesignToBuild', () => {
 		expect(v.filaments.find((f) => f.key === 'red')).toMatchObject({ hex: '#aa0000', spools: 0 });
 		expect(v.parts.find((p) => p.slug === 'wing-left')!.role).toBe('red');
 		expect(describeActivity(last(v, 'design.apply'), v)).toBe(
-			'User editor applied the color design "Source"'
+			'User editor applied the color design "Source" (colors and part colors replaced)'
 		);
 		expect(ev.some((e) => e.kind === 'design.apply')).toBe(true);
 		expect(
@@ -499,18 +499,22 @@ describe('Lock part color', () => {
 		expect(lockedOf(id)).toEqual(['wing-left']);
 	});
 
-	it('Apply this design clears the locks', () => {
+	it('Apply this design keeps the locks (a locked part keeps its slot)', () => {
 		const id = mk();
 		const d = createDesign(db, 'owner', { buildId: id, name: 'Same' });
 		updateBuildDesign(db, id, 'owner', {
 			lock: { slugs: ['wing-left', 'seat-center'], locked: true }
 		});
+		const before = rolesOfBuild(id);
 		applyDesignToBuild(db, d.id, id, 'owner');
-		expect(lockedOf(id)).toEqual([]);
+		expect(lockedOf(id)).toEqual(['seat-center', 'wing-left']);
+		expect(rolesOfBuild(id)['wing-left']).toBe(before['wing-left']);
 		expect(
-			(db.select().from(builds).where(eq(builds.id, id)).get()!.design as Record<string, unknown>)
-				.lockedParts
-		).toBeUndefined();
+			(
+				(db.select().from(builds).where(eq(builds.id, id)).get()!.design as Record<string, unknown>)
+					.lockedParts as string[]
+			).sort()
+		).toEqual(['seat-center', 'wing-left']);
 	});
 });
 

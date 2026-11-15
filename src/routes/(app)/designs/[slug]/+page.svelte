@@ -2,8 +2,17 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { applyDesign, createBuild, deleteDesign, updateDesignMeta } from '#lib/client/api.ts';
+	import {
+		applyDesign,
+		createBuild,
+		deleteDesign,
+		previewApplyDesign,
+		updateDesignMeta
+	} from '#lib/client/api.ts';
+	import { offerDesignUndo, snapshotBuild } from '#lib/client/design-undo.ts';
+	import type { ApplyMode } from '#lib/domain/design-apply.ts';
 	import Dialog from '#lib/components/design/share/Dialog.svelte';
+	import StartedApplyDialog from '#lib/components/design/share/StartedApplyDialog.svelte';
 	import ModelStage from '#lib/components/design/ModelStage.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
@@ -93,7 +102,7 @@
 		});
 
 	/** Which confirmation dialog is open (replaces the browser confirm()). */
-	let asking = $state<'copy' | 'delete' | null>(null);
+	let asking = $state<'copy' | 'started' | 'delete' | null>(null);
 	const targetBuild = $derived(data.targets.builds.find((x) => x.id === target));
 
 	const askCopy = () => {
@@ -102,7 +111,29 @@
 			return;
 		}
 		error = null;
-		asking = 'copy';
+		// A build that has started printing asks how to apply (colors only or also print files).
+		asking = targetBuild.started ? 'started' : 'copy';
+	};
+
+	/** Started build: apply in the chosen mode. A failure goes back to the dialog, which stays open. */
+	const copyStarted = async (mode: ApplyMode) => {
+		const b = targetBuild;
+		if (!b) throw new Error('Pick a build.');
+		const before = await snapshotBuild(b.id);
+		const r = await applyDesign(d.id, b.id, {
+			mode,
+			...(mode === 'full' ? { confirm: true } : {})
+		});
+		const left = r.skipped?.length ?? 0;
+		offerDesignUndo(
+			mode === 'full'
+				? `Applied "${d.name}" to "${b.name}" (colors and print files)`
+				: `Applied the colors of "${d.name}" to "${b.name}"${left ? `; ${left} ${left === 1 ? 'slot' : 'slots'} left as they were` : ''}`,
+			b.id,
+			before
+		);
+		asking = null;
+		await goto(resolve('/(app)/builds/[id]/design', { id: b.id }));
 	};
 
 	const copy = () =>
@@ -219,7 +250,7 @@
 						<h3>Or copy it into a build or draft you have</h3>
 						<p class="muted small">
 							Replaces that build's filament names, materials, colors and every part's slot. Spools
-							and print progress stay.
+							stay. If the build has started printing you can apply the colors only.
 						</p>
 						<label class="field">
 							Build or draft
@@ -269,7 +300,8 @@
 		<div class="confirm">
 			<p>
 				Replace the colors of "{targetBuild.name}" with "{d.name}"? Filament names, materials,
-				colors and every part's slot change. Spools and print progress stay.
+				colors and every part's slot change. Spools stay, and plates that are already arranged are
+				re-arranged for the new colors.
 			</p>
 			<div class="acts">
 				<button class="btn" type="button" onclick={() => (asking = null)}>Cancel</button>
@@ -279,6 +311,12 @@
 			</div>
 		</div>
 	</Dialog>
+{:else if asking === 'started' && targetBuild}
+	<StartedApplyDialog
+		load={() => previewApplyDesign(d.id, targetBuild.id)}
+		onchoose={copyStarted}
+		oncancel={() => (asking = null)}
+	/>
 {:else if asking === 'delete'}
 	<Dialog
 		title="Delete design?"

@@ -108,6 +108,14 @@ Sections match the subagents in `.claude/agents/`:
   inferred for older rows by `gramsSourceOf` (`server/builds/view.ts`). `updatePart`
   `manualGrams` (0-20000 g, 0/null clears, activity `part.grams`, drafts refused);
   request-supplied part slugs go through `hasPart` (own keys only).
+- **Started builds** (#56): `domain/started.ts` `buildStarted(view, live)` /
+  `startedSummary` define "started" (any run, a part not To print, a Printing part, a live
+  printer job); `BuildView.started` carries it (`loadLiveJobs` in `view.ts`).
+  `autoRearrange` skips started builds. `server/builds/started-guard.ts`
+  `BuildStartedError` is a 409 `build-started` with `started` and `summary` (`respond()`
+  passes `extra` fields); the client `call()` throws `ApiError {status, code, body}`.
+  Activity: `design.recolor` (outside `REARRANGE_KINDS`), `design.apply` with `mode`, and a
+  `before` snapshot `{roles, partRoles, lockedParts}` in design payloads.
 - **Stats** (#47, `domain/stats.ts`, pure): `runsByPeriod`, `plateTimes` (shares
   `timedRun` with `pace.ts`), `filamentBreakdown`, `failureRates`, `progressSeries`,
   `projectFinish` (28-day rate; fewer than 3 runs → `not-enough`), `buildStatsSummary`
@@ -190,6 +198,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Plates and 3MF (`plates-3mf`)
 
+- **Plate replacement guard** (#56): `guardPlateReplace` (`builds/plates.ts`) runs before
+  `setPlateLayout`, `arrangeForPrinter` and `applyUpload` (plates mode, or template mode
+  with arrange): a live printer job refuses (409 `build-started`, no override); a started
+  build needs `confirm` (or the older `convertRuns`). `client/plate-guard.ts`
+  `withStartedConfirm` is shared by `PlateLayoutPicker`, `PlatesPanel` and `PlateUpload`,
+  which also disable those controls up front while a job is live (`plates-refused`).
 - Plate grams (#45): an upload sets `slicer_grams_source='file'`; typed plate grams survive
   re-layout and re-upload (`manualTimes` → `PlateManuals`, `carryManuals` in
   `arrange-plan.ts`). `domain/plate-grams.ts` `plateGramsBadge` + `PlateGrams.svelte` show
@@ -395,6 +409,15 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 ## Design studio (`design-studio-ui`)
 
+- **Applying a design to a started build** (#56): `domain/design-apply.ts` (`planRecolor`,
+  `fullReplaceBlock`, `designSnapshot`, `undoPatch`) is shared by server and client.
+  `applyDesignToBuild(…, {mode: 'colors'|'full', confirm})` in `designs/mutate.ts`: a
+  started build without a mode gets 409; `colors` (`recolorOnly`) writes only slot
+  filaments (skips slots that change material family or hold locked parts, reports slots
+  that keep spools); `full` keeps locks and is refused while printing. `previewApplyDesign`
+  is the dry run (`POST /api/designs/[id]/apply {dryRun:true}`); palette `reset` on a
+  started build needs `confirm`. `StartedApplyDialog` is used by `ApplyDesign`,
+  `/designs/[slug]`, `PalettePanel` and the wizard; `client/design-undo.ts` shows Undo.
 - **Charts** (#47, `src/lib/components/charts/`): domain-free SVG/CSS components with no
   library: `ChartFigure` (heading, summary sentence, "Show data" table; every chart sits in
   one), `StackedBars`, `HBar`, `StepLine`, `StatTile`; helpers in `scale.ts` (`niceTicks`,

@@ -7,6 +7,14 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r58** (published `sha-a71f3ac` = `edge` a71f3ac, digest `sha256:aef697626a13…018ca5`, same
+  as `edge`; CI push run green, 2026-11-15; `edge` 39b20ba adds docs only): asks before
+  changing the design of a started build, with a "Colors only" option; plates no longer
+  re-arrange on a started build (#58 = #56). No migration. Rehearsal clean on a copy of the
+  backup (health ok, no startup errors, all 37 tables' row counts equal to the backup). Live
+  after the swap: health ok, login page loads, no restarts. Not checked signed in (no UI
+  check on a copy this time). The header pull request ships separately as r59. Rollback:
+  stop, restore `tmt-backup-pre-r58.db` (move aside `-wal`/`-shm`), re-tag `r57` as `test`.
 - **r57** (published `sha-e1e04f8` = `edge` e1e04f8, digest `sha256:db5363093c3e…5945e1`, same
   as `edge`; CI push run changes/test/e2e/image green, 2026-11-15; `edge` 11a41f6 adds docs only):
   Stats tab per build and workspace Stats page (#51); chevron on phone filament rows (#53);
