@@ -185,7 +185,7 @@ has not started.
 | Assembly checklist, photos, handoff, printable summary                         | Done                                                                           |
 | Read-only printer status + camera, job → plate linking                         | Done; SDCP and camera verified live, supervisor not tested during a full print |
 | Elegoo via OctoEverywhere shared link                                          | Done; status + camera confirmed live through the link (r44)                    |
-| Spoolman (optional)                                                            | Done, mock-tested only                                                         |
+| Spoolman (optional)                                                            | Done; filament link (#59) mock-tested only, PR 2/3 not started                 |
 | Filament catalog + vendor supplement                                           | Done                                                                           |
 | Release (Unraid template, domain, public repo)                                 | Public repo and 0.9.0 image done; Unraid template and domain not started       |
 | PWA (manifest, icons, service worker, offline page, update prompt)             | Done; real-phone checks pending                                                |

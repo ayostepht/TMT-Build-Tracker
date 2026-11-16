@@ -1,5 +1,7 @@
 import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
+import { linkedRunGrams } from '#lib/domain/accounting.ts';
+import { readSpoolmanStock } from '#lib/domain/spoolman.ts';
 import { buildStarted, type LiveJobs } from '#lib/domain/started.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
@@ -38,6 +40,7 @@ import {
 	buildPlates,
 	builds,
 	member,
+	spoolmanCache,
 	printRuns,
 	printerJobs,
 	templateAssemblySteps,
@@ -53,6 +56,8 @@ import {
 	user
 } from '../db/schema';
 import { normalizeRole } from '../access';
+import { fromCacheData } from '../spoolman/client';
+import { getDeductions, getOrgSettings, ledgerRole, prelinkLedgerKey } from '../org-settings';
 import { layoutBed } from '#lib/printers/layout-bed.ts';
 
 function defaultLayoutKey(db: Db, templateId: string): string | null {
@@ -143,6 +148,106 @@ export function startedBuildIds(db: Db, buildIds: string[]): Set<string> {
 		.all())
 		if (!inactiveByBuild.get(r.id)?.has(r.slug)) started.add(r.id);
 	return started;
+}
+
+/**
+ * Fill `view.spoolman` and every slot's `spoolman` summary (issue #59): link, kept-by mode,
+ * sharing count, cached stock and the ledger grams. Reads only; never talks to Spoolman.
+ */
+function attachSpoolman(db: Db, view: BuildView, orgId: string): void {
+	const cfg = getOrgSettings(db, orgId);
+	view.spoolman = { configured: !!cfg.spoolmanUrl, keptBy: cfg.spoolmanKeptBy };
+	const links = new Map(
+		db
+			.select()
+			.from(buildFilaments)
+			.where(eq(buildFilaments.buildId, view.build.id))
+			.all()
+			.map((f) => [f.roleKey, f])
+	);
+	const filamentIds = [
+		...new Set(
+			[...links.values()].flatMap((f) =>
+				f.spoolmanFilamentId != null ? [f.spoolmanFilamentId] : []
+			)
+		)
+	];
+	const cache = new Map(
+		filamentIds.length
+			? db
+					.select()
+					.from(spoolmanCache)
+					.where(
+						and(
+							eq(spoolmanCache.organizationId, orgId),
+							inArray(spoolmanCache.spoolmanFilamentId, filamentIds)
+						)
+					)
+					.all()
+					.map((c) => [c.spoolmanFilamentId, c])
+			: []
+	);
+	// Other (non-draft) builds of the workspace on the same Spoolman filament, per filament id.
+	const shared = new Map<number, Set<string>>();
+	if (filamentIds.length)
+		for (const r of db
+			.select({ fid: buildFilaments.spoolmanFilamentId, build: buildFilaments.buildId })
+			.from(buildFilaments)
+			.innerJoin(builds, eq(builds.id, buildFilaments.buildId))
+			.where(
+				and(
+					eq(builds.organizationId, orgId),
+					ne(builds.kind, 'draft'),
+					ne(buildFilaments.buildId, view.build.id),
+					inArray(buildFilaments.spoolmanFilamentId, filamentIds)
+				)
+			)
+			.all()) {
+			if (r.fid == null) continue;
+			const set = shared.get(r.fid) ?? new Set<string>();
+			set.add(r.build);
+			shared.set(r.fid, set);
+		}
+	const ledger = getDeductions(db, orgId);
+	const runIds = new Set(view.runs.map((r) => r.id));
+	for (const f of view.filaments) {
+		const l = links.get(f.key);
+		const filamentId = l?.spoolmanFilamentId ?? null;
+		const linkedAt = l?.spoolmanLinkedAt ? l.spoolmanLinkedAt.getTime() : null;
+		const c = filamentId != null ? cache.get(filamentId) : undefined;
+		let deductedG = 0;
+		for (const [key, entries] of Object.entries(ledger))
+			if (runIds.has(key)) for (const e of entries) if (ledgerRole(e) === f.key) deductedG += e[1];
+		const prelink = (ledger[prelinkLedgerKey(view.build.id, f.key)] ?? []).reduce(
+			(a, e) => a + e[1],
+			0
+		);
+		const cached = c ? fromCacheData(c.data) : null;
+		const spool =
+			f.spoolmanSpoolId != null
+				? cached?.spools.find((x) => x.id === f.spoolmanSpoolId)
+				: undefined;
+		f.spoolman = {
+			filamentId,
+			filamentName: cached ? `${cached.vendor ? `${cached.vendor} ` : ''}${cached.name}` : null,
+			spoolName: spool?.location ?? null,
+			spoolId: f.spoolmanSpoolId,
+			linkedAt,
+			keptBy: cfg.spoolmanKeptBy,
+			sharedWith: filamentId != null ? (shared.get(filamentId)?.size ?? 0) : 0,
+			stock: c
+				? readSpoolmanStock(
+						c.data,
+						{ fetchedAt: c.fetchedAt.getTime(), error: c.error },
+						f.spoolmanSpoolId
+					)
+				: null,
+			deductedG: Math.round(deductedG * 10) / 10,
+			prelinkDeductedG: Math.round(prelink * 10) / 10,
+			preLinkLoggedG:
+				linkedAt != null && filamentId != null ? linkedRunGrams(view, f.key, linkedAt).preG : 0
+		};
+	}
 }
 
 export function loadBuildView(db: Db, buildId: string, userId: string): BuildView | null {
@@ -433,7 +538,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			printer: r.printer,
 			userId: r.userId,
 			userName,
-			note: r.note
+			note: r.note,
+			createdAt: r.createdAt ? r.createdAt.getTime() : null
 		}));
 
 	const acts: ActivityItem[] = db
@@ -541,6 +647,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		handoff: loadHandoff(db, buildId, access.canEdit),
 		started: undefined as never
 	};
+	attachSpoolman(db, result, b.organizationId);
 	// Drafts are never started (buildStarted ignores jobs and runs for them).
 	result.started = buildStarted(result, kind === 'draft' ? undefined : loadLiveJobs(db, buildId));
 	return result;

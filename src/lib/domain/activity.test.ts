@@ -492,3 +492,59 @@ describe('design.recolor and design.apply modes', () => {
 		);
 	});
 });
+
+describe('Spoolman activity sentences', () => {
+	const f = view.filaments[0];
+	const label = filamentLabel(f);
+	it('link, relink and unlink', () => {
+		expect(
+			say('filament.spoolman.link', { role: f.key, filamentName: 'Overture Blue', filamentId: 7 })
+		).toBe(`Steph linked ${label} to Spoolman filament "Overture Blue" (#7)`);
+		expect(say('filament.spoolman.link', { role: f.key, filamentId: 8, relinked: true })).toBe(
+			`Steph linked ${label} to Spoolman filament (#8) instead of the one it was linked to`
+		);
+		expect(say('filament.spoolman.unlink', { role: f.key, filamentName: 'Blue' })).toBe(
+			`Steph unlinked ${label} from Spoolman filament "Blue"; its own spools count again`
+		);
+	});
+	it('spool choice, auto-advance and clearing', () => {
+		expect(say('filament.spoolman.spool', { role: f.key, spoolId: 4, spoolName: 'Roll B' })).toBe(
+			`Steph set ${label} to Spoolman spool #4 (Roll B)`
+		);
+		expect(
+			say('filament.spoolman.spool', { role: f.key, spoolId: 5, fromSpoolId: 4, auto: true })
+		).toBe(`${label} moved on to Spoolman spool #5 because spool #4 ran out`);
+		expect(say('filament.spoolman.spool', { role: f.key, spoolId: null })).toBe(
+			`Steph cleared the Spoolman spool of ${label}`
+		);
+	});
+	it('create and the one-off pre-link deduction (and its undo)', () => {
+		expect(say('filament.spoolman.create', { what: 'vendor', name: 'Acme', id: 2 })).toBe(
+			'Steph created Spoolman vendor "Acme" (#2)'
+		);
+		expect(
+			say('filament.spoolman.create', { what: 'filament', name: 'Blue', id: 9, role: f.key })
+		).toBe(`Steph created Spoolman filament "Blue" (#9) for ${label}`);
+		expect(say('filament.spoolman.prelink', { role: f.key, grams: 1234 })).toBe(
+			`Steph subtracted 1,234 g from Spoolman for ${label} (prints logged before it was linked)`
+		);
+		expect(say('filament.spoolman.prelink', { role: f.key, grams: 80, undone: true })).toBe(
+			`Steph gave back 80 g to Spoolman for ${label} (prints logged before it was linked)`
+		);
+	});
+	it('stock add and remove mention the Spoolman spool', () => {
+		expect(say('filament.stock.add', { role: f.key, kg: 1, spoolmanSpoolId: 12 })).toBe(
+			`Steph added 1 kg of ${label} and created Spoolman spool #12`
+		);
+		expect(
+			say('filament.stock.remove', { role: f.key, kg: 1, spoolmanSpoolId: 12, archived: true })
+		).toBe(`Steph removed an added spool of ${label} (1 kg) and archived Spoolman spool #12`);
+		expect(
+			say('filament.stock.remove', { role: f.key, spoolmanSpoolId: 12, archived: false })
+		).toBe(`Steph removed an added spool of ${label}; Spoolman spool #12 was kept`);
+	});
+	it('strips link markers from user text', () => {
+		const t = say('filament.spoolman.create', { what: 'filament', name: 'A\u0001b\u0003' });
+		expect(t).toBe('Steph created Spoolman filament "Ab"');
+	});
+});

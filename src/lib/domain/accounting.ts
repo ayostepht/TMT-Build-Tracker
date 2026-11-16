@@ -11,6 +11,7 @@
 import { runTargets } from './actions.ts';
 import { fmtH } from './format.ts';
 import { paceOf, type Pace } from './pace.ts';
+import { haveGramsOf, isDeductibleRun, isPreLinkRun, isSpoolmanLinked } from './spoolman.ts';
 import type {
 	BuildView,
 	FilamentRole,
@@ -181,6 +182,28 @@ export function runRoleGrams(view: BuildView, run: RunLike): Record<string, numb
 			.filter(([, w]) => w > 0)
 			.map(([k, w]) => [k, Math.round(((grams * w) / total) * 10) / 10])
 	);
+}
+
+/**
+ * Grams of logged runs that land on one filament role, split by whether they were logged before
+ * the slot was linked to Spoolman (`preG`, never deducted) or after (`postG`, deducted when the
+ * workspace keeps Spoolman up to date). Old Partial rows and runs without grams count in
+ * neither, like the deduction code. `linkedAt` null: everything is `postG`. Pure.
+ */
+export function linkedRunGrams(
+	view: BuildView,
+	role: string,
+	linkedAt: number | null | undefined
+): { preG: number; postG: number } {
+	let preG = 0;
+	let postG = 0;
+	for (const r of view.runs) {
+		if (!isDeductibleRun(r)) continue;
+		const g = runRoleGrams(view, r)[role] ?? 0;
+		if (isPreLinkRun(r, linkedAt)) preG += g;
+		else postG += g;
+	}
+	return { preG: Math.round(preG * 10) / 10, postG: Math.round(postG * 10) / 10 };
 }
 
 // ---- Grams: one source order for parts, plates and units ---------------------------------------
@@ -448,6 +471,15 @@ export interface FilamentStat {
 	/** `unknownParts.length` (kept for existing readers). */
 	unweighed: number;
 	haveGrams: number; // stock on hand (`stockKg`) * 1000
+	/**
+	 * Spare in grams: `haveGrams - usedForSpare - need`. Use this instead of subtracting `used`
+	 * yourself, because a slot linked to Spoolman takes its stock from Spoolman (see `haveGramsOf`).
+	 */
+	spareG: number;
+	/** The prints subtracted in `spareG` (equals `used` unless the slot is linked to Spoolman). */
+	usedForSpare: number;
+	/** Where `haveGrams` comes from: the app's spools, Spoolman's weight, or unknown (linked, never fetched). */
+	haveSource: 'app' | 'spoolman' | 'unknown';
 	/** The starting spools (kg). */
 	startKg: number;
 	/** Spools added since the start (kg). */
@@ -472,7 +504,17 @@ export function filamentStats(view: BuildView): FilamentStat[] {
 		}
 		const used = keptG + lostG;
 		const need = us.reduce((a, u) => a + unitLeft(view, u) * share(u), 0);
-		const haveGrams = stockKg(f) * 1000;
+		const sm = f.spoolman;
+		const linkedRuns = isSpoolmanLinked(sm)
+			? linkedRunGrams(view, f.key, sm!.linkedAt)
+			: { preG: 0, postG: used };
+		const have = haveGramsOf({
+			appStockG: stockKg(f) * 1000,
+			usedG: used,
+			postLinkUsedG: linkedRuns.postG,
+			spoolman: sm
+		});
+		const haveGrams = have.haveGrams;
 		const startKg = Number(f.spools) || 0;
 		const unknownParts = [
 			...new Set(
@@ -486,7 +528,7 @@ export function filamentStats(view: BuildView): FilamentStat[] {
 					)
 			)
 		];
-		const spare = haveGrams - used - need;
+		const spare = haveGrams - have.usedGrams - need;
 		return {
 			role: f.key,
 			used,
@@ -497,10 +539,13 @@ export function filamentStats(view: BuildView): FilamentStat[] {
 			unknownParts,
 			unweighed: unknownParts.length,
 			haveGrams,
+			spareG: spare,
+			usedForSpare: have.usedGrams,
+			haveSource: have.source,
 			startKg,
 			addedKg: Math.round((stockKg(f) - startKg) * 100) / 100,
-			short: spare < 0,
-			shortByGrams: Math.max(0, -spare)
+			short: have.source !== 'unknown' && spare < 0,
+			shortByGrams: have.source === 'unknown' ? 0 : Math.max(0, -spare)
 		};
 	});
 }

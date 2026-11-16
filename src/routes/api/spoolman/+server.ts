@@ -6,7 +6,7 @@ import { assertOutboundAllowed, hostBlockReason } from '#lib/server/printers/out
 import { normalizeSpoolmanUrl, SpoolmanError } from '#lib/server/spoolman/client.ts';
 import type { RequestHandler } from './$types';
 
-/** Team integration settings: Spoolman address, auto-deduct, auto-log finished prints. */
+/** Team integration settings: Spoolman address, who keeps it up to date, auto-log finished prints. Owners change them. */
 export const GET: RequestHandler = (event) =>
 	respond(() => {
 		const db = getDb();
@@ -55,6 +55,11 @@ export const PUT: RequestHandler = (event) =>
 			if (body[k] === undefined) continue;
 			if (typeof body[k] !== 'boolean') throw new ApiError(400, `${k} must be true or false`);
 			patch[k] = body[k] as boolean;
+		}
+		if (body.spoolmanKeptBy !== undefined) {
+			if (body.spoolmanKeptBy !== 'app' && body.spoolmanKeptBy !== 'other')
+				throw new ApiError(400, "spoolmanKeptBy must be 'app' or 'other'");
+			patch.spoolmanKeptBy = body.spoolmanKeptBy;
 		}
 		setOrgSettings(db, org, patch);
 		return { settings: getOrgSettings(db, org) };

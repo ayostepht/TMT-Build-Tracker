@@ -6,6 +6,9 @@
 	import { removeImpact } from '#lib/domain/design.ts';
 	import RemoveColorDialog from './RemoveColorDialog.svelte';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
+	import SpoolmanSlotLine from '#lib/components/SpoolmanSlotLine.svelte';
+	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 
 	let {
 		view,
@@ -34,6 +37,16 @@
 	const canEdit = $derived(view.canEdit);
 	/** Studio drafts have no spools on hand: show what the design needs, not stock. */
 	const draft = $derived(view.build.kind === 'draft');
+
+	/** Where an owner sets Spoolman up; only offered to editors, and only when the workspace is known. */
+	const teamSlug = $derived(
+		(page.data as { teams?: { id: string; slug: string }[] }).teams?.find(
+			(t) => t.id === view.build.organizationId
+		)?.slug
+	);
+	const integrationsHref = $derived(
+		canEdit && teamSlug ? resolve('/(app)/teams/[slug]/integrations', { slug: teamSlug }) : null
+	);
 
 	const statOf = (f: FilamentRole) => stats.find((s) => s.role === f.key);
 	const partCount = (f: FilamentRole) => view.parts.filter((p) => p.role === f.key).length;
@@ -82,7 +95,8 @@
 		{#each sortRoles(view.filaments, (x) => x.key) as f (f.key)}
 			{@const s = statOf(f)}
 			{@const grams = s?.total ?? 0}
-			{@const spare = s ? s.haveGrams - s.used - s.need : 0}
+			{@const spare = s ? s.spareG : 0}
+			{@const linked = !draft && !!s && s.haveSource !== 'app'}
 			<li
 				class="slot"
 				class:on={activeRole === f.key}
@@ -118,11 +132,23 @@
 						<span class="muted">{f.material} · {partCount(f)} parts · {fmt(grams)} g</span>
 					</button>
 					<div class="need" class:short={!draft && s?.short && grams > 0}>
-						Needs {fmtSpools(grams / 1000)} kg{#if !draft}, have {fmtSpools(stockKg(f))} kg{/if}
-						{#if grams > 0 && !draft}
+						Needs {fmtSpools(grams / 1000)} kg{#if !draft}{#if linked && s}{#if s.haveSource === 'unknown'},
+									Spoolman stock unknown{:else}, have {fmtSpools(s.haveGrams / 1000)} kg in Spoolman{/if}{:else},
+								have {fmtSpools(stockKg(f))} kg{/if}{/if}
+						{#if grams > 0 && !draft && !(linked && s?.haveSource === 'unknown')}
 							{#if spare < 0}<span class="flag">short</span>{:else}<span class="ok">ok</span>{/if}
 						{/if}
 					</div>
+					{#if !draft}
+						<SpoolmanSlotLine
+							buildId={view.build.id}
+							slot={f}
+							workspaceConfigured={view.spoolman?.configured ?? false}
+							{canEdit}
+							{integrationsHref}
+							onchange={() => ctx.refresh()}
+						/>
+					{/if}
 					{#if canEdit}
 						<div class="acts">
 							<button

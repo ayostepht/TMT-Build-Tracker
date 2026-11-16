@@ -203,6 +203,17 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   defaults on once a part is Printed; parts that become Printed during a visit stay visible
   ("Printed just now", `groupParts(..., { keep })`). Specs use `keepPrintedVisible`.
 
+- **Spoolman (#59, unreleased):** `domain/spoolman.ts` holds the pre-link rule
+  (`isPreLinkRun`, `runCountsForDeduction`: runs created, or dated, before the slot's
+  `linkedAt` are never deducted, also on edit/undo; Partial rows never), the cached-stock
+  reader `readSpoolmanStock` and `haveGramsOf` (Spare while linked uses Spoolman's remaining
+  weight; kept-by 'app' also subtracts post-link grams the ledger hasn't delivered; pre-link
+  grams never count twice). `filamentStats` exposes `spareG`/`usedForSpare`/`haveSource`.
+  `loadBuildView` → `attachSpoolman` fills `BuildView.spoolman` and `FilamentRole.spoolman`
+  (link, `linkedAt`, `keptBy`, `sharedWith`, cached stock, ledger grams); `PrintRun.createdAt`
+  comes from `print_runs.created_at`. Activity kinds `filament.spoolman.link|unlink|spool|
+create|prelink`, plus `spoolmanSpoolId`/`archived` extras on `filament.stock.add|remove`.
+
 ## Plates and 3MF (`plates-3mf`)
 
 - **Plate replacement guard** (#56): `guardPlateReplace` (`builds/plates.ts`) runs before
@@ -414,6 +425,20 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `pendingExpected(db, org, buildId?)`. A disabled printer reads "Monitoring stopped";
   buttons "Stop monitoring" / "Resume monitoring".
 
+- **Spoolman filaments (#59, unreleased):** modules `spoolman/{lock,cache,engine,link,suggest,
+mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (in-process,
+  per workspace), ledger `[spool, g, role]`, `runCountsForDeduction`, auto-advance to the next
+  open spool of the linked filament (lowest id; the last spool takes any remainder) and LIFO
+  give-back. A run that stops being eligible (kept by "other", unlinked, pre-link) keeps its
+  ledger grams; only deleting or undoing it gives them back (maintainer, 2026-11-16). Routes:
+  `/api/builds/[id]/filaments/[role]/spoolman` (GET suggestions for members, PUT link/unlink
+  for editors), `…/spool` (PUT), `…/prelink` (POST apply, DELETE undo; kept-by 'app' only);
+  `/api/spoolman` PUT takes `spoolmanKeptBy` (owner). The cache is written on link, after a
+  deduction and on the build `/spoolman` GET (which also back-fills legacy filament ids); a
+  failed fetch only sets `error`. `SpoolmanFilamentPicker` / `SpoolmanSlotLine` are
+  self-contained for FilamentTiles, SlotPanel and the wizard. `mock-spoolman.ts`
+  (`startMockSpoolman()`) serves unit and e2e tests.
+
 ## Design studio (`design-studio-ui`)
 
 - **Applying a design to a started build** (#56): `domain/design-apply.ts` (`planRecolor`,
@@ -602,6 +627,22 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 - Startup: migrate, seed, `failStaleModelJobs`, `sweepImportsDir` (`imports-sweep.ts`:
   temp uploads and scratch folders older than 1 h that no queued job needs). Schema:
   `site_admin`.
+
+- **Spoolman schema (#59, migration `0003_spoolman_filaments`, unreleased):**
+  `build_filaments.spoolman_filament_id` and `spoolman_linked_at` (null = unknown, e.g. a
+  legacy spool-only link: no pre-link skipping); table `spoolman_cache` (PK
+  `(organization_id, spoolman_filament_id)`, `data` JSON, `fetched_at`, `error`; a non-null
+  `error` means the last fetch failed and `data` is stale). In JSON, no migration:
+  `SpoolAdd.spoolmanSpoolId?`; the deduction ledger and `spoolmanKeptBy` (`'app' | 'other'`,
+  default from `spoolmanAutoDeduct`, kept in sync with that column) live in
+  `organization_settings.settings` via `org-settings.ts`. Ledger entries are
+  `[spoolId, grams, role?]` (old two-element entries read as role-less); pre-link one-off
+  deductions use `prelink:<buildId>:<role>` keys. A migration that adds a column or table
+  registers it in `baseline-upgrade.test.ts` (`POST_BASELINE_COLUMNS` / `POST_BASELINE_TABLES`).
+  `print_runs.created_at` (nullable `timestamp_ms`) is set on insert by the schema's
+  `$defaultFn` (SQLite can't `ADD COLUMN` with an expression default); 0003 back-fills it
+  from the earliest matching `run.add` activity (`runId`/`runIds`), else UTC midnight of the
+  run's date.
 
 ## App shell (`app-shell`)
 
