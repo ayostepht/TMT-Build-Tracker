@@ -124,6 +124,13 @@ Sections match the subagents in `.claude/agents/`:
   order-independent). Dates are `YYYY-MM-DD` with Monday weeks. `safeSwatch` only passes
   `#rrggbb`. `server/stats/workspace.ts` `loadWorkspaceStats`: member-only (404), drafts
   excluded, `months` clamped 1-24, loads each build with `loadBuildView`, no cache.
+  Shared helpers (dates, rounding, `attempts`/`isSplitPair`, failure-rate types) live in
+  `domain/stats-core.ts`; `stats.ts` re-exports them. The failures chart counts part-level
+  Failed runs too (a plate row, or "Not on a plate"). Hours round alike for good and failed
+  (whole hours from 100 h logged).
+- **Headline numbers** (`domain/kpis.ts`, pure): `buildKpis(view, now)` is the one source
+  for the four headline figures (parts, time, filament, finish, each with its estimate),
+  used by the Stats tiles and the build header cards.
 - **Kept vs lost** (#46, `domain/accounting.ts`): `unitUse`/`unitUseByRole` split used grams
   into kept (Success runs, plus the estimate for done runs no Success log covers) and lost
   (Failed runs and older Partial rows); `used = keptG + lostG`, and `TimeStats` has
@@ -424,7 +431,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `unitSuffix`, `edgeAnchor`…). Colours from the `--chart-good/bad/todo/grid` tokens (3:1
   contrast test); failed/lost is also hatched. Column charts get a button layer
   (`HitColumns`: roving tabindex, arrows/Home/End, Escape) and a readout line; no
-  hover-only tooltips. Imported only by the Stats routes.
+  hover-only tooltips. `scale.ts` `visibleLabels` drops x-axis labels that would collide.
+  "Show data" tables scroll inside their card (sticky first column, edge shadow).
+  `StatTile` (`compact` for the build header) puts a real space between value and unit.
+  Imported by the Stats routes and `BuildHeader`.
 - **DesignWorkspace** (`components/build/DesignWorkspace.svelte`, also used by the wizard
   and drafts): tabs Colors | Palettes | Parts (leaving Palettes cancels an un-applied
   preview). ≥900 px: fixed-height two panes; <900 px: sticky stage (~34vh) + sticky tabs.
@@ -681,7 +691,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   behind `nav-toggle` on phones; phone specs call `openNav(page)`), the `<Toast />` host
   (phones: above the bottom bar) and a navigation progress bar. `TabBar` is one nav with two
   looks: top tabs on desktop, a fixed bottom bar on phones (`--bottom-bar-h` in the shell
-  block at the end of `app.css`). `BuildHeader` is one line on phones. `ErrorPage.svelte`
+  block at the end of `app.css`). `BuildHeader` shows four compact `StatTile` cards
+  (Parts, Time, Filament, Finish, from `buildKpis`) linking to Stats on every build tab, four
+  across on phones and hidden on the Design tab at ≤760 px; Time and Filament add a short
+  "of ~estimate" line (the full sentence is in the aria-label). Below them, a details line
+  holds only "N printing · N to reprint · deliver-by" and hides when empty. Drafts keep the
+  old header. `ErrorPage.svelte`
   serves both `+error.svelte` files (fixed wording per status).
 - `AppMark.svelte` is the app mark (`static/icons/icon.svg`; PNGs regenerate from it) in the
   top bar and signed-out headers. Sign-out, "Sign in again" and account deletion call

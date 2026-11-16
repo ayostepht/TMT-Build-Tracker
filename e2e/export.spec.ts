@@ -116,6 +116,8 @@ test('export for a slicer: no geometry, then a project 3MF per color and a plain
 
 	// UI: switch to plain and to a plate selection; layout stays inside the phone width.
 	await page.reload();
+	// A choice made before hydration is lost: wait for the page to settle first.
+	await page.waitForLoadState('networkidle');
 	await page.getByTestId('export-flavor').selectOption('plain');
 	await expect(page.getByTestId('export-download')).toContainText('Download .zip');
 	await page.getByTestId('export-scope-some').check();

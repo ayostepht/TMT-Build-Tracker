@@ -119,7 +119,7 @@ test('new build walks the setup wizard: template, options, colors, files, export
 	await page.getByTestId('setup-finish').click();
 	await expect(page).toHaveURL(new RegExp(`/builds/${id}$`));
 	await expect(page.getByTestId('continue-setup')).toHaveCount(0);
-	await expect(page.locator('.overall-top')).toBeVisible();
+	await expect(page.getByTestId('header-kpis')).toBeVisible();
 });
 
 test('"Upload your own files" makes a workspace-owned copy of the kit', async ({
