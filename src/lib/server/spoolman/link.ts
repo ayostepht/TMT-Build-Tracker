@@ -7,15 +7,17 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { isObj } from '#lib/domain/guards.ts';
+import { isPreLinkRun } from '#lib/domain/spoolman.ts';
 import { ApiError, buildAccess } from '../access';
 import { mutateBuild } from '../builds/actions';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
-import { buildFilaments } from '../db/schema';
+import { buildFilaments, spoolmanCache } from '../db/schema';
 import { resolveSlotOrigin } from '../filaments/index';
 import {
 	getDeductions,
 	getOrgSettings,
+	ledgerRole,
 	prelinkLedgerKey,
 	setDeduction,
 	type DeductionEntry
@@ -29,8 +31,8 @@ import {
 	writeCache
 } from './cache';
 import { SpoolmanClient, SpoolmanError, type FilamentWithSpools } from './client';
-import { EPS, giveBack, recordAdvances, round1, takeGrams } from './engine';
-import { withSpoolmanLock } from './lock';
+import { EPS, giveBack, pushEntry, recordAdvances, round1, takeGrams } from './engine';
+import { isSpoolmanLocked, withSpoolmanLock } from './lock';
 import { rankFilaments, type Suggestion } from './suggest';
 
 export type ClientFactory = (url: string) => SpoolmanClient;
@@ -112,6 +114,30 @@ export async function suggestFilaments(
 			suggestions: rankFilaments(readAllCached(db, org), q, origin)
 		};
 	}
+}
+
+const BUSY = 'Spoolman is busy with another update; try again in a moment';
+
+/**
+ * Grams logged before the link that Spoolman has not been told about: the view's pre-link figure
+ * minus what the run ledger already took for those runs (an unlink then relink makes runs that were
+ * deducted look pre-link; they must never be taken twice). Server-side, whatever the link history.
+ */
+function netPreLinkG(
+	db: Db,
+	org: string,
+	role: string,
+	view: NonNullable<ReturnType<typeof loadBuildView>>
+): number {
+	const sp = view.filaments.find((f) => f.key === role)?.spoolman;
+	if (!sp) return 0;
+	const ledger = getDeductions(db, org);
+	let done = 0;
+	for (const r of view.runs) {
+		if (!isPreLinkRun(r, sp.linkedAt)) continue;
+		for (const e of ledger[r.id] ?? []) if (ledgerRole(e) === role) done += e[1];
+	}
+	return Math.max(0, round1(sp.preLinkLoggedG - done));
 }
 
 // ---- Link / unlink -----------------------------------------------------------------------------
@@ -206,13 +232,13 @@ export async function setFilamentLink(
 			}
 		};
 	});
-	const sp = loadBuildView(db, buildId, userId)?.filaments.find((x) => x.key === role)?.spoolman;
+	const after = loadBuildView(db, buildId, userId);
 	return {
 		linked: true,
 		filamentId: id,
 		filamentName: f.name,
 		spoolId,
-		preLinkLoggedG: sp?.preLinkLoggedG ?? 0
+		preLinkLoggedG: after ? netPreLinkG(db, org, role, after) : 0
 	};
 }
 
@@ -283,50 +309,66 @@ export async function applyPrelinkDeduction(
 	userId: string,
 	role: string,
 	factory: ClientFactory = defaultFactory
-): Promise<{ grams: number; warning?: string }> {
+): Promise<{ grams: number; totalG: number; remainingG: number; warning?: string }> {
 	const { org, cfg } = ctxFor(db, buildId, userId, true);
 	const view = loadBuildView(db, buildId, userId);
 	const sp = view?.filaments.find((f) => f.key === role)?.spoolman;
-	if (!sp || sp.filamentId == null || sp.linkedAt == null)
+	if (!view || !sp || sp.filamentId == null || sp.linkedAt == null)
 		throw new ApiError(400, 'Link this filament to Spoolman first');
 	if (cfg.spoolmanKeptBy !== 'app')
 		throw new ApiError(
 			400,
 			'Spoolman is kept up to date by something else; the app does not change its weights'
 		);
-	const grams = sp.preLinkLoggedG;
-	if (grams <= EPS) throw new ApiError(400, 'Nothing was logged before linking');
+	const net = netPreLinkG(db, org, role, view);
+	if (net <= EPS) throw new ApiError(400, 'Nothing was logged before linking');
 	const client = clientFor(cfg.spoolmanUrl, factory);
 	const key = prelinkLedgerKey(buildId, role);
+	if (isSpoolmanLocked(org)) throw new ApiError(409, BUSY);
 	return withSpoolmanLock(org, async () => {
-		if ((getDeductions(db, org)[key] ?? []).length) throw new ApiError(409, 'Already subtracted');
+		const before = getDeductions(db, org)[key] ?? [];
+		const already = round1(before.reduce((a, e) => a + e[1], 0));
+		const want = round1(net - already);
+		if (want <= EPS) throw new ApiError(409, 'Already subtracted');
 		const slot = slotOf(db, buildId, role);
 		const t = await takeGrams(
 			client,
 			{ filamentId: slot.spoolmanFilamentId, spoolId: slot.spoolmanSpoolId },
 			role,
-			grams
+			want
 		);
 		const taken = round1(t.entries.reduce((a, e) => a + e[1], 0));
-		if (t.entries.length) setDeduction(db, org, key, t.entries);
-		if (t.advances.length)
-			recordAdvances(
-				db,
-				buildId,
-				org,
-				role,
-				t.advances,
-				() => readCached(db, org, slot.spoolmanFilamentId!)?.name ?? null
-			);
-		if (taken > EPS)
-			mutateBuild(db, buildId, userId, () => ({
-				kind: 'filament.spoolman.prelink',
-				payload: { role, grams: taken }
-			}));
+		const all = before.map((e) => [...e] as DeductionEntry);
+		for (const e of t.entries) pushEntry(all, e[0], e[1], role);
+		if (t.entries.length) setDeduction(db, org, key, all);
+		let warning = t.warning;
+		try {
+			if (t.advances.length)
+				recordAdvances(
+					db,
+					buildId,
+					org,
+					role,
+					t.advances,
+					() => readCached(db, org, slot.spoolmanFilamentId!)?.name ?? null
+				);
+			if (taken > EPS)
+				mutateBuild(db, buildId, userId, () => ({
+					kind: 'filament.spoolman.prelink',
+					payload: { role, grams: taken }
+				}));
+		} catch {
+			// the grams are taken and in the ledger; only the activity line is missing
+			warning ??= 'The grams were subtracted but the activity entry could not be written';
+		}
 		if (slot.spoolmanFilamentId != null)
 			await refreshFilaments(db, org, client, [slot.spoolmanFilamentId]);
 		if (taken <= EPS) throw new ApiError(502, t.warning ?? 'Spoolman did not take the grams');
-		return { grams: taken, warning: t.warning };
+		const total = round1(already + taken);
+		const remainingG = Math.max(0, round1(net - total));
+		if (remainingG > EPS)
+			warning = `Subtracted ${total} of ${net} g. Try again to subtract the rest, or give the grams back to start over.`;
+		return { grams: taken, totalG: total, remainingG, warning };
 	});
 }
 
@@ -341,6 +383,7 @@ export async function undoPrelinkDeduction(
 	const { org, cfg } = ctxFor(db, buildId, userId, true);
 	const key = prelinkLedgerKey(buildId, role);
 	const client = clientFor(cfg.spoolmanUrl, factory);
+	if (isSpoolmanLocked(org)) throw new ApiError(409, BUSY);
 	return withSpoolmanLock(org, async () => {
 		const entries: DeductionEntry[] = getDeductions(db, org)[key] ?? [];
 		if (!entries.length) throw new ApiError(404, 'Nothing to give back');
@@ -401,12 +444,14 @@ export async function refreshBuildSpoolman(
 	db: Db,
 	buildId: string,
 	userId: string,
-	factory: ClientFactory = defaultFactory
-): Promise<{ configured: boolean; error?: string }> {
-	const { org, cfg } = ctxFor(db, buildId, userId, false);
+	factory: ClientFactory = defaultFactory,
+	opts: { throttleMs?: number } = {}
+): Promise<{ configured: boolean; error?: string; skipped?: boolean }> {
+	const { org, cfg, access } = ctxFor(db, buildId, userId, false);
 	if (!cfg.spoolmanUrl) return { configured: false };
 	const client = clientFor(cfg.spoolmanUrl, factory);
-	let error = await backfillFilamentIds(db, buildId, client);
+	// Legacy back-fill writes the build's rows: editors only (a viewer's load only reads).
+	let error = access.canEdit ? await backfillFilamentIds(db, buildId, client) : undefined;
 	const ids = db
 		.select({ id: buildFilaments.spoolmanFilamentId })
 		.from(buildFilaments)
@@ -414,6 +459,18 @@ export async function refreshBuildSpoolman(
 		.all()
 		.map((r) => r.id)
 		.filter((x): x is number => x != null);
+	if (opts.throttleMs && !error && ids.length) {
+		const now = Date.now();
+		const fresh = ids.every((id) => {
+			const r = db
+				.select()
+				.from(spoolmanCache)
+				.where(and(eq(spoolmanCache.organizationId, org), eq(spoolmanCache.spoolmanFilamentId, id)))
+				.get();
+			return !!r && !r.error && now - r.fetchedAt.getTime() < opts.throttleMs!;
+		});
+		if (fresh) return { configured: true, skipped: true };
+	}
 	if (!error) error = await refreshFilaments(db, org, client, ids);
 	return { configured: true, error };
 }

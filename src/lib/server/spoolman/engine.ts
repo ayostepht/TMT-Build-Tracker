@@ -13,9 +13,11 @@ import { mutateBuildSystem } from '../builds/actions';
 import { getMemberActor } from '../printers/system';
 import { openSpools } from './cache';
 import { SpoolmanError, type SpoolmanClient } from './client';
+import { LOCK_BUDGET_MS } from './lock';
 
 export const round1 = (x: number) => Math.round(x * 10) / 10;
 export const EPS = 0.05;
+const TOO_SLOW = 'Spoolman is taking too long; try again in a moment';
 
 export interface Advance {
 	from: number | null;
@@ -46,7 +48,8 @@ export async function takeGrams(
 	client: SpoolmanClient,
 	link: { filamentId: number | null; spoolId: number | null },
 	role: string,
-	grams: number
+	grams: number,
+	deadline = Date.now() + LOCK_BUDGET_MS
 ): Promise<{
 	entries: DeductionEntry[];
 	spoolId: number | null;
@@ -66,6 +69,7 @@ export async function takeGrams(
 			return siblings.find((s) => !used.has(s.id) && s.id !== cur)?.id ?? null;
 		};
 		for (let guard = 0; guard < 25 && left > EPS; guard++) {
+			if (Date.now() > deadline) throw new SpoolmanError(TOO_SLOW);
 			if (cur == null) {
 				const n = await next();
 				if (n == null) {
@@ -119,13 +123,15 @@ export async function giveBack(
 	ledger: DeductionEntry[],
 	roleOf: (e: DeductionEntry) => string | null,
 	role: string | null,
-	grams: number
+	grams: number,
+	deadline = Date.now() + LOCK_BUDGET_MS
 ): Promise<{ entries: DeductionEntry[]; given: number; warning?: string }> {
 	const entries = ledger.map((e) => [...e] as DeductionEntry);
 	let left = round1(grams);
 	let given = 0;
 	try {
 		for (let i = entries.length - 1; i >= 0 && left > EPS; i--) {
+			if (Date.now() > deadline) throw new SpoolmanError(TOO_SLOW);
 			const e = entries[i];
 			if (roleOf(e) !== role) continue;
 			const g = round1(Math.min(e[1], left));

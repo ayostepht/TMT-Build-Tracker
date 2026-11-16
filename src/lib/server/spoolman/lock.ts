@@ -16,3 +16,9 @@ export function withSpoolmanLock<T>(key: string, fn: () => Promise<T>): Promise<
 	});
 	return run;
 }
+
+/** True while a locked job of this workspace is running or queued. */
+export const isSpoolmanLocked = (key: string): boolean => tails.has(key);
+
+/** Longest a single locked job may work; engine loops stop at this deadline (a hung Spoolman). */
+export const LOCK_BUDGET_MS = 30_000;

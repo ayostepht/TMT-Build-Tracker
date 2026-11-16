@@ -17,7 +17,7 @@ import { readCached, refreshFilaments } from './cache';
 import { backfillFilamentIds } from './link';
 import { SpoolmanClient, SpoolmanError } from './client';
 import { EPS, giveBack, recordAdvances, round1, takeGrams } from './engine';
-import { withSpoolmanLock } from './lock';
+import { LOCK_BUDGET_MS, withSpoolmanLock } from './lock';
 
 export type ClientFactory = (url: string) => SpoolmanClient;
 const defaultFactory: ClientFactory = (url) => new SpoolmanClient(url);
@@ -158,6 +158,7 @@ async function syncLocked(
 
 	await backfillFilamentIds(db, buildId, client);
 	slots = loadSlots();
+	const deadline = Date.now() + LOCK_BUDGET_MS;
 	let entries = ledger.map((e) => [...e] as DeductionEntry);
 	let warning: string | undefined;
 	let total = 0;
@@ -165,7 +166,7 @@ async function syncLocked(
 		const delta = round1(p.want - p.had);
 		if (Math.abs(delta) <= EPS) continue;
 		if (delta < 0) {
-			const back = await giveBack(client, entries, roleOf, r, -delta);
+			const back = await giveBack(client, entries, roleOf, r, -delta, deadline);
 			entries = back.entries;
 			total -= back.given;
 			warning ??= back.warning;
@@ -176,7 +177,8 @@ async function syncLocked(
 			client,
 			{ filamentId: f.spoolmanFilamentId, spoolId: f.spoolmanSpoolId },
 			r as string,
-			delta
+			delta,
+			deadline
 		);
 		for (const e of t.entries) {
 			const last = entries[entries.length - 1];

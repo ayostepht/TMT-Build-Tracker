@@ -159,7 +159,9 @@ describe('link and unlink', () => {
 	it('back-fills the filament of a legacy spool-only link', async () => {
 		linkSpool(db, buildId, 'owner', role, { spoolId: 1 });
 		expect(slot().spoolmanFilamentId).toBeNull();
-		await refreshBuildSpoolman(db, buildId, 'viewer', factory);
+		await refreshBuildSpoolman(db, buildId, 'viewer', factory); // viewers never write
+		expect(slot().spoolmanFilamentId).toBeNull();
+		await refreshBuildSpoolman(db, buildId, 'editor', factory);
 		expect(slot()).toMatchObject({ spoolmanFilamentId: 1, spoolmanLinkedAt: null });
 	});
 
@@ -415,6 +417,73 @@ describe('prints logged before the link', () => {
 		run(5, { old: true });
 		setOrgSettings(db, 'org1', { spoolmanKeptBy: 'other' });
 		expect(await status(applyPrelinkDeduction(db, buildId, 'editor', role, factory))).toBe(400);
+	});
+});
+
+describe('hardening', () => {
+	it('unlink then relink never takes grams twice', async () => {
+		await link();
+		const id = run(40);
+		await syncRunDeduction(db, buildId, id, factory);
+		const tot = () => used(1) + used(2);
+		expect(tot()).toBe(1010);
+		await link('editor', null);
+		await new Promise((r) => setTimeout(r, 5));
+		const r = await link();
+		expect(r.preLinkLoggedG).toBe(0); // already in the run ledger
+		expect(await status(applyPrelinkDeduction(db, buildId, 'editor', role, factory))).toBe(400);
+		const old = run(10, { old: true }); // really logged before the link
+		db.update(printRuns)
+			.set({ createdAt: new Date(Date.now() - 90_000) })
+			.where(eq(printRuns.id, old))
+			.run();
+		const r2 = await link();
+		expect(r2.preLinkLoggedG).toBe(10);
+		await applyPrelinkDeduction(db, buildId, 'editor', role, factory);
+		expect(tot()).toBe(1020);
+	});
+
+	it('a partial pre-link apply says so and can be topped up', async () => {
+		mock.spools.get(2)!.used_weight = 1000; // only spool 1 (30 g) is open
+		mock.spools.get(1)!.used_weight = 990; // 10 g left
+		run(25, { old: true });
+		await link();
+		let calls = 0;
+		const flaky = (u: string) =>
+			new SpoolmanClient(u, 2000, (async (...a: Parameters<typeof fetch>) => {
+				if (String(a[0]).includes('/use') && ++calls > 1) throw new Error('down');
+				return fetch(...a);
+			}) as typeof fetch);
+		const r = await applyPrelinkDeduction(db, buildId, 'editor', role, flaky);
+		expect(r.grams).toBeGreaterThan(0);
+		expect(r.totalG + r.remainingG).toBe(25);
+		if (r.remainingG > 0) {
+			expect(r.warning).toMatch(/Subtracted/);
+			const r2 = await applyPrelinkDeduction(db, buildId, 'editor', role, factory);
+			expect(r2.remainingG).toBe(0);
+		}
+	});
+
+	it('the pre-link routes answer busy instead of queueing', async () => {
+		run(5, { old: true });
+		await link();
+		let release!: () => void;
+		const hold = withSpoolmanLock('org1', () => new Promise<void>((r) => (release = r)));
+		expect(await status(applyPrelinkDeduction(db, buildId, 'editor', role, factory))).toBe(409);
+		expect(await status(undoPrelinkDeduction(db, buildId, 'editor', role, factory))).toBe(409);
+		release();
+		await hold;
+	});
+
+	it('a viewer load is throttled while the cache is fresh', async () => {
+		await link();
+		mock.calls.length = 0;
+		const r = await refreshBuildSpoolman(db, buildId, 'viewer', factory, { throttleMs: 30_000 });
+		expect(r.skipped).toBe(true);
+		expect(mock.calls).toHaveLength(0);
+		const r2 = await refreshBuildSpoolman(db, buildId, 'viewer', factory);
+		expect(r2.skipped).toBeUndefined();
+		expect(mock.calls.length).toBeGreaterThan(0);
 	});
 });
 
