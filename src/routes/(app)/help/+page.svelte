@@ -69,8 +69,11 @@
 			</li>
 		</ol>
 		<p class="muted">
-			The tabs of a build are Overview · Design · Print · Files · Finish · Settings. Want to try
-			colors first? <b>Studio</b> in the top bar makes drafts you can recolor and export without a build.
+			The tabs of a build are Overview · Design · Print · Files · Finish · Activity · Settings. The <b
+				>Activity</b
+			>
+			tab lists recent changes to the build. Want to try colors first? <b>Studio</b> in the top bar makes
+			drafts you can recolor and export without a build.
 		</p>
 	</section>
 
@@ -251,7 +254,8 @@
 				<p>
 					From MakeGood, who released the design under CC0. The converted model and print files come
 					as a kit pack that is installed on the first start of the app. They are not in the source
-					code. A site admin can import other kit files in the kit admin. See
+					code. The optional one-piece push handle is by jeepxj (CC BY-NC). A site admin can import
+					other kit files in the kit admin. See
 					<a href={resolve('/(app)/about')}>About</a> for the credit.
 				</p>
 			</details>

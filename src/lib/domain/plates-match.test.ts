@@ -62,6 +62,7 @@ describe('matchObject on the H-series object names', () => {
 		['3DTMT XX PUSH HANDLE PIN REV B.STEP', 'push-pin'],
 		['3DTMT XX PUSH HANDLE BRACE REV B.STEP', 'push-brace'],
 		['3DTMT XX PUSH HANDLE BOTTOM REV B V3.step', 'push-bottom'],
+		['TMT_SinglePIecehandle.stl', 'push-handle-one-piece'],
 		['TMT3D - HARNESS RIGHT', 'harness'],
 		['TMT3D - HARNESS LEFT', 'harness'],
 		['TMT3D - BUCKLE HOLDER.step', 'harness'],
@@ -86,6 +87,27 @@ describe('matchObject on the H-series object names', () => {
 					: 'PETG';
 			expect(slugOf(name, type)).toBe(slug);
 		});
+
+	it('matches the one-piece push handle with high confidence and never as a multi-part piece', () => {
+		const m = matchObject('TMT_SinglePIecehandle.stl', parts, { filamentType: 'PETG' });
+		expect(m.slug).toBe('push-handle-one-piece');
+		expect(m.confidence).toBeGreaterThanOrEqual(0.9);
+		// the multi-part names still go to their own parts
+		expect(slugOf('3DTMT XX PUSH HANDLE TOP REV B.STEP', 'PETG')).toBe('push-top');
+	});
+
+	it('suggests the one-piece option from the one-piece handle (the shared grip does not tip it)', () => {
+		const groups = view.variantGroups;
+		expect(suggestVariants(groups, ['push-handle-one-piece', 'push-grip'])['push-handle']).toBe(
+			'one-piece'
+		);
+		expect(suggestVariants(groups, ['push-handle-one-piece'])['push-handle']).toBe('one-piece');
+		expect(
+			suggestVariants(groups, ['push-top', 'push-bottom', 'push-pin', 'push-grip'])['push-handle']
+		).toBe('include');
+		// the grip alone says nothing about the handle
+		expect(suggestVariants(groups, ['push-grip'])['push-handle']).toBeUndefined();
+	});
 
 	it('uses the material to tell the grip from the push handle parts', () => {
 		expect(slugOf('MG_PUSH HANDLE.step', 'TPU')).toBe('push-grip');

@@ -4,9 +4,12 @@ import {
 	hoursFromSeconds,
 	parseGrams,
 	partRuns,
+	partialPrefill,
+	partialTicksOk,
 	progressGrams,
 	runOutcomeSummary,
-	snapshotParts
+	snapshotParts,
+	splitPartial
 } from './logrun.ts';
 import { makeView, run } from './fixtures.ts';
 import type { PrintRunInput, RunResult } from './types.ts';
@@ -125,5 +128,112 @@ describe('parseGrams', () => {
 		expect(parseGrams('162,5')).toBe(162.5);
 		expect(parseGrams('0')).toBe(0);
 		for (const bad of ['abc', '-1', '1e3', '1.2.3', '12 g']) expect(parseGrams(bad)).toBeNaN();
+	});
+});
+
+describe('Partial with per-part results', () => {
+	const view = makeView();
+	const plate = view.plates.find((p) => !p.perPartRuns && p.runs === 1 && p.parts.length >= 3)!;
+	const [a, b, c] = plate.parts;
+	const heavy = {
+		...view,
+		state: {
+			...view.state,
+			[a]: { ...view.state[a], manualGrams: 150 },
+			[b]: { ...view.state[b], manualGrams: 50 },
+			[c]: { ...view.state[c], manualGrams: 100 }
+		}
+	};
+	const base: PrintRunInput = {
+		plateNumber: plate.number,
+		partSlug: null,
+		partSlugs: null,
+		date: '2026-01-01',
+		result: 'Partial',
+		grams: null,
+		hours: 6,
+		printer: null,
+		note: ''
+	};
+	const name = (s: string) => view.parts.find((p) => p.slug === s)!.name;
+
+	it('needs at least one ticked and one unticked part of the targets', () => {
+		expect(partialTicksOk([a, b], [])).toBe(false);
+		expect(partialTicksOk([a, b], [a, b])).toBe(false);
+		expect(partialTicksOk([a, b], ['other'])).toBe(false);
+		expect(partialTicksOk([a, b], [a])).toBe(true);
+	});
+
+	it('splits into a Success run and a Failed run, hours and run time by weight', () => {
+		const r = splitPartial(heavy, base, { keptSlugs: [a], keptGrams: 150, lostGrams: 20 }, 3600)!;
+		expect(r.keptSlugs).toEqual([a]);
+		expect(r.lostSlugs).toEqual(plate.parts.slice(1));
+		expect(r.share).toBeCloseTo(0.5 * (plate.parts.length === 3 ? 1 : 1), 5);
+		expect([r.kept.result, r.kept.partSlugs, r.kept.grams, r.kept.hours]).toEqual([
+			'Success',
+			[a],
+			150,
+			3
+		]);
+		expect([r.lost.result, r.lost.grams, r.lost.hours]).toEqual(['Failed', 20, 3]);
+		expect(r.kept.estSeconds).toBe(1800);
+		expect(r.lost.estSeconds).toBe(1800);
+		expect(r.kept.partSlug).toBeNull();
+	});
+	it('keeps unknown hours unknown and refuses bad ticks', () => {
+		const r = splitPartial(
+			heavy,
+			{ ...base, hours: null },
+			{ keptSlugs: [a], keptGrams: null, lostGrams: null }
+		)!;
+		expect([r.kept.hours, r.lost.hours, r.kept.estSeconds]).toEqual([null, null, null]);
+		expect(
+			splitPartial(heavy, base, { keptSlugs: [], keptGrams: null, lostGrams: null })
+		).toBeNull();
+		expect(
+			splitPartial(heavy, base, { keptSlugs: plate.parts, keptGrams: null, lostGrams: null })
+		).toBeNull();
+	});
+	it('hours of the two halves add up', () => {
+		const r = splitPartial(
+			heavy,
+			{ ...base, hours: 7.3 },
+			{ keptSlugs: [b], keptGrams: null, lostGrams: null }
+		)!;
+		expect(Math.round((r.kept.hours! + r.lost.hours!) * 10) / 10).toBe(7.3);
+	});
+
+	it('prefills grams from progress, split by weight', () => {
+		expect(partialPrefill(heavy, [a, b], [a], 200, 100)).toEqual({ keptGrams: 150, lostGrams: 50 });
+		expect(partialPrefill(heavy, [a, b], [a], 200, 50)).toEqual({ keptGrams: 150, lostGrams: 25 });
+		expect(partialPrefill(heavy, [a, b], [a], null, 100)).toEqual({
+			keptGrams: null,
+			lostGrams: null
+		});
+		expect(partialPrefill(heavy, [a, b], [a], 200, null)).toEqual({
+			keptGrams: 150,
+			lostGrams: null
+		});
+		expect(partialPrefill(heavy, [a, b], [], 200, 100)).toEqual({
+			keptGrams: null,
+			lostGrams: null
+		});
+	});
+
+	it('summary: Marks A printed; flags B for reprint', () => {
+		const input = { ...base, result: 'Partial' as const };
+		const t = runOutcomeSummary(heavy, input, [a]);
+		expect(t).toBe(
+			`Marks ${name(a)} printed; flags ${plate.parts
+				.slice(1)
+				.map(name)
+				.reduce((x, y, i, all) =>
+					i === 0 ? y : i === all.length - 1 ? `${x} and ${y}` : `${x}, ${y}`
+				)} for reprint.`
+		);
+		expect(runOutcomeSummary(heavy, input, [])).toBe('');
+		expect(runOutcomeSummary(heavy, input, plate.parts)).toBe('');
+		// without ticks the old wording stays
+		expect(runOutcomeSummary(heavy, input)).toContain('partial');
 	});
 });

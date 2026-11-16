@@ -39,6 +39,8 @@ function toSegments(s: string): Segment[] {
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? clean(v) || null : null);
+const obj = (v: unknown): Obj | null =>
+	typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 function list(items: string[]): string {
@@ -127,6 +129,12 @@ function describeMarked(a: ActivityItem, view: Names): string {
 				? `${who} set ${part(p.slug)} to ${to}`
 				: `${who} changed the status of ${part(p.slug)}`;
 		}
+		case 'part.grams': {
+			const g = num(p.manualGrams);
+			return g !== null
+				? `${who} set the weight of ${part(p.slug)} to ${fmt(g)} g`
+				: `${who} cleared the entered weight of ${part(p.slug)}`;
+		}
 		case 'part.update': {
 			const bits: string[] = [];
 			if (p.comps) bits.push('ticked off components');
@@ -165,7 +173,11 @@ function describeMarked(a: ActivityItem, view: Names): string {
 						: p.partSlug
 							? part(p.partSlug)
 							: 'a part';
-			if (a.kind === 'run.undo') return `${who} undid a ${adj} print of ${target}`;
+			const split = p.split === true;
+			if (a.kind === 'run.undo')
+				return split
+					? `${who} undid a partial print of ${target} (both of its logs)`
+					: `${who} undid a ${adj} print of ${target}`;
 			if (a.kind === 'run.update') {
 				const bits: string[] = [];
 				if ('result' in p) bits.push(`the result to ${(str(p.result) ?? 'unknown').toLowerCase()}`);
@@ -179,6 +191,15 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			}
 			if (a.kind === 'run.delete')
 				return `${who} deleted a ${adj} print of ${target} from the log${recomputedText(p.recomputed, part)}`;
+			if (split) {
+				// A Partial with per-part results: one sentence for the printed and the failed half.
+				const ok = Array.isArray(p.kept) ? p.kept : [];
+				const lost = Array.isArray(p.lost) ? p.lost : [];
+				const kg = num(p.keptGrams);
+				const lg = num(p.lostGrams);
+				const on = str(p.printer);
+				return `${who} logged a partial print of ${target}${on ? ` on ${on}` : ''}: ${parts(ok)} printed${kg !== null ? ` (${fmt(kg)} g)` : ''}, ${parts(lost)} flagged for reprint${lg !== null ? ` (${fmt(lg)} g lost)` : ''}`;
+			}
 			let grams = num(p.grams);
 			if (grams === null) grams = view.runs.find((r) => r.id === p.runId)?.grams ?? null;
 			const on = str(p.printer);
@@ -260,7 +281,16 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			const s = num(p.spools);
 			return s === null
 				? `${who} updated spools for ${fil(p.role)}`
-				: `${who} set ${fil(p.role)} spools to ${fmtSpools(s)}`;
+				: `${who} set ${fil(p.role)} starting spools to ${fmtSpools(s)} kg`;
+		}
+		case 'filament.stock.add': {
+			const kg = num(p.kg);
+			const note = str(p.note);
+			return `${who} added ${kg !== null ? `${fmtSpools(kg)} kg` : 'a spool'} of ${fil(p.role)}${note ? ` (${note})` : ''}`;
+		}
+		case 'filament.stock.remove': {
+			const kg = num(p.kg);
+			return `${who} removed an added spool of ${fil(p.role)}${kg !== null ? ` (${fmtSpools(kg)} kg)` : ''}`;
 		}
 		case 'filament.update': {
 			const bits: string[] = [];
@@ -284,16 +314,110 @@ function describeMarked(a: ActivityItem, view: Names): string {
 				}
 				for (const e of byRole.values()) bits.push(`moved ${list(e.names)} to ${e.to}`);
 			}
+			const names = (v: unknown): string[] =>
+				Array.isArray(v) ? v.map((x) => str(x)).filter((x): x is string => !!x) : [];
+			// "applied the Sunset palette; 5 parts back to their kit colors, 2 locked parts kept"
+			const pal = obj(p.palette);
+			if (pal) {
+				const undo = pal.undo === true || str(pal.label) === 'previous';
+				const nRemoved = Array.isArray(pal.removeRoles)
+					? pal.removeRoles.length
+					: Array.isArray(p.removeRoles)
+						? p.removeRoles.length
+						: Math.max(0, Math.round(num(pal.removed) ?? 0));
+				const reset = Math.max(0, Math.round(num(pal.reset) ?? 0));
+				const kept = Math.max(0, Math.round(num(pal.kept) ?? 0));
+				const tail: string[] = [];
+				if (reset)
+					tail.push(
+						`${reset} ${reset === 1 ? 'part back to its kit color' : 'parts back to their kit colors'}`
+					);
+				if (kept) tail.push(`${kept} locked ${kept === 1 ? 'part' : 'parts'} kept`);
+				if (nRemoved)
+					tail.push(
+						`removed ${nRemoved} color ${nRemoved === 1 ? 'slot' : 'slots'} added for locked parts`
+					);
+				const head = undo
+					? 'undid the palette change'
+					: `applied the ${str(pal.label) ? `${str(pal.label)} ` : ''}palette`;
+				bits.push(`${head}${tail.length ? `; ${tail.join(', ')}` : ''}`);
+			}
+			// Name + material, without repeating a material the name already carries ("Red PETG" + "PETG").
+			const named = (name: string, material: string | null): string => {
+				if (!material) return name;
+				const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+				const edge = '(^|[^\\p{L}\\p{N}])';
+				if (new RegExp(`${edge}${esc(material)}($|[^\\p{L}\\p{N}])`, 'iu').test(name)) return name;
+				// "Black TPU" + "TPU 95A": the name already ends with the first words of the material.
+				const words = material.split(/\s+/);
+				for (let k = words.length - 1; k >= 1; k--) {
+					const lead = words.slice(0, k).join(' ');
+					if (new RegExp(`${edge}${esc(lead)}$`, 'iu').test(name))
+						return `${name} ${words.slice(k).join(' ')}`;
+				}
+				return `${name} ${material}`;
+			};
+			const lockedAdded = Array.isArray(p.lockedAdded) ? (p.lockedAdded as unknown[]) : [];
+			for (const raw of lockedAdded) {
+				const e = obj(raw);
+				if (!e) continue;
+				const ps = names(e.parts);
+				const slot = named(str(e.name) ?? 'a new color', str(e.material));
+				bits.push(`kept ${ps.length ? list(ps) : 'locked parts'} on a new color slot (${slot})`);
+			}
+			const locked = names(p.locked);
+			if (locked.length) bits.push(`locked the part color of ${list(locked)}`);
+			const unlocked = names(p.unlocked);
+			if (unlocked.length) bits.push(`unlocked the part color of ${list(unlocked)}`);
 			const added = (p.added ?? null) as Obj | null;
 			if (added) bits.push(`added a color: ${str(added.name) ?? 'new color'}`);
-			const removed = (p.removed ?? null) as Obj | null;
-			if (removed) bits.push(`removed a color: ${str(removed.name) ?? 'a color'}`);
+			const removed = obj(p.removed);
+			if (removed) {
+				const label = named(str(removed.name) ?? 'a color', str(removed.material));
+				const rep = obj(p.replacedBy);
+				if (!rep) bits.push(`removed a color: ${str(removed.name) ?? 'a color'}`);
+				else {
+					const n = num(removed.parts);
+					const repLabel = named(str(rep.name) ?? 'another color', str(rep.material));
+					let t = `removed ${label}; ${
+						n === null ? 'its parts' : n === 1 ? 'its 1 part' : `its ${fmt(n)} parts`
+					} now ${n === 1 ? 'uses' : 'use'} ${repLabel}`;
+					const extra: string[] = [];
+					if (num(removed.spoolmanSpoolId) !== null)
+						extra.push(`unlinked Spoolman spool #${num(removed.spoolmanSpoolId)}`);
+					const sp = num(removed.spools);
+					if (sp !== null && sp > 0)
+						extra.push(`dropped ${fmtSpools(sp)} ${sp === 1 ? 'spool' : 'spools'} of stock`);
+					if (extra.length) t += ` and ${list(extra)}`;
+					bits.push(t);
+				}
+			}
 			return bits.length ? `${who} ${list(bits)}` : `${who} changed the colors`;
 		}
+		// `before` ({roles, partRoles, lockedParts}) is the undo snapshot; it is stored, never rendered.
 		case 'design.apply':
-			return str(p.designName)
-				? `${who} applied the color design "${str(p.designName)}"`
-				: `${who} applied a color design`;
+			// Only a started build stores `before`; a plain apply on a not-started build reads without the suffix.
+			return `${who} applied ${str(p.designName) ? `the color design "${str(p.designName)}"` : 'a color design'}${p.mode === 'full' && obj(p.before) ? ' (colors and part colors replaced)' : ''}`;
+		// Colors only: slots and part colors change, plates and progress stay. `skipped` lists slots left
+		// alone: [{ role, name?, reason: 'material' | 'locked' }].
+		case 'design.recolor': {
+			const skipped = (Array.isArray(p.skipped) ? p.skipped : [])
+				.map((x) => obj(x))
+				.filter((x): x is Obj => !!x)
+				.map((x) => {
+					const why =
+						x.reason === 'material'
+							? 'other material'
+							: x.reason === 'locked'
+								? 'locked parts'
+								: null;
+					return `${str(x.name) ?? fil(x.role)}${why ? ` (${why})` : ''}`;
+				});
+			const head = str(p.designName)
+				? `${who} changed the colors to design "${str(p.designName)}"`
+				: `${who} changed the colors to a design`;
+			return `${head} (colors only; plates and progress kept)${skipped.length ? `; left ${list(skipped)} as they were` : ''}`;
+		}
 		// Historical kind: no code writes it any more, but old builds keep these rows and they must still read as a sentence.
 		case 'build.import': {
 			const bits = [

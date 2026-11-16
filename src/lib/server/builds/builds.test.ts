@@ -72,7 +72,7 @@ describe('createBuild', () => {
 		expect(n(buildParts)).toBe(tpl.parts.length);
 		expect(n(buildPlates)).toBe(tpl.plates.length);
 		expect(n(buildFilaments)).toBe(tpl.filamentRoles.length);
-		expect(tpl.parts.length).toBe(40);
+		expect(tpl.parts.length).toBe(41);
 		expect(tpl.plates.length).toBe(24);
 		expect(tpl.filamentRoles.length).toBe(4);
 	});
@@ -245,7 +245,7 @@ describe('mutations', () => {
 		expect(() =>
 			printingAction(db, id, 'owner', { action: 'start', slugs: [slug], printer: 5 })
 		).toThrow(ApiError);
-		const runId = addRun(db, id, 'owner', {
+		const { runId } = addRun(db, id, 'owner', {
 			plateNumber: null,
 			partSlug: slug,
 			date: '2026-01-02',
@@ -314,7 +314,7 @@ describe('undoRun', () => {
 			runEstSeconds: before.runEstSeconds,
 			comps: before.comps
 		};
-		const runId = addRun(db, id, 'owner', {
+		const { runId } = addRun(db, id, 'owner', {
 			plateNumber: null,
 			partSlug: slug,
 			date: '2026-01-01',
@@ -348,7 +348,7 @@ describe('editing and deleting past print logs', () => {
 			grams: 10,
 			hours: 1,
 			note: 'first'
-		});
+		}).runId;
 	const lastAct = (id: string) =>
 		db.select().from(activity).where(eq(activity.buildId, id)).all().at(-1)!;
 

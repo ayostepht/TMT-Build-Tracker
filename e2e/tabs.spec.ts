@@ -3,7 +3,7 @@ import { ownerWithBuild } from './helpers';
 
 const SHOTS = 'data/shots-tabs';
 
-// Tab bar on Overview, Print and Files: the active tab is visible (scrolled into view on
+// Tab bar on Overview, Print, Files and Activity: the active tab is visible (scrolled into view on
 // phones) and marked current; screenshots at 360, 390 and 1440, light and dark.
 test('build tab bar: order, active tab in view, screenshots', async ({ page }) => {
 	await ownerWithBuild(page, 'tabbar');
@@ -16,7 +16,8 @@ test('build tab bar: order, active tab in view, screenshots', async ({ page }) =
 			for (const [tab, path, label] of [
 				['overview', '', 'Overview'],
 				['print', '/print', 'Print'],
-				['files', '/files', 'Files']
+				['files', '/files', 'Files'],
+				['activity', '/activity', 'Activity']
 			]) {
 				await page.goto(buildUrl.replace(/\/$/, '') + path);
 				// On phones the nav is display: contents (the bar inside it is fixed to the bottom).

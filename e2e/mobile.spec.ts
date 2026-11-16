@@ -34,7 +34,10 @@ test('Overview and Print do not scroll sideways at 390px', async ({ page }) => {
 			client: document.documentElement.clientWidth
 		}));
 
-	await expect(page.locator('.overall-top')).toContainText('of 33');
+	await expect(page.getByTestId('header-kpi-parts')).toHaveAttribute(
+		'aria-label',
+		/Parts printed: 0 of 33/
+	);
 	let m = await overflow();
 	expect(m.scroll, 'overview').toBeLessThanOrEqual(m.client);
 

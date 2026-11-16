@@ -14,9 +14,9 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 	await expect(page.getByTestId('layout-name')).toHaveText("MakeGood's Bambu X1 / P1 / A1 profile");
 	await expect(cards).toHaveCount(24);
 
-	// Built-in layout: 21 H plates; with the default variants the McMaster caster (8) and
+	// Built-in layout: 21 H plates plus the one-piece push handle plate (22); with the default variants the McMaster caster (8) and
 	// smaller rim (20) plates have no active parts and are left out.
-	await layout.selectOption({ label: 'Bambu H2D / H2S (21 plates)' });
+	await layout.selectOption({ label: 'Bambu H2D / H2S (22 plates)' });
 	await expect(page.getByTestId('layout-name')).toHaveText("MakeGood's Bambu H2D / H2S profile");
 	await expect(cards).toHaveCount(19);
 	await expect(page.getByRole('region', { name: 'Plate 12' })).toContainText(
@@ -82,6 +82,15 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 	await expect(plate).toContainText('~2.0 h per run');
 	await expect(plate).toContainText('Primary PETG 120 g per run');
 	await expect(plate).toContainText('Primary TPU 30 g per run');
+	// The plate's grams sit beside its time: from the file until the maker types a number.
+	await expect(plate.getByTestId('plate-grams')).toContainText('from file');
+	const gramsIn = plate.getByLabel(/^Grams per run · from file/);
+	await gramsIn.fill('140');
+	await gramsIn.press('Enter');
+	await expect(plate.getByTestId('plate-grams')).toContainText('140 g per run');
+	await expect(plate.getByTestId('plate-grams')).toContainText('your entry');
+	await expect(plate.getByTestId('grams-override')).toContainText('overrides file 150 g');
+	await expect(plate.getByLabel(/^Grams per run · your entry/)).toBeVisible();
 	const img = plate.locator('img.plate-thumb');
 	await expect(img).toBeVisible();
 	await expect

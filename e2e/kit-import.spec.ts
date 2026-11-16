@@ -277,7 +277,7 @@ test('add MakeGood files together: plan, one run, retry, checklist, guide mappin
 
 	// The plan: every file says what it will feed; the stray text file is flagged.
 	const plan = root.getByTestId('kit-plan');
-	await expect(plan.getByText('3D chair (1 STEP file)')).toBeVisible();
+	await expect(plan.getByText('3D chair (1 STEP file)', { exact: true }).first()).toBeVisible();
 	await expect(plan.getByText('3D chair (loose STEP file)')).toBeVisible();
 	await expect(plan.getByText('Print geometry (profile with 1 plate)').first()).toBeVisible();
 	await expect(plan.getByText('Print geometry (zip of 1 3MF file)')).toBeVisible();
@@ -454,7 +454,7 @@ test('a sliced 3MF in the kit drop zone is offered to the build plates', async (
 	await page.goto(`/builds/${buildId}`);
 	await page.waitForLoadState('networkidle');
 	await expect(page.locator('header.head')).not.toContainText('(estimate)');
-	await expect(page.locator('header.head')).toContainText('of printing left');
+	await expect(page.locator('header.head')).toContainText('Printing time');
 	if (shots) {
 		for (const [w, h] of [
 			[390, 844],

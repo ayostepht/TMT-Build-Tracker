@@ -5,6 +5,7 @@
  * `plate-NN-<plate name>.3mf`; users also save "Plate 3 - Wings (Accent)" style names from the
  * slicer. We look for a plate number after the word "plate", or a plate name in the file name.
  */
+import { partGrams, plateGrams } from './accounting.ts';
 import type { BuildView } from './types.ts';
 
 export function normalizeFileName(name: string): string {
@@ -53,8 +54,9 @@ export function fileMentionsBuild(fileName: string, buildName: string): boolean 
 }
 
 /**
- * Grams a finished plate print should be logged with: the slicer weight of the plate, or
- * the sum of the per-part weights for plates that print each part separately.
+ * Grams a finished plate print should be logged with (one run), from the same calculation as the
+ * rest of the app (`plateGrams`: typed > sliced file > your slice > BOM). `partSlugs` narrows a
+ * per-part plate to the parts that were printed. null when nothing is known (never 0 g).
  */
 export function plateRunGrams(
 	view: BuildView,
@@ -63,10 +65,9 @@ export function plateRunGrams(
 ): number | null {
 	const plate = view.plates.find((p) => p.number === plateNumber);
 	if (!plate) return null;
-	if (plate.perPartRuns) {
-		const slugs = partSlugs?.length ? partSlugs : plate.parts;
-		const sum = slugs.reduce((a, s) => a + (plate.slicerByPart[s] ?? 0), 0);
-		return sum > 0 ? sum : null;
-	}
-	return plate.slicerGrams && plate.slicerGrams > 0 ? plate.slicerGrams : null;
+	const grams =
+		plate.perPartRuns && partSlugs?.length
+			? partSlugs.reduce((a, s) => a + partGrams(view, s).perRun, 0)
+			: plateGrams(view, plate).perRun;
+	return grams > 0 ? grams : null;
 }

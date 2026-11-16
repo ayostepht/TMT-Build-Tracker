@@ -1,5 +1,6 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
+import { buildStarted, type LiveJobs } from '#lib/domain/started.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
 	ActivityItem,
@@ -38,6 +39,7 @@ import {
 	builds,
 	member,
 	printRuns,
+	printerJobs,
 	templateAssemblySteps,
 	templateFilamentRoles,
 	templateGuidePages,
@@ -68,6 +70,81 @@ function defaultLayoutKey(db: Db, templateId: string): string | null {
 	);
 }
 
+/** Printer jobs linked to the build that are running right now (printing or paused). */
+export function loadLiveJobs(db: Db, buildId: string): LiveJobs {
+	const rows = db
+		.select({ plateNumber: printerJobs.plateNumber, partSlugs: printerJobs.partSlugs })
+		.from(printerJobs)
+		.where(
+			and(eq(printerJobs.buildId, buildId), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all();
+	return {
+		count: rows.length,
+		slugs: rows.flatMap((r) => r.partSlugs ?? []),
+		plates: rows.map((r) => r.plateNumber).filter((n): n is number => n != null)
+	};
+}
+
+/**
+ * Ids of the given builds that have started printing, in a handful of batched queries (no
+ * `loadBuildView` per build). Same definition as `buildStarted`: a logged run, a part that is not
+ * "To print" (parts of inactive variants are ignored), or a live (printing / paused) linked job.
+ * Drafts are never started.
+ */
+export function startedBuildIds(db: Db, buildIds: string[]): Set<string> {
+	const started = new Set<string>();
+	if (!buildIds.length) return started;
+	const rows = db
+		.select({
+			id: builds.id,
+			kind: builds.kind,
+			templateId: builds.templateId,
+			choices: builds.variantChoices
+		})
+		.from(builds)
+		.where(inArray(builds.id, buildIds))
+		.all()
+		.filter((r) => r.kind !== 'draft');
+	if (!rows.length) return started;
+	const ids = rows.map((r) => r.id);
+	for (const r of db
+		.selectDistinct({ id: printRuns.buildId })
+		.from(printRuns)
+		.where(inArray(printRuns.buildId, ids))
+		.all())
+		started.add(r.id);
+	for (const r of db
+		.selectDistinct({ id: printerJobs.buildId })
+		.from(printerJobs)
+		.where(
+			and(inArray(printerJobs.buildId, ids), inArray(printerJobs.status, ['printing', 'paused']))
+		)
+		.all())
+		if (r.id) started.add(r.id);
+
+	const groupsByTemplate = new Map(
+		db
+			.select({ id: templates.id, groups: templates.variantGroups })
+			.from(templates)
+			.where(inArray(templates.id, [...new Set(rows.map((r) => r.templateId))]))
+			.all()
+			.map((t) => [t.id, t.groups ?? []])
+	);
+	const inactiveByBuild = new Map<string, Set<string>>();
+	for (const r of rows) {
+		const groups = groupsByTemplate.get(r.templateId) ?? [];
+		inactiveByBuild.set(r.id, inactiveSlugs(groups, resolveChoices(groups, r.choices)));
+	}
+	for (const r of db
+		.select({ id: buildParts.buildId, slug: buildParts.partSlug })
+		.from(buildParts)
+		.where(and(inArray(buildParts.buildId, ids), ne(buildParts.status, 'To print')))
+		.all())
+		if (!inactiveByBuild.get(r.id)?.has(r.slug)) started.add(r.id);
+	return started;
+}
+
 export function loadBuildView(db: Db, buildId: string, userId: string): BuildView | null {
 	const access = buildAccess(db, buildId, userId);
 	if (!access) return null;
@@ -76,8 +153,17 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 	const tpl = db.select().from(templates).where(eq(templates.id, b.templateId)).get();
 	if (!tpl) return null;
 
-	const design = (b.design ?? null) as { partRoles?: Record<string, string> } | null;
+	const design = (b.design ?? null) as {
+		partRoles?: Record<string, string>;
+		lockedParts?: unknown;
+	} | null;
 	const partRoles = design?.partRoles ?? {};
+	// Optional string[]; anything else means nothing is locked. Unknown slugs are ignored below.
+	const lockedSlugs = new Set(
+		Array.isArray(design?.lockedParts)
+			? (design.lockedParts as unknown[]).filter((x): x is string => typeof x === 'string')
+			: []
+	);
 
 	const tRoles = new Map(
 		db
@@ -101,10 +187,35 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 				hex: f.hex,
 				tpu: t?.tpu ?? materialFamily(f.material) === 'tpu',
 				spools: f.spools,
+				spoolAdds: (f.spoolAdds ?? []).map((a) => ({
+					id: a.id,
+					kg: a.kg,
+					at: a.at,
+					userId: a.userId,
+					userName: null as string | null,
+					...(a.note ? { note: a.note } : {})
+				})),
 				recommendedSpools: t?.recommendedSpools ?? 1,
-				spoolmanSpoolId: f.spoolmanSpoolId
+				spoolmanSpoolId: f.spoolmanSpoolId,
+				kit: !!t
 			};
 		});
+	// Who added each spool.
+	const adderIds = [
+		...new Set(filaments.flatMap((f) => f.spoolAdds.map((a) => a.userId)).filter((x) => !!x))
+	] as string[];
+	if (adderIds.length) {
+		const names = new Map(
+			db
+				.select({ id: user.id, name: user.name })
+				.from(user)
+				.where(inArray(user.id, adderIds))
+				.all()
+				.map((u) => [u.id, u.name])
+		);
+		for (const f of filaments)
+			for (const a of f.spoolAdds) a.userName = (a.userId && names.get(a.userId)) || null;
+	}
 	// keep template role order
 	const order = [...tRoles.keys()];
 	// Colors added in the Design tab come after the template's own slots.
@@ -127,6 +238,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			name: p.name,
 			section: p.section,
 			role: partRoles[p.slug] ?? p.defaultRole,
+			defaultRole: p.defaultRole,
+			locked: lockedSlugs.has(p.slug),
 			bomGrams: p.bomGrams,
 			qty: p.qty,
 			walls: p.walls,
@@ -156,6 +269,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			runEstSeconds: s.runEstSeconds,
 			comps: s.comps,
 			assigneeUserId: s.assigneeUserId,
+			manualGrams: s.manualGrams,
 			updatedAt: s.updatedAt.toISOString()
 		};
 	}
@@ -169,6 +283,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			runEstSeconds: null,
 			comps: {},
 			assigneeUserId: null,
+			manualGrams: null,
 			updatedAt: b.createdAt.toISOString()
 		};
 	}
@@ -287,6 +402,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			parts: p.parts,
 			slicerGrams: p.slicerGrams,
 			slicerByPart: p.slicerByPart,
+			gramsSource: gramsSourceOf(p, arrangedEst.get(p.number)?.gramsByRole, !!learnedPlate(p)),
 			thumbnailPath: p.thumbnailPath,
 			filamentGrams:
 				p.source === 'arranged' || learnedPlate(p)
@@ -370,14 +486,15 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			}
 		: null;
 
-	return {
+	const kind = b.kind === 'draft' ? 'draft' : 'build';
+	const result: BuildView = {
 		build: {
 			id: b.id,
 			organizationId: b.organizationId,
 			name: b.name,
 			recipient: b.recipient,
 			hospital: b.hospital,
-			kind: b.kind === 'draft' ? 'draft' : 'build',
+			kind,
 			phase: b.phase as BuildPhase,
 			deliveryDate: b.deliveryDate,
 			createdAt: b.createdAt.toISOString(),
@@ -421,8 +538,47 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		layoutPrinter: b.printer ? null : layoutBed(b.plateLayout ?? defaultLayoutKey(db, tpl.id)),
 		assembly: loadAssembly(db, buildId, tpl.id, variantChoices, parts),
 		photos: loadPhotos(db, buildId),
-		handoff: loadHandoff(db, buildId, access.canEdit)
+		handoff: loadHandoff(db, buildId, access.canEdit),
+		started: undefined as never
 	};
+	// Drafts are never started (buildStarted ignores jobs and runs for them).
+	result.started = buildStarted(result, kind === 'draft' ? undefined : loadLiveJobs(db, buildId));
+	return result;
+}
+
+/**
+ * Where a plate's grams come from. A stored source wins. Older rows have none: grams on an uploaded
+ * plate that match the file's own total (or, on a perPartRuns plate, are the same for every part, as
+ * an upload writes them) came from the file; anything else was typed. With no slicer grams, a plate
+ * whose `filamentGrams` come from the build's own slice (arranged / learned) reads 'slice'.
+ */
+export function gramsSourceOf(
+	p: {
+		source: string | null;
+		slicerGrams: number | null;
+		slicerByPart: Record<string, number>;
+		perPartRuns: boolean;
+		filamentGrams: Record<string, number> | null;
+		slicerGramsSource: 'user' | 'file' | 'printer' | null;
+	},
+	arrangedGrams: Record<string, number> | undefined,
+	learned: boolean
+): 'user' | 'file' | 'printer' | 'slice' | null {
+	const typed = p.perPartRuns
+		? Object.values(p.slicerByPart)
+		: p.slicerGrams
+			? [p.slicerGrams]
+			: [];
+	const has = typed.some((v) => v > 0);
+	if (!has) {
+		const own = Object.values(p.source === 'arranged' || learned ? (arrangedGrams ?? {}) : {});
+		return own.some((g) => g > 0) ? 'slice' : null;
+	}
+	if (p.slicerGramsSource) return p.slicerGramsSource;
+	if (!p.source?.startsWith('upload:')) return 'user';
+	if (p.perPartRuns) return new Set(typed).size === 1 ? 'file' : 'user';
+	const fileTotal = Object.values(p.filamentGrams ?? {}).reduce((a, b) => a + b, 0);
+	return fileTotal > 0 && Math.abs(fileTotal - (p.slicerGrams ?? 0)) < 0.5 ? 'file' : 'user';
 }
 
 /** Persist domain patches onto build_parts. */
@@ -435,6 +591,7 @@ export function applyPatches(db: Db, buildId: string, patches: PartPatch[], now:
 		if ('runEstSeconds' in p) set.runEstSeconds = p.runEstSeconds ?? null;
 		if (p.comps !== undefined) set.comps = p.comps;
 		if ('assigneeUserId' in p) set.assigneeUserId = p.assigneeUserId ?? null;
+		if ('manualGrams' in p) set.manualGrams = p.manualGrams ?? null;
 		db.update(buildParts)
 			.set(set)
 			.where(and(eq(buildParts.buildId, buildId), eq(buildParts.partSlug, slug)))

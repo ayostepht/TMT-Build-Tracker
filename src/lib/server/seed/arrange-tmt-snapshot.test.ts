@@ -15,7 +15,8 @@ const roles = tmtTemplate.filamentRoles.map((r) => ({
 const design = tmtTemplate.designs[0].partRoles;
 const fps = new Map((tmtTemplate.printFootprints ?? []).map((f) => [f.slug, seedToFootprint(f)]));
 const parts: ArrangePart[] = tmtTemplate.parts
-	.filter((p) => fps.has(p.slug))
+	// the one-piece push handle (a later addition) is covered in arrange-tmt.test.ts
+	.filter((p) => fps.has(p.slug) && p.slug !== 'push-handle-one-piece')
 	.map((p) => ({
 		slug: p.slug,
 		name: p.name,

@@ -53,7 +53,10 @@ test('Log plate printed from a plate group: one-tap Success and undo', async ({ 
 	await expect(inHead).toHaveCount(1);
 
 	await page.getByRole('link', { name: 'Overview' }).click();
-	await expect(page.locator('.overall-top')).toContainText('printed');
+	await expect(page.getByTestId('header-kpi-parts')).toHaveAttribute(
+		'aria-label',
+		/Parts printed: \d+ of 33/
+	);
 });
 
 test('A plate run shows in the Print log of a part on that plate, tagged with the plate', async ({

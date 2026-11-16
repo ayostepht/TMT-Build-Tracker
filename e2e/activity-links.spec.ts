@@ -22,7 +22,7 @@ async function logFirstPlate(page: Page): Promise<string> {
 test('A plate in the Activity feed links to its plate group on the Print tab', async ({ page }) => {
 	await ownerWithBuild(page);
 	const plate = await logFirstPlate(page);
-	await page.getByRole('link', { name: 'Overview' }).click();
+	await page.getByRole('link', { name: 'Activity', exact: true }).click();
 
 	await page
 		.locator('.activity')
@@ -38,7 +38,7 @@ test('A plate in the Activity feed links to its plate group on the Print tab', a
 	// Grouping is a per-visit override: set Role, follow the link again, Role comes back on reload.
 	await page.getByLabel('Group by').selectOption('role');
 	await expect(page.locator('.group-head h2').first()).not.toHaveText(/^Plate/);
-	await page.getByRole('link', { name: 'Overview' }).click();
+	await page.getByRole('link', { name: 'Activity', exact: true }).click();
 	await page
 		.locator('.activity')
 		.getByRole('link', { name: `plate ${plate}` })
@@ -59,7 +59,7 @@ test('A hash link shows the plate despite filters, without saving the overrides'
 	// Hide printed would hide the just-printed plate; the link still lands on it.
 	await page.getByLabel('Hide printed').check();
 	await page.getByLabel('Group by').selectOption('role');
-	await page.getByRole('link', { name: 'Overview' }).click();
+	await page.getByRole('link', { name: 'Activity', exact: true }).click();
 	await page
 		.locator('.activity')
 		.getByRole('link', { name: `plate ${plate}` })
@@ -79,7 +79,7 @@ test('A part name in the Activity feed opens its detail on the Print tab', async
 	const row = page.locator('.row[data-s="To print"]').first();
 	const slug = (await row.getAttribute('data-id')) as string;
 	await chooseStatus(row.getByTestId('part-status'), 'Printing');
-	await page.getByRole('link', { name: 'Overview' }).click();
+	await page.getByRole('link', { name: 'Activity', exact: true }).click();
 
 	await page.locator(`.activity a[href$="#part-${slug}"]`).first().click();
 	const target = page.locator(`#part-${slug}`);
@@ -97,4 +97,26 @@ test('Unknown plate and part hashes do nothing', async ({ page }) => {
 	await page.goto(`${url}#part-nope`);
 	await expect(page.locator('.flash')).toHaveCount(0);
 	await expect(page.locator('.row .detail')).toHaveCount(0);
+});
+
+test('The Activity tab lists more than the 12 entries the Overview teaser shows', async ({
+	page
+}) => {
+	test.setTimeout(120_000);
+	await ownerWithBuild(page);
+	await page.getByRole('link', { name: 'Print', exact: true }).click();
+	await page.getByLabel('Group by').selectOption('plate');
+	for (let i = 0; i < 14; i++) {
+		await page
+			.locator('.group-head')
+			.getByRole('button', { name: /^Log a print on plate \d+$/ })
+			.first()
+			.click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+		await expect(page.getByRole('dialog')).toBeHidden();
+	}
+	await page.getByRole('link', { name: 'Activity', exact: true }).click();
+	await expect(page.locator('.activity li').nth(12)).toBeVisible();
+	expect(await page.locator('.activity li').count()).toBeGreaterThan(12);
+	await expect(page.getByRole('heading', { name: 'Recent activity' })).toHaveCount(0);
 });

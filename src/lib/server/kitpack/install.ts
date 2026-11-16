@@ -1,5 +1,6 @@
 /**
- * Installs the kit pack of a template at start (MakeGood's converted files, CC0), so a fresh
+ * Installs the kit pack of a template at start (MakeGood's converted files, CC0, plus any community part
+ * the pack credits separately), so a fresh
  * install needs no upload. Runs in the background after migrations: never blocks startup,
  * never throws to the caller. Idempotent; see `docs/kit-pack.md` for the rules:
  *

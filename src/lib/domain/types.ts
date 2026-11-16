@@ -26,6 +26,17 @@ export type BuildPhase = (typeof BUILD_PHASES)[number];
 
 export type TeamRole = 'owner' | 'editor' | 'viewer';
 
+/** One "added a spool" entry on a filament slot, as the view shows it. */
+export interface SpoolAddView {
+	id: string;
+	kg: number;
+	/** ms since the epoch */
+	at: number;
+	userId: string | null;
+	userName: string | null;
+	note?: string;
+}
+
 /** A filament slot in this build: a template role with the build's chosen filament. */
 export interface FilamentRole {
 	key: string; // template role key: primary | accent | soft | tire | …
@@ -33,9 +44,13 @@ export interface FilamentRole {
 	material: string; // e.g. "PETG", "TPU 95A"
 	hex: string;
 	tpu: boolean;
-	spools: number; // spools on hand (1 kg each)
+	spools: number; // starting spools (kg, 1 kg each): the stock the build began with
+	/** Spools added after the start, oldest first; total stock = `spools` + their kg (`stockKg`). */
+	spoolAdds?: SpoolAddView[];
 	recommendedSpools: number;
 	spoolmanSpoolId: number | null;
+	/** True for the template's own slots (primary, accent, soft, tire, …): they can be recoloured but never removed. */
+	kit: boolean;
 }
 
 export interface PartComponent {
@@ -50,6 +65,8 @@ export interface PartDef {
 	name: string;
 	section: string;
 	role: string; // FilamentRole.key: design snapshot's partRoles[slug] ?? template defaultRole
+	defaultRole: string; // FilamentRole.key the template gives this part (what a palette reset returns it to)
+	locked: boolean; // "Lock part color": a palette apply leaves this part on its current filament (builds.design.lockedParts)
 	bomGrams: number | null;
 	qty: number | null;
 	walls: number | null;
@@ -76,6 +93,8 @@ export interface PartState {
 	runEstSeconds: number | null; // slicer time for the current run, while Printing
 	comps: Record<string, boolean>; // component index → checked
 	assigneeUserId: string | null;
+	/** Grams the maker typed for the whole part, all copies (the top of the part's grams order). Null/absent = none entered. */
+	manualGrams?: number | null;
 	updatedAt: string; // ISO
 }
 
@@ -90,6 +109,13 @@ export interface Plate {
 	parts: string[]; // part slugs
 	slicerGrams: number | null; // per run, whole plate (when !perPartRuns)
 	slicerByPart: Record<string, number>; // per run, per part (when perPartRuns)
+	/**
+	 * Where `slicerGrams` / `slicerByPart` came from: typed by hand ('user'), a sliced file ('file'), a
+	 * printer job ('printer'). 'slice' (no slicer value): the plate's `filamentGrams` come from the
+	 * build's own slice (print template), not a file of this plate. Null/absent = no value or unknown.
+	 * Older rows without a stored source are inferred by `loadBuildView`.
+	 */
+	gramsSource?: 'user' | 'file' | 'printer' | 'slice' | null;
 	thumbnailPath: string | null; // served via GET /api/builds/[id]/plates/[number]/thumbnail when set
 	filamentGrams: Record<string, number>; // grams per run by filament role key, from a sliced 3MF; {} when unknown
 	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>' | 'arranged'
@@ -100,6 +126,22 @@ export interface Plate {
 	baseEstSource?: 'slicer' | 'learned' | 'profile' | 'estimate' | null;
 	/** The estimate includes a gram-based guess for a part that is on no MakeGood plate. */
 	estRough?: boolean;
+}
+
+/** Where a grams figure comes from. 'slice' = learned from the build's own slice (print template). */
+export type GramsSource = 'user' | 'file' | 'slice' | 'bom' | 'none';
+
+/** Result of `partGrams` / `plateGrams` (domain/accounting.ts). */
+export interface GramsInfo {
+	/** Grams for one print of the plate (or of the part's share of a plate run); 0 when unknown. */
+	perRun: number;
+	/** Grams for all runs / all copies; 0 when unknown. */
+	total: number;
+	source: GramsSource;
+	/** An estimate rather than a typed or sliced number: BOM based, or a total that misses parts. */
+	approx: boolean;
+	/** Slugs of parts with no weight at all (the total leaves them out). */
+	unknown: string[];
 }
 
 /**
@@ -220,6 +262,24 @@ export interface TemplateModelInfo {
 	slugs: string[];
 }
 
+export interface StartedInfo {
+	started: boolean;
+	/** Logged print runs. */
+	runs: number;
+	/** Active parts with status Printed. */
+	printed: number;
+	/** Active parts that are not "To print" (Printing, Printed or Reprint). */
+	notToPrint: number;
+	/** Active parts with status Printing, plus parts on a live job. */
+	printingParts: number;
+	/** Plate numbers that are printing right now (a Printing part sits on it, or a live job names it), ascending. */
+	printingPlates: number[];
+	/** Live linked printer jobs. */
+	liveJobs: number;
+	/** Active parts in the build (for "22 of 64"). */
+	totalParts: number;
+}
+
 export interface BuildView {
 	build: BuildSummary;
 	role: TeamRole;
@@ -255,6 +315,8 @@ export interface BuildView {
 	partProfiles?: Record<string, PartProfileInfo>;
 	/** Summary of the print template; null/absent when nothing was learned. */
 	printTemplate?: PrintTemplateInfo | null;
+	/** Whether the build has started printing (see `buildStarted`); `started.started` is false for drafts. */
+	started: StartedInfo;
 }
 
 /** Per-part data learned from a sliced file, as it applies to the build's current colors. */

@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { effectivePartRoles } from '#lib/domain/design.ts';
 import { ApiError } from '../access';
 import { diskHasRoom } from '../config';
-import { loadBuildView } from '../builds/view';
+import { loadBuildView, startedBuildIds } from '../builds/view';
 import type { Db } from '../db';
 import {
 	builds,
@@ -298,7 +298,7 @@ export function editableTargets(
 	templateId: string
 ): {
 	workspaces: { id: string; name: string }[];
-	builds: { id: string; name: string; workspaceName: string }[];
+	builds: { id: string; name: string; workspaceName: string; started: boolean }[];
 } {
 	const teams = listTeams(db, userId)
 		.filter((t) => t.role === 'owner' || t.role === 'editor')
@@ -311,8 +311,18 @@ export function editableTargets(
 		.where(and(eq(builds.templateId, templateId), inArray(builds.organizationId, [...byId.keys()])))
 		.orderBy(asc(builds.name))
 		.all();
+	const startedIds = startedBuildIds(
+		db,
+		rows.map((r) => r.id)
+	);
 	return {
 		workspaces: teams,
-		builds: rows.map((r) => ({ id: r.id, name: r.name, workspaceName: byId.get(r.org) ?? '' }))
+		builds: rows.map((r) => ({
+			id: r.id,
+			name: r.name,
+			workspaceName: byId.get(r.org) ?? '',
+			// Started builds ask before a design is applied (see StartedApplyDialog).
+			started: startedIds.has(r.id)
+		}))
 	};
 }

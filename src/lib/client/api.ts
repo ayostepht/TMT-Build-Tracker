@@ -6,10 +6,34 @@ import type {
 	PrinterPublic,
 	PrinterStatus
 } from '#lib/printers/status.ts';
+import type {
+	ApplyMode,
+	ApplyPreview,
+	KeptStockSlot,
+	SkippedSlot
+} from '#lib/domain/design-apply.ts';
 import type { BuildPhase, BuildView, PartStatus, PrintRunInput } from '#lib/domain/types.ts';
 import type { ThreeMfPlate, ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { PartSnapshot } from '#lib/domain/logrun.ts';
 import { clearPrivateCaches } from './private-caches.ts';
+
+/**
+ * A failed API call. `message` is the server's `error` text (so `catch (e) { e.message }` keeps
+ * working); `status` is the HTTP status, `code` the JSON body's `code` (e.g. 'build-started') and
+ * `body` the whole parsed JSON body ({} when the body was not JSON).
+ */
+export class ApiError extends Error {
+	status: number;
+	code: string | null;
+	body: Record<string, unknown>;
+	constructor(message: string, status: number, body: Record<string, unknown> = {}) {
+		super(message);
+		this.name = 'ApiError';
+		this.status = status;
+		this.code = typeof body.code === 'string' ? body.code : null;
+		this.body = body;
+	}
+}
 
 async function call<T = Record<string, never>>(
 	method: string,
@@ -29,7 +53,12 @@ async function call<T = Record<string, never>>(
 	}
 	// The session is gone: drop cached private kit models (fire and forget, never throws).
 	if (res.status === 401 && url.startsWith('/api/')) void clearPrivateCaches();
-	if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+	if (!res.ok)
+		throw new ApiError(
+			typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
+			res.status,
+			data
+		);
 	return data as T;
 }
 
@@ -74,7 +103,12 @@ export const setPartStatus = (id: string, slug: string, status: PartStatus, prin
 export const updatePart = (
 	id: string,
 	slug: string,
-	patch: { comps?: Record<string, boolean>; assigneeUserId?: string | null }
+	patch: {
+		comps?: Record<string, boolean>;
+		assigneeUserId?: string | null;
+		/** Grams for the whole part, all copies (send on its own). null clears. */
+		manualGrams?: number | null;
+	}
 ) => call('PATCH', `${b(id)}/parts/${encodeURIComponent(slug)}`, patch);
 
 export const startPrinting = (id: string, slugs: string[]) =>
@@ -90,8 +124,22 @@ export const setPrintStart = (id: string, slugs: string[], when: Date | string) 
 export const setRunEstimate = (id: string, slugs: string[], seconds: number | null) =>
 	call('POST', `${b(id)}/printing`, { action: 'setEstimate', slugs, seconds });
 
-export const logRun = (id: string, input: PrintRunInput) =>
-	call<{ id: string }>('POST', `${b(id)}/runs`, input).then((r) => r.id);
+/**
+ * A Partial's per-part results: the parts that printed OK become a Success run, the rest a Failed
+ * run (grams of each half; hours and run time split by the parts' estimated grams).
+ */
+export interface PartialSplitBody {
+	keptSlugs: string[];
+	keptGrams: number | null;
+	lostGrams: number | null;
+}
+/** Logs a run; with `split` (result Partial) two runs are made. `id` is the printed one, `ids` all of them. */
+export const logRun = (id: string, input: PrintRunInput & { split?: PartialSplitBody }) =>
+	call<{ id: string; ids?: string[]; spoolmanWarning?: string }>(
+		'POST',
+		`${b(id)}/runs`,
+		input
+	).then((r) => ({ id: r.id, ids: r.ids ?? [r.id], spoolmanWarning: r.spoolmanWarning }));
 export const deleteRun = (id: string, runId: string, { recompute = true } = {}) =>
 	call('DELETE', `${b(id)}/runs/${encodeURIComponent(runId)}${recompute ? '' : '?recompute=0'}`);
 
@@ -113,6 +161,18 @@ export const updateFilament = (
 	patch: { spools?: number; name?: string; hex?: string; material?: string }
 ) => call('PATCH', `${b(id)}/filaments/${encodeURIComponent(role)}`, patch);
 
+/** Add a spool to a color's stock (kg 0.01 to 99, optional note up to 200 characters). Returns the add's id. */
+export const addSpool = (id: string, role: string, body: { kg: number; note?: string }) =>
+	call<{ id: string }>('POST', `${b(id)}/filaments/${encodeURIComponent(role)}/stock`, body).then(
+		(r) => r.id
+	);
+/** Remove one earlier add from a color's stock. */
+export const removeSpoolAdd = (id: string, role: string, addId: string) =>
+	call(
+		'DELETE',
+		`${b(id)}/filaments/${encodeURIComponent(role)}/stock/${encodeURIComponent(addId)}`
+	);
+
 /** Generic printing action (start | stop | setStart | setEstimate). `seconds` undefined/null clears the estimate. */
 export const printing = (
 	id: string,
@@ -130,8 +190,12 @@ export const printing = (
 export const getView = (id: string) => call<BuildView>('GET', `${b(id)}/view`);
 
 /** Delete a run and restore the affected parts to `parts` (their state before the run was logged). */
-export const undoRun = (id: string, runId: string, parts: PartSnapshot[]) =>
-	call('POST', `${b(id)}/runs/${encodeURIComponent(runId)}/undo`, { parts });
+/** Undo a just-logged run; pass `runIds` (from `logRun`) to remove both runs of a split Partial. */
+export const undoRun = (id: string, runId: string, parts: PartSnapshot[], runIds?: string[]) =>
+	call('POST', `${b(id)}/runs/${encodeURIComponent(runId)}/undo`, {
+		parts,
+		...(runIds && runIds.length > 1 ? { runIds } : {})
+	});
 
 /** Correct a past print log; changing result, part or date re-derives the affected parts' statuses. */
 export const updateRun = (
@@ -157,10 +221,31 @@ export interface DesignRoleInput {
 	hex: string;
 }
 
-/** Edit a build's colors: move parts between slots, add a slot, remove an unused one. */
+/** A slot's filament as a palette writes it. */
+export interface PaletteSlotInput {
+	name: string;
+	material: string;
+	hex: string;
+}
+
+/**
+ * Edit a build's colors in one call: move parts between slots, add a slot, apply a palette (`reset`: unlocked
+ * parts go back to their kit slot, locked ones keep their color), "Lock part color" on/off, or remove a slot
+ * (`replaceWith` is required while parts use it; `removeRoles` drops unused ones, e.g. Undo of an auto-added slot).
+ */
 export const setBuildDesign = (
 	id: string,
-	patch: { partRoles?: Record<string, string>; addRole?: DesignRoleInput; removeRole?: string }
+	patch: {
+		partRoles?: Record<string, string>;
+		addRole?: DesignRoleInput;
+		palette?: { label: string; slots: Record<string, PaletteSlotInput>; reset?: boolean };
+		lock?: { slugs: string[]; locked: boolean };
+		removeRole?: string;
+		replaceWith?: string;
+		removeRoles?: string[];
+		/** Needed with `palette.reset` on a build that has started printing (else 409 `build-started`). */
+		confirm?: boolean;
+	}
 ) => call('PATCH', `${b(id)}/design`, patch);
 
 export const createDesign = (input: { buildId: string; name: string; isPublic: boolean }) =>
@@ -187,9 +272,33 @@ export const listDesigns = (templateId: string) =>
 		`/api/designs?templateId=${encodeURIComponent(templateId)}`
 	);
 
-/** Replace a build's colors with a saved design. */
-export const applyDesign = (id: string, buildId: string) =>
-	call('POST', `/api/designs/${encodeURIComponent(id)}/apply`, { buildId });
+export interface ApplyDesignResult {
+	/** Slots whose filament changed ("Colors only"). */
+	changed?: number;
+	skipped?: SkippedSlot[];
+	keptStock?: KeptStockSlot[];
+}
+
+/**
+ * Apply a saved design to a build. A build that has started needs `mode` (else `ApiError` 409 code
+ * 'build-started'); `full` there also needs `confirm`.
+ */
+export const applyDesign = (
+	id: string,
+	buildId: string,
+	opts: { mode?: ApplyMode; confirm?: boolean } = {}
+) =>
+	call<ApplyDesignResult>('POST', `/api/designs/${encodeURIComponent(id)}/apply`, {
+		buildId,
+		...opts
+	});
+
+/** Dry run for the started-build dialog: what "Colors only" would do, whether full is allowed. Writes nothing. */
+export const previewApplyDesign = (id: string, buildId: string) =>
+	call<ApplyPreview>('POST', `/api/designs/${encodeURIComponent(id)}/apply`, {
+		buildId,
+		dryRun: true
+	});
 
 /** Upload the PNG preview of a design you wrote (up to 2 MB). */
 export async function uploadDesignSnapshot(id: string, png: Blob): Promise<void> {
@@ -228,10 +337,12 @@ export const buildPlateLayouts = (buildId: string) =>
 		'GET',
 		`${b(buildId)}/plates/layouts`
 	);
-export const setPlateLayout = (buildId: string, key: string, convertRuns = false) =>
+/** `confirm` answers the "this build has started" / "print logs will be converted" prompt (409 `build-started`). */
+export const setPlateLayout = (buildId: string, key: string, confirm = false) =>
 	call<{ plates: number; convertedRuns: number }>('POST', `${b(buildId)}/plates/layout`, {
 		key,
-		convertRuns
+		convertRuns: confirm,
+		confirm
 	});
 
 export type UploadedPlate = Omit<ThreeMfPlate, 'thumbnail'> & { hasThumbnail: boolean };
@@ -291,6 +402,8 @@ export const applyPlateUpload = (
 		filamentMap: Record<string, string | null>;
 		variantChoices?: Record<string, string>;
 		convertRuns?: boolean;
+		/** Answers the 409 `build-started` prompt (the build has started printing). */
+		confirm?: boolean;
 		/** 'plates' (default): the file's plates become the build's plates. 'template': keep my plates, learn per-part data. */
 		mode?: 'plates' | 'template';
 		/** Template mode: arrange the plates for the build's printer right away with the learned data. */
@@ -414,13 +527,13 @@ export const setPrinter = (
 	printer: import('#lib/domain/types.ts').BuildPrinter | null
 ) => call('PATCH', `${b(id)}/printer`, { printer });
 
-/** Arrange the build's plates for its printer; `convertRuns` confirms converting plate print logs. */
-export const arrangePlates = (id: string, convertRuns = false) =>
+/** Arrange the build's plates for its printer; `confirm` answers the 409 `build-started` prompt (also converts plate logs). */
+export const arrangePlates = (id: string, confirm = false) =>
 	call<{
 		plates: number;
 		convertedRuns: number;
 		warnings: import('#lib/domain/arrange.ts').ArrangeWarning[];
-	}>('POST', `${b(id)}/plates/arrange`, { convertRuns });
+	}>('POST', `${b(id)}/plates/arrange`, { convertRuns: confirm, confirm });
 
 export type ArrangementDto = import('#lib/domain/arrange.ts').ArrangementInfo;
 export const getArrangement = (id: string) => call<ArrangementDto>('GET', `${b(id)}/arrangement`);
@@ -679,6 +792,8 @@ export const jobAction = (
 		| {
 				action: 'confirm';
 				result?: 'Success' | 'Failed' | 'Partial';
+				/** With result Partial: which parts printed OK and the grams of each half (see `PartialSplitBody`). */
+				split?: PartialSplitBody;
 				grams?: number | null;
 				hours?: number | null;
 				note?: string;

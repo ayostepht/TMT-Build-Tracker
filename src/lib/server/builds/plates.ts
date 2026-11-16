@@ -41,7 +41,16 @@ import { ApiError, buildAccess } from '../access';
 import { diskHasRoom, uploadsDir } from '../config';
 import { assertRunTotal, assertUploadRoom, parsedUploadBytes } from '../quota';
 import type { Db } from '../db';
-import { buildPlates, builds, buildUploads, printRuns, templatePlateLayouts } from '../db/schema';
+import {
+	buildPlates,
+	builds,
+	buildUploads,
+	printerJobs,
+	printers,
+	printRuns,
+	templatePlateLayouts
+} from '../db/schema';
+import { BuildStartedError } from './started-guard';
 import { mutateBuild } from './actions';
 import {
 	ARRANGED_LAYOUT,
@@ -51,6 +60,7 @@ import {
 	loadFootprints,
 	planArrangement,
 	signature,
+	carryManuals,
 	manualTimes,
 	writePlan
 } from './arrange-plan';
@@ -159,6 +169,69 @@ function requireConversion(view: BuildView, convertRuns: boolean) {
 		);
 }
 
+/**
+ * Guard for every path that deletes or renumbers `build_plates` under a build that may have started.
+ *
+ * - A live printer job (printing / paused) on the build: refused outright, no override; the job points
+ *   at a plate number that would change.
+ * - Started with nothing live (runs logged, parts printed or set to Printing by hand): needs
+ *   `confirm: true` or the older `convertRuns: true` (409 `build-started` otherwise). The retry also converts plate logs, so the one
+ *   prompt covers both.
+ * - Not started: nothing to confirm; the old plate-log check (`requireConversion`) still applies.
+ *
+ * Returns the effective `convertRuns`.
+ */
+function guardPlateReplace(
+	tx: Db,
+	buildId: string,
+	view: BuildView,
+	body: { convertRuns: boolean; confirm: boolean }
+): boolean {
+	const st = view.started;
+	if (st.liveJobs > 0) {
+		const jobs = tx
+			.select({
+				plate: printerJobs.plateNumber,
+				printer: printers.name
+			})
+			.from(printerJobs)
+			.leftJoin(printers, eq(printers.id, printerJobs.printerId))
+			.where(
+				and(eq(printerJobs.buildId, buildId), inArray(printerJobs.status, ['printing', 'paused']))
+			)
+			.all();
+		const first = jobs[0];
+		const what =
+			first?.plate != null
+				? `Plate ${first.plate} is printing${first.printer ? ` on ${first.printer}` : ''}`
+				: first?.printer
+					? `A print is running on ${first.printer}`
+					: 'A print is running';
+		throw new BuildStartedError(
+			st,
+			`${what}. Re-arranging would renumber the plates; wait until the print finishes.`
+		);
+	}
+	if (st.started && !(body.confirm || body.convertRuns)) {
+		const bits: string[] = [];
+		if (st.runs > 0)
+			bits.push(`${st.runs} print log${st.runs === 1 ? '' : 's'} will become part logs`);
+		if (st.printingParts > 0) {
+			const names = Object.values(view.state)
+				.filter((s) => s.status === 'Printing')
+				.map((s) => view.parts.find((p) => p.slug === s.slug)?.name ?? s.slug);
+			bits.push(
+				`${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} ${names.length === 1 ? 'is' : 'are'} marked Printing by hand`
+			);
+		}
+		throw new BuildStartedError(
+			st,
+			`This build has started printing. Changing the plates renumbers them${bits.length ? `; ${bits.join('; ')}` : ''}. Part statuses stay as they are.`
+		);
+	}
+	return body.convertRuns || body.confirm;
+}
+
 export function setPlateLayout(
 	db: Db,
 	buildId: string,
@@ -167,7 +240,10 @@ export function setPlateLayout(
 ): { plates: number; convertedRuns: number } {
 	if (!isObj(body) || typeof body.key !== 'string') bad('key is required');
 	const key = (body as Obj).key as string;
-	const convertRuns = (body as Obj).convertRuns === true;
+	const flags = {
+		convertRuns: (body as Obj).convertRuns === true,
+		confirm: (body as Obj).confirm === true
+	};
 	let result = { plates: 0, convertedRuns: 0 };
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		const b = tx.select().from(builds).where(eq(builds.id, buildId)).get()!;
@@ -179,6 +255,7 @@ export function setPlateLayout(
 			)
 			.get();
 		if (!layout) bad('Unknown plate layout');
+		const convertRuns = guardPlateReplace(tx, buildId, view, flags);
 		requireConversion(view, convertRuns);
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
 		tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
@@ -412,7 +489,7 @@ export function applyUpload(
 ): ApplyResult {
 	if (!isObj(body)) bad('Invalid body');
 	const b = body as Obj;
-	const convertRuns = b.convertRuns === true;
+	const flags = { convertRuns: b.convertRuns === true, confirm: b.confirm === true };
 	const mode = b.mode === 'template' ? 'template' : 'plates';
 	let result: ApplyResult = {
 		plates: 0,
@@ -520,7 +597,7 @@ export function applyUpload(
 			let convertedRuns = 0;
 			if (b.arrange === true) {
 				if (!view.printer) bad('Choose a printer first to arrange plates');
-				requireConversion(view, convertRuns);
+				requireConversion(view, guardPlateReplace(tx, buildId, view, flags));
 			}
 			const learned = storeLearned();
 			if (b.arrange === true) {
@@ -561,6 +638,7 @@ export function applyUpload(
 				}
 			};
 		}
+		const convertRuns = guardPlateReplace(tx, buildId, view, flags);
 		requireConversion(view, convertRuns);
 
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
@@ -586,6 +664,9 @@ export function applyUpload(
 				cpSync(src, dest);
 				thumb = buildThumbRel(buildId, pl.index);
 			}
+			const manual = manualFor(pl.index, slugs);
+			// grams the maker typed on the same plate win over the file's (shown as "overrides file")
+			const carried = !!manual.typedGrams;
 			tx.insert(buildPlates)
 				.values({
 					buildId,
@@ -595,13 +676,18 @@ export function applyUpload(
 					runs: plan.runs,
 					perPartRuns: plan.perPartRuns,
 					parts: slugs,
-					...manualFor(pl.index, slugs),
-					slicerGrams: pl.grams,
-					// twins: each part's grams per run are the plate's; accounting counts them under the part's own role
-					slicerByPart:
-						plan.perPartRuns && pl.grams
-							? Object.fromEntries(slugs.map((s) => [s, pl.grams as number]))
-							: {},
+					...carryManuals(manual),
+					...(carried
+						? {}
+						: {
+								slicerGrams: pl.grams,
+								// twins: each part's grams per run are the plate's; accounting counts them under the part's own role
+								slicerByPart:
+									plan.perPartRuns && pl.grams
+										? Object.fromEntries(slugs.map((s) => [s, pl.grams as number]))
+										: {},
+								slicerGramsSource: pl.grams ? ('file' as const) : null
+							}),
 					thumbnailPath: thumb,
 					filamentGrams: plan.perPartRuns ? {} : fg,
 					source: `upload:${uploadId}`
@@ -666,7 +752,8 @@ export function plateThumbnailFile(
  * Replace the build's plates with the arranger's plan for the build's printer. Parts are
  * grouped by filament and packed onto the bed (see `domain/arrange.ts`); positions are kept
  * in `build_plates.arrangement`. Print logs attached to the old plates need `convertRuns`
- * (409 otherwise), exactly like `setPlateLayout`.
+ * (409 otherwise), exactly like `setPlateLayout`. A started build needs `confirm: true`; a live printer job
+ * refuses the call (see `guardPlateReplace`).
  */
 export function arrangeForPrinter(
 	db: Db,
@@ -674,7 +761,10 @@ export function arrangeForPrinter(
 	userId: string,
 	body: unknown = {}
 ): { plates: number; convertedRuns: number; warnings: ArrangeWarning[] } {
-	const convertRuns = isObj(body) && body.convertRuns === true;
+	const flags = {
+		convertRuns: isObj(body) && body.convertRuns === true,
+		confirm: isObj(body) && body.confirm === true
+	};
 	let result = { plates: 0, convertedRuns: 0, warnings: [] as ArrangeWarning[] };
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		if (!view.printer) bad('Choose a printer first');
@@ -683,6 +773,7 @@ export function arrangeForPrinter(
 			loadFootprints(tx, view.build.templateId),
 			layoutHintFor(tx, view.build.templateId)
 		)!;
+		const convertRuns = guardPlateReplace(tx, buildId, view, flags);
 		requireConversion(view, convertRuns);
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
 		clearBuildThumbs(buildId);

@@ -459,6 +459,31 @@ export const tmtTemplate: TemplateSeed = {
 			allowedMaterials: PETG,
 			guideRefs: [{ page: 21, text: 'Steps 30-31: insert pin' }]
 		},
+		{
+			slug: 'push-handle-one-piece',
+			name: 'Push Handle (one piece)',
+			section: 'Frame',
+			defaultRole: 'accent',
+			// Not published and the file is unsliced: weigh it once printed.
+			bomGrams: null,
+			qty: 1,
+			walls: 5,
+			infill: '5%',
+			supports: 'Yes',
+			sourceFile: 'TMT_SinglePIecehandle.stl',
+			notes: [
+				'Variant: replaces the push handle top, bottom, brace and pin. Experimental community design by jeepxj (CC BY-NC), endorsed by MakeGood. Source: https://makerworld.com/en/models/3409242-3d-toddler-mobility-trainer-one-piece-push-handle',
+				'Only for the Bambu H2 series (about 340 x 320 mm bed): it does not fit a 256 mm bed. Printed in PETG at 0.3 mm layers, 5 walls, 5% crosshatch infill, painted tree supports, auto brim.',
+				'Keeps the soft TPU push handle grip. Check that the grip fits before you print the grip.'
+			],
+			allowedMaterials: PETG,
+			guideRefs: [
+				{
+					page: 21,
+					text: 'Steps 28-29: push handle into the chair (the one piece replaces top and bottom)'
+				}
+			]
+		},
 
 		// ---- Accessories
 		{
@@ -1095,10 +1120,17 @@ export const tmtTemplate: TemplateSeed = {
 			options: [
 				{
 					key: 'include',
-					name: 'With push handle',
+					name: 'Multi-part push handle',
 					description:
-						'Push handle top, bottom, brace and pin, plus the soft TPU grip. If you also build the headrest, install the headrest first.',
+						'MakeGood push handle: top, bottom, brace and pin, plus the soft TPU grip. Prints on a 256 mm bed. If you also build the headrest, install the headrest first.',
 					parts: ['push-top', 'push-bottom', 'push-brace', 'push-pin', 'push-grip']
+				},
+				{
+					key: 'one-piece',
+					name: 'One piece, H2 series',
+					description:
+						'Experimental single-piece push handle by jeepxj (CC BY-NC), endorsed by MakeGood, for printers with a bed of about 340 x 320 mm (Bambu H2S, H2D). Keeps the soft TPU grip; check the grip fits.',
+					parts: ['push-handle-one-piece', 'push-grip']
 				},
 				{
 					key: 'none',
@@ -1133,6 +1165,10 @@ export const tmtTemplate: TemplateSeed = {
 			'push-top',
 			'push-bottom',
 			'push-pin',
+			// One-piece push handle (jeepxj, from the 3MF's own frame): its low end meets the multi-part bottom's
+			// (y 395, rear face z -499.2), the pin and brace seats line up. The grip keeps the multi-part
+			// position below, so in a one-piece build the viewer draws it above the handle (fit still open).
+			'push-handle-one-piece',
 			'headrest-mount', // seat-back rear face at z -499, top of its stem at y 695
 			// Variant parts whose STEP frame is the assembly frame (boxes match the one-piece footrest and the kit casters).
 			'footrest-front', // x +-138, y 40..97.5, z -148..0
@@ -1317,7 +1353,16 @@ const H2D_PLATES: PlateSeed[] = [
 		perPartRuns: true,
 		parts: ['rims-small-1-4', 'rims-small-2-3']
 	},
-	{ number: 21, name: 'Footrest 1-Piece', estSeconds: null, runs: 1, parts: ['footrest'] }
+	{ number: 21, name: 'Footrest 1-Piece', estSeconds: null, runs: 1, parts: ['footrest'] },
+	// Not in MakeGood's profile: the one-piece push handle (community design by jeepxj, H2 series only)
+	// gets its own plate here. Empty, and so dropped from a build, unless that option is chosen.
+	{
+		number: 22,
+		name: 'Push Handle One Piece',
+		estSeconds: null,
+		runs: 1,
+		parts: ['push-handle-one-piece']
+	}
 ];
 
 tmtTemplate.plateLayouts = [
@@ -1331,7 +1376,8 @@ tmtTemplate.plateLayouts = [
 	{
 		key: 'h2d',
 		name: 'Bambu H2D / H2S',
-		printerNote: 'MakeGood H series profile: 21 plates for the larger H2D / H2S bed.',
+		printerNote:
+			'MakeGood H series profile: 21 plates for the larger H2D / H2S bed, plus a plate for the one-piece push handle option.',
 		plates: H2D_PLATES
 	}
 ];
@@ -1847,6 +1893,41 @@ tmtTemplate.printFootprints = [
 			[-20.1, 16.8],
 			[-24, 10.6],
 			[-25.8, 4]
+		]
+	},
+	{
+		slug: 'push-handle-one-piece',
+		// The designer's plate pose (one piece standing on its edge, 160 mm tall), turned flat about z to the
+		// smallest box; a 346.6 mm long bar that only fits a bed like the H2S / H2D diagonally.
+		w: 346.6,
+		d: 56.8,
+		h: 160,
+		unitsPerPlate: 1,
+		hull: [
+			[-168.5, -26.6],
+			[-164.9, -28.4],
+			[-162.8, -28.6],
+			[158.9, -28.6],
+			[160, -28.2],
+			[170.4, -21.1],
+			[171.3, -19.7],
+			[173.5, -7.5],
+			[173.2, -5.9],
+			[160.8, 12],
+			[150.7, 14.9],
+			[144.7, 16],
+			[70.8, 28.5],
+			[70.4, 28.6],
+			[7.3, 28.6],
+			[-1.3, 28.3],
+			[-9.9, 27.3],
+			[-166.7, 1.6],
+			[-168.9, 0.8],
+			[-170.9, -0.5],
+			[-173.1, -3.9],
+			[-173.4, -7.9],
+			[-171.2, -21.7],
+			[-170.4, -24]
 		]
 	},
 	{
@@ -2642,6 +2723,19 @@ tmtTemplate.assemblySteps = [
 			{ key: 'grip', text: 'Grip is on with the logo facing the right way' }
 		],
 		when: { group: 'push-handle', option: 'include' }
+	},
+	{
+		key: 'extras.push-handle-one-piece',
+		title: 'One-piece push handle',
+		description:
+			'Push the one-piece handle into the chair where the guide fits the push handle (steps 28-29). This community design has no separate brace or pin, so steps 30-31 do not apply. The soft grip goes on last; watch the logo direction and check that it fits.',
+		guidePage: 21,
+		parts: ['push-handle-one-piece', 'push-grip'],
+		checks: [
+			{ key: 'firm', text: 'Handle is firm with no play where it meets the chair' },
+			{ key: 'grip', text: 'Grip is on with the logo facing the right way and fits snugly' }
+		],
+		when: { group: 'push-handle', option: 'one-piece' }
 	},
 	{
 		key: 'finish.buckles',

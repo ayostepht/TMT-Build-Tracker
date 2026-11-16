@@ -6,7 +6,46 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
-Nothing yet.
+## [0.9.2] - 2026-11-16
+
+**Upgrading:** back up your `/data` folder first. This release adds two database migrations (0001 and 0002, both additive: new columns for entered weights and spool adds). They run automatically when the container starts and cannot be undone, so to go back to 0.9.1 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
+
+### Added
+
+- Stats: a Stats tab on every build (printing time and filament used, progress with a projected finish, failures per plate, filament by colour against your stock, plate time against the estimate, hours per day) and a Stats page for the workspace (hours per week, printers, most-used filaments, plates that fail most, a table of builds, over the last 3, 6, 12 or 24 months). Every chart has a sentence that says what it shows and a "Show data" table.
+- An optional one-piece push handle for printers with a bed of about 340 x 320 mm (Bambu H2S, H2D): choose "One piece, H2 series" under the push handle option. It is an experimental community design by jeepxj (CC BY-NC, endorsed by MakeGood) that replaces the push handle top, bottom, brace and pin and keeps the soft grip. It ships in kit pack 1.0.2, which installs by itself on the next start; builds you already have do not change.
+- Lock part color: a part can keep its filament when you choose a palette. Turn on "Lock part color" in the part card; locked parts show a lock in the part list and the card. A locked part stays on its exact color: if the palette changes its slot, the part moves to a slot that holds its old filament (added for you when needed).
+- Remove a color that parts still use: Remove is now on every color you added. A dialog lists the affected parts and asks which of the design's other filaments replaces it; confirming reassigns them and removes the color in one step, in builds and in Studio drafts. The color's spools on hand and Spoolman link are dropped with it, and the activity log says what changed.
+
+- Enter a part's weight yourself: a part without a weight (the rear caster mounts, for example) now shows "Add weight" in the part list; the grams you type count in the plate, the log sheet and the filament totals and are marked "your entry". Weights now read the same everywhere: your entry, then the weight from your slice, then MakeGood's estimate (marked "~").
+- Plate weights next to the time: every plate header (Print tab, Files tab, the printing and next-up cards) shows its grams beside its hours, marked "~" for an estimate, "from file" for a sliced 3MF, or "your entry" for grams you typed. A plate with parts that have no weight shows the known total as "≥ 417 g · 1 part without weight"; tap the flag to add the missing weights on the spot. The grams you type for a plate now survive re-arranging, and the field on the Files tab says "overrides file 150 g" when it replaces the file's number.
+
+- Applying a design to a build that has started printing now asks first. A dialog says what has started ("Plate 4 is printing; 22 of 64 parts printed; 18 prints logged") and offers "Colors only" (recommended: slot colors change; plates, print files, progress, logs, spools and locked parts stay) or "Colors and print files" (also moves parts to the design's slots; plates will need re-arranging). The colors-only choice lists slots it leaves alone (another material, or locked parts) and slots that change filament but keep their spools or Spoolman link. It is on the Design tab, on a design's page ("Copy into my build") and when applying a palette. After applying you get an Undo for a while.
+
+- Add spools as you go: each color keeps its starting spools (kg) and you can add another spool any time with a dated history (who added it, how many kg, an optional note, removable). The stock is the starting spools plus every add, and Spare is that stock minus what is used and what is still to print.
+- Partial prints with per-part results: when a plate with several parts does not fully succeed, choose Partial and tick the parts that printed OK. Those are marked printed and count as kept; the rest are flagged for reprint and count as lost. Grams (Kept and Lost) and hours are split between them by the parts' weights, and one Undo removes both logs. A failed print's grams are filled in from the printer's progress, or from "How far did it get?" when no printer reported it.
+
+### Changed
+
+- Filament and time now tell used from lost: "used" is split into what ended up in printed parts and what failed prints took (older Partial logs count as lost), and logged hours the same way. The totals are unchanged for existing builds. After a Partial, only the parts still to print count toward what is left.
+- The build header shows four Stats cards (parts printed, printing time, filament used, projected finish) on every build tab, each linking to the Stats tab. On phones they sit four across under the build name, with a short "of ~382 h" estimate line under Time and Filament. The build details line (what is printing, parts to reprint, the deliver-by date) appears only when there is something to show, and still opens from the arrow beside the name on phones. The Design tab keeps its room for the chair: no cards there on phones.
+- Recent activity has its own Activity tab (after Finish, before Settings). The Overview now shows only the last change with an "All activity" link, so it stays lighter. Studio drafts have no Activity tab.
+- Choosing a palette now resets every part-level color change: unlocked parts go back to their kit colors, as the Apply bar says ("Resets N part changes · M locked kept"). Applying a palette is one saved change in the activity log, and Undo restores the colors and the parts together.
+- Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG", and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
+
+### Fixed
+
+- Stats: the dates along the bottom of a chart no longer run into each other.
+- Stats: the "Show data" tables, and the table of builds on the workspace Stats page, scroll sideways inside their own card on phones instead of widening the page.
+- Stats: the failures chart now counts failed prints of single parts too (they appear under their plate, or under "Not on a plate"), so its rows add up to the failed prints.
+- Stats: hours are rounded the same way everywhere (whole hours from 100 h logged), so the Stats tab and the build header show the same numbers.
+- Applying a design (or a palette that resets part colors) to a build that was already printing no longer happens without a warning, and no longer rebuilds its plates. "Colors and print files" is refused while a plate is printing or a printer job is running, and now keeps parts whose color is locked. The confirmations on the Design tab and on a design's page no longer claim plates are kept when they are re-arranged.
+- Filament used: a print that was marked done with a failed attempt logged and the successful one logged without grams counted only the failed grams; it now uses the estimate for the kept print too. Parts with no weight at all are listed as missing instead of counting as 0 g.
+- Lock part color: it locks only the part you tapped, even with "Both sides" on (it used to lock the matching parts too, such as a wheel rim on a different color). A slot added for a locked part now reads "Accent PETG · added" instead of repeating the kit slot's name.
+- Filament picker: the number next to each Type now matches the swatches the picker lists for it (same-looking colors count once, as they are listed once), and a short list no longer repeats itself under "Closest to the current color" or hides its neutrals.
+- Design: on phones the MakeGood and handle credit sits in its own band under the 3D view instead of running over the chair.
+- Files: choosing one of MakeGood's plate layouts right after arranging plates for your own bed could be ignored (no "Replace plates?" question, the list snapped back). The choice now always applies.
+- Now printing: moving from one build to another inside the app (for example from the builds menu) could leave the card without its live printer panel (printer name, progress, layer, temperatures, camera, "Not this plate") until you left and reopened the build. The panel now follows the build you are on.
 
 ## [0.9.1] - 2026-11-13
 

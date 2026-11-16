@@ -82,7 +82,7 @@ describe('built-in layouts', () => {
 		const l = buildLayouts(db, id, 'owner');
 		expect(l.layouts.map((x) => [x.key, x.plateCount])).toEqual([
 			['xpa', 24],
-			['h2d', 21]
+			['h2d', 22]
 		]);
 		expect(l.current).toBe('xpa');
 		expect(view(id).plates).toHaveLength(24);
@@ -111,7 +111,7 @@ describe('built-in layouts', () => {
 		const id = mk();
 		const events = onBuildEvents(id);
 		const r = setPlateLayout(db, id, 'owner', { key: 'h2d' });
-		expect(r).toEqual({ plates: 21, convertedRuns: 0 });
+		expect(r).toEqual({ plates: 22, convertedRuns: 0 });
 		expect(view(id).plates.find((p) => p.number === 1)!.source).toBe('layout:h2d');
 		expect(buildLayouts(db, id, 'owner').current).toBe('h2d');
 		expect(events.at(-1)?.kind).toBe('plates.layout');
@@ -121,7 +121,7 @@ describe('built-in layouts', () => {
 			{ id: 'x', userId: 'owner', userName: 'Owen', kind: a.kind, payload: a.payload, at: '' },
 			view(id)
 		);
-		expect(text).toBe("Owen switched the plates to MakeGood's Bambu H2D / H2S profile (21 plates)");
+		expect(text).toBe("Owen switched the plates to MakeGood's Bambu H2D / H2S profile (22 plates)");
 		expect(() => setPlateLayout(db, id, 'owner', { key: 'zzz' })).toThrow(/Unknown plate layout/);
 	});
 
@@ -371,6 +371,60 @@ describe('uploading a 3MF', () => {
 		const v = view(id);
 		expect(v.runs.map((x) => [x.plateNumber, x.partSlug])).toEqual([[null, 'handle-left']]);
 		expect(v.state['handle-left'].status).toBe('Printed');
+	});
+
+	describe('plate grams source', () => {
+		async function applied(id: string) {
+			const up = await upload(id);
+			const body = {
+				mapping: up.suggestions.mapping,
+				filamentMap: up.suggestions.filamentMap,
+				variantChoices: up.suggestions.variantChoices
+			};
+			applyUpload(db, id, 'owner', up.uploadId, body);
+			return { up, body };
+		}
+		const plate1 = (id: string) => view(id).plates.find((p) => p.number === 1)!;
+		const rawSource = (id: string) =>
+			db
+				.select({ s: buildPlates.slicerGramsSource })
+				.from(buildPlates)
+				.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 1)))
+				.get()!.s;
+
+		it('an upload stores the file as the source; typing grams makes it "your entry"', async () => {
+			const id = mk();
+			await applied(id);
+			expect(rawSource(id)).toBe('file');
+			expect(plate1(id)).toMatchObject({ slicerGrams: 330, gramsSource: 'file' });
+			updatePlate(db, id, 'owner', 1, { slicerGrams: 340 });
+			expect(rawSource(id)).toBe('user');
+			expect(plate1(id)).toMatchObject({ slicerGrams: 340, gramsSource: 'user' });
+			// the file's own total stays readable for "overrides file"
+			expect(plate1(id).filamentGrams).toEqual({ primary: 330 });
+		});
+
+		it('a typed entry survives applying a new upload on the same plate; a file value does not', async () => {
+			const id = mk();
+			const { body } = await applied(id);
+			updatePlate(db, id, 'owner', 1, { slicerGrams: 340 });
+			const again = await upload(id);
+			applyUpload(db, id, 'owner', again.uploadId, { ...body, mapping: again.suggestions.mapping });
+			expect(plate1(id)).toMatchObject({ slicerGrams: 340, gramsSource: 'user' });
+			expect(plate1(id).filamentGrams).toEqual({ primary: 330 });
+			// cleared, the next file's value comes back, marked 'file'
+			updatePlate(db, id, 'owner', 1, { slicerGrams: null });
+			const third = await upload(id);
+			applyUpload(db, id, 'owner', third.uploadId, { ...body, mapping: third.suggestions.mapping });
+			expect(plate1(id)).toMatchObject({ slicerGrams: 330, gramsSource: 'file' });
+		});
+
+		it('twin repair keeps a typed source and does not invent one', () => {
+			const id = mk();
+			updatePlate(db, id, 'owner', 1, { slicerGrams: 77 });
+			expect(repairTwinPlates(db)).toEqual([]);
+			expect(rawSource(id)).toBe('user');
+		});
 	});
 
 	describe('manual plate time', () => {

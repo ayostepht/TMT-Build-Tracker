@@ -11,9 +11,9 @@ test('an editor change shows up on the owner page without a reload', async ({ pa
 	const link = await invite(page, email, 'editor');
 	const editor = await joinViaInvite(browser, link, 'Eddie Editor', email);
 
-	await page.goto(buildUrl);
+	await page.goto(`${buildUrl}/activity`);
 	const header = page.locator('.overall-top');
-	await expect(header).toContainText('0 printing');
+	await expect(header).toHaveCount(0);
 	await expect(page.locator('.sync')).toContainText('Live');
 	// Tag the page so a reload would be noticed.
 	await page.evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));

@@ -2,7 +2,13 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { filamentStats, roleLabel } from '#lib/domain/index.ts';
-	import { applyPartRole, designColors, hiddenSlugs } from '#lib/domain/design.ts';
+	import {
+		applyPartRole,
+		designColors,
+		hiddenSlugs,
+		paletteReset,
+		roleBlockedReason
+	} from '#lib/domain/design.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import { getArrangement, setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
@@ -100,17 +106,33 @@
 	let origin: 'row' | 'canvas' = 'canvas';
 	/** slug → role the user just chose, shown at once while the save is in flight. */
 	let pending = $state<Record<string, string>>({});
+	/** slug → "Lock part color" the user just chose, shown at once while the save is in flight. */
+	let pendingLock = $state<Record<string, boolean>>({});
 	let ready = $state<{ rendered: string[]; unplaced: string[] } | null>(null);
 	let stage = $state<ReturnType<typeof ModelStage>>();
 
 	// The view with the user's not-yet-saved changes applied (part moves, picked filaments,
-	// a previewed palette): drives 3D colors, totals and lists.
+	// a previewed palette): drives 3D colors, totals and lists. A previewed palette also shows what
+	// applying it does to part-level changes: unlocked parts back on their kit slot.
 	const live = $derived.by((): BuildView => {
 		const v = ctx.view;
 		const fil = { ...optimistic, ...(preview?.slots ?? {}) };
-		if (!Object.keys(pending).length && !Object.keys(fil).length) return v;
-		const ov = <T extends { slug: string; role: string }>(p: T): T =>
-			pending[p.slug] ? { ...p, role: pending[p.slug] } : p;
+		const hasLock = Object.keys(pendingLock).length > 0;
+		const resets: Record<string, string> = {};
+		if (preview) {
+			for (const p of paletteReset(v).reset) {
+				const to = v.filaments.find((f) => f.key === p.defaultRole);
+				const cur = to ? { ...to, ...fil[to.key] } : null;
+				if (cur && !roleBlockedReason(p, cur)) resets[p.slug] = p.defaultRole;
+			}
+		}
+		const roleOf = { ...resets, ...pending };
+		if (!Object.keys(roleOf).length && !Object.keys(fil).length && !hasLock) return v;
+		const ov = <T extends { slug: string; role: string; locked: boolean }>(p: T): T => {
+			const role = roleOf[p.slug] ?? p.role;
+			const locked = pendingLock[p.slug] ?? p.locked;
+			return role === p.role && locked === p.locked ? p : { ...p, role, locked };
+		};
 		return {
 			...v,
 			filaments: v.filaments.map((f) => (fil[f.key] ? { ...f, ...fil[f.key] } : f)),
@@ -118,7 +140,16 @@
 			allParts: v.allParts.map(ov)
 		};
 	});
-	const colors = $derived(designColors(live));
+	const colors = $derived.by(() => {
+		const out = designColors(live);
+		if (!preview) return out;
+		// Locked parts on a slot the previewed palette recolors keep their current color.
+		for (const p of ctx.view.allParts) {
+			const cur = ctx.view.filaments.find((f) => f.key === p.role);
+			if (p.locked && cur && preview.slots[p.role] && !pending[p.slug]) out[p.slug] = cur.hex;
+		}
+		return out;
+	});
 	const hidden = $derived(hiddenSlugs(live));
 	const stats = $derived(filamentStats(live));
 	const part = $derived(live.allParts.find((p) => p.slug === selected) ?? null);
@@ -194,7 +225,7 @@
 		if (!Object.keys(r.changes).length) return;
 		const to = live.filaments.find((f) => f.key === role);
 		const n = Object.keys(r.changes).length;
-		announce = `${part.name}${n > 1 ? ` and ${n - 1} matching part${n > 2 ? 's' : ''}` : ''} moved to ${roleLabel(role, to)}`;
+		announce = `${part.name}${n > 1 ? ` and ${n - 1} matching part${n > 2 ? 's' : ''}` : ''} moved to ${roleLabel(role, to, live.filaments)}`;
 		pending = { ...pending, ...r.changes };
 		await ctx.act(() => setBuildDesign(ctx.id, { partRoles: r.changes }));
 		const next = { ...pending };
@@ -202,11 +233,24 @@
 		pending = next;
 	}
 
+	// A lock covers only the tapped part: "Both sides" applies to colour moves, never to locks.
+	async function lock(on: boolean) {
+		if (!part) return;
+		const slug = part.slug;
+		announce = `${part.name} part color ${on ? 'locked' : 'unlocked'}`;
+		pendingLock = { ...pendingLock, [slug]: on };
+		await ctx.act(() => setBuildDesign(ctx.id, { lock: { slugs: [slug], locked: on } }));
+		const next = { ...pendingLock };
+		if (next[slug] === on) delete next[slug];
+		pendingLock = next;
+	}
+
 	async function pickFilament(role: string, v: PickedFilament) {
 		optimistic = { ...optimistic, [role]: v };
 		announce = `${roleLabel(
 			role,
-			live.filaments.find((f) => f.key === role)
+			live.filaments.find((f) => f.key === role),
+			live.filaments
 		)} is now ${v.name}, ${v.material}`;
 		await ctx.act(() => updateFilament(ctx.id, role, v));
 		if (optimistic[role] === v) {
@@ -306,6 +350,7 @@
 						bind:bothSides
 						noPreview={noPreview.includes(part.slug)}
 						onmove={move}
+						onlock={lock}
 						onclose={closePart}
 					/>
 				</div>
@@ -332,7 +377,7 @@
 		{#if picker?.mode === 'edit' && pickerSlot}
 			<div class="pickhost">
 				<SwatchPicker
-					title={roleLabel(pickerSlot.key, pickerSlot)}
+					title={roleLabel(pickerSlot.key, pickerSlot, live.filaments)}
 					family={pickerSlot.tpu ? 'tpu' : 'petg'}
 					current={{ name: pickerSlot.name, material: pickerSlot.material, hex: pickerSlot.hex }}
 					slotMaterial={pickerSlot.material}
@@ -430,6 +475,7 @@
 					}}
 					onedit={(role) => openPicker({ mode: 'edit', role })}
 					onadd={() => openPicker({ mode: 'new' })}
+					announce={(m) => (announce = m)}
 				/>
 			</div>
 		</div>

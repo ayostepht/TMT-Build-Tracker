@@ -7,7 +7,7 @@
  * Pure: no DB, no Svelte.
  */
 import { fmtH } from './format.ts';
-import type { BuildView, Plate } from './types.ts';
+import type { BuildView, Plate, PrintRun } from './types.ts';
 
 /** Estimated hours of usable timed runs before a pace is trusted. */
 export const PACE_MIN_HOURS = 12;
@@ -35,30 +35,49 @@ export function paceText(ratio: number, basis: 'slicer' | 'estimate' = 'slicer')
 	return `you print ${pct}% ${ratio < 1 ? 'faster' : 'slower'} than ${vs}`;
 }
 
+/** A run usable for pace: the actual and planned hours, and whether the plan is the run's own time. */
+export interface TimedRun {
+	actual: number;
+	est: number;
+	/** The planned time is the run's own (`estSeconds`), not the plate's. */
+	own: boolean;
+	plate: Plate;
+}
+
+/**
+ * The run as a pace sample, or null when it is not one: not a Success, no hours, no plate or time,
+ * a part subset without its own time, the log sheet's prefill, or an outlier (see the file header).
+ */
+export function timedRun(view: BuildView, r: PrintRun): TimedRun | null {
+	const h = Number(r.hours) || 0;
+	if (!(h > 0) || r.result !== 'Success' || r.plateNumber == null) return null;
+	const pl = view.plates.find((p) => p.number === r.plateNumber);
+	// The run's own time (what was planned when it was logged) comes before the plate's.
+	const own = r.estSeconds && r.estSeconds > 0 ? r.estSeconds : 0;
+	const sec = own || pl?.estSeconds || 0;
+	if (!pl || !sec) return null;
+	// A subset of a plate's parts does not take the whole plate's time.
+	if (!own && !pl.perPartRuns && r.partSlugs && r.partSlugs.length < pl.parts.length) return null;
+	const e = sec / 3600;
+	// A time that is exactly the plate's own time is the log sheet's prefill, not a measurement.
+	if (h === Math.round(e * 10) / 10) return null;
+	if (h < e * PACE_OUTLIER_LOW || h > e * PACE_OUTLIER_HIGH) return null;
+	return { actual: h, est: e, own: !!own, plate: pl };
+}
+
 export function paceOf(view: BuildView): Pace | null {
 	let est = 0;
 	let actual = 0;
 	let runs = 0;
 	let slicerEst = 0;
 	for (const r of view.runs) {
-		const h = Number(r.hours) || 0;
-		if (!(h > 0) || r.result !== 'Success' || r.plateNumber == null) continue;
-		const pl = view.plates.find((p) => p.number === r.plateNumber);
-		// The run's own time (what was planned when it was logged) comes before the plate's.
-		const own = r.estSeconds && r.estSeconds > 0 ? r.estSeconds : 0;
-		const sec = own || pl?.estSeconds || 0;
-		if (!pl || !sec) continue;
-		// A subset of a plate's parts does not take the whole plate's time.
-		if (!own && !pl.perPartRuns && r.partSlugs && r.partSlugs.length < pl.parts.length) continue;
-		const e = sec / 3600;
-		// A time that is exactly the plate's own time is the log sheet's prefill, not a measurement.
-		if (h === Math.round(e * 10) / 10) continue;
-		if (h < e * PACE_OUTLIER_LOW || h > e * PACE_OUTLIER_HIGH) continue;
-		est += e;
-		actual += h;
+		const t = timedRun(view, r);
+		if (!t) continue;
+		est += t.est;
+		actual += t.actual;
 		runs++;
-		if (own || pl.estSource === 'slicer' || pl.estSource === 'learned' || pl.estSource === 'manual')
-			slicerEst += e;
+		const src = t.plate.estSource;
+		if (t.own || src === 'slicer' || src === 'learned' || src === 'manual') slicerEst += t.est;
 	}
 	if (est < PACE_MIN_HOURS) return null;
 	const ratio = actual / est;

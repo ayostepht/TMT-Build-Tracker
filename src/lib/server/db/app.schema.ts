@@ -328,6 +328,9 @@ const buildId = () =>
 		.notNull()
 		.references(() => builds.id, { onDelete: 'cascade' });
 
+/** One "added a spool" entry on a build filament slot (kg, ms timestamp). */
+export type SpoolAdd = { id: string; kg: number; at: number; userId: string | null; note?: string };
+
 export const buildFilaments = sqliteTable(
 	'build_filaments',
 	{
@@ -337,6 +340,11 @@ export const buildFilaments = sqliteTable(
 		material: text('material').notNull(),
 		hex: text('hex').notNull(),
 		spools: real('spools').notNull().default(0),
+		/** Spools added after the start (kg each); total stock = spools + sum of these. */
+		spoolAdds: text('spool_adds', { mode: 'json' })
+			.$type<SpoolAdd[]>()
+			.notNull()
+			.default(sql`'[]'`),
 		spoolmanSpoolId: integer('spoolman_spool_id')
 	},
 	(t) => [primaryKey({ columns: [t.buildId, t.roleKey] })]
@@ -356,6 +364,8 @@ export const buildParts = sqliteTable(
 			.notNull()
 			.default(sql`'{}'`),
 		assigneeUserId: text('assignee_user_id').references(() => user.id, { onDelete: 'set null' }),
+		/** Grams the maker typed for the whole part (all copies). Null = none entered. */
+		manualGrams: real('manual_grams'),
 		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
 			.notNull()
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -377,6 +387,8 @@ export const buildPlates = sqliteTable(
 			.notNull()
 			.default(sql`'[]'`),
 		slicerGrams: real('slicer_grams'),
+		/** Where slicerGrams / slicerByPart came from: 'user' (typed), 'file' (sliced 3MF), 'printer'. Null = older row; the reader infers it. */
+		slicerGramsSource: text('slicer_grams_source').$type<'user' | 'file' | 'printer'>(),
 		/** Time typed in by hand (seconds per run); overrides the file's and every estimated time. */
 		manualEstSeconds: integer('manual_est_seconds'),
 		/** Who set the manual time: 'user' (typed) or 'printer' (from a linked printer job; a typed one is never overwritten by it). */

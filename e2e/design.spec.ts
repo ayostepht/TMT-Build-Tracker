@@ -74,11 +74,11 @@ test('design tab: move parts between slots, add a color, share a design and star
 	await page.keyboard.press('Escape');
 	await expect(dlg).toHaveCount(0);
 
-	// Apply a saved design to this build: asks first, keeps print progress.
+	// Apply a saved design to this build: asks first (the build has not started, so no started-build dialog).
 	await page.getByTestId('open-apply').click();
 	await page.getByTestId('apply-design-select').selectOption({ label: 'E2E Blues (mine)' });
 	await page.getByRole('button', { name: 'Apply this design…' }).click();
-	await expect(page.getByTestId('apply-design')).toContainText('Your print progress');
+	await expect(page.getByTestId('apply-design')).toContainText('re-arranged for the new colors');
 	await page.getByRole('button', { name: 'Replace colors' }).click();
 	await expect(page.getByTestId('apply-dialog')).toHaveCount(0);
 	await expect(page.locator('li.slot[data-role="e2e-red"]')).toContainText('E2E Red');
@@ -237,10 +237,20 @@ test('the swatch picker hides types palettes never use until asked', async ({ pa
 	expect(
 		clean.filter((l) => /93A|silk|carbon|, TPU-?(85|90|93|98)A|\b(64|75)D\b/i.test(l))
 	).toEqual([]);
-	await picker.getByTestId('show-all-types').check();
+	// Type filter: one subtype at a time (98A), everything with "All types".
+	const type = picker.getByTestId('type-select');
+	await expect(type.locator('option').first()).toContainText('95A');
+	await type.selectOption('hardness:98A');
+	await expect.poll(async () => (await labels()).length).toBeGreaterThan(0);
+	const only98 = await labels();
+	expect(only98.every((l) => /98A/i.test(l))).toBe(true);
+	await expect(picker.locator('.sw.excl').first()).toBeVisible();
+	await type.selectOption('all');
 	await expect.poll(async () => (await labels()).length).toBeGreaterThan(clean.length);
 	await expect(picker.locator('.sw.excl').first()).toBeVisible();
 	expect((await labels()).some((l) => /not used by palettes/.test(l))).toBe(true);
+	await type.selectOption('');
+	await expect.poll(async () => (await labels()).length).toBe(clean.length);
 	// Brand chips are a multi-select.
 	await picker.getByRole('button', { name: 'Overture', exact: true }).click();
 	await picker.getByRole('button', { name: 'Sunlu', exact: true }).click();

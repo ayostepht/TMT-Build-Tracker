@@ -56,8 +56,14 @@ export async function respond(fn: () => unknown | Promise<unknown>): Promise<Res
 		if (e instanceof ApiError) {
 			// An error may carry a machine-readable `code` (quota refusals send 'quota').
 			const code = (e as { code?: unknown }).code;
+			// ...and extra JSON fields (`BuildStartedError` sends `started` and `summary`).
+			const extra = (e as { extra?: unknown }).extra;
 			return json(
-				{ error: e.message, ...(typeof code === 'string' ? { code } : {}) },
+				{
+					...(extra && typeof extra === 'object' ? extra : {}),
+					error: e.message,
+					...(typeof code === 'string' ? { code } : {})
+				},
 				{ status: e.status }
 			);
 		}

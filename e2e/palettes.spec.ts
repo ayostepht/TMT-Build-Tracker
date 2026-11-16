@@ -88,9 +88,94 @@ test('apply a pre-made palette: matched filaments show on Overview, Undo restore
 	await expect(page.locator('li.slot[data-role="primary"]')).toContainText(names[0]);
 });
 
+test('re-applying a palette resets moved parts, keeps locked ones, and Undo restores all', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'reapply');
+	// Wing Left sits on a non-default slot; Seat Center sits on Accent and gets locked below.
+	const r = await page.request.patch(`/api/builds/${buildId}/design`, {
+		data: { partRoles: { 'wing-left': 'primary', 'seat-center': 'accent' } }
+	});
+	expect(r.ok()).toBe(true);
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	const partRow = (slug: string) => page.locator(`[data-testid="part-row"][data-slug="${slug}"]`);
+	const slots = page.locator('li.slot');
+	await page.getByRole('tab', { name: 'Colors' }).click();
+	await expect(slots).toHaveCount(4);
+
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(partRow('wing-left')).toContainText('Primary');
+	await partRow('seat-center').click();
+	await page.getByTestId('part-lock').click();
+	await expect(page.getByTestId('part-lock')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('design-announce')).toContainText('part color locked');
+	await page.getByRole('button', { name: 'Close part details' }).click();
+	await expect(partRow('seat-center').getByTestId('part-row-locked')).toBeVisible();
+
+	await openPalettes(page);
+	await openReadyMade(page);
+	await page.locator('[data-palette="fire-truck"]').click();
+	await expect(page.getByTestId('palette-reset-note')).toContainText(/Resets 1 part change/);
+	await expect(page.getByTestId('palette-reset-note')).toContainText('1 locked kept');
+	await bar(page).getByRole('button', { name: 'Apply' }).click();
+	await expect(bar(page)).toHaveCount(0);
+
+	// The moved part is back on its kit slot; the locked one keeps its filament on an added slot.
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(partRow('wing-left')).toContainText('Accent');
+	await expect(partRow('wing-left')).not.toContainText('Primary');
+	await expect(partRow('seat-center').getByTestId('part-row-locked')).toBeVisible();
+	await page.getByRole('tab', { name: 'Colors' }).click();
+	await expect(slots).toHaveCount(5);
+
+	// Undo restores the part, the filaments and the slot count.
+	await page.getByRole('button', { name: 'Undo' }).click();
+	await expect(slots).toHaveCount(4);
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(partRow('wing-left')).toContainText('Primary');
+	await expect(partRow('seat-center')).toContainText('Accent');
+	await expect(partRow('seat-center').getByTestId('part-row-locked')).toBeVisible();
+});
+
 const PINK = '#ec407a';
 const PURPLE = '#8e24aa';
 const real = { petg: serverSwatches('petg'), tpu: serverSwatches('tpu') };
+
+test('Lock part color locks only the tapped part, even with Both sides on', async ({ page }) => {
+	const { buildId } = await ownerWithBuild(page, 'lock-one');
+	// Wing Left and Wing Right share a symmetry group but sit on different slots.
+	const r = await page.request.patch(`/api/builds/${buildId}/design`, {
+		data: { partRoles: { 'wing-left': 'primary', 'wing-right': 'accent' } }
+	});
+	expect(r.ok()).toBe(true);
+	await page.goto(`/builds/${buildId}/design`);
+	await page.waitForLoadState('networkidle');
+	const partRow = (slug: string) => page.locator(`[data-testid="part-row"][data-slug="${slug}"]`);
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await partRow('wing-left').click();
+	await expect(page.getByTestId('part-lock')).toContainText('Lock part color');
+	await page.getByTestId('part-lock').click();
+	await expect(page.getByTestId('part-lock')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('design-announce')).toContainText('Wing Left part color locked');
+	await page.getByRole('button', { name: 'Close part details' }).click();
+	await expect(partRow('wing-left').getByTestId('part-row-locked')).toBeVisible();
+	await expect(partRow('wing-right').getByTestId('part-row-locked')).toHaveCount(0);
+
+	// A palette adds at most one slot, and its name differs from the kit slot's.
+	await openPalettes(page);
+	await openReadyMade(page);
+	await page.locator('[data-palette="fire-truck"]').click();
+	await expect(page.getByTestId('palette-reset-note')).toContainText('1 locked kept');
+	await bar(page).getByRole('button', { name: 'Apply' }).click();
+	await expect(bar(page)).toHaveCount(0);
+	await page.getByRole('tab', { name: 'Colors' }).click();
+	await expect(page.locator('li.slot')).toHaveCount(5);
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	await expect(partRow('wing-right').getByTestId('part-row-locked')).toHaveCount(0);
+	await expect(partRow('wing-left')).toContainText('· added');
+	await expect(page.locator('.pchip', { hasText: '· added' })).toHaveCount(1);
+});
 
 test('lock pink and purple, pick from auto-filled variations, preview, apply and undo', async ({
 	page

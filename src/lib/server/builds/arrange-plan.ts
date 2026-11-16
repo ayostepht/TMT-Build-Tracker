@@ -21,7 +21,7 @@ import type { BuildView } from '#lib/domain/types.ts';
 import { effectiveKeepOut } from '#lib/printers/printer.ts';
 import type { Db } from '../db';
 import { buildPlates, builds, templatePlateLayouts, templatePrintGeometry } from '../db/schema';
-import { loadBuildView } from './view';
+import { gramsSourceOf, loadBuildView } from './view';
 import { estimateArrangedPlates, loadTimeModel } from './time-model';
 import { ensureSilhouettes } from '../print-geometry/store';
 
@@ -159,28 +159,56 @@ export function signature(plates: Pick<ArrangedPlate, 'parts' | 'roles' | 'runs'
 /** The build's plate-attached print logs (they would be orphaned by replacing plates). */
 export const hasPlateRuns = (view: BuildView) => view.runs.some((r) => r.plateNumber != null);
 
+/** What survives a plate replacement: typed time and typed grams (see `manualTimes`). */
+export interface PlateManuals {
+	manualEstSeconds: number | null;
+	manualEstSource: 'user' | 'printer' | null;
+	/** Typed plate grams; only present when the old plate's grams were typed by hand. */
+	typedGrams?: {
+		slicerGrams: number | null;
+		slicerByPart: Record<string, number>;
+		slicerGramsSource: 'user';
+	};
+}
+
 /**
- * Manual plate times keyed for carrying over when plates are replaced: a new plate keeps the old
- * plate's manual time only when it has the same number and the same set of parts.
+ * Manual plate times and typed plate grams keyed for carrying over when plates are replaced: a new
+ * plate keeps the old plate's manual time (and typed grams, source 'user') only when it has the same
+ * number and the same set of parts. Grams that came from a file or a printer job are not carried:
+ * the new plates have their own source.
  */
 export function manualTimes(
 	tx: Db,
 	buildId: string
-): (
-	number: number,
-	parts: string[]
-) => { manualEstSeconds: number | null; manualEstSource: 'user' | 'printer' | null } {
+): (number: number, parts: string[]) => PlateManuals {
 	const old = tx.select().from(buildPlates).where(eq(buildPlates.buildId, buildId)).all();
 	const key = (n: number, parts: string[]) => `${n}:${[...parts].sort().join(',')}`;
-	const m = new Map(
-		old
-			.filter((o) => o.manualEstSeconds)
-			.map((o) => [key(o.number, o.parts), { s: o.manualEstSeconds!, src: o.manualEstSource }])
-	);
-	return (number, parts) => {
-		const h = m.get(key(number, parts));
-		return { manualEstSeconds: h?.s ?? null, manualEstSource: h ? (h.src ?? 'user') : null };
-	};
+	const m = new Map<string, PlateManuals>();
+	for (const o of old) {
+		const typed =
+			gramsSourceOf(o, undefined, false) === 'user' &&
+			((o.slicerGrams ?? 0) > 0 || Object.values(o.slicerByPart).some((v) => v > 0));
+		if (!o.manualEstSeconds && !typed) continue;
+		m.set(key(o.number, o.parts), {
+			manualEstSeconds: o.manualEstSeconds ?? null,
+			manualEstSource: o.manualEstSeconds ? (o.manualEstSource ?? 'user') : null,
+			typedGrams: typed
+				? {
+						slicerGrams: o.slicerGrams,
+						slicerByPart: o.slicerByPart,
+						slicerGramsSource: 'user'
+					}
+				: undefined
+		});
+	}
+	return (number, parts) =>
+		m.get(key(number, parts)) ?? { manualEstSeconds: null, manualEstSource: null };
+}
+
+/** Column values to spread into an insert: the carried time, and typed grams when there are any. */
+export function carryManuals(h: PlateManuals) {
+	const { typedGrams, ...time } = h;
+	return { ...time, ...(typedGrams ?? {}) };
 }
 
 /** Replace the build's plates with a plan. Callers must have dealt with plate-attached runs. */
@@ -214,7 +242,7 @@ export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 				runs: pl.runs,
 				perPartRuns: false,
 				parts: pl.parts,
-				...manualFor(pl.number, pl.parts),
+				...carryManuals(manualFor(pl.number, pl.parts)),
 				source: ARRANGED_SOURCE,
 				arrangement: pl
 			})
@@ -226,8 +254,9 @@ export function writePlan(tx: Db, buildId: string, plan: Plan): number {
 /**
  * After a change that moves parts between colors or switches variants or printer:
  * if the build's plates are arranged and no print log hangs on a plate, arrange again.
- * Returns whether plates were rewritten. With plate logs it does nothing (the UI offers
- * "re-arrange" and asks before converting the logs).
+ * Returns whether plates were rewritten. With plate logs, or once the build has started
+ * (`view.started`: any run, part not To print, Printing part or live printer job) it does nothing
+ * (the UI offers "re-arrange" and asks first).
  */
 export function autoRearrange(
 	tx: Db,
@@ -242,6 +271,10 @@ export function autoRearrange(
 		.where(and(eq(builds.id, buildId)))
 		.get();
 	if (b?.layout !== ARRANGED_LAYOUT || hasPlateRuns(view)) return false;
+	// A build that has started printing keeps its plates: rewriting them renumbers plates under a
+	// live printer job and under Printing parts. The plates go stale instead (banner offers a
+	// deliberate "Re-arrange"). Issue #56.
+	if (view.started.started) return false;
 	const plan = planArrangement(view, footprints, layoutHint);
 	if (!plan) return false;
 	writePlan(tx, buildId, plan);
