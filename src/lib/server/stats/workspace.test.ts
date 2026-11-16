@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { ApiError } from '../access';
 import { openDb, runMigrations, type Db } from '../db';
 import { buildStatsSummary, workspaceStats } from '#lib/domain/stats.ts';
@@ -37,8 +38,18 @@ function addMember(orgId: string, userId: string, role: string) {
 		})
 		.run();
 }
-const mk = (orgId: string, name: string, kind: 'build' | 'draft' = 'build') =>
-	createBuild(db, { organizationId: orgId, templateId, designId: null, name, kind }, 'owner');
+// `createdAt` is a SQL default (the real clock), and the stats window ends at NOW: a build created
+// "today" would drop out of it once the real date passes NOW. Stamp builds a few days before NOW.
+const CREATED = new Date(2026, 10, 5, 12);
+const mk = (orgId: string, name: string, kind: 'build' | 'draft' = 'build') => {
+	const id = createBuild(
+		db,
+		{ organizationId: orgId, templateId, designId: null, name, kind },
+		'owner'
+	);
+	db.update(builds).set({ createdAt: CREATED }).where(eq(builds.id, id)).run();
+	return id;
+};
 function addRuns(buildId: string, n: number, over: Partial<typeof printRuns.$inferInsert> = {}) {
 	db.insert(printRuns)
 		.values(
