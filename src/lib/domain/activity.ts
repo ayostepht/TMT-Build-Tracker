@@ -286,11 +286,56 @@ function describeMarked(a: ActivityItem, view: Names): string {
 		case 'filament.stock.add': {
 			const kg = num(p.kg);
 			const note = str(p.note);
-			return `${who} added ${kg !== null ? `${fmtSpools(kg)} kg` : 'a spool'} of ${fil(p.role)}${note ? ` (${note})` : ''}`;
+			const sp = num(p.spoolmanSpoolId);
+			return `${who} added ${kg !== null ? `${fmtSpools(kg)} kg` : 'a spool'} of ${fil(p.role)}${note ? ` (${note})` : ''}${sp !== null ? ` and created Spoolman spool #${sp}` : ''}`;
 		}
 		case 'filament.stock.remove': {
 			const kg = num(p.kg);
-			return `${who} removed an added spool of ${fil(p.role)}${kg !== null ? ` (${fmtSpools(kg)} kg)` : ''}`;
+			const sp = num(p.spoolmanSpoolId);
+			const tail =
+				sp === null
+					? ''
+					: p.archived === true
+						? ` and archived Spoolman spool #${sp}`
+						: p.archived === false
+							? `; Spoolman spool #${sp} was kept`
+							: '';
+			return `${who} removed an added spool of ${fil(p.role)}${kg !== null ? ` (${fmtSpools(kg)} kg)` : ''}${tail}`;
+		}
+		case 'filament.spoolman.link': {
+			const name = str(p.filamentName);
+			const id = num(p.filamentId);
+			const target = `Spoolman filament${name ? ` "${name}"` : ''}${id !== null ? ` (#${id})` : ''}`;
+			return p.relinked === true
+				? `${who} linked ${fil(p.role)} to ${target} instead of the one it was linked to`
+				: `${who} linked ${fil(p.role)} to ${target}`;
+		}
+		case 'filament.spoolman.unlink': {
+			const name = str(p.filamentName);
+			return `${who} unlinked ${fil(p.role)} from Spoolman${name ? ` filament "${name}"` : ''}; its own spools count again`;
+		}
+		case 'filament.spoolman.spool': {
+			const id = num(p.spoolId);
+			const name = str(p.spoolName);
+			const from = num(p.fromSpoolId);
+			if (id === null) return `${who} cleared the Spoolman spool of ${fil(p.role)}`;
+			const to = `Spoolman spool #${id}${name ? ` (${name})` : ''}`;
+			return p.auto === true
+				? `${fil(p.role)} moved on to ${to}${from !== null ? ` because spool #${from} ran out` : ''}`
+				: `${who} set ${fil(p.role)} to ${to}`;
+		}
+		case 'filament.spoolman.create': {
+			const kind = p.what === 'vendor' || p.what === 'spool' ? p.what : 'filament';
+			const name = str(p.name);
+			const id = num(p.id);
+			return `${who} created Spoolman ${kind}${name ? ` "${name}"` : ''}${id !== null ? ` (#${id})` : ''}${str(p.role) ? ` for ${fil(p.role)}` : ''}`;
+		}
+		case 'filament.spoolman.prelink': {
+			const g = num(p.grams);
+			const undone = p.undone === true;
+			return undone
+				? `${who} gave back ${g !== null ? `${fmt(g)} g` : 'the grams'} to Spoolman for ${fil(p.role)} (prints logged before it was linked)`
+				: `${who} subtracted ${g !== null ? `${fmt(g)} g` : 'the grams'} from Spoolman for ${fil(p.role)} (prints logged before it was linked)`;
 		}
 		case 'filament.update': {
 			const bits: string[] = [];

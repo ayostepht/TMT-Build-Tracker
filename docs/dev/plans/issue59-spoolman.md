@@ -3,7 +3,7 @@
 _Recovered 2026-11-16 from the previous orchestrator session. Rewrite in place as decisions
 change._
 
-Branch `feat/spoolman-filaments` (from `edge` a71f3ac), developed in its own worktree(s).
+Branch `feat/spoolman-filaments` (from `edge` 3420884), developed in its own worktree(s).
 **Nothing merges until 0.9.2 is on `main`** (maintainer, 2026-11-16); pull requests may be
 opened as drafts. Three stacked pull requests: (1) discoverability, filament link,
 auto-advance, Spoolman stock, the "kept up to date by" workspace setting and pre-link
@@ -54,3 +54,15 @@ vendor/filament in Spoolman. The clickable prototype was approved ("Looks great"
 - Catalog (question 5): extend the bundled catalog with the SpoolmanDB id, density and spool
   weight (~+300 KB), so suggestions work offline and the same everywhere. No runtime
   `/external/filament` dependency.
+
+## Progress
+
+- 2026-11-16: migration 0003 + typed accessors done (`kit-and-startup`); contracts in
+  `docs/architecture.md` "Kit and startup".
+- 2026-11-16: `print_runs.created_at` added to 0003 (maintainer: exact column); build-state
+  rules, view and activity; catalog regenerated with SpoolmanDB ids; printers stage 3 (server
+  side, shared components, Settings). Decision: switching kept-by to "something else" keeps
+  existing deductions; only deleting or undoing a print gives grams back.
+- Next: security review; place `SpoolmanSlotLine` in FilamentTiles / wizard (app-shell) and
+  SlotPanel (design-studio-ui) with screenshots; e2e spec + printers.spec on the shared mock;
+  verifier; draft pull request (no merge before 0.9.2 is on `main`).

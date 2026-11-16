@@ -714,6 +714,8 @@ export interface SpoolDto {
 export interface OrgSettingsDto {
 	spoolmanUrl: string | null;
 	spoolmanAutoDeduct: boolean;
+	/** Who keeps Spoolman's weights up to date: 'app' (this app deducts logged grams) or 'other'. */
+	spoolmanKeptBy: 'app' | 'other';
 	autoLogPrints: boolean;
 }
 
@@ -823,8 +825,69 @@ export const buildSpoolman = (buildId: string, all = false) =>
 		autoDeduct: boolean;
 		linked: Record<string, SpoolDto | null>;
 		spools: SpoolDto[];
+		/** The server re-fetched linked filaments and their cached stock differs from before. */
+		changed?: boolean;
 		error?: string;
 	}>('GET', `${b(buildId)}/spoolman${all ? '?all=1' : ''}`);
+export interface SpoolmanSpoolStockDto {
+	id: number;
+	remainingG: number | null;
+	initialG: number | null;
+	usedG: number | null;
+	archived: boolean;
+	location: string | null;
+}
+export interface SpoolmanFilamentDto {
+	id: number;
+	name: string;
+	vendor: string | null;
+	material: string | null;
+	colorHex: string | null;
+	density: number | null;
+	diameter: number | null;
+	weightG: number | null;
+	spoolWeightG: number | null;
+	externalId: string | null;
+	spools: SpoolmanSpoolStockDto[];
+}
+export interface SpoolmanSuggestionDto {
+	filament: SpoolmanFilamentDto;
+	score: number;
+	level: 'exact' | 'likely' | 'possible' | 'other';
+	reasons: string[];
+	openSpoolCount: number;
+}
+export interface SpoolmanSuggestionsDto {
+	configured: boolean;
+	offline: boolean;
+	error?: string;
+	suggestions: SpoolmanSuggestionDto[];
+}
+export interface SpoolmanLinkResultDto {
+	linked: boolean;
+	filamentId: number | null;
+	filamentName: string | null;
+	spoolId: number | null;
+	/** Grams logged on this build for the slot before it was linked. */
+	preLinkLoggedG: number;
+}
+const sm = (buildId: string, role: string) =>
+	`${b(buildId)}/filaments/${encodeURIComponent(role)}/spoolman`;
+/** Spoolman filaments ranked for a slot. */
+export const spoolmanSuggestions = (buildId: string, role: string) =>
+	call<SpoolmanSuggestionsDto>('GET', sm(buildId, role));
+/** Link a slot to a Spoolman filament, or unlink it with null. */
+export const linkSpoolmanFilament = (buildId: string, role: string, filamentId: number | null) =>
+	call<SpoolmanLinkResultDto>('PUT', sm(buildId, role), { filamentId });
+/** Choose (null clears) the spool of the linked filament that deductions start on. */
+export const setSpoolmanSpool = (buildId: string, role: string, spoolId: number | null) =>
+	call<{ spoolId: number | null }>('PUT', `${sm(buildId, role)}/spool`, { spoolId });
+/** Subtract the grams logged before the link from Spoolman, once. */
+export const prelinkDeduct = (buildId: string, role: string) =>
+	call<{ grams: number; warning?: string }>('POST', `${sm(buildId, role)}/prelink`);
+/** Give those grams back. */
+export const prelinkUndo = (buildId: string, role: string) =>
+	call<{ grams: number; warning?: string }>('DELETE', `${sm(buildId, role)}/prelink`);
 export const linkFilamentSpool = (
 	buildId: string,
 	role: string,

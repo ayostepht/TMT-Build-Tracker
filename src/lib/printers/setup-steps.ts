@@ -121,11 +121,11 @@ export const ISSUES_URL =
 
 export const SPOOLMAN_TEXT = {
 	description:
-		'Spoolman tracks your filament spools. With it connected, the grams you log are taken off the spool you linked.',
+		'Spoolman tracks your filament spools. Connect it, link each filament to its Spoolman filament, and the app shows what is left, keeps it up to date and moves on to the next spool when one runs out.',
 	steps: [
 		'Spoolman is a separate app. Run it on your own network, for example on the same server as this app.',
 		'Enter its address below, like http://192.168.0.20:7912. The address must be reachable from where this app runs.',
-		'Turn on “Deduct logged grams” so each logged print takes its grams off the linked spool. Link each filament to a spool in a build’s Settings.'
+		'Choose who keeps Spoolman up to date: this app (each logged print takes its grams off the linked spool) or something else. Then link each filament to its Spoolman filament on the build’s Overview, in the setup wizard or in the Design tab.'
 	],
 	anchor: 'spoolman-and-automatic-logging',
 	hostedReason:

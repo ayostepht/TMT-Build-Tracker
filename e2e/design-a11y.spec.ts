@@ -37,11 +37,23 @@ async function tabStops(page: Page, scope: string, max = 80): Promise<Stop[]> {
 				el.getAttribute('placeholder') ||
 				'';
 			const r = el.getBoundingClientRect();
+			// Vertical position in the content of the nearest scrolling ancestor (the slot column
+			// scrolls on its own), so tabbing that scrolls it does not change the measured order.
+			let box: HTMLElement | null = el.parentElement;
+			while (box && box !== document.body) {
+				const oy = getComputedStyle(box).overflowY;
+				if ((oy === 'auto' || oy === 'scroll') && box.scrollHeight > box.clientHeight) break;
+				box = box.parentElement;
+			}
+			const inner =
+				box && box !== document.body
+					? r.top - box.getBoundingClientRect().top + box.scrollTop
+					: r.top + window.scrollY;
 			return {
 				tag: el.tagName.toLowerCase(),
 				name: label.replace(/\s+/g, ' ').trim(),
 				visible: outline || shadow,
-				top: r.top + window.scrollY,
+				top: inner,
 				left: r.left
 			};
 		}, scope);

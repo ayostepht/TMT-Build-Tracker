@@ -12,6 +12,7 @@
 	import StartedApplyDialog from '#lib/components/design/share/StartedApplyDialog.svelte';
 	import ExportCard from '#lib/components/ExportCard.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
+	import SpoolmanSlotLine from '#lib/components/SpoolmanSlotLine.svelte';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import type { PageProps } from './$types';
 
@@ -41,7 +42,24 @@
 	/** Export needs a bed (size and filament slots): a printer, or a built-in MakeGood layout, which stands for its bed. Files is where the wizard stops without either. */
 	const needsPrinter = $derived(!ctx.view.printer && !ctx.view.layoutPrinter);
 	const MAX_WITHOUT_PRINTER = 4;
+	/**
+	 * Virtual step `?step=spoolman` (issue #59): between Colors (3) and Files (4) when the workspace has
+	 * Spoolman set up. It is not numbered, saves no progress of its own and Colors stays marked as the
+	 * current step, so the 1-5 numbering and links keep working.
+	 */
+	const spoolmanOn = $derived(ctx.view.spoolman?.configured ?? false);
+	const isSpoolman = $derived(param === 'spoolman' && spoolmanOn && reached >= 3);
+	let smPending = $state(0);
+	async function smChanged() {
+		smPending++;
+		try {
+			await ctx.refresh();
+		} finally {
+			smPending--;
+		}
+	}
 	const step = $derived.by(() => {
+		if (isSpoolman) return 3;
 		const n = param && param in STEP_NAMES ? STEP_NAMES[param] : Number(param);
 		const asked =
 			Number.isInteger(n) && n >= 1 && n <= 5
@@ -59,7 +77,7 @@
 	let busy = $state(false);
 	let error = $state('');
 
-	async function go(to: number | 'done') {
+	async function go(to: number | 'done' | 'spoolman') {
 		error = '';
 		if (
 			to === 'done'
@@ -131,6 +149,12 @@
 		asking = false;
 		designId = '';
 	}
+	const nextTo = $derived<number | 'spoolman'>(
+		step === 3 && !isSpoolman && spoolmanOn ? 'spoolman' : isSpoolman ? 4 : step + 1
+	);
+	const backTo = $derived<number | 'spoolman'>(
+		step === 4 && spoolmanOn ? 'spoolman' : isSpoolman ? 3 : step - 1
+	);
 	const partNames = $derived(Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name])));
 </script>
 
@@ -139,7 +163,9 @@
 <section class="wizard stack" data-testid="setup-wizard">
 	<header class="wh">
 		<div>
-			<div class="kicker">{isDone ? 'Setup' : `Setup · step ${step} of 5`}</div>
+			<div class="kicker">
+				{isDone ? 'Setup' : `Setup · step ${step} of 5${isSpoolman ? ' · Spoolman' : ''}`}
+			</div>
 			<h1>{ctx.view.build.name}</h1>
 		</div>
 		<button
@@ -217,6 +243,28 @@
 				<p class="muted">This kit has no options. Carry on.</p>
 			{/if}
 		</section>
+	{:else if isSpoolman}
+		<section class="card" aria-labelledby="sm-h" data-testid="setup-spoolman">
+			<h2 id="sm-h">Spoolman</h2>
+			<p class="muted">
+				Link each color to its filament in Spoolman so the grams you print come off your real spool.
+				Skip any you don't track: you can link them later on the Overview.
+			</p>
+			<ul class="smlist">
+				{#each ctx.view.filaments as f (f.key)}
+					<li class="smrow" data-testid="setup-spoolman-slot" data-role={f.key}>
+						<div class="smname"><Swatch hex={f.hex} tpu={f.tpu} /><b>{f.name}</b></div>
+						<SpoolmanSlotLine
+							buildId={ctx.id}
+							slot={f}
+							workspaceConfigured={spoolmanOn}
+							canEdit={ctx.canEdit}
+							onchange={smChanged}
+						/>
+					</li>
+				{/each}
+			</ul>
+		</section>
 	{:else if step === 3}
 		<div class="colorbar">
 			<h2 id="col-h">Colors</h2>
@@ -280,7 +328,7 @@
 		{/if}
 		<div class="nav">
 			{#if step > 1}
-				<button type="button" class="btn" data-testid="wizard-back" onclick={() => go(step - 1)}
+				<button type="button" class="btn" data-testid="wizard-back" onclick={() => go(backTo)}
 					>Back</button
 				>
 			{/if}
@@ -290,9 +338,9 @@
 					type="button"
 					class="btn primary"
 					data-testid="wizard-next"
-					disabled={!!blocker}
+					disabled={!!blocker || smPending > 0}
 					aria-describedby={blocker ? 'wizard-blocker' : undefined}
-					onclick={() => go(step + 1)}>Continue</button
+					onclick={() => go(nextTo)}>Continue</button
 				>
 			{:else}
 				<button
@@ -398,6 +446,32 @@
 	}
 	.designs .btn {
 		min-height: 40px;
+	}
+	.smlist {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0;
+	}
+	.smrow {
+		display: grid;
+		gap: 8px;
+		padding: 12px 0;
+		border-top: 1px solid var(--line);
+		min-width: 0;
+	}
+	.smrow :global(.sl) {
+		justify-items: start;
+	}
+	.smrow:first-child {
+		border-top: 0;
+	}
+	.smname {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
 	}
 	.strip {
 		display: inline-flex;

@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { startMockSpoolman, type MockSpoolman } from '../src/lib/server/spoolman/mock-spoolman';
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { chooseStatus } from './status-helpers';
@@ -9,50 +9,16 @@ const SHOTS = 'data/shots-m7';
 const FILE = 'Plate 1 - Handle Left.gcode';
 
 let mock: MockSdcp;
-let spoolman: Server;
-let spoolmanPort = 0;
-let used = 100;
+let spoolman: MockSpoolman;
 
 test.beforeAll(async () => {
 	mock = new MockSdcp();
 	await mock.start();
-	spoolman = createServer((req, res) => {
-		let body = '';
-		req.on('data', (c) => (body += c));
-		req.on('end', () => {
-			res.setHeader('content-type', 'application/json');
-			const spool = (id: number, name: string, hex: string, mat: string, usedG: number) => ({
-				id,
-				archived: false,
-				used_weight: usedG,
-				initial_weight: 1000,
-				remaining_weight: 1000 - usedG,
-				filament: { name, material: mat, color_hex: hex, vendor: { name: 'Overture' } }
-			});
-			if (req.url === '/api/v1/info') return res.end('{"version":"0.22.1"}');
-			if (req.url?.startsWith('/api/v1/spool?'))
-				return res.end(
-					JSON.stringify([
-						spool(1, 'Cobalt Blue', '2b3f9e', 'PETG', used),
-						spool(2, 'Signal Orange', 'f26b1d', 'PETG', 20),
-						spool(3, 'Black', '151515', 'TPU', 300)
-					])
-				);
-			if (req.method === 'GET' && req.url === '/api/v1/spool/1')
-				return res.end(JSON.stringify(spool(1, 'Cobalt Blue', '2b3f9e', 'PETG', used)));
-			if (req.method === 'PATCH' && /\/api\/v1\/spool\/1$/.test(req.url ?? ''))
-				used = JSON.parse(body).used_weight;
-			if (req.method === 'PUT' && /\/api\/v1\/spool\/1\/use$/.test(req.url ?? ''))
-				used += JSON.parse(body).use_weight;
-			res.end('{}');
-		});
-	});
-	await new Promise<void>((r) => spoolman.listen(0, '127.0.0.1', r));
-	spoolmanPort = (spoolman.address() as { port: number }).port;
+	spoolman = await startMockSpoolman();
 });
 test.afterAll(async () => {
 	await mock.stop();
-	await new Promise((r) => spoolman.close(() => r(null)));
+	await spoolman.close();
 });
 
 test('printer: add, test connection, live status, job links to a plate, finish, log prompt', async ({
@@ -194,7 +160,15 @@ test('spoolman: link a spool to a filament, see it on the tiles, grams deducted 
 	page
 }) => {
 	test.setTimeout(120_000);
-	used = 100;
+	spoolman.reset();
+	for (const [id, name, hex, material, usedG] of [
+		[1, 'Cobalt Blue', '2b3f9e', 'PETG', 100],
+		[2, 'Signal Orange', 'f26b1d', 'PETG', 20],
+		[3, 'Black', '151515', 'TPU', 300]
+	] as const) {
+		spoolman.addFilament({ id, name, color_hex: hex, material, vendor: { id, name: 'Overture' } });
+		spoolman.addSpool({ id, filament_id: id, initial_weight: 1000, used_weight: usedG });
+	}
 	await page.setViewportSize({ width: 390, height: 844 });
 	const { chapterUrl, buildId } = await ownerWithBuild(page, 'spoolman');
 
@@ -205,7 +179,7 @@ test('spoolman: link a spool to a filament, see it on the tiles, grams deducted 
 	// Team page: set the address, test, turn on auto-deduct.
 	await page.goto(`${chapterUrl}/integrations`);
 	await page.waitForLoadState('networkidle');
-	await page.getByTestId('spoolman-url').fill(`127.0.0.1:${spoolmanPort}`);
+	await page.getByTestId('spoolman-url').fill(spoolman.url.replace(/^https?:\/\//, ''));
 	await page.getByTestId('spoolman-save').click();
 	await expect(page.getByTestId('spoolman-deduct')).toBeEnabled();
 	await page.getByTestId('spoolman-deduct').check();
@@ -233,7 +207,11 @@ test('spoolman: link a spool to a filament, see it on the tiles, grams deducted 
 
 	// Overview tile shows remaining grams.
 	await page.goto(`/builds/${buildId}`);
-	await expect(page.getByTestId('spool-remaining').first()).toContainText('900 g left');
+	// The shared fake gives its filaments ids, so opening the Overview upgrades this spool-only
+	// link to a filament link (#59): the tile shows the Spoolman line, not the legacy figure.
+	await expect(
+		page.getByTestId('spool-remaining').or(page.getByTestId('spoolman-stock')).first()
+	).toContainText('900 g left');
 	await page.screenshot({ path: `${SHOTS}/spoolman-tiles-1440-light.png`, fullPage: true });
 
 	// Logging a run deducts from the spool (Handle Left is on the first role).
@@ -247,15 +225,15 @@ test('spoolman: link a spool to a filament, see it on the tiles, grams deducted 
 		data: { plateNumber: 1, date: '2026-11-03', result: 'Success', grams: 60, hours: 2 }
 	});
 	expect((await res.json()).spoolmanWarning).toBeUndefined();
-	expect(used).toBeGreaterThan(100);
-	const first = used;
+	expect(spoolman.spools.get(1)!.used_weight).toBeGreaterThan(100);
+	const first = spoolman.spools.get(1)!.used_weight;
 	// Deleting the run puts it back.
 	const view = await (await page.request.get(`/api/builds/${buildId}/view`)).json();
 	const runId = view.runs[view.runs.length - 1].id;
 	await page.request.delete(`/api/builds/${buildId}/runs/${runId}`, {
 		headers: { origin: new URL(page.url()).origin }
 	});
-	await expect.poll(() => used).toBeLessThan(first);
+	await expect.poll(() => spoolman.spools.get(1)!.used_weight).toBeLessThan(first);
 });
 
 async function orgId(page: import('@playwright/test').Page): Promise<string> {

@@ -85,8 +85,13 @@ function seedEveryTable(c: Database.Database) {
 const POST_BASELINE_COLUMNS = new Set([
 	'build_parts.manual_grams',
 	'build_plates.slicer_grams_source',
-	'build_filaments.spool_adds'
+	'build_filaments.spool_adds',
+	'build_filaments.spoolman_filament_id',
+	'build_filaments.spoolman_linked_at',
+	'print_runs.created_at'
 ]);
+/** Tables added after the baseline (empty in the legacy database). */
+const POST_BASELINE_TABLES = new Set(['spoolman_cache']);
 /** Number of migrations in the committed journal (the baseline plus later ones). */
 const JOURNAL_LENGTH = (
 	JSON.parse(readFileSync('./drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] }
@@ -95,6 +100,7 @@ const JOURNAL_LENGTH = (
 function contentHashes(c: Database.Database) {
 	const out: Record<string, { n: number; hash: string }> = {};
 	for (const t of tablesOf(c)) {
+		if (POST_BASELINE_TABLES.has(t)) continue;
 		const cols = (c.pragma(`table_info("${t}")`) as { name: string }[])
 			.map((x) => x.name)
 			.filter((x) => !POST_BASELINE_COLUMNS.has(`${t}.${x}`))

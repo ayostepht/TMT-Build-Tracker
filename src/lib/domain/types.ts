@@ -37,6 +37,55 @@ export interface SpoolAddView {
 	note?: string;
 }
 
+/** Who keeps Spoolman's weights up to date (workspace setting). */
+export type SpoolmanKeptBy = 'app' | 'other';
+
+/** Last-seen Spoolman stock for a linked filament, from `spoolman_cache` (works offline). */
+export interface SpoolmanStockView {
+	/** Grams left on the linked spool, or (no spool linked) on the filament's open spools; null = unknown. */
+	remainingG: number | null;
+	/** Grams the spool(s) held when new; null = unknown. */
+	initialG: number | null;
+	/** When the cache row was fetched (ms since the epoch). */
+	fetchedAt: number;
+	/** The last fetch failed: the numbers are the last good ones. */
+	stale: boolean;
+	error: string | null;
+}
+
+/** What a filament slot knows about Spoolman (issue #59). Always set by `loadBuildView` once the schema has it. */
+export interface RoleSpoolman {
+	/** Linked Spoolman filament (`build_filaments.spoolman_filament_id`). While set the app's own spools are hidden from Spare. */
+	filamentId: number | null;
+	/** Name of the linked Spoolman filament ("Vendor Name") from the cache; null when not cached yet. */
+	filamentName: string | null;
+	/** Where the linked spool is kept (Spoolman's location field) from the cache; null when unknown. */
+	spoolName: string | null;
+	/** Linked Spoolman spool (the legacy per-spool link; may exist without a filament). */
+	spoolId: number | null;
+	/** When the slot was linked (ms); null = unknown (legacy spool-only link: no pre-link skipping). */
+	linkedAt: number | null;
+	/** Workspace "kept up to date by" mode, copied here so one slot can be read alone. */
+	keptBy: SpoolmanKeptBy;
+	/** Other builds of this workspace linked to the same Spoolman filament ("Shared with N other builds"). */
+	sharedWith: number;
+	/** Cached stock; null when the filament was never fetched. */
+	stock: SpoolmanStockView | null;
+	/** Grams the app has deducted from Spoolman for this slot's runs of this build (ledger, excluding the pre-link entry). */
+	deductedG: number;
+	/** Grams of the one-off pre-link deduction (0 = not taken). */
+	prelinkDeductedG: number;
+	/** Grams logged on this build before the link that were never deducted (the "N g already logged" figure). */
+	preLinkLoggedG: number;
+}
+
+/** Workspace-level Spoolman facts a build view needs. */
+export interface BuildSpoolman {
+	/** A Spoolman address is saved for the workspace. */
+	configured: boolean;
+	keptBy: SpoolmanKeptBy;
+}
+
 /** A filament slot in this build: a template role with the build's chosen filament. */
 export interface FilamentRole {
 	key: string; // template role key: primary | accent | soft | tire | …
@@ -49,6 +98,8 @@ export interface FilamentRole {
 	spoolAdds?: SpoolAddView[];
 	recommendedSpools: number;
 	spoolmanSpoolId: number | null;
+	/** Spoolman link, stock and ledger summary (#59). Optional so older fixtures still type-check. */
+	spoolman?: RoleSpoolman;
 	/** True for the template's own slots (primary, accent, soft, tire, …): they can be recoloured but never removed. */
 	kit: boolean;
 }
@@ -164,10 +215,12 @@ export interface PrintRun {
 	userId: string | null;
 	userName: string | null;
 	note: string;
+	/** When the run was logged (ms since the epoch), from `print_runs.created_at`; null/absent when unknown. Used by the Spoolman pre-link rule. */
+	createdAt?: number | null;
 }
 
 /** Input for logging a run (what the UI sends; server adds id/user). */
-export type PrintRunInput = Omit<PrintRun, 'id' | 'userId' | 'userName'>;
+export type PrintRunInput = Omit<PrintRun, 'id' | 'userId' | 'userName' | 'createdAt'>;
 
 export interface ActivityItem {
 	id: string;
@@ -285,6 +338,8 @@ export interface BuildView {
 	role: TeamRole;
 	canEdit: boolean; // owner or editor
 	filaments: FilamentRole[];
+	/** Workspace Spoolman facts (#59); absent in fixtures. */
+	spoolman?: BuildSpoolman;
 	parts: PartDef[]; // active parts only (variant choices applied), sorted by `sort`
 	state: Record<string, PartState>; // by part slug; every active part has an entry
 	variantGroups: VariantGroup[]; // all groups with all options, for the chooser

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readCached } from '../spoolman/cache';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
 	applyRun,
@@ -1258,7 +1259,17 @@ export function linkSpool(
 		bad('spoolId must be a whole number');
 	const name = optStr(body.spoolName, 'spoolName', 200) ?? null;
 	mutateBuild(db, buildId, userId, (tx, view) => {
-		if (!view.filaments.some((f) => f.key === role)) throw new ApiError(404, 'Unknown filament');
+		const slot = view.filaments.find((f) => f.key === role);
+		if (!slot) throw new ApiError(404, 'Unknown filament');
+		// A slot linked to a Spoolman filament only takes one of that filament's own spools.
+		const fid = slot.spoolman?.filamentId ?? null;
+		if (id !== null && fid != null) {
+			const cached = readCached(tx, view.build.organizationId, fid);
+			if (!cached?.spools.some((x) => x.id === id))
+				bad(
+					'That spool does not belong to the linked Spoolman filament. Pick it with the Spoolman spool chooser.'
+				);
+		}
 		tx.update(buildFilaments)
 			.set({ spoolmanSpoolId: id as number | null })
 			.where(and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, role)))
