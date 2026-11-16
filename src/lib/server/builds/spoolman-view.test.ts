@@ -48,12 +48,19 @@ describe('view.spoolman', () => {
 	it('reports the workspace mode and an unlinked slot', () => {
 		const id = mk();
 		const v = view(id);
-		expect(v.spoolman).toEqual({ configured: false, keptBy: 'other' });
+		expect(v.spoolman).toEqual({ configured: false, keptBy: 'app' });
 		const sp = v.filaments[0].spoolman!;
 		expect(sp).toMatchObject({ filamentId: null, linkedAt: null, sharedWith: 0, stock: null });
 		setOrgSettings(db, orgId, { spoolmanUrl: 'http://spoolman.test', spoolmanKeptBy: 'app' });
 		expect(view(id).spoolman).toEqual({ configured: true, keptBy: 'app' });
 		expect(view(id).filaments[0].spoolman!.keptBy).toBe('app');
+	});
+
+	it('an existing address with auto-deduct off and no stored choice stays "other"', () => {
+		const id = mk();
+		setOrgSettings(db, orgId, { spoolmanUrl: 'http://spoolman.test', spoolmanAutoDeduct: false });
+		expect(view(id).spoolman).toEqual({ configured: true, keptBy: 'other' });
+		expect(view(id).filaments[0].spoolman!.keptBy).toBe('other');
 	});
 
 	it('shows link, cached stock (stale on error) and shared builds', () => {
