@@ -6,6 +6,12 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
+### Added
+
+- Spoolman filaments: link each color of a build to its filament in Spoolman, from the Overview filaments, a new Spoolman step in the build setup, or a color slot on the Design tab. Matching filaments are suggested. While a color is linked, Spare uses what Spoolman says is left, and the build's own spools are hidden until you unlink (their history is kept).
+- Choose who keeps Spoolman up to date (chapter Settings, Integrations): "This app" takes each logged print's grams off the linked spool and moves on to the next spool of that filament when one runs out; "Something else" only reads Spoolman. A chapter that sets up Spoolman for the first time starts with "This app"; chapters that already use Spoolman keep their setting.
+- Prints logged before a color was linked are never taken off Spoolman. When you link, the app says how many grams were already logged and offers to subtract them once (with a way to give them back).
+
 ## [0.9.2] - 2026-11-16
 
 **Upgrading:** back up your `/data` folder first. This release adds two database migrations (0001 and 0002, both additive: new columns for entered weights and spool adds). They run automatically when the container starts and cannot be undone, so to go back to 0.9.1 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
