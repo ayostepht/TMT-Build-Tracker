@@ -53,6 +53,8 @@
 	// After linking: ask about prints logged before the link.
 	let done = $state<SpoolmanLinkResultDto | null>(null);
 	let choice = $state<'current' | 'subtract'>('current');
+	// The apply took only part of the grams (Spoolman had less): keep the prompt open and say so.
+	let warning = $state('');
 
 	$effect(() => {
 		void load();
@@ -112,9 +114,12 @@
 		busy = true;
 		error = '';
 		try {
-			if (choice === 'subtract' && keptBy === 'app') await prelinkDeduct(buildId, role);
+			warning = '';
+			const r =
+				choice === 'subtract' && keptBy === 'app' ? await prelinkDeduct(buildId, role) : null;
 			await onchange?.();
-			onclose?.();
+			if (r?.warning) warning = r.warning;
+			else onclose?.();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not subtract';
 		}
@@ -156,14 +161,22 @@
 					<span>Also subtract those {fmt(done.preLinkLoggedG)} g from Spoolman now</span>
 				</label>
 			{/if}
+			{#if warning}
+				<div class="warn" role="status" data-testid="prelink-warning">{warning}</div>
+			{/if}
 			<div class="smp-row">
 				<button
 					class="btn primary"
 					type="button"
 					disabled={busy}
 					data-testid="prelink-done"
-					onclick={confirmPrelink}>Done</button
+					onclick={confirmPrelink}>{warning ? 'Try again' : 'Done'}</button
 				>
+				{#if warning}
+					<button class="btn ghost" type="button" disabled={busy} onclick={() => onclose?.()}
+						>Close</button
+					>
+				{/if}
 			</div>
 		</div>
 	{:else if mode === 'spool'}
