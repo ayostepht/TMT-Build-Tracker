@@ -1,15 +1,19 @@
 # Orchestrator handoff
 
-_Updated 2026-11-15. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-16. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
 
-- **Merge freeze** (maintainer, 2026-11-15): open pull requests freely, but merge nothing new
-  until (1) the header pull request (`feat/stats-header`) is merged and (2) the maintainer
-  signs off on it on Unraid. Goal: a clean new `main` image (the maintainer runs "Promote
-  edge to main"; the release tag is theirs).
-- #59 (Spoolman) work may open pull requests but never merges during the freeze.
+- **Goal: release 0.9.2 from today's work, without Spoolman** (maintainer, 2026-11-16).
+  Order: header pull request merges → `edge` image → r59 on the test copy (deploy needs the
+  maintainer's OK) → release pull request into `edge` (version, `CHANGELOG.md`,
+  `fixtures/v0.9.2/`) → the maintainer runs "Promote edge to main", merges it and tags
+  `v0.9.2`.
+- **Merging** (maintainer, 2026-11-16): the orchestrator may merge any of its pull requests
+  into `edge` once the routine was followed and CI is green, except Spoolman work.
+- **Spoolman (#59) does not merge until 0.9.2 is on `main`.** It is developed meanwhile in
+  its own worktree(s) and branches; pull requests may be opened (draft) but stay unmerged.
 - Pull request and issue text: no internal process notes; footer on GitHub comments.
 - Run `npx prettier --write` on edited docs before committing. Docs-only pull requests take
   the CI fast path (~35 s).
@@ -18,17 +22,16 @@ _Updated 2026-11-15. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
 
 ## State of `edge`
 
-`origin/edge` = 79c2cec (docs only on top of a71f3ac). Merged 2026-11-15: #50 (#46
+`origin/edge` = 42e1437 (docs only on top of a71f3ac). Merged 2026-11-15: #50 (#46
 accounting), #51 (#47 Stats), #52/#57 (r56/r57 docs), #53 (chevron), #54 (CI docs fast
 path), #55 (Prettier rule), #58 (#56 design change on a started build), #60 (this handoff),
-#62 (r58 docs). Docs-only handoff/deploy-notes pull requests may merge during the freeze
-(maintainer, 2026-11-15). The test copy runs r58 = `edge` a71f3ac (#56 included; deployed
+#62 (r58 docs), #61/#63 (handoff). The test copy runs r58 = `edge` a71f3ac (#56 included; deployed
 2026-11-15, rehearsal clean). Next deploy, r59 = the header pull request, after it merges.
 No migrations.
 
 ## In flight
 
-### `feat/stats-header` (pushed, head be40a7f, no pull request yet)
+### `feat/stats-header` (pushed, head da4b3e7, no pull request yet)
 
 - Stats fixes from the r57 check: chart x-labels thinned by collision (`visibleLabels` in
   `charts/scale.ts`); "Show data" and the workspace builds table scroll inside their card
@@ -38,35 +41,34 @@ No migrations.
   (Stats tiles and header); shared pieces in `domain/stats-core.ts`; `stats.ts` re-exports.
 - Header (`BuildHeader.svelte`): four compact `StatTile` cards (Parts, Time, Filament,
   Finish) linking to Stats on every build tab, four across on phones; Time and Filament show
-  "X of ~estimate"; the details line holds only "N printing · N to reprint · deliver-by" and
-  hides when empty (with its phone caret); cards hidden on the Design tab at ≤760 px; drafts
-  unchanged. About +1.4 KB gzip on build pages. New `e2e/header-kpis.spec.ts`; several specs
-  moved from `.overall-top` text to the Parts card aria-label.
-- **Open, show the maintainer before the pull request** (the old screenshots were lost with
-  the previous container; take new ones at 390 and 1440 px):
-  - a) **Decided** (maintainer, 2026-11-15): on phones the estimate truncated ("30.5 h of …");
-    keep four cards across and show a short "of ~382 h" on its own line under the value.
-  - b) Bug: the Parts card reads "0of 33" (no space before the unit) → `app-shell`, or
-    `design-studio-ui` if it is `StatTile`'s unit spacing.
-  - c) Deliver-by stays in the details line (no card shows it): mention it.
-- Not yet run on the final head: the whole e2e group together (the last fix re-ran only
-  `log-plate`, 8/8). The verifier gate covers it.
-- `app-shell` is fixing a) and b) in a local worktree (not pushed yet), with new screenshots.
-- **Next steps:** (1) review the a/b fix and its screenshots with the maintainer, commit and
-  push to `feat/stats-header`; (2) STATUS and
-  `docs/architecture.md` notes (Stats: `kpis.ts`/`stats-core.ts`, failures rule, rounding,
-  label thinning, table scroll; App shell: header cards), Prettier on the docs; (3)
-  `verifier` in a fresh worktree with a real `npm ci` (a symlinked `node_modules` breaks
-  `npm run check` with ~376 `./$types` errors), full vitest + build + full e2e; (4) pull
-  request into `edge`; (5) merge only with the maintainer's OK; (6) r59 deploy on Unraid
-  (header, no migrations), maintainer signs off, freeze lifts.
+  a short "of ~382 h" line under the value at all widths (full sentence in the aria-label);
+  `StatTile` puts a real space before the unit ("3 of 33"); the details line holds only
+  "N printing · N to reprint · deliver-by" and hides when empty; cards hidden on the Design
+  tab at ≤760 px; drafts unchanged. `e2e/header-kpis.spec.ts` checks no truncation at 390.
+- Maintainer approved the 390/1440 screenshots (2026-11-15). STATUS and
+  `docs/architecture.md` notes are on the branch (merged with `edge` 79c2cec+).
+- Known, not blocking: at 1440 the Parts and Finish detail lines end in "…" (full text on
+  hover and in the details line), a possible small follow-up [app-shell].
+- **Verifier (da4b3e7): FAIL.** check, lint, 1909 unit tests and build pass; full e2e 253
+  passed, 4 failed: `r47-tracking-shots:11` (waits for the `header-details` toggle, which
+  now only renders when there is something to show), `kit-import:365` (expects the old
+  "of printing left" text), `export:15` (gets "Download .3mf project" instead of ".zip";
+  passes on `edge`, cause unknown) and `kit-import:221` (strict-mode locator; fails on
+  `edge` too). `e2e-playwright` is fixing all four on the branch and re-running the full
+  suite; if `export` turns out to be an app bug it reports back instead of editing `src/`.
+- **Next steps:** (1) e2e fixes green → re-run `verifier` → open the pull request into
+  `edge`; (2) merge once CI is green; (3) r59 deploy on Unraid
+  (header, no migrations) with the maintainer's OK; (4) the release pull request (see the
+  goal above).
 
-### `feat/spoolman-filaments` (#59; branch from a71f3ac, nothing written yet)
+### `feat/spoolman-filaments` (#59; local only, branch from `edge` 3420884)
 
+- Started 2026-11-16: `kit-and-startup` is writing migration 0003 (filament id + link time
+  per slot, `spoolman_cache`, Spoolman spool id on added spools, ledger entries with a role,
+  the "kept up to date by" setting). Nothing merges until 0.9.2 is on `main`.
 - Prototype approved by the maintainer ("Looks great"):
-  https://claude.ai/artifact/McTWfeDj42QF26FJ74uDC3. The detailed plan file was in the
-  previous session's scratchpad and is lost; its text is recoverable from that archived
-  session's transcript ("Plate 9 retry bugs").
+  https://claude.ai/artifact/McTWfeDj42QF26FJ74uDC3. Full plan, findings and the
+  maintainer's answers (all questions answered): `docs/dev/plans/issue59-spoolman.md`.
 - Three stacked pull requests: (1) discoverability, filament link, auto-advance, Spoolman
   stock, a "kept up to date by: this app / something else" workspace setting, and handling
   of prints from before the link; (2) adding a spool also creates the Spoolman spool
