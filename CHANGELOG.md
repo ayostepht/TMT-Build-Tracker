@@ -24,6 +24,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 ### Changed
 
 - Filament and time now tell used from lost: "used" is split into what ended up in printed parts and what failed prints took (older Partial logs count as lost), and logged hours the same way. The totals are unchanged for existing builds. After a Partial, only the parts still to print count toward what is left.
+- The build header shows the four Stats cards (parts printed, printing time, filament used, projected finish) on every build tab, each linking to the Stats tab. On phones they sit in one row under the build name; the build details still open from the arrow beside it.
 - Recent activity has its own Activity tab (after Finish, before Settings). The Overview now shows only the last change with an "All activity" link, so it stays lighter. Studio drafts have no Activity tab.
 - Choosing a palette now resets every part-level color change: unlocked parts go back to their kit colors, as the Apply bar says ("Resets N part changes · M locked kept"). Applying a palette is one saved change in the activity log, and Undo restores the colors and the parts together.
 - Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG", and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".

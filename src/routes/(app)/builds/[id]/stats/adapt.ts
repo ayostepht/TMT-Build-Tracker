@@ -4,7 +4,7 @@
  */
 import { formatValue } from '#lib/components/charts/scale.ts';
 import type { Tone } from '#lib/components/charts/tones.ts';
-import { overallProgress, timeStats } from '#lib/domain/accounting.ts';
+import { timeStats } from '#lib/domain/accounting.ts';
 import { today } from '#lib/domain/format.ts';
 import {
 	addDays,
@@ -17,6 +17,7 @@ import {
 	runsByPeriod,
 	shortDate
 } from '#lib/domain/stats.ts';
+import { buildKpis } from '#lib/domain/kpis.ts';
 import type { BuildView } from '#lib/domain/types.ts';
 
 export interface Table {
@@ -104,53 +105,20 @@ export function buildStats(view: BuildView, now: Date): BuildStats {
 	const fails = failureRates(view);
 	const prog = progressSeries(view);
 	const proj = projectFinish(view, now);
-	const op = overallProgress(view);
 
 	const keptG = fil.reduce((s, f) => s + f.keptG, 0);
 	const lostG = fil.reduce((s, f) => s + f.lostG, 0);
 	const toPrintG = fil.reduce((s, f) => s + f.toPrintG, 0);
-	const platesDone = prog.points.length ? prog.points[prog.points.length - 1].y : 0;
-	const platesLeft = Math.max(0, prog.platesTotal - platesDone);
 
-	// ---- tiles
-	const finishTile: Tile =
-		proj.kind === 'projected'
-			? {
-					key: 'finish',
-					label: 'Projected finish',
-					value: shortDate(proj.date),
-					detail: `About ${hours(proj.hoursLeft)} left at ${n1(proj.hoursPerDay)} h a day${
-						t.pace ? ` · ${t.pace.text}` : ''
-					}`
-				}
-			: proj.kind === 'done'
-				? {
-						key: 'finish',
-						label: 'Projected finish',
-						value: 'Done',
-						detail: 'Every part is printed'
-					}
-				: proj.kind === 'no-estimate'
-					? {
-							key: 'finish',
-							label: 'Projected finish',
-							value: 'No estimate',
-							detail: 'The plates left have no print time yet'
-						}
-					: {
-							key: 'finish',
-							label: 'Projected finish',
-							value: 'Not yet',
-							detail: `Needs 3 prints in the last 28 days (${proj.runs} so far)`
-						};
-	const useG = keptG + lostG;
+	// ---- tiles (numbers and text from buildKpis, shared with the build header)
+	const k = buildKpis(view, now);
 	const tiles: Tile[] = [
 		{
 			key: 'time',
 			label: 'Printing time',
-			value: formatValue(t.loggedHours, t.loggedHours >= 100 ? 0 : 1),
+			value: k.time.value,
 			unit: 'h logged',
-			detail: `${hours(t.keptHours)} good, ${hours(t.lostHours)} lost to failed prints`,
+			detail: k.time.detail,
 			split: [
 				{ value: t.keptHours, tone: 'good' },
 				{ value: t.lostHours, tone: 'bad' }
@@ -159,9 +127,9 @@ export function buildStats(view: BuildView, now: Date): BuildStats {
 		{
 			key: 'filament',
 			label: 'Filament used',
-			value: useG >= 1000 ? n1(useG / 1000) : formatValue(useG, 0),
-			unit: useG >= 1000 ? 'kg' : 'g',
-			detail: `${grams(keptG)} in parts, ${grams(lostG)} lost`,
+			value: k.filament.value,
+			unit: k.filament.unit,
+			detail: k.filament.detail,
 			split: [
 				{ value: keptG, tone: 'good' },
 				{ value: lostG, tone: 'bad' }
@@ -170,16 +138,17 @@ export function buildStats(view: BuildView, now: Date): BuildStats {
 		{
 			key: 'parts',
 			label: 'Parts printed',
-			value: String(op.printed),
-			unit: `of ${op.total}`,
-			detail: `${plural(platesLeft, 'plate')} to go · ${plural(fails.total.failed, 'failed print')}`,
+			value: String(k.parts.printed),
+			unit: `of ${k.parts.total}`,
+			detail: k.parts.detail,
 			split: [
-				{ value: op.printed, tone: 'good' },
-				{ value: Math.max(0, op.total - op.printed), tone: 'neutral' }
+				{ value: k.parts.printed, tone: 'good' },
+				{ value: Math.max(0, k.parts.total - k.parts.printed), tone: 'neutral' }
 			]
 		},
-		finishTile
+		{ key: 'finish', label: 'Projected finish', value: k.finish.label, detail: k.finish.detail }
 	];
+	const useG = keptG + lostG;
 
 	// ---- progress
 	const byPlates = prog.platesTotal > 0;

@@ -11,22 +11,27 @@
 		value,
 		unit,
 		detail,
-		split
+		split,
+		compact = false
 	}: {
 		label: string;
 		value: string;
 		unit?: string;
 		detail?: string;
 		split?: { value: number; tone: Tone }[];
+		/** Small header-card variant: one line each for label and detail, smaller value. */
+		compact?: boolean;
 	} = $props();
 
+	/** A real space between value and unit (text, copy, screen readers); the visible gap is the unit margin. */
+	const SPACE = ' ';
 	const sum = $derived((split ?? []).reduce((s, x) => s + Math.max(0, x.value), 0));
 </script>
 
-<div class="ds-card ds-card--compact st-tile">
-	<p class="st-label">{label}</p>
+<div class="ds-card ds-card--compact st-tile" class:st-compact={compact}>
+	<p class="st-label" title={compact ? label : undefined}>{label}</p>
 	<p class="st-value">
-		{value}{#if unit}<span class="st-unit">{unit}</span>{/if}
+		{value}{#if unit}<span class="st-sp">{SPACE}</span><span class="st-unit">{unit}</span>{/if}
 	</p>
 	{#if split && sum > 0}
 		<div class="st-split" aria-hidden="true">
@@ -37,7 +42,7 @@
 			{/each}
 		</div>
 	{/if}
-	{#if detail}<p class="st-detail">{detail}</p>{/if}
+	{#if detail}<p class="st-detail" title={compact ? detail : undefined}>{detail}</p>{/if}
 </div>
 
 <style>
@@ -68,6 +73,10 @@
 		font-variant-numeric: tabular-nums;
 		overflow-wrap: anywhere;
 	}
+	/* A real space for text, copy and screen readers; the gap you see is the unit's margin. */
+	.st-sp {
+		font-size: 0;
+	}
 	.st-unit {
 		margin-left: var(--sp-3);
 		font-size: var(--fs-lg);
@@ -78,6 +87,34 @@
 		font-size: var(--fs-sm);
 		color: var(--muted);
 		overflow-wrap: anywhere;
+	}
+	.st-compact {
+		padding: var(--sp-4) var(--sp-4);
+		gap: var(--sp-2);
+		border-radius: var(--r-md);
+	}
+	.st-compact .st-label,
+	.st-compact .st-detail {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		overflow-wrap: normal;
+		font-size: var(--fs-xs);
+	}
+	.st-compact .st-label {
+		letter-spacing: 0.2px;
+	}
+	.st-compact .st-value {
+		font-size: var(--fs-xl);
+		white-space: nowrap;
+		overflow-wrap: normal;
+	}
+	.st-compact .st-unit {
+		margin-left: var(--sp-1);
+		font-size: var(--fs-sm);
+	}
+	.st-compact .st-split {
+		height: 5px;
 	}
 	.st-split {
 		display: flex;

@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
 	edgeAnchor,
 	formatValue,
+	labelExtent,
 	labelStep,
 	linearScale,
 	niceCeil,
 	niceTicks,
 	rovingIndex,
 	truncate,
+	visibleLabels,
 	unitSuffix
 } from './scale.ts';
 
@@ -104,5 +106,37 @@ describe('unitSuffix and edgeAnchor', () => {
 		expect(edgeAnchor(100, 30, 200)).toBe('middle');
 		expect(edgeAnchor(190, 30, 200)).toBe('end');
 		expect(edgeAnchor(5, 30, 200)).toBe('start');
+	});
+});
+
+describe('visibleLabels', () => {
+	const at = (n: number, slot: number, w: number) => ({
+		xs: Array.from({ length: n }, (_, i) => 30 + i * slot + slot / 2),
+		widths: Array.from({ length: n }, () => w)
+	});
+	it('keeps every label when they all fit', () => {
+		const { xs, widths } = at(4, 80, 40);
+		expect(visibleLabels(xs, widths, 400)).toEqual([true, true, true, true]);
+	});
+	it('always keeps the last, and the first when it clears it, and never overlaps', () => {
+		const { xs, widths } = at(12, 26, 44);
+		const show = visibleLabels(xs, widths, 350);
+		expect(show[0]).toBe(true);
+		expect(show[11]).toBe(true);
+		const kept = show.flatMap((s, i) => (s ? [i] : []));
+		for (let k = 1; k < kept.length; k++) {
+			const [a, b] = [labelExtent(xs[kept[k - 1]], 44, 350), labelExtent(xs[kept[k]], 44, 350)];
+			expect(b[0]).toBeGreaterThanOrEqual(a[1] + 6);
+		}
+	});
+	it('drops the label before the last one when the edge anchor would push them together', () => {
+		// last label hugs the right edge (anchored end), so the one before must give way
+		const show = visibleLabels([100, 330, 372], [44, 44, 44], 380);
+		expect(show[2]).toBe(true);
+		expect(show[1]).toBe(false);
+	});
+	it('handles no labels and one label', () => {
+		expect(visibleLabels([], [], 100)).toEqual([]);
+		expect(visibleLabels([50], [30], 100)).toEqual([true]);
 	});
 });

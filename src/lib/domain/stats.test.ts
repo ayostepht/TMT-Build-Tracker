@@ -229,11 +229,10 @@ describe('failureRates', () => {
 			])
 		);
 		expect(out.total).toMatchObject({ runs: 6, failed: 2 });
-		expect(out.byPlate.map((p) => [p.plate, p.rate])).toEqual([
-			[1, 0.5],
-			[2, 0],
-			[3, 0]
-		]);
+		// the part-level run of handle-left lands on the plate that holds it
+		expect(out.byPlate.reduce((a, p) => a + p.runs, 0)).toBe(6);
+		expect(out.byPlate.reduce((a, p) => a + p.failed, 0)).toBe(2);
+		expect(out.byPlate.find((p) => p.plate === 2)).toMatchObject({ runs: 2, failed: 0 });
 		const cc2 = out.byPrinter.find((p) => p.printer === 'CC2')!;
 		expect(cc2).toMatchObject({ runs: 3, failed: 1, hours: 21, failedHours: 1 });
 		expect(out.byPrinter.find((p) => p.printer === null)).toMatchObject({ runs: 1, failed: 0 });
@@ -262,6 +261,56 @@ describe('failureRates', () => {
 		expect(out.total).toEqual({ runs: 1, failed: 1, rate: 1 });
 		expect(out.byPlate[0]).toMatchObject({ runs: 1, failed: 1 });
 		expect(out.byPrinter[0]).toMatchObject({ hours: 8, failedHours: 2 });
+	});
+});
+
+describe('failureRates part-level runs', () => {
+	it('attributes a plate-less part run to its plate and sums to the total', () => {
+		const v = makeView();
+		const pl = v.plates.find((p) => p.parts.length)!;
+		const out = failureRates(
+			withRuns([
+				{ plateNumber: pl.number, result: 'Failed', hours: 2 },
+				{ partSlug: pl.parts[0], plateNumber: null, result: 'Failed', hours: 1 },
+				{ partSlugs: [pl.parts[0]], plateNumber: null, result: 'Failed', hours: 1 }
+			])
+		);
+		expect(out.total).toEqual({ runs: 3, failed: 3, rate: 1 });
+		expect(out.byPlate).toHaveLength(1);
+		expect(out.byPlate[0]).toMatchObject({ plate: pl.number, runs: 3, failed: 3 });
+	});
+	it('uses a "Not on a plate" row for a part no plate holds', () => {
+		const out = failureRates(
+			withRuns([{ partSlug: 'no-such-part', plateNumber: null, result: 'Failed', hours: 1 }])
+		);
+		expect(out.total).toMatchObject({ runs: 1, failed: 1 });
+		expect(out.byPlate).toEqual([
+			{ plate: null, name: 'Not on a plate', runs: 1, failed: 1, rate: 1 }
+		]);
+	});
+	it('counts a split Partial once, plate-less or not, so rows match the total', () => {
+		const pl = multiPartPlate(makeView());
+		const out = failureRates(
+			withRuns([
+				{
+					plateNumber: pl.number,
+					partSlugs: [pl.parts[0]],
+					result: 'Success',
+					hours: 6,
+					date: '2026-11-01'
+				},
+				{
+					plateNumber: pl.number,
+					partSlugs: pl.parts.slice(1),
+					result: 'Failed',
+					hours: 2,
+					date: '2026-11-01'
+				},
+				{ partSlug: pl.parts[0], plateNumber: null, result: 'Failed', hours: 1 }
+			])
+		);
+		expect(out.total).toMatchObject({ runs: 2, failed: 2 });
+		expect(out.byPlate.reduce((a, p) => a + p.failed, 0)).toBe(out.total.failed);
 	});
 });
 

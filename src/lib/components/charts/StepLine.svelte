@@ -5,6 +5,7 @@
 		edgeAnchor,
 		formatValue,
 		labelStep,
+		visibleLabels,
 		unitSuffix,
 		linearScale,
 		niceTicks,
@@ -111,6 +112,18 @@
 	}
 	const labels = $derived(xs.map((_, i) => describe(i)));
 	const step = $derived(labelStep(slot, Math.max(...xs.map((x) => x.length), 1) * 6.4 + 8));
+	/** Every `step`-th label, then whatever still collides (or hugs the edge) is dropped. */
+	const shown = $derived.by(() => {
+		const idx = xs.map((_, i) => i).filter((i) => i === 0 || (n - 1 - i) % step === 0);
+		const vis = visibleLabels(
+			idx.map(px),
+			idx.map((i) => truncate(xs[i], 12).length * 6.4),
+			W
+		);
+		const out: Record<number, boolean> = {};
+		idx.forEach((i, k) => (out[i] = vis[k]));
+		return out;
+	});
 	const legend = $derived([
 		{ label: 'Done so far', tone: 'accent' as const, shape: 'line' as const },
 		...(projPath ? [{ label: 'Projected', tone: 'accent' as const, shape: 'dash' as const }] : []),
@@ -187,7 +200,7 @@
 				/>
 			{/each}
 			{#each xs as x, i (i)}
-				{#if (n - 1 - i) % step === 0}
+				{#if shown[i]}
 					<text
 						x={px(i)}
 						y={H - 8}
