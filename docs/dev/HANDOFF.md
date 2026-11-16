@@ -49,15 +49,23 @@ No migrations.
   `docs/architecture.md` notes are on the branch (merged with `edge` 79c2cec+).
 - Known, not blocking: at 1440 the Parts and Finish detail lines end in "…" (full text on
   hover and in the details line), a possible small follow-up [app-shell].
-- **Now:** `verifier` is running on da4b3e7 in a fresh worktree (`npm ci`, check, lint, full
-  vitest, build, full e2e). No `security-reviewer` needed (no server, API or auth files).
-- **Next steps:** (1) verifier green → open the pull request into `edge`; red → send the
-  failure to the owning agent; (2) merge once CI is green; (3) r59 deploy on Unraid
+- **Verifier (da4b3e7): FAIL.** check, lint, 1909 unit tests and build pass; full e2e 253
+  passed, 4 failed: `r47-tracking-shots:11` (waits for the `header-details` toggle, which
+  now only renders when there is something to show), `kit-import:365` (expects the old
+  "of printing left" text), `export:15` (gets "Download .3mf project" instead of ".zip";
+  passes on `edge`, cause unknown) and `kit-import:221` (strict-mode locator; fails on
+  `edge` too). `e2e-playwright` is fixing all four on the branch and re-running the full
+  suite; if `export` turns out to be an app bug it reports back instead of editing `src/`.
+- **Next steps:** (1) e2e fixes green → re-run `verifier` → open the pull request into
+  `edge`; (2) merge once CI is green; (3) r59 deploy on Unraid
   (header, no migrations) with the maintainer's OK; (4) the release pull request (see the
   goal above).
 
-### `feat/spoolman-filaments` (#59; branch from a71f3ac, nothing written yet)
+### `feat/spoolman-filaments` (#59; local only, branch from `edge` 3420884)
 
+- Started 2026-11-16: `kit-and-startup` is writing migration 0003 (filament id + link time
+  per slot, `spoolman_cache`, Spoolman spool id on added spools, ledger entries with a role,
+  the "kept up to date by" setting). Nothing merges until 0.9.2 is on `main`.
 - Prototype approved by the maintainer ("Looks great"):
   https://claude.ai/artifact/McTWfeDj42QF26FJ74uDC3. Full plan, findings and the
   maintainer's answers (all questions answered): `docs/dev/plans/issue59-spoolman.md`.
