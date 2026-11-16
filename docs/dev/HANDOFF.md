@@ -1,15 +1,19 @@
 # Orchestrator handoff
 
-_Updated 2026-11-15. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-16. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
 
-- **Merge freeze** (maintainer, 2026-11-15): open pull requests freely, but merge nothing new
-  until (1) the header pull request (`feat/stats-header`) is merged and (2) the maintainer
-  signs off on it on Unraid. Goal: a clean new `main` image (the maintainer runs "Promote
-  edge to main"; the release tag is theirs).
-- #59 (Spoolman) work may open pull requests but never merges during the freeze.
+- **Goal: release 0.9.2 from today's work, without Spoolman** (maintainer, 2026-11-16).
+  Order: header pull request merges → `edge` image → r59 on the test copy (deploy needs the
+  maintainer's OK) → release pull request into `edge` (version, `CHANGELOG.md`,
+  `fixtures/v0.9.2/`) → the maintainer runs "Promote edge to main", merges it and tags
+  `v0.9.2`.
+- **Merging** (maintainer, 2026-11-16): the orchestrator may merge any of its pull requests
+  into `edge` once the routine was followed and CI is green, except Spoolman work.
+- **Spoolman (#59) does not merge until 0.9.2 is on `main`.** It is developed meanwhile in
+  its own worktree(s) and branches; pull requests may be opened (draft) but stay unmerged.
 - Pull request and issue text: no internal process notes; footer on GitHub comments.
 - Run `npx prettier --write` on edited docs before committing. Docs-only pull requests take
   the CI fast path (~35 s).
@@ -18,11 +22,10 @@ _Updated 2026-11-15. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
 
 ## State of `edge`
 
-`origin/edge` = 79c2cec (docs only on top of a71f3ac). Merged 2026-11-15: #50 (#46
+`origin/edge` = 42e1437 (docs only on top of a71f3ac). Merged 2026-11-15: #50 (#46
 accounting), #51 (#47 Stats), #52/#57 (r56/r57 docs), #53 (chevron), #54 (CI docs fast
 path), #55 (Prettier rule), #58 (#56 design change on a started build), #60 (this handoff),
-#62 (r58 docs). Docs-only handoff/deploy-notes pull requests may merge during the freeze
-(maintainer, 2026-11-15). The test copy runs r58 = `edge` a71f3ac (#56 included; deployed
+#62 (r58 docs), #61/#63 (handoff). The test copy runs r58 = `edge` a71f3ac (#56 included; deployed
 2026-11-15, rehearsal clean). Next deploy, r59 = the header pull request, after it merges.
 No migrations.
 
@@ -49,8 +52,9 @@ No migrations.
 - **Now:** `verifier` is running on da4b3e7 in a fresh worktree (`npm ci`, check, lint, full
   vitest, build, full e2e). No `security-reviewer` needed (no server, API or auth files).
 - **Next steps:** (1) verifier green → open the pull request into `edge`; red → send the
-  failure to the owning agent; (2) merge only with the maintainer's OK; (3) r59 deploy on
-  Unraid (header, no migrations), maintainer signs off, freeze lifts.
+  failure to the owning agent; (2) merge once CI is green; (3) r59 deploy on Unraid
+  (header, no migrations) with the maintainer's OK; (4) the release pull request (see the
+  goal above).
 
 ### `feat/spoolman-filaments` (#59; branch from a71f3ac, nothing written yet)
 
