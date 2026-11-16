@@ -156,16 +156,54 @@
 						data-testid="spoolman-url"
 					/>
 				</label>
-				<label class="ti-chk">
-					<input
-						type="checkbox"
-						checked={s.spoolmanAutoDeduct}
-						disabled={!canEdit || busy || !s.spoolmanUrl}
-						data-testid="spoolman-deduct"
-						onchange={(e) => save({ spoolmanAutoDeduct: e.currentTarget.checked })}
-					/>
-					Deduct logged grams from spools
-				</label>
+				<fieldset
+					class="ti-kept"
+					data-testid="spoolman-kept-by"
+					disabled={!canEdit || busy || !s.spoolmanUrl}
+				>
+					<legend>Spoolman is kept up to date by</legend>
+					<label class="ti-radio">
+						<input
+							type="radio"
+							name="spoolman-kept-by"
+							value="app"
+							checked={s.spoolmanKeptBy === 'app'}
+							data-testid="spoolman-deduct"
+							onchange={() => save({ spoolmanKeptBy: 'app' })}
+						/>
+						<span>
+							<b>This app</b>
+							<span class="muted"
+								>Logged grams are taken off the linked spool automatically, and Spare counts prints
+								the app has not delivered yet.</span
+							>
+						</span>
+					</label>
+					<label class="ti-radio">
+						<input
+							type="radio"
+							name="spoolman-kept-by"
+							value="other"
+							checked={s.spoolmanKeptBy === 'other'}
+							data-testid="spoolman-kept-other"
+							onchange={() => save({ spoolmanKeptBy: 'other' })}
+						/>
+						<span>
+							<b>Something else</b>
+							<span class="muted"
+								>Another tool or your printer updates the weights. The app only reads Spoolman and
+								never changes a weight; Spare uses what Spoolman says is left.</span
+							>
+						</span>
+					</label>
+				</fieldset>
+				{#if s.spoolmanUrl}
+					<p class="muted" data-testid="spoolman-where">
+						Link a filament to its Spoolman filament in a build's Settings (Filament), in the build
+						setup, or on a color in the Studio. Stock then comes from Spoolman, and with “This app”
+						each logged print moves on to the next spool when one runs out.
+					</p>
+				{/if}
 				{#if canEdit}
 					<div class="ti-row">
 						<button
@@ -248,6 +286,33 @@
 		gap: var(--sp-4);
 		align-items: center;
 		font-size: var(--fs-md);
+	}
+	.ti-kept {
+		border: 1px solid var(--line);
+		border-radius: var(--r-lg);
+		padding: var(--sp-4) var(--sp-6) var(--sp-5);
+		margin: 0;
+		display: grid;
+		gap: var(--sp-4);
+		min-width: 0;
+	}
+	.ti-kept legend {
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		padding: 0 var(--sp-3);
+	}
+	.ti-radio {
+		display: flex;
+		gap: var(--sp-4);
+		align-items: flex-start;
+		font-size: var(--fs-md);
+	}
+	.ti-radio input {
+		margin-top: 0.3em;
+	}
+	.ti-radio span span {
+		display: block;
+		font-size: var(--fs-sm);
 	}
 	.ti-row {
 		display: flex;
