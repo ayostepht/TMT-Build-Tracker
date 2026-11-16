@@ -825,6 +825,8 @@ export const buildSpoolman = (buildId: string, all = false) =>
 		autoDeduct: boolean;
 		linked: Record<string, SpoolDto | null>;
 		spools: SpoolDto[];
+		/** The server re-fetched linked filaments and their cached stock differs from before. */
+		changed?: boolean;
 		error?: string;
 	}>('GET', `${b(buildId)}/spoolman${all ? '?all=1' : ''}`);
 export interface SpoolmanSpoolStockDto {

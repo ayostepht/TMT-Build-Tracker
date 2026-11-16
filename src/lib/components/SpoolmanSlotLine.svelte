@@ -1,5 +1,15 @@
+<script lang="ts" module>
+	/** Builds whose Spoolman stock was refreshed during this page load (the server throttles too). */
+	const refreshedBuilds: Record<string, true | undefined> = {};
+</script>
+
 <script lang="ts">
-	import { prelinkUndo, prelinkDeduct, linkSpoolmanFilament } from '#lib/client/api.ts';
+	import {
+		buildSpoolman,
+		prelinkUndo,
+		prelinkDeduct,
+		linkSpoolmanFilament
+	} from '#lib/client/api.ts';
 	import { fmt } from '#lib/domain/index.ts';
 	import type { FilamentRole } from '#lib/domain/types.ts';
 	import SpoolmanFilamentPicker from './SpoolmanFilamentPicker.svelte';
@@ -32,6 +42,15 @@
 
 	const sp = $derived(slot.spoolman);
 	const linked = $derived(sp?.filamentId != null);
+	// Once per build per page load, when a slot is linked: have the server re-read Spoolman so the stock
+	// is current (weights may change elsewhere). Reload the build only when the stock really changed.
+	$effect(() => {
+		if (!workspaceConfigured || !linked || refreshedBuilds[buildId]) return;
+		refreshedBuilds[buildId] = true;
+		void buildSpoolman(buildId)
+			.then((r) => (r.changed ? onchange?.() : undefined))
+			.catch(() => {});
+	});
 	let picking = $state<'filament' | 'spool' | null>(null);
 	let busy = $state(false);
 	let error = $state('');

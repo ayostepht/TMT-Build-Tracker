@@ -28,9 +28,15 @@ export const GET: RequestHandler = (event) =>
 			.filter((l) => l.id != null) as { role: string; id: number }[];
 		// Back-fill legacy links and refresh the cached stock; Spoolman being down is reported below.
 		// Throttled: a page load by any member must not hit Spoolman every time.
-		await refreshBuildSpoolman(db, event.params.id, requireUserId(event), undefined, {
-			throttleMs: 30_000
-		});
+		const refreshed = await refreshBuildSpoolman(
+			db,
+			event.params.id,
+			requireUserId(event),
+			undefined,
+			{
+				throttleMs: 30_000
+			}
+		);
 		try {
 			const client = new SpoolmanClient(cfg.spoolmanUrl);
 			const all = event.url.searchParams.get('all') === '1';
@@ -41,6 +47,7 @@ export const GET: RequestHandler = (event) =>
 				configured: true,
 				autoDeduct: cfg.spoolmanAutoDeduct,
 				keptBy: cfg.spoolmanKeptBy,
+				changed: refreshed.changed === true,
 				linked,
 				spools: all ? spools : []
 			};

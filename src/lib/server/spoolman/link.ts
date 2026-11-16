@@ -446,7 +446,7 @@ export async function refreshBuildSpoolman(
 	userId: string,
 	factory: ClientFactory = defaultFactory,
 	opts: { throttleMs?: number } = {}
-): Promise<{ configured: boolean; error?: string; skipped?: boolean }> {
+): Promise<{ configured: boolean; error?: string; skipped?: boolean; changed?: boolean }> {
 	const { org, cfg, access } = ctxFor(db, buildId, userId, false);
 	if (!cfg.spoolmanUrl) return { configured: false };
 	const client = clientFor(cfg.spoolmanUrl, factory);
@@ -459,7 +459,9 @@ export async function refreshBuildSpoolman(
 		.all()
 		.map((r) => r.id)
 		.filter((x): x is number => x != null);
-	if (opts.throttleMs && !error && ids.length) {
+	// Editors always refresh (one call per build per page load from the UI); the throttle is for
+	// viewers, whose loads must not hit Spoolman every time.
+	if (opts.throttleMs && !access.canEdit && !error && ids.length) {
 		const now = Date.now();
 		const fresh = ids.every((id) => {
 			const r = db
@@ -471,6 +473,20 @@ export async function refreshBuildSpoolman(
 		});
 		if (fresh) return { configured: true, skipped: true };
 	}
+	const snap = () =>
+		JSON.stringify(
+			ids.map((id) => {
+				const r = db
+					.select()
+					.from(spoolmanCache)
+					.where(
+						and(eq(spoolmanCache.organizationId, org), eq(spoolmanCache.spoolmanFilamentId, id))
+					)
+					.get();
+				return r ? [r.data, r.error] : null;
+			})
+		);
+	const before = snap();
 	if (!error) error = await refreshFilaments(db, org, client, ids);
-	return { configured: true, error };
+	return { configured: true, error, changed: snap() !== before };
 }

@@ -158,12 +158,7 @@ test.describe('Spoolman filaments (#59)', () => {
 		expect(gramsIn(await tile.getByTestId('filament-spare').innerText())).toBe(appSpare);
 	});
 
-	// APP BUG (reported, not patched): nothing refreshes a filament-linked slot's cached stock on
-	// page load (SpoolRemaining, the only caller of GET /spoolman, is hidden for those slots), so a
-	// weight changed in Spoolman by another tool never shows until a print or a re-link. This is
-	// the whole point of "Something else". Expected to fail until fixed; then drop `test.fail`.
 	test('Spoolman weights changed elsewhere show up on the Overview', async ({ page }) => {
-		test.fail(true, 'stock cache is not refreshed for filament-linked slots on page load');
 		test.setTimeout(120_000);
 		const { chapterUrl, buildId, role, hex } = await workspace(page, 'smstale');
 		mock.addFilament({ id: 1, name: 'Cobalt Blue', color_hex: hex });

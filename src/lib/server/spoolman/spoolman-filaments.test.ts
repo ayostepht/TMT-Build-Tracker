@@ -514,3 +514,15 @@ describe('cache and offline', () => {
 		expect(used(1)).toBe(980);
 	});
 });
+
+describe('stock refresh on load', () => {
+	it('reports whether the cached stock changed; editors are not throttled', async () => {
+		await link();
+		const r0 = await refreshBuildSpoolman(db, buildId, 'editor', factory, { throttleMs: 30_000 });
+		expect(r0.skipped).toBeUndefined();
+		expect(r0.changed).toBe(false);
+		mock.spools.get(1)!.used_weight = 500;
+		const r1 = await refreshBuildSpoolman(db, buildId, 'editor', factory, { throttleMs: 30_000 });
+		expect(r1.changed).toBe(true);
+	});
+});
