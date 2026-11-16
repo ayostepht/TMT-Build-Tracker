@@ -87,7 +87,8 @@ const POST_BASELINE_COLUMNS = new Set([
 	'build_plates.slicer_grams_source',
 	'build_filaments.spool_adds',
 	'build_filaments.spoolman_filament_id',
-	'build_filaments.spoolman_linked_at'
+	'build_filaments.spoolman_linked_at',
+	'print_runs.created_at'
 ]);
 /** Tables added after the baseline (empty in the legacy database). */
 const POST_BASELINE_TABLES = new Set(['spoolman_cache']);

@@ -604,6 +604,10 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   `[spoolId, grams, role?]` (old two-element entries read as role-less); pre-link one-off
   deductions use `prelink:<buildId>:<role>` keys. A migration that adds a column or table
   registers it in `baseline-upgrade.test.ts` (`POST_BASELINE_COLUMNS` / `POST_BASELINE_TABLES`).
+  `print_runs.created_at` (nullable `timestamp_ms`) is set on insert by the schema's
+  `$defaultFn` (SQLite can't `ADD COLUMN` with an expression default); 0003 back-fills it
+  from the earliest matching `run.add` activity (`runId`/`runIds`), else UTC midnight of the
+  run's date.
 
 ## App shell (`app-shell`)
 

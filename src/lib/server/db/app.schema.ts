@@ -442,7 +442,12 @@ export const printRuns = sqliteTable(
 		estSeconds: integer('est_seconds'),
 		printer: text('printer'),
 		userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
-		note: text('note').notNull().default('')
+		note: text('note').notNull().default(''),
+		/**
+		 * Exact creation time (set on insert by the app). Nullable only because SQLite cannot add a
+		 * column with an expression default; migration 0003 back-fills every existing row.
+		 */
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date())
 	},
 	(t) => [index('print_runs_build_idx').on(t.buildId)]
 );
