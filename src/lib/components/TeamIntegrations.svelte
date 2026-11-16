@@ -199,9 +199,10 @@
 				</fieldset>
 				{#if s.spoolmanUrl}
 					<p class="muted" data-testid="spoolman-where">
-						Link a filament to its Spoolman filament in a build's Settings (Filament), in the build
-						setup, or on a color in the Studio. Stock then comes from Spoolman, and with “This app”
-						each logged print moves on to the next spool when one runs out.
+						Link a filament to its Spoolman filament on the build's Overview (filaments), in the
+						setup wizard's Spoolman step, or on a colour slot in the Design tab. Stock then comes
+						from Spoolman, and with “This app” each logged print moves on to the next spool when one
+						runs out.
 					</p>
 				{/if}
 				{#if canEdit}

@@ -125,7 +125,7 @@ export const SPOOLMAN_TEXT = {
 	steps: [
 		'Spoolman is a separate app. Run it on your own network, for example on the same server as this app.',
 		'Enter its address below, like http://192.168.0.20:7912. The address must be reachable from where this app runs.',
-		'Choose who keeps Spoolman up to date: this app (each logged print takes its grams off the linked spool) or something else. Then link each filament to its Spoolman filament in a build’s Settings.'
+		'Choose who keeps Spoolman up to date: this app (each logged print takes its grams off the linked spool) or something else. Then link each filament to its Spoolman filament on the build’s Overview, in the setup wizard or in the Design tab.'
 	],
 	anchor: 'spoolman-and-automatic-logging',
 	hostedReason:

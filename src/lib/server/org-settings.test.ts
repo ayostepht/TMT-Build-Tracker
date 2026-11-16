@@ -19,10 +19,39 @@ beforeEach(() => {
 });
 
 describe('spoolmanKeptBy', () => {
-	it('defaults to the current auto-deduct behaviour', () => {
-		expect(getOrgSettings(db, 'org1').spoolmanKeptBy).toBe('other');
-		setOrgSettings(db, 'org1', { spoolmanAutoDeduct: true });
+	it('a workspace that never chose defaults to this app', () => {
 		expect(getOrgSettings(db, 'org1').spoolmanKeptBy).toBe('app');
+	});
+	it('saving the first address with no choice starts as this app, auto-deduct on', () => {
+		setOrgSettings(db, 'org1', { spoolmanUrl: 'http://sm.test:7912' });
+		expect(getOrgSettings(db, 'org1')).toMatchObject({
+			spoolmanKeptBy: 'app',
+			spoolmanAutoDeduct: true
+		});
+		// changing the address later does not reset a choice
+		setOrgSettings(db, 'org1', { spoolmanKeptBy: 'other' });
+		setOrgSettings(db, 'org1', { spoolmanUrl: 'http://other.test:7912' });
+		expect(getOrgSettings(db, 'org1').spoolmanKeptBy).toBe('other');
+	});
+	it('an existing address with auto-deduct off stays something else', () => {
+		db.insert(organizationSettings)
+			.values({
+				organizationId: 'org1',
+				spoolmanUrl: 'http://sm.test:7912',
+				spoolmanAutoDeduct: false,
+				settings: {}
+			})
+			.run();
+		expect(getOrgSettings(db, 'org1').spoolmanKeptBy).toBe('other');
+		setOrgSettings(db, 'org1', { spoolmanUrl: 'http://sm2.test:7912' });
+		expect(getOrgSettings(db, 'org1')).toMatchObject({
+			spoolmanKeptBy: 'other',
+			spoolmanAutoDeduct: false
+		});
+	});
+	it('an explicit auto-deduct choice with the first address is respected', () => {
+		setOrgSettings(db, 'org1', { spoolmanUrl: 'http://sm.test:7912', spoolmanAutoDeduct: false });
+		expect(getOrgSettings(db, 'org1').spoolmanKeptBy).toBe('other');
 	});
 	it('follows an old row that has auto-deduct on and no choice stored', () => {
 		db.insert(organizationSettings)

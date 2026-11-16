@@ -62,8 +62,10 @@ export function getOrgSettings(db: Db, orgId: string): OrgSettings {
 		spoolmanUrl: r?.spoolmanUrl ?? null,
 		spoolmanAutoDeduct: r?.spoolmanAutoDeduct ?? false,
 		autoLogPrints: extra.autoLogPrints === true,
-		// Not chosen yet: follow today's behaviour (auto-deduct on = this app keeps it up to date).
-		spoolmanKeptBy: extra.spoolmanKeptBy ?? (r?.spoolmanAutoDeduct ? 'app' : 'other')
+		// Not chosen yet: a workspace with no Spoolman address starts as 'app'; one that already has an
+		// address keeps what it had (auto-deduct on = 'app', off = 'other').
+		spoolmanKeptBy:
+			extra.spoolmanKeptBy ?? (r?.spoolmanUrl ? (r.spoolmanAutoDeduct ? 'app' : 'other') : 'app')
 	};
 }
 
@@ -111,6 +113,20 @@ function upsert(
 }
 
 export function setOrgSettings(db: Db, orgId: string, patch: Partial<OrgSettings>): void {
+	// First Spoolman address with no choice made yet: the workspace starts as "this app keeps it up
+	// to date" (auto-deduct on).
+	const cur = db
+		.select()
+		.from(organizationSettings)
+		.where(eq(organizationSettings.organizationId, orgId))
+		.get();
+	const firstAddress =
+		!!patch.spoolmanUrl &&
+		!cur?.spoolmanUrl &&
+		((cur?.settings ?? {}) as Extra).spoolmanKeptBy === undefined &&
+		patch.spoolmanKeptBy === undefined &&
+		patch.spoolmanAutoDeduct === undefined;
+	if (firstAddress) patch = { ...patch, spoolmanKeptBy: 'app' };
 	upsert(db, orgId, (settings) => {
 		const set: Partial<typeof organizationSettings.$inferInsert> = {};
 		if (patch.spoolmanUrl !== undefined) set.spoolmanUrl = patch.spoolmanUrl;

@@ -35,12 +35,15 @@
 	let picking = $state<'filament' | 'spool' | null>(null);
 	let busy = $state(false);
 	let error = $state('');
+	let warning = $state('');
 
 	async function run(fn: () => Promise<unknown>) {
 		busy = true;
 		error = '';
+		warning = '';
 		try {
-			await fn();
+			const r = (await fn()) as { warning?: string } | null | undefined;
+			if (r?.warning) warning = r.warning; // e.g. only part of the grams could be subtracted
 			await onchange?.();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Spoolman failed';
@@ -138,7 +141,8 @@
 					<button
 						class="btn sm"
 						type="button"
-						onclick={() => (picking = picking === 'filament' ? null : 'filament')}>Change…</button
+						onclick={() => (picking = picking === 'filament' ? null : 'filament')}
+						>Other filament…</button
 					>
 					<button
 						class="btn sm"
@@ -155,6 +159,7 @@
 				</div>
 			{/if}
 		{/if}
+		{#if warning}<div class="warn" role="status" data-testid="spoolman-warning">{warning}</div>{/if}
 		{#if error}<div class="error" role="alert" style="white-space:normal">{error}</div>{/if}
 		{#if picking}
 			<SpoolmanFilamentPicker
@@ -174,6 +179,7 @@
 <style>
 	.sl {
 		display: grid;
+		justify-items: start;
 		gap: var(--sp-3);
 		font-size: var(--fs-sm);
 		margin: 0;
