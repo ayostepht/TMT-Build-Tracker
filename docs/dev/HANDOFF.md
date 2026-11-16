@@ -59,9 +59,8 @@ No migrations.
 ### `feat/spoolman-filaments` (#59; branch from a71f3ac, nothing written yet)
 
 - Prototype approved by the maintainer ("Looks great"):
-  https://claude.ai/artifact/McTWfeDj42QF26FJ74uDC3. The detailed plan file was in the
-  previous session's scratchpad and is lost; its text is recoverable from that archived
-  session's transcript ("Plate 9 retry bugs").
+  https://claude.ai/artifact/McTWfeDj42QF26FJ74uDC3. Full plan, findings and the
+  maintainer's answers: `docs/dev/plans/issue59-spoolman.md` (open: question 5, catalog).
 - Three stacked pull requests: (1) discoverability, filament link, auto-advance, Spoolman
   stock, a "kept up to date by: this app / something else" workspace setting, and handling
   of prints from before the link; (2) adding a spool also creates the Spoolman spool
