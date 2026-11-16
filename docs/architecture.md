@@ -593,6 +593,18 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   temp uploads and scratch folders older than 1 h that no queued job needs). Schema:
   `site_admin`.
 
+- **Spoolman schema (#59, migration `0003_spoolman_filaments`, unreleased):**
+  `build_filaments.spoolman_filament_id` and `spoolman_linked_at` (null = unknown, e.g. a
+  legacy spool-only link: no pre-link skipping); table `spoolman_cache` (PK
+  `(organization_id, spoolman_filament_id)`, `data` JSON, `fetched_at`, `error`; a non-null
+  `error` means the last fetch failed and `data` is stale). In JSON, no migration:
+  `SpoolAdd.spoolmanSpoolId?`; the deduction ledger and `spoolmanKeptBy` (`'app' | 'other'`,
+  default from `spoolmanAutoDeduct`, kept in sync with that column) live in
+  `organization_settings.settings` via `org-settings.ts`. Ledger entries are
+  `[spoolId, grams, role?]` (old two-element entries read as role-less); pre-link one-off
+  deductions use `prelink:<buildId>:<role>` keys. A migration that adds a column or table
+  registers it in `baseline-upgrade.test.ts` (`POST_BASELINE_COLUMNS` / `POST_BASELINE_TABLES`).
+
 ## App shell (`app-shell`)
 
 - r48: top-level nav is Builds, Studio, Designs, Printers, Help; the account menu holds
