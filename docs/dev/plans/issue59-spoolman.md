@@ -58,5 +58,11 @@ vendor/filament in Spoolman. The clickable prototype was approved ("Looks great"
 ## Progress
 
 - 2026-11-16: migration 0003 + typed accessors done (`kit-and-startup`); contracts in
-  `docs/architecture.md` "Kit and startup". Next: `build-state` ‖ `filaments-catalog`, then
-  `printers`.
+  `docs/architecture.md` "Kit and startup".
+- 2026-11-16: `print_runs.created_at` added to 0003 (maintainer: exact column); build-state
+  rules, view and activity; catalog regenerated with SpoolmanDB ids; printers stage 3 (server
+  side, shared components, Settings). Decision: switching kept-by to "something else" keeps
+  existing deductions; only deleting or undoing a print gives grams back.
+- Next: security review; place `SpoolmanSlotLine` in FilamentTiles / wizard (app-shell) and
+  SlotPanel (design-studio-ui) with screenshots; e2e spec + printers.spec on the shared mock;
+  verifier; draft pull request (no merge before 0.9.2 is on `main`).
