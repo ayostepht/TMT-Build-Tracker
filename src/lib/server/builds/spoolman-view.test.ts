@@ -4,7 +4,7 @@ import { openDb, runMigrations, type Db } from '../db';
 import { buildFilaments, member, organization, spoolmanCache, templates, user } from '../db/schema';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
-import { addRun } from './actions';
+import { addRun, linkSpool } from './actions';
 import { createBuild } from './create';
 import { loadBuildView } from './view';
 import { prelinkLedgerKey, setDeduction, setOrgSettings } from '../org-settings';
@@ -69,7 +69,12 @@ describe('view.spoolman', () => {
 			.values({
 				organizationId: orgId,
 				spoolmanFilamentId: 7,
-				data: { spools: [{ id: 1, remaining_weight: 420, initial_weight: 1000 }] },
+				data: {
+					id: 7,
+					name: 'Overture Blue',
+					vendor: { name: 'Acme' },
+					spools: [{ id: 1, remaining_weight: 420, initial_weight: 1000, location: 'Shelf 2' }]
+				},
 				fetchedAt: new Date(5000),
 				error: null
 			})
@@ -77,6 +82,8 @@ describe('view.spoolman', () => {
 		let sp = view(id).filaments.find((f) => f.key === role)!.spoolman!;
 		expect(sp).toMatchObject({ filamentId: 7, linkedAt: at.getTime(), sharedWith: 1 });
 		expect(sp.stock).toMatchObject({ remainingG: 420, stale: false, fetchedAt: 5000 });
+		expect(sp.filamentName).toBe('Acme Overture Blue');
+		expect(sp.spoolName).toBeNull();
 		db.update(spoolmanCache).set({ error: 'timeout' }).run();
 		sp = view(id).filaments.find((f) => f.key === role)!.spoolman!;
 		expect(sp.stock).toMatchObject({ remainingG: 420, stale: true, error: 'timeout' });
@@ -133,5 +140,38 @@ describe('view.spoolman', () => {
 		expect(s.haveGrams).toBe(321);
 		link(id, role, null, null);
 		expect(filamentStats(view(id)).find((x) => x.role === role)!.haveSource).toBe('app');
+	});
+
+	it('the legacy spool link only takes a spool of the linked filament', () => {
+		const id = mk();
+		const role = view(id).filaments[0].key;
+		const status = (fn: () => unknown) => {
+			try {
+				fn();
+			} catch (e) {
+				return (e as { status?: number }).status;
+			}
+			return 0;
+		};
+		// no filament link: any whole number, as before
+		expect(status(() => linkSpool(db, id, 'owner', role, { spoolId: 99 }))).toBe(0);
+		link(id, role, 7, new Date());
+		db.insert(spoolmanCache)
+			.values({
+				organizationId: orgId,
+				spoolmanFilamentId: 7,
+				data: { id: 7, name: 'Blue', spools: [{ id: 1, remaining_weight: 400 }] },
+				fetchedAt: new Date(),
+				error: null
+			})
+			.run();
+		expect(status(() => linkSpool(db, id, 'owner', role, { spoolId: 42 }))).toBe(400);
+		expect(status(() => linkSpool(db, id, 'owner', role, { spoolId: 1 }))).toBe(0);
+		expect(view(id).filaments.find((f) => f.key === role)!.spoolman!.spoolId).toBe(1);
+		// clearing is always allowed
+		expect(status(() => linkSpool(db, id, 'owner', role, { spoolId: null }))).toBe(0);
+		// a filament link whose cache is missing cannot be checked, so it is refused
+		link(id, role, 8, new Date());
+		expect(status(() => linkSpool(db, id, 'owner', role, { spoolId: 1 }))).toBe(400);
 	});
 });

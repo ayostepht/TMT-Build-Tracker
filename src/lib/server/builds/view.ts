@@ -56,6 +56,7 @@ import {
 	user
 } from '../db/schema';
 import { normalizeRole } from '../access';
+import { fromCacheData } from '../spoolman/client';
 import { getDeductions, getOrgSettings, ledgerRole, prelinkLedgerKey } from '../org-settings';
 import { layoutBed } from '#lib/printers/layout-bed.ts';
 
@@ -221,8 +222,15 @@ function attachSpoolman(db: Db, view: BuildView, orgId: string): void {
 			(a, e) => a + e[1],
 			0
 		);
+		const cached = c ? fromCacheData(c.data) : null;
+		const spool =
+			f.spoolmanSpoolId != null
+				? cached?.spools.find((x) => x.id === f.spoolmanSpoolId)
+				: undefined;
 		f.spoolman = {
 			filamentId,
+			filamentName: cached ? `${cached.vendor ? `${cached.vendor} ` : ''}${cached.name}` : null,
+			spoolName: spool?.location ?? null,
 			spoolId: f.spoolmanSpoolId,
 			linkedAt,
 			keptBy: cfg.spoolmanKeptBy,

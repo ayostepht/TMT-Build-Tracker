@@ -1,33 +1,3 @@
-<script lang="ts" module>
-	import { spoolmanSuggestions } from '#lib/client/api.ts';
-
-	/** Names of linked Spoolman filaments, fetched once per build slot (RoleSpoolman carries only numbers). */
-	const labels: Record<string, string> = {};
-	const inflight: Record<string, Promise<void> | undefined> = {};
-	async function loadLabel(
-		buildId: string,
-		role: string,
-		filamentId: number
-	): Promise<string | null> {
-		const key = `${buildId}:${filamentId}`;
-		const hit = labels[key];
-		if (hit) return hit;
-		let p = inflight[key];
-		if (!p) {
-			p = spoolmanSuggestions(buildId, role)
-				.then((r) => {
-					const f = r.suggestions.find((s) => s.filament.id === filamentId)?.filament;
-					if (f) labels[key] = `${f.vendor ? `${f.vendor} ` : ''}${f.name}`;
-				})
-				.catch(() => {})
-				.finally(() => delete inflight[key]);
-			inflight[key] = p;
-		}
-		await p;
-		return labels[key] ?? null;
-	}
-</script>
-
 <script lang="ts">
 	import { prelinkUndo, prelinkDeduct, linkSpoolmanFilament } from '#lib/client/api.ts';
 	import { fmt } from '#lib/domain/index.ts';
@@ -65,13 +35,6 @@
 	let picking = $state<'filament' | 'spool' | null>(null);
 	let busy = $state(false);
 	let error = $state('');
-	let label = $state<string | null>(null);
-
-	$effect(() => {
-		const id = sp?.filamentId;
-		label = null;
-		if (id != null) void loadLabel(buildId, slot.key, id).then((l) => (label = l));
-	});
 
 	async function run(fn: () => Promise<unknown>) {
 		busy = true;
@@ -119,7 +82,7 @@
 		{:else}
 			<div class="main">
 				<span class="lbl" data-testid="spoolman-label"
-					>{label ?? `Spoolman filament #${sp?.filamentId}`}</span
+					>{sp?.filamentName ?? `Spoolman filament #${sp?.filamentId}`}</span
 				>
 				{#if sp?.stock}
 					<span class="num" data-testid="spoolman-stock">
@@ -135,7 +98,9 @@
 				{/if}
 			</div>
 			<div class="meta muted">
-				{#if sp?.spoolId != null}<span>Spool #{sp.spoolId} in use</span>{/if}
+				{#if sp?.spoolId != null}<span
+						>Spool #{sp.spoolId} in use{sp.spoolName ? ` (${sp.spoolName})` : ''}</span
+					>{/if}
 				{#if sp && sp.sharedWith > 0}
 					<span data-testid="spoolman-shared"
 						>Shared with {sp.sharedWith} other build{sp.sharedWith === 1 ? '' : 's'}</span

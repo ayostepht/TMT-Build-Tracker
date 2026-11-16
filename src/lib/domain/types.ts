@@ -57,6 +57,10 @@ export interface SpoolmanStockView {
 export interface RoleSpoolman {
 	/** Linked Spoolman filament (`build_filaments.spoolman_filament_id`). While set the app's own spools are hidden from Spare. */
 	filamentId: number | null;
+	/** Name of the linked Spoolman filament ("Vendor Name") from the cache; null when not cached yet. */
+	filamentName: string | null;
+	/** Where the linked spool is kept (Spoolman's location field) from the cache; null when unknown. */
+	spoolName: string | null;
 	/** Linked Spoolman spool (the legacy per-spool link; may exist without a filament). */
 	spoolId: number | null;
 	/** When the slot was linked (ms); null = unknown (legacy spool-only link: no pre-link skipping). */

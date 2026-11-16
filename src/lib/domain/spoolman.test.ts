@@ -72,6 +72,8 @@ describe('cached stock', () => {
 
 const sm = (over: Partial<RoleSpoolman> = {}): RoleSpoolman => ({
 	filamentId: 7,
+	filamentName: null,
+	spoolName: null,
 	spoolId: null,
 	linkedAt: LINK,
 	keptBy: 'app',
