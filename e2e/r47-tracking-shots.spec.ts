@@ -55,7 +55,11 @@ test('print tab touch targets are >= 44px and the start pair reads clearly', asy
 			name: (await row.locator('.pbtn').boundingBox())!.height,
 			status: (await row.getByTestId('part-status').boundingBox())!.height,
 			more: (await row.locator('.more').boundingBox())!.height,
-			details: (await page.getByTestId('header-details').boundingBox())?.height ?? 99
+			// The details toggle only exists while something is printing, reprinting or due: skip it here.
+			details:
+				(await page.getByTestId('header-details').count()) > 0
+					? (await page.getByTestId('header-details').boundingBox())!.height
+					: 99
 		});
 		const h = await heights();
 		console.log('TOUCH', JSON.stringify(h));
