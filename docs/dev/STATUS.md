@@ -1,7 +1,7 @@
 # Project status
 
-_Last updated: 2026-11-15 (0.9.1 released, see item 0; `edge` is the default branch; test
-copy on r58 = `edge` a71f3ac (0.9.1 + #32, #33, #35, #36, #38, #41, #43, #48–#55, #58), the published image)._
+_Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
+copy on r59 = `edge` ce8afce, the published image)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -10,19 +10,15 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **0.9.1 released (2026-11-13).** Contents: #18 (plate retry: live printer job keeps the
-   plate Printing, printer start time and estimate, `sanePrintSeconds`, `UnloggedNotice`),
-   #19 (phone sheet overflow), #21 (minimatch override), #22 (README compose sample, no
-   release numbers), #26 (a built-in MakeGood layout counts as the chosen bed: `layoutBed` →
-   `view.layoutPrinter`), #27 (version, CHANGELOG, `fixtures/v0.9.1`). First promotion:
-   #28 (`promote/d1cff2d` → `main`, merge commit f20a168); `main` no longer holds `CLAUDE.md`,
-   `.claude/`, `docs/dev/`, `docs/architecture.md`. The maintainer published release
-   `v0.9.1` from the Releases page; the tag points at d1cff2d on `edge` (the form defaulted to
-   the default branch), not at f20a168 on `main`: same app code (only excluded paths
-   differ), left as is. Image run for the tag: actions run 43363456558 succeeded (test,
-   e2e, image); `latest`, `0.9.1`, `0.9` and `sha-d1cff2d` are on ghcr.io with one digest
-   (checked anonymously 2026-11-13). The test copy runs it (r58 = `edge` a71f3ac, which adds
-   #32, #33, #35, #36, #38, #41, #43, #48–#55 and #58 on top of 0.9.1; see `docs/dev/CHANGELOG.md`).
+0. **0.9.2 released (2026-11-16).** `main` 48c9649 (merge commit of #70, promote of `edge`
+   8f473ad = #69 "Release 0.9.2"); tag `v0.9.2` on 48c9649, created by the maintainer from the
+   release form with Target `main` (cloud sessions could not push the tag: the git proxy cut
+   tag pushes). Image run 43801476939 succeeded; `latest`, `0.9.2`, `0.9` and `sha-48c9649`
+   share one digest (checked anonymously 2026-11-16). 0.9.2 adds migrations 0001/0002
+   (additive) and the frozen fixture `fixtures/v0.9.2/`. Contents since 0.9.1: #32, #33,
+   #35, #36, #38, #41, #43, #48–#51, #53, #54, #58, #66, #67. The test copy runs r59 =
+   `edge` ce8afce (same app code as 0.9.2 minus the version bump; maintainer signed off).
+   Spoolman (#59, #71) was held until 0.9.2 was on `main` and may merge now.
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
