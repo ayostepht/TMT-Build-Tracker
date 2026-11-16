@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-16, 04:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-16, 04:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -20,12 +20,11 @@ _Updated 2026-11-16, 04:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **0.9.2 released** 2026-11-16: `main` 48c9649, tag `v0.9.2`, images `latest`/`0.9.2`/`0.9`
   (STATUS item 0).
 - **Test copy:** r59 = `edge` ce8afce (header Stats cards), signed off by the maintainer.
-- **Spoolman (#59) pull request #71** (`feat/spoolman-filaments`, head d3e181d): first of
-  three parts. Verifier on 148ac0c: check, lint, build, startup (4 migrations), full e2e
-  266/0 green; one stale unit test fixed after it (test-only). Security review: no
-  high/medium, four lows fixed. CI was running at 04:13 UTC; merge when green (no longer
-  held). It brings migration 0003 → next deploy **r60 needs backup + migration rehearsal and
-  the maintainer's OK**. Plan, decisions and progress: `docs/dev/plans/issue59-spoolman.md`.
+- **Spoolman (#59) part 1 merged** as #71 (`edge` a501e5e, 2026-11-16 04:44 UTC; CI test +
+  e2e green; verifier green apart from one stale test fixed before merge; security review: no
+  high/medium, four lows fixed). It brings **migration 0003** → the next deploy, **r60 =
+  `edge` a501e5e image, needs a backup, a migration rehearsal on a copy and the maintainer's
+  OK**. Plan, decisions and progress: `docs/dev/plans/issue59-spoolman.md`.
 - **Next for #59:** part 2 (adding a spool also creates the Spoolman spool, archive on
   remove), part 3 (create vendor/filament in Spoolman). Small follow-ups: `RoleSpoolman`
   editor refresh has no throttle (maintainer may want one); 1440 header detail lines
