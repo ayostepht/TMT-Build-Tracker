@@ -60,7 +60,7 @@ No migrations.
 
 - Prototype approved by the maintainer ("Looks great"):
   https://claude.ai/artifact/McTWfeDj42QF26FJ74uDC3. Full plan, findings and the
-  maintainer's answers: `docs/dev/plans/issue59-spoolman.md` (open: question 5, catalog).
+  maintainer's answers (all questions answered): `docs/dev/plans/issue59-spoolman.md`.
 - Three stacked pull requests: (1) discoverability, filament link, auto-advance, Spoolman
   stock, a "kept up to date by: this app / something else" workspace setting, and handling
   of prints from before the link; (2) adding a spool also creates the Spoolman spool

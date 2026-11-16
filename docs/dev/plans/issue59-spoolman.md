@@ -30,7 +30,7 @@ vendor/filament in Spoolman. The clickable prototype was approved ("Looks great"
 - e2e: spoolman-filaments, spoolman-create, extend spool-stock, printers.spec to shared mock.
 - security-reviewer (first write-heavy outbound), verifier.
 
-## Open questions (asked 2026-11-15; 1-4 answered below, 5 still open)
+## Open questions (asked 2026-11-15; all answered below)
 
 1. Spare when linked with auto-deduct OFF.
 2. Several builds sharing one filament.
@@ -48,3 +48,9 @@ vendor/filament in Spoolman. The clickable prototype was approved ("Looks great"
   - store linkedAt per slot; runs dated/created before the link are never deducted (also on edit/undo of those runs);
   - on link, show "N g already logged on this build before linking" and ask: "Spoolman's weight is current (default)" vs "Also subtract those N g from Spoolman now" (one-off deduction recorded in the ledger, undoable);
   - Spare when linked never double-counts pre-link grams.
+
+## Maintainer answer (2026-11-16)
+
+- Catalog (question 5): extend the bundled catalog with the SpoolmanDB id, density and spool
+  weight (~+300 KB), so suggestions work offline and the same everywhere. No runtime
+  `/external/filament` dependency.
