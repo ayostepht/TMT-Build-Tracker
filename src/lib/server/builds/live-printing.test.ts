@@ -110,7 +110,7 @@ describe('logging an older attempt while the plate prints again', () => {
 		liveJob();
 		printingAction(db, buildId, 'owner', { action: 'start', slugs: ['handle-left'] });
 		const before = part();
-		const runId = addRun(db, buildId, 'owner', failed);
+		const { runId } = addRun(db, buildId, 'owner', failed);
 		expect(db.select().from(printRuns).all()).toHaveLength(1);
 		expect(part()).toMatchObject({
 			status: 'Printing',
@@ -120,7 +120,7 @@ describe('logging an older attempt while the plate prints again', () => {
 		deleteRun(db, buildId, 'owner', runId);
 		expect(part()).toMatchObject({ status: 'Printing', startedAt: before.startedAt });
 
-		const id2 = addRun(db, buildId, 'owner', failed);
+		const { runId: id2 } = addRun(db, buildId, 'owner', failed);
 		undoRun(db, buildId, 'owner', id2, {
 			parts: [{ slug: 'handle-left', status: 'To print', comps: {} }]
 		});

@@ -1,6 +1,14 @@
 <script lang="ts">
 	import { focusIn } from '#lib/client/focus.ts';
-	import { applyDesign, listDesigns, type DesignListItem } from '#lib/client/api.ts';
+	import {
+		applyDesign,
+		listDesigns,
+		previewApplyDesign,
+		type DesignListItem
+	} from '#lib/client/api.ts';
+	import { offerDesignUndo } from '#lib/client/design-undo.ts';
+	import { designSnapshot, type ApplyMode } from '#lib/domain/design-apply.ts';
+	import StartedApplyDialog from './StartedApplyDialog.svelte';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { toasts } from '#lib/components/toast.svelte.ts';
@@ -13,6 +21,8 @@
 	let chosen = $state('');
 	let confirming = $state(false);
 	let busy = $state(false);
+	/** The build has started printing: ask how to apply (colors only or also print files) first. */
+	let asking = $state(false);
 
 	$effect(() => {
 		const tpl = ctx.view.build.templateId;
@@ -24,6 +34,30 @@
 	});
 
 	const design = $derived(items?.find((d) => d.id === chosen));
+
+	/** Started build: apply in the chosen mode; errors go back to the dialog, which stays open. */
+	async function applyStarted(mode: ApplyMode) {
+		if (!design) return;
+		const name = design.name;
+		const before = designSnapshot(ctx.view);
+		ctx.error = null;
+		const r = await applyDesign(design.id, ctx.id, {
+			mode,
+			...(mode === 'full' ? { confirm: true } : {})
+		});
+		await ctx.refresh();
+		const left = r.skipped?.length ?? 0;
+		offerDesignUndo(
+			mode === 'full'
+				? `Applied design "${name}" (colors and print files)`
+				: `Applied the colors of "${name}"${left ? `; ${left} ${left === 1 ? 'slot' : 'slots'} left as they were` : ''}`,
+			ctx.id,
+			before,
+			() => ctx.refresh()
+		);
+		asking = false;
+		ondone();
+	}
 
 	async function apply() {
 		if (!design) return;
@@ -65,7 +99,11 @@
 			</span>
 		{/if}
 		{#if ctx.error}<div class="error" role="alert">{ctx.error}</div>{/if}
-		<button type="button" class="btn primary" disabled={!design} onclick={() => (confirming = true)}
+		<button
+			type="button"
+			class="btn primary"
+			disabled={!design}
+			onclick={() => (ctx.view.started.started ? (asking = true) : (confirming = true))}
 			>Apply this design…</button
 		>
 	{:else}
@@ -89,8 +127,8 @@
 				<b>Apply "{design?.name}" to this build?</b>
 			</p>
 			<p class="muted">
-				This replaces the color of every slot and which slot each part uses. Your print progress,
-				plates and logged runs are kept.
+				This replaces the color of every slot and which slot each part uses. Plates that are already
+				arranged are re-arranged for the new colors.
 			</p>
 			<div class="apply-actions">
 				<button type="button" class="btn primary" disabled={busy} onclick={apply}
@@ -101,6 +139,14 @@
 				>
 			</div>
 		</div>
+	{/if}
+
+	{#if asking && design}
+		<StartedApplyDialog
+			load={() => previewApplyDesign(design.id, ctx.id)}
+			onchoose={applyStarted}
+			oncancel={() => (asking = false)}
+		/>
 	{/if}
 </div>
 

@@ -13,13 +13,22 @@ name: docker
 # (push to edge, or a manual run from edge); a push to main publishes `sha-<short>` only;
 # `sha-<short>` on every published build.
 # Pull requests never publish: the image job does not run for them.
+# Docs-only pull requests: the `changes` job lists the files a pull request changes (the merge
+# commit against its first parent, the base tip). If every file is in the docs set (the same list
+# as the push `paths-ignore` below: keep the two in sync, YAML cannot share it), `test` only
+# runs `prettier --check` on the changed files (no check, tests, audit or build) and `e2e` is
+# skipped. The job names stay `test` and `e2e` and always appear (a skipped job counts as passed),
+# so required status checks keep matching. Anything else, an empty list, pushes, tags and manual
+# runs run everything. Detection only reads file names with git, never runs code from the pull
+# request, and the workflow stays on `pull_request` (no secrets for forks) with read-only permissions.
 on:
   push:
     branches: [main, edge]
     tags: ['v*']
     # Not evaluated for tag pushes, so releases always run. Docs-only pushes to main or edge skip the run.
     paths-ignore:
-      - '**/*.md'
+      - '*.md'
+      - '.github/**/*.md'
       - 'docs/**'
       - '.claude/**'
       - 'LICENSE'
@@ -43,26 +52,94 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  # Cheap (no install). docs_only is 'true' only for a pull request whose changed files are all
+  # in the docs set; every other case, and any doubt, gives 'false'.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.detect.outputs.docs_only }}
+    steps:
+      # For a pull request this is the merge commit; depth 2 brings its first parent (the base tip).
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docs_only=true
+          count=0
+          # --no-renames lists both sides of a rename; deleted files count too.
+          while IFS= read -r -d '' f; do
+            count=$((count + 1))
+            case "$f" in
+              # Keep in sync with `paths-ignore` under `on.push`. A `.md` below src/, e2e/,
+              # scripts/ and so on is code (tests read some), so Markdown counts only at the
+              # root, under .github/, docs/ and .claude/.
+              docs/* | .claude/* | unraid/* | .github/*.md) ;;
+              */*) docs_only=false ;;
+              *.md | LICENSE) ;;
+              *) docs_only=false ;;
+            esac
+          done < <(git diff --name-only --no-renames -z HEAD^1 HEAD)
+          [ "$count" -gt 0 ] || docs_only=false
+          echo "$count changed file(s), docs_only=$docs_only"
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: changes
+    # Runs even when `changes` failed (a skipped required check would read as passed); the first
+    # step then fails it.
+    if: ${{ !cancelled() }}
     env:
       KITPACK_DOWNLOAD: 'off'
     runs-on: ubuntu-latest
     steps:
+      - name: Fail if change detection did not succeed
+        if: ${{ needs.changes.result != 'success' }}
+        run: |
+          echo "::error::The changes job did not succeed (${{ needs.changes.result }}), so this run cannot tell docs-only from code changes."
+          exit 1
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # Docs-only: Prettier and its plugins are all that is needed, so skip install scripts
+      # (native builds such as better-sqlite3).
+      - name: Install (docs only)
+        if: ${{ needs.changes.outputs.docs_only == 'true' }}
+        run: npm ci --ignore-scripts
+      - name: Prettier check on the changed docs (docs only)
+        if: ${{ needs.changes.outputs.docs_only == 'true' }}
+        # Existing changed files only; Prettier skips files it has no parser for or that
+        # .prettierignore lists. Same check as `npm run lint`, limited to the pull request. The
+        # root config is passed explicitly so a config file added by the pull request is ignored.
+        run: git diff --name-only --no-renames --diff-filter=d -z HEAD^1 HEAD | xargs -0 -r npx prettier --config prettier.config.js --no-editorconfig --check --ignore-unknown --no-error-on-unmatched-pattern --
+      - name: Install
+        if: ${{ needs.changes.outputs.docs_only != 'true' }}
+        run: npm ci
       - name: Source routes must not be gitignored (e.g. export.3mf, model.glb directories)
+        if: ${{ needs.changes.outputs.docs_only != 'true' }}
         run: |
           test -n "$(git ls-files ':(literal)src/routes/api/builds/[id]/export.3mf/+server.ts')"
           test -n "$(git ls-files ':(literal)src/routes/api/templates/[id]/model.glb/+server.ts')"
       - name: Audit production dependencies (fails on high or critical advisories)
+        if: ${{ needs.changes.outputs.docs_only != 'true' }}
         run: npm audit --omit=dev --audit-level=high
-      - run: npm run check
-      - run: npm run lint
-      - run: npm test
+      - if: ${{ needs.changes.outputs.docs_only != 'true' }}
+        run: npm run check
+      - if: ${{ needs.changes.outputs.docs_only != 'true' }}
+        run: npm run lint
+      - if: ${{ needs.changes.outputs.docs_only != 'true' }}
+        run: npm test
 
   # Runs in parallel with `test`. `image` needs both, so a failing browser run blocks
   # publishing. Only on tags, manual runs and (CI_FULL=true) every push/PR; see the top.
@@ -71,12 +148,21 @@ jobs:
   # Ubuntu mirrors were unreachable. The app self-hosts its web fonts and the specs have no
   # screenshot comparisons. The browser download is cached per Playwright version.
   e2e:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || vars.CI_FULL == 'true' }}
+    needs: changes
+    # A failed `changes` leaves docs_only empty, so this still runs (when the original condition
+    # holds) and the first step fails it, instead of a skip that would read as passed.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || vars.CI_FULL == 'true') }}
     env:
       KITPACK_DOWNLOAD: 'off'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Suite takes ~20 min on ubuntu-latest (1 worker); one retry can add the 3-minute test timeout.
+    timeout-minutes: 35
     steps:
+      - name: Fail if change detection did not succeed
+        if: ${{ needs.changes.result != 'success' }}
+        run: |
+          echo "::error::The changes job did not succeed (${{ needs.changes.result }}), so this run cannot tell docs-only from code changes."
+          exit 1
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:

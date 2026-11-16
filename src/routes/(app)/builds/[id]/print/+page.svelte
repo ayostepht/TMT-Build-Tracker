@@ -7,6 +7,7 @@
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import PartRow from '#lib/components/PartRow.svelte';
 	import PlateTime from '#lib/components/PlateTime.svelte';
+	import PlateGrams from '#lib/components/PlateGrams.svelte';
 	import PlateControl from '#lib/components/PlateControl.svelte';
 	import PrinterHint from '#lib/components/PrinterHint.svelte';
 	import PrintToolbar from '#lib/components/PrintToolbar.svelte';
@@ -136,7 +137,7 @@
 
 {#snippet startFor(key: string)}
 	{@const pl = ctx.view.plates.find((p) => String(p.number) === key)}
-	{#if pl}<PlateTime plate={pl} /><PlateControl plate={pl} />{/if}
+	{#if pl}<PlateGrams plate={pl} /><PlateTime plate={pl} /><PlateControl plate={pl} />{/if}
 	{#if histCount(key)}
 		<button
 			class="btn sm ghost"

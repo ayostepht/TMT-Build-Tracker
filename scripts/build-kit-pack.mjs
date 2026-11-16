@@ -11,15 +11,27 @@
 //   # or only pack what an install already has:
 //   node scripts/build-kit-pack.mjs --db /data/tmt.db --pack-version 1.0.0 --out /tmp
 //
+//   # a part without a STEP file (community design from a slicer 3MF) is added to the model
+//   # as a node in its own frame (see src/lib/server/kitpack/model-node.ts), then packed:
+//   node scripts/build-kit-pack.mjs --db data/kitpack-work/tmt.db --pack-version 1.0.2 --out data/kitpack \
+//     --print SinglePieceHandleTMT.3mf --model-node push-handle-one-piece=SinglePieceHandleTMT.3mf \
+//     --project-settings push-handle-one-piece=SinglePieceHandleTMT.3mf \
+//     --origins-from kitpacks/makegood-tmt-revb-1.0.1.kitpack
+//
+// Parts under another license than MakeGood's CC0 are listed in kitpacks/licenses.json (manifest
+// `otherLicenses` and CREDITS.md); `--licenses <file>` picks another file.
+//
 // Writes <out>/<template>-<version>.kitpack and prints its size and sha256 (for
 // kitpacks/index.json). Never commit the pack.
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { strFromU8, unzipSync } from 'fflate';
 
 const usage = `Usage: build-kit-pack.mjs --db <path> --pack-version <x.y.z> --out <dir> [--template <slug>]
   [--init] [--model <step.zip>] [--hardware <hardware.glb>] [--print <3mf|zip>]... [--scale 1000]
-  [--license-url <url>] [--import-only]`;
+  [--license-url <url>] [--import-only] [--model-node <slug>=<3mf>]... [--project-settings <slug>=<3mf>]... [--origins-from <older.kitpack>] [--licenses <json>]`;
 
 let args;
 try {
@@ -35,6 +47,10 @@ try {
 			out: { type: 'string' },
 			scale: { type: 'string', default: '1000' },
 			'license-url': { type: 'string' },
+			'model-node': { type: 'string', multiple: true },
+			'project-settings': { type: 'string', multiple: true },
+			'origins-from': { type: 'string' },
+			licenses: { type: 'string' },
 			'import-only': { type: 'boolean', default: false },
 			help: { type: 'boolean', default: false }
 		}
@@ -91,17 +107,57 @@ try {
 			}
 		}
 	}
+	for (const spec of args['model-node'] ?? []) {
+		const eq = spec.indexOf('=');
+		if (eq < 1) throw new Error(`--model-node expects <slug>=<file.3mf>, got "${spec}"`);
+		const slug = spec.slice(0, eq);
+		const r = await cli.addModelNodeFrom3mf(db, tpl.id, slug, resolve(spec.slice(eq + 1)), step);
+		const f = (a) => a.map((v) => v.toFixed(1)).join(' ');
+		step(
+			`model node ${slug}: box min [${f(r.box.min)}] max [${f(r.box.max)}], ${r.slugs.length} nodes`
+		);
+	}
+	for (const spec of args['project-settings'] ?? []) {
+		const eq = spec.indexOf('=');
+		if (eq < 1) throw new Error(`--project-settings expects <slug>=<file.3mf>, got "${spec}"`);
+		const slug = spec.slice(0, eq);
+		const kept = cli.applyProjectSettings(db, tpl.id, slug, resolve(spec.slice(eq + 1)));
+		step(`print settings of ${slug}: ${JSON.stringify(kept)}`);
+	}
 	if (args['import-only']) process.exit(0);
 	const out = resolve(args.out);
 	mkdirSync(out, { recursive: true });
 	const version = args['pack-version'];
 	const outFile = `${out}/${tpl.slug}-${version}.kitpack`;
+	const defaultLicenses = fileURLToPath(new URL('../kitpacks/licenses.json', import.meta.url));
+	const licensesFile = args.licenses ? resolve(args.licenses) : defaultLicenses;
+	let otherLicenses;
+	if (existsSync(licensesFile))
+		otherLicenses = JSON.parse(readFileSync(licensesFile, 'utf8')).otherLicenses;
+	else if (args.licenses) throw new Error(`--licenses file ${licensesFile} does not exist`);
+	else
+		console.error(
+			`WARNING: ${defaultLicenses} not found: the pack gets no otherLicenses notices (community parts would be credited as CC0)`
+		);
+	const originsFrom = args['origins-from']
+		? Object.fromEntries(
+				JSON.parse(
+					strFromU8(
+						unzipSync(new Uint8Array(readFileSync(resolve(args['origins-from']))), {
+							filter: (f) => f.name === 'print/geometry.json'
+						})['print/geometry.json']
+					)
+				).map((r) => [r.slug, r.origin])
+			)
+		: undefined;
 	const res = cli.buildKitPack(db, {
 		templateSlug: tpl.slug,
 		version,
 		outFile,
 		scale: Number(args.scale),
 		licenseUrl: args['license-url'],
+		otherLicenses,
+		originsFrom,
 		log: step
 	});
 	step(`wrote ${outFile}`);

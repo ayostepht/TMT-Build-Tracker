@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { filamentLabel, roleLabel, sortRoles } from '#lib/domain/labels.ts';
-	import { fmt, fmtSpools, type FilamentStat } from '#lib/domain/index.ts';
+	import { fmt, fmtSpools, stockKg, type FilamentStat } from '#lib/domain/index.ts';
 	import type { BuildView, FilamentRole } from '#lib/domain/types.ts';
 	import { setBuildDesign } from '#lib/client/api.ts';
+	import { removeImpact } from '#lib/domain/design.ts';
+	import RemoveColorDialog from './RemoveColorDialog.svelte';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 
 	let {
@@ -12,7 +14,8 @@
 		editingRole = null,
 		onfilter,
 		onedit,
-		onadd
+		onadd,
+		announce
 	}: {
 		view: BuildView;
 		stats: FilamentStat[];
@@ -23,6 +26,8 @@
 		onfilter?: (role: string | null) => void;
 		onedit?: (role: string) => void;
 		onadd?: () => void;
+		/** Spoken confirmation for screen readers. */
+		announce?: (msg: string) => void;
 	} = $props();
 
 	const ctx = getBuildCtx();
@@ -35,8 +40,34 @@
 	const totalG = $derived(stats.reduce((a, s) => a + s.total, 0));
 	const shortCount = $derived(draft ? 0 : stats.filter((s) => s.short && s.total > 0).length);
 
+	/** Slot being removed while parts still use it: its dialog is open. */
+	let removing = $state<string | null>(null);
+	let removeBusy = $state(false);
+	const removingSlot = $derived(view.filaments.find((f) => f.key === removing));
+	// Close the dialog if its slot disappears (someone else removed it) or editing is no longer allowed.
+	$effect(() => {
+		if (removing && (!removingSlot || !canEdit)) removing = null;
+	});
+
+	/** Every part counts, also those of unchosen variant options: the server moves them too. */
 	function remove(f: FilamentRole) {
-		void ctx.act(() => setBuildDesign(ctx.id, { removeRole: f.key }));
+		if (removeImpact(view, f.key).length) removing = f.key;
+		else void ctx.act(() => setBuildDesign(ctx.id, { removeRole: f.key }));
+	}
+
+	async function confirmRemove(replaceWith: string) {
+		const f = removingSlot;
+		if (!f) return;
+		const to = view.filaments.find((x) => x.key === replaceWith);
+		const n = removeImpact(view, f.key).length;
+		removeBusy = true;
+		const ok = await ctx.act(() => setBuildDesign(ctx.id, { removeRole: f.key, replaceWith }));
+		removeBusy = false;
+		removing = null;
+		if (ok)
+			announce?.(
+				`Removed ${roleLabel(f.key, f, view.filaments)}. ${n} ${n === 1 ? 'part' : 'parts'} moved to ${roleLabel(replaceWith, to, view.filaments)}`
+			);
 	}
 </script>
 
@@ -64,7 +95,7 @@
 						class="big"
 						class:tpu={f.tpu}
 						style="background-color:{f.hex}"
-						aria-label="Change filament for {roleLabel(f.key, f)}"
+						aria-label="Change filament for {roleLabel(f.key, f, view.filaments)}"
 						title="Pick a different filament"
 						onclick={() => onedit?.(f.key)}
 					></button>
@@ -80,14 +111,14 @@
 						onclick={() => onfilter?.(activeRole === f.key ? null : f.key)}
 						title="Show only the parts in this slot"
 					>
-						<b>{roleLabel(f.key, f)}</b>
-						{#if roleLabel(f.key, f) !== filamentLabel(f, f.key)}<span class="fname"
+						<b>{roleLabel(f.key, f, view.filaments)}</b>
+						{#if roleLabel(f.key, f, view.filaments) !== filamentLabel(f, f.key)}<span class="fname"
 								>{filamentLabel(f, f.key)}</span
 							>{/if}
 						<span class="muted">{f.material} · {partCount(f)} parts · {fmt(grams)} g</span>
 					</button>
 					<div class="need" class:short={!draft && s?.short && grams > 0}>
-						Needs {fmtSpools(grams / 1000)} kg{#if !draft}, have {fmtSpools(f.spools)}{/if}
+						Needs {fmtSpools(grams / 1000)} kg{#if !draft}, have {fmtSpools(stockKg(f))} kg{/if}
 						{#if grams > 0 && !draft}
 							{#if spare < 0}<span class="flag">short</span>{:else}<span class="ok">ok</span>{/if}
 						{/if}
@@ -102,8 +133,13 @@
 							>
 								Change filament
 							</button>
-							{#if partCount(f) === 0}
-								<button type="button" class="btn sm danger" onclick={() => remove(f)}>Remove</button
+							{#if !f.kit}
+								<button
+									type="button"
+									class="btn sm danger"
+									data-testid="remove-color"
+									aria-label="Remove {roleLabel(f.key, f, view.filaments)}"
+									onclick={() => remove(f)}>Remove</button
 								>
 							{/if}
 						</div>
@@ -117,6 +153,16 @@
 		<button type="button" class="btn" onclick={() => onadd?.()}>Add a color</button>
 	{/if}
 </section>
+
+{#if removing && removingSlot}
+	<RemoveColorDialog
+		{view}
+		roleKey={removing}
+		busy={removeBusy}
+		onconfirm={confirmRemove}
+		oncancel={() => (removing = null)}
+	/>
+{/if}
 
 <style>
 	.slots {

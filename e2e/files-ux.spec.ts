@@ -238,7 +238,7 @@ test('compact printer summary, switching layouts asks first, printers from other
 	await expect(page.getByTestId('bed-picker')).toHaveCount(0);
 
 	// Switching to a MakeGood profile asks first; Cancel keeps the arrangement.
-	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (21 plates)' });
+	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (22 plates)' });
 	await expect(page.getByTestId('layout-confirm')).toContainText('Replace your');
 	// the safe choice (Cancel) has focus, not the destructive one
 	await expect(page.getByTestId('layout-confirm-cancel')).toBeFocused();
@@ -247,7 +247,7 @@ test('compact printer summary, switching layouts asks first, printers from other
 	await expect(page.getByTestId('plate-layout')).toBeFocused();
 	await expect(page.getByTestId('layout-confirm')).toHaveCount(0);
 	await expect(page.getByTestId('layout-name')).toHaveText('Arranged for CC1');
-	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (21 plates)' });
+	await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (22 plates)' });
 	await page.getByTestId('layout-confirm-yes').click();
 	await expect(page.getByTestId('layout-name')).toHaveText("MakeGood's Bambu H2D / H2S profile");
 });

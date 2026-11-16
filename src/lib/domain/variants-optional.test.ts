@@ -42,22 +42,55 @@ describe('TMT headrest and push handle accessories', () => {
 	it('both default to included, with an empty "none" option', () => {
 		for (const k of ['headrest', 'push-handle']) {
 			expect(group(k).defaultOption).toBe('include');
-			expect(group(k).options.map((o) => o.key)).toEqual(['include', 'none']);
-			expect(group(k).options[1].parts).toEqual([]);
+			expect(group(k).options.at(-1)!.key).toBe('none');
+			expect(group(k).options.at(-1)!.parts).toEqual([]);
 		}
+		expect(group('headrest').options.map((o) => o.key)).toEqual(['include', 'none']);
+		expect(group('push-handle').options.map((o) => o.key)).toEqual([
+			'include',
+			'one-piece',
+			'none'
+		]);
 		expect(group('headrest').options[0].parts.sort()).toEqual([...HEADREST].sort());
 		expect(group('push-handle').options[0].parts.sort()).toEqual([...PUSH].sort());
 	});
-	it('every option part is a real part and appears in one option only', () => {
+	it('every option part is a real part; only the push grip is shared, between options of one group', () => {
 		const slugs = new Set(tmtTemplate.parts.map((p) => p.slug));
-		const seen = new Set<string>();
-		for (const g of tmtTemplate.variantGroups!)
-			for (const o of g.options)
+		const groupOf = new Map<string, string>();
+		const shared: string[] = [];
+		for (const g of tmtTemplate.variantGroups!) {
+			const inGroup = new Set<string>();
+			for (const o of g.options) {
+				expect(new Set(o.parts).size, `${g.key}/${o.key} lists a part twice`).toBe(o.parts.length);
 				for (const s of o.parts) {
 					expect(slugs.has(s), s).toBe(true);
-					expect(seen.has(s), `${s} twice`).toBe(false);
-					seen.add(s);
+					expect(groupOf.get(s) ?? g.key, `${s} in two groups`).toBe(g.key);
+					groupOf.set(s, g.key);
+					if (inGroup.has(s)) shared.push(s);
+					inGroup.add(s);
 				}
+			}
+		}
+		expect(shared).toEqual(['push-grip']);
+	});
+	it('one-piece push handle: its parts replace the multi-part ones, the grip stays', () => {
+		const one = group('push-handle').options.find((o) => o.key === 'one-piece')!;
+		expect(one.parts.sort()).toEqual(['push-grip', 'push-handle-one-piece']);
+		const v = makeView(undefined, 0, { 'push-handle': 'one-piece' });
+		const left = v.parts.map((p) => p.slug);
+		for (const s of ['push-handle-one-piece', 'push-grip']) expect(left).toContain(s);
+		for (const s of ['push-top', 'push-bottom', 'push-brace', 'push-pin'])
+			expect(left).not.toContain(s);
+		// default build: the one-piece part is inactive
+		expect(makeView().parts.map((p) => p.slug)).not.toContain('push-handle-one-piece');
+		// the shared grip belongs to the first (default) option
+		expect(variantOfPart(tmtTemplate.variantGroups!).get('push-grip')).toEqual({
+			group: 'push-handle',
+			option: 'include'
+		});
+		expect(
+			inactiveSlugs(tmtTemplate.variantGroups!, { 'push-handle': 'none' }).has('push-grip')
+		).toBe(true);
 	});
 	it('the default build includes them; choosing none drops exactly those parts', () => {
 		const all = makeView().parts.map((p) => p.slug);

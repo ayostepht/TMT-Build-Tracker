@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
 	applyRun,
@@ -6,6 +7,7 @@ import {
 	setPrintStart,
 	setRunEstimate,
 	setStatus,
+	splitPartial,
 	startPrinting,
 	type LiveStart,
 	stopPrinting,
@@ -69,13 +71,24 @@ function optNum(v: unknown, field: string): number | null | undefined {
 	if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) bad(`${field} must be a number >= 0`);
 	return v;
 }
+/** Grams of a run, a split half or a part's `grams` field: 0 up to `MAX_RUN_GRAMS`. */
+function optGrams(v: unknown, field: string): number | null | undefined {
+	const n = optNum(v, field);
+	if (n != null && n > MAX_RUN_GRAMS) bad(runGramsMessage(field));
+	return n;
+}
 function dateStr(v: unknown, field: string): string {
 	if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) bad(`${field} must be YYYY-MM-DD`);
 	return v;
 }
+/** A request-supplied slug is a part of this build (own keys only: `constructor`, `__proto__` are not). */
+function hasPart(view: BuildView, slug: unknown): slug is string {
+	return typeof slug === 'string' && Object.hasOwn(view.state, slug);
+}
 function slugList(v: unknown, view: BuildView, field = 'slugs'): string[] {
 	if (!Array.isArray(v) || v.length === 0) bad(`${field} must be a non-empty array`);
-	for (const s of v) if (typeof s !== 'string' || !view.state[s]) bad(`Unknown part in ${field}`);
+	for (const s of v)
+		if (typeof s !== 'string' || !hasPart(view, s)) bad(`Unknown part in ${field}`);
 	return [...new Set(v as string[])];
 }
 
@@ -212,7 +225,7 @@ export function setPartStatus(
 	if (printedOn !== undefined && status !== 'Printed')
 		bad('printedOn only applies when restoring a part to Printed');
 	mutateBuild(db, buildId, userId, (_tx, view, now) => {
-		if (!view.state[slug]) throw new ApiError(404, 'Unknown part');
+		if (!hasPart(view, slug)) throw new ApiError(404, 'Unknown part');
 		if (printedOn !== undefined && !validPrintedOn(printedOn, now))
 			bad('printedOn must be a date (YYYY-MM-DD) between 2020-01-01 and today');
 		return {
@@ -229,6 +242,14 @@ export function setPartStatus(
 	});
 }
 
+/** Upper bound for a typed part weight (all copies), in grams. */
+export const MAX_PART_GRAMS = 20000;
+
+/** Upper bound for the grams logged on one run (or one half of a split), in grams. */
+export const MAX_RUN_GRAMS = 100000;
+export const runGramsMessage = (field: string): string =>
+	`${field} must be at most ${MAX_RUN_GRAMS} g`;
+
 export function updatePart(
 	db: Db,
 	buildId: string,
@@ -238,7 +259,7 @@ export function updatePart(
 ): void {
 	if (!isObj(body)) bad('Invalid body');
 	mutateBuild(db, buildId, userId, (tx, view) => {
-		if (!view.state[slug]) throw new ApiError(404, 'Unknown part');
+		if (!hasPart(view, slug)) throw new ApiError(404, 'Unknown part');
 		const patch: PartPatch = { slug };
 		if (body.comps !== undefined) {
 			if (!isObj(body.comps)) bad('comps must be an object');
@@ -254,6 +275,25 @@ export function updatePart(
 			if (a !== null && (typeof a !== 'string' || !view.members.some((m) => m.userId === a)))
 				bad('assignee must be a chapter member');
 			patch.assigneeUserId = a as string | null;
+		}
+		if (body.manualGrams !== undefined) {
+			if (Object.keys(patch).length > 1) bad('Send the weight on its own');
+			const g = body.manualGrams;
+			if (
+				g !== null &&
+				(typeof g !== 'number' || !Number.isFinite(g) || g < 0 || g > MAX_PART_GRAMS)
+			)
+				bad(`manualGrams must be a number from 0 to ${MAX_PART_GRAMS}, or null`);
+			// 0 or null clears the entry (a part with no weight is "unknown", never 0 g).
+			const typed = g ? Math.round(g * 100) / 100 : null;
+			if (typed === null && !view.state[slug].manualGrams)
+				bad('No weight was entered for this part');
+			patch.manualGrams = typed;
+			return {
+				kind: 'part.grams',
+				payload: { slug, manualGrams: typed, ...(typed ? {} : { cleared: true }) },
+				patches: [patch]
+			};
 		}
 		if (Object.keys(patch).length === 1) bad('Nothing to update');
 		void tx;
@@ -419,15 +459,40 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 	for (const f of freed) emitPrinterEvent(f.org, { type: 'job', printerId: f.printerId });
 }
 
-export function addRun(db: Db, buildId: string, userId: string, body: unknown): string {
+export function addRun(
+	db: Db,
+	buildId: string,
+	userId: string,
+	body: unknown
+): { runId: string; runIds: string[] } {
 	if (!isObj(body)) bad('Invalid body');
-	let runId = '';
+	let ids = { runId: '', runIds: [] as string[] };
 	mutateBuild(db, buildId, userId, (tx, view, now) => {
 		const o = runOutcome(tx, view, now, buildId, userId, body);
-		runId = o.runId;
+		ids = { runId: o.runId, runIds: o.runIds };
 		return o.outcome;
 	});
-	return runId;
+	return ids;
+}
+
+/** A Partial with per-part results (`body.split`): which parts printed OK, and the grams of each half. */
+function splitRequest(
+	view: BuildView,
+	body: Obj,
+	plateNumber: number | null
+): { keptSlugs: string[]; keptGrams: number | null; lostGrams: number | null } | null {
+	if (body.split === undefined || body.split === null) return null;
+	if (!isObj(body.split)) bad('split must be an object');
+	if (body.result !== 'Partial') bad('Per-part results belong to a Partial print');
+	const plate = plateNumber === null ? null : view.plates.find((p) => p.number === plateNumber);
+	if (!plate) bad('Per-part results need a plate');
+	if (plate.perPartRuns || plate.runs > 1)
+		bad('Per-part results are for single-run plates; log Success or Failed instead');
+	return {
+		keptSlugs: slugList(body.split.keptSlugs, view, 'keptSlugs'),
+		keptGrams: optGrams(body.split.keptGrams, 'keptGrams') ?? null,
+		lostGrams: optGrams(body.split.lostGrams, 'lostGrams') ?? null
+	};
 }
 
 function runOutcome(
@@ -437,55 +502,102 @@ function runOutcome(
 	buildId: string,
 	userId: string | null,
 	body: Obj
-): { runId: string; outcome: Outcome } {
+): { runId: string; runIds: string[]; outcome: Outcome } {
 	{
 		const plateNumber = optNum(body.plateNumber, 'plateNumber') ?? null;
 		if (plateNumber !== null && !view.plates.some((p) => p.number === plateNumber))
 			bad('Unknown plate');
 		const partSlug = optStr(body.partSlug, 'partSlug') ?? null;
-		if (partSlug && !view.state[partSlug]) bad('Unknown part');
+		if (partSlug && !hasPart(view, partSlug)) bad('Unknown part');
 		const partSlugs =
 			body.partSlugs === undefined || body.partSlugs === null
 				? null
 				: slugList(body.partSlugs, view, 'partSlugs');
 		if (plateNumber === null && !partSlug && !partSlugs) bad('A run needs a plate or a part');
 		if (!(RUN_RESULTS as readonly unknown[]).includes(body.result)) bad('Unknown result');
+		const split = splitRequest(view, body, plateNumber);
 		const input: PrintRunInput = {
 			plateNumber,
 			partSlug,
 			partSlugs,
 			date: dateStr(body.date, 'date'),
 			result: body.result as PrintRunInput['result'],
-			grams: optNum(body.grams, 'grams') ?? null,
+			grams: optGrams(body.grams, 'grams') ?? null,
 			hours: optNum(body.hours, 'hours') ?? null,
 			printer: optStr(body.printer, 'printer', 100) ?? null,
 			note: typeof body.note === 'string' ? body.note.slice(0, 2000) : ''
 		};
-		assertRunRoom(tx, buildId);
-		const row = tx
-			.insert(printRuns)
-			.values({
-				buildId,
-				plateNumber: input.plateNumber,
-				partSlug: input.partSlug,
-				partSlugs: input.partSlugs,
-				date: input.date,
-				result: input.result,
-				grams: input.grams,
-				hours: input.hours,
-				estSeconds:
-					runTargets(view, input)
-						.map((s) => view.state[s]?.runEstSeconds)
-						.find((v): v is number => !!v) ?? null,
-				printer: input.printer,
-				userId,
-				note: input.note
-			})
-			.returning({ id: printRuns.id })
-			.get();
-		const runId = row.id;
+		const targets = runTargets(view, input);
+		const plannedSeconds =
+			targets.map((s) => view.state[s]?.runEstSeconds).find((v): v is number => !!v) ?? null;
+		const live = livePrintingSlugs(tx, buildId);
+		const insert = (r: PrintRunInput, estSeconds: number | null): string => {
+			assertRunRoom(tx, buildId);
+			return tx
+				.insert(printRuns)
+				.values({
+					buildId,
+					plateNumber: r.plateNumber,
+					partSlug: r.partSlug,
+					partSlugs: r.partSlugs,
+					date: r.date,
+					result: r.result,
+					grams: r.grams,
+					hours: r.hours,
+					estSeconds,
+					printer: r.printer,
+					userId,
+					note: r.note
+				})
+				.returning({ id: printRuns.id })
+				.get().id;
+		};
+		const auto = userId === null ? { auto: true } : {};
+
+		if (split) {
+			if (split.keptSlugs.some((s) => !targets.includes(s)))
+				bad('A ticked part is not part of this print');
+			const runs = splitPartial(view, input, split, plannedSeconds);
+			if (!runs) bad('Tick at least one part that printed OK and leave at least one that did not');
+			const keptId = insert(runs.kept, runs.kept.estSeconds);
+			const lostId = insert(runs.lost, runs.lost.estSeconds);
+			const grams =
+				split.keptGrams === null && split.lostGrams === null
+					? null
+					: (split.keptGrams ?? 0) + (split.lostGrams ?? 0);
+			return {
+				runId: keptId,
+				runIds: [keptId, lostId],
+				outcome: {
+					kind: 'run.add',
+					payload: {
+						runId: keptId,
+						runIds: [keptId, lostId],
+						plateNumber,
+						partSlug: null,
+						partSlugs: targets,
+						grams,
+						result: 'Partial',
+						split: true,
+						kept: runs.keptSlugs,
+						lost: runs.lostSlugs,
+						keptGrams: split.keptGrams,
+						lostGrams: split.lostGrams,
+						...(input.printer ? { printer: input.printer } : {}),
+						...auto
+					},
+					patches: [
+						...applyRun(view, runs.kept, now, { livePrinting: live }),
+						...applyRun(view, runs.lost, now, { livePrinting: live })
+					]
+				}
+			};
+		}
+
+		const runId = insert(input, plannedSeconds);
 		return {
 			runId,
+			runIds: [runId],
 			outcome: {
 				kind: 'run.add',
 				payload: {
@@ -495,9 +607,9 @@ function runOutcome(
 					partSlugs,
 					grams: input.grams,
 					result: input.result,
-					...(userId === null ? { auto: true } : {})
+					...auto
 				},
-				patches: applyRun(view, input, now, { livePrinting: livePrintingSlugs(tx, buildId) })
+				patches: applyRun(view, input, now, { livePrinting: live })
 			}
 		};
 	}
@@ -554,6 +666,8 @@ export function updatePlate(
 		if (!plate) throw new ApiError(404, 'Unknown plate');
 		const set: Partial<typeof buildPlates.$inferInsert> = {};
 		const g = optNum(body.slicerGrams, 'slicerGrams');
+		if (g !== undefined && g !== null && g > MAX_PART_GRAMS)
+			bad(`slicerGrams must be at most ${MAX_PART_GRAMS}`);
 		if (g !== undefined) set.slicerGrams = g;
 		if (body.manualEstSeconds !== undefined) {
 			const m = body.manualEstSeconds;
@@ -568,17 +682,26 @@ export function updatePlate(
 			for (const [k, v] of Object.entries(body.slicerByPart)) {
 				if (!plate.parts.includes(k)) bad('Part is not on this plate');
 				if (v === null) continue; // null clears the entry
-				if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) bad('Grams must be >= 0');
+				if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > MAX_PART_GRAMS)
+					bad(`Grams must be between 0 and ${MAX_PART_GRAMS}`);
 				m[k] = v;
 			}
 			set.slicerByPart = m;
 		}
 		if (!Object.keys(set).length) bad('Nothing to update');
+		// Grams typed here are the maker's own entry; clearing them clears the source too.
+		if (set.slicerGrams !== undefined || set.slicerByPart !== undefined) {
+			const typed =
+				(set.slicerGrams ?? 0) > 0 || Object.values(set.slicerByPart ?? {}).some((v) => v > 0);
+			set.slicerGramsSource = typed ? 'user' : null;
+		}
 		tx.update(buildPlates)
 			.set(set)
 			.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.number, number)))
 			.run();
-		return { kind: 'plate.slicer', payload: { number, ...set } };
+		const shown: Record<string, unknown> = { ...set };
+		delete shown.slicerGramsSource;
+		return { kind: 'plate.slicer', payload: { number, ...shown } };
 	});
 }
 
@@ -628,9 +751,15 @@ export function updateFilament(
 	});
 }
 
+/** Most runs one undo may remove (a Partial's two halves, with room to spare). */
+const MAX_UNDO_RUNS = 10;
+
 /**
  * Undo a just-logged run: delete it and put the targeted parts back to the state the client
- * saw before logging. Only parts that run affects may be restored.
+ * saw before logging. Only parts that run affects may be restored. A Partial with per-part
+ * results made two runs: `body.runIds` names all of them and one undo removes both (one
+ * `run.undo` row). Ids that are no longer in this build are skipped; none left is a 404.
+ * Returns the ids that were deleted (to hand back to Spoolman).
  */
 export function undoRun(
 	db: Db,
@@ -638,34 +767,55 @@ export function undoRun(
 	userId: string,
 	runId: string,
 	body: unknown
-): void {
+): string[] {
 	if (!isObj(body) || !Array.isArray(body.parts)) bad('parts must be an array');
 	const rawParts = body.parts as unknown[];
 	if (rawParts.length > 100) bad('Too many parts');
+	let extra: string[] = [];
+	if (body.runIds !== undefined) {
+		if (!Array.isArray(body.runIds) || body.runIds.length > MAX_UNDO_RUNS)
+			bad(`runIds must be a list of at most ${MAX_UNDO_RUNS} run ids`);
+		if (body.runIds.some((x) => typeof x !== 'string' || !x || x.length > 100))
+			bad('runIds must be strings');
+		extra = body.runIds as string[];
+	}
+	const wanted = [...new Set([runId, ...extra])];
+	if (wanted.length > MAX_UNDO_RUNS) bad(`At most ${MAX_UNDO_RUNS} runs can be undone at once`);
+	let removed: string[] = [];
 	mutateBuild(db, buildId, userId, (tx, view) => {
-		const r = tx
+		const rows = tx
 			.select()
 			.from(printRuns)
-			.where(and(eq(printRuns.id, runId), eq(printRuns.buildId, buildId)))
-			.get();
-		if (!r) throw new ApiError(404, 'Run not found');
-		const allowed = runTargets(view, {
-			plateNumber: r.plateNumber,
-			partSlug: r.partSlug,
-			partSlugs: r.partSlugs,
-			date: r.date,
-			result: r.result as PrintRunInput['result'],
-			grams: r.grams,
-			hours: r.hours,
-			printer: r.printer,
-			note: r.note
-		});
+			.where(and(inArray(printRuns.id, wanted), eq(printRuns.buildId, buildId)))
+			.all()
+			.sort((a, b) => wanted.indexOf(a.id) - wanted.indexOf(b.id));
+		if (!rows.length) throw new ApiError(404, 'Run not found');
+		const r = rows[0];
+		const allowed = [
+			...new Set(
+				rows.flatMap((x) =>
+					runTargets(view, {
+						plateNumber: x.plateNumber,
+						partSlug: x.partSlug,
+						partSlugs: x.partSlugs,
+						date: x.date,
+						result: x.result as PrintRunInput['result'],
+						grams: x.grams,
+						hours: x.hours,
+						printer: x.printer,
+						note: x.note
+					})
+				)
+			)
+		];
 		const patches: PartPatch[] = [];
 		const live = livePrintingSlugs(tx, buildId);
 		for (const raw of rawParts) {
 			if (!isObj(raw) || typeof raw.slug !== 'string') bad('Invalid part snapshot');
 			const slug = raw.slug;
-			if (!allowed.includes(slug) || !view.state[slug]) bad('Part is not affected by this run');
+			// With a sibling already gone, its parts are no longer ours to restore: skip them.
+			if (rows.length < wanted.length && !allowed.includes(slug)) continue;
+			if (!allowed.includes(slug) || !hasPart(view, slug)) bad('Part is not affected by this run');
 			// Printing again on a live job: the snapshot is of an older attempt, keep the live state.
 			const keep = live.has(slug) && view.state[slug].status === 'Printing';
 			if (!(PART_STATUSES as readonly unknown[]).includes(raw.status)) bad('Invalid status');
@@ -694,19 +844,32 @@ export function undoRun(
 				comps
 			});
 		}
-		tx.delete(printRuns).where(eq(printRuns.id, runId)).run();
+		removed = rows.map((x) => x.id);
+		tx.delete(printRuns).where(inArray(printRuns.id, removed)).run();
+		const split = rows.length > 1;
 		return {
 			kind: 'run.undo',
-			payload: {
-				runId,
-				plateNumber: r.plateNumber,
-				partSlug: r.partSlug,
-				partSlugs: r.partSlugs,
-				result: r.result
-			},
+			payload: split
+				? {
+						runId: r.id,
+						runIds: removed,
+						plateNumber: r.plateNumber,
+						partSlug: null,
+						partSlugs: allowed,
+						result: 'Partial',
+						split: true
+					}
+				: {
+						runId: r.id,
+						plateNumber: r.plateNumber,
+						partSlug: r.partSlug,
+						partSlugs: r.partSlugs,
+						result: r.result
+					},
 			patches
 		};
 	});
+	return removed;
 }
 
 /**
@@ -814,7 +977,7 @@ export function updateRun(
 			changed.result = set.result;
 		}
 		if (body.grams !== undefined) {
-			set.grams = optNum(body.grams, 'grams') ?? null;
+			set.grams = optGrams(body.grams, 'grams') ?? null;
 			changed.grams = set.grams;
 		}
 		if (body.hours !== undefined) {
@@ -832,7 +995,7 @@ export function updateRun(
 		}
 		if (body.partSlug !== undefined) {
 			const s = optStr(body.partSlug, 'partSlug') ?? null;
-			if (s && !view.state[s]) bad('Unknown part');
+			if (s && !hasPart(view, s)) bad('Unknown part');
 			if (s === null && old.plateNumber === null) bad('A part log needs a part');
 			const pl =
 				old.plateNumber === null ? null : view.plates.find((x) => x.number === old.plateNumber);
@@ -960,7 +1123,27 @@ export function mutateBuildSystem(
 	return out;
 }
 
-/** Log a run on behalf of a printer (auto-log of a finished job). Returns the run id. */
+/**
+ * Log a run on behalf of a printer (auto-log of a finished job). `body` may carry `split` like the
+ * user route does. Returns the run id (the printed half of a split) and every id created.
+ */
+export function addRunsSystem(
+	db: Db,
+	buildId: string,
+	viewAs: string,
+	by: string,
+	body: Obj
+): { runId: string; runIds: string[] } {
+	let ids = { runId: '', runIds: [] as string[] };
+	mutateBuildSystem(db, buildId, viewAs, by, (tx, view, now) => {
+		const o = runOutcome(tx, view, now, buildId, null, body);
+		ids = { runId: o.runId, runIds: o.runIds };
+		return o.outcome;
+	});
+	return ids;
+}
+
+/** `addRunsSystem` for callers that only need the (first) run id. */
 export function addRunSystem(
 	db: Db,
 	buildId: string,
@@ -968,13 +1151,96 @@ export function addRunSystem(
 	by: string,
 	body: Obj
 ): string {
-	let runId = '';
-	mutateBuildSystem(db, buildId, viewAs, by, (tx, view, now) => {
-		const o = runOutcome(tx, view, now, buildId, null, body);
-		runId = o.runId;
-		return o.outcome;
+	return addRunsSystem(db, buildId, viewAs, by, body).runId;
+}
+
+/** Most "added a spool" entries one color keeps. */
+export const MAX_SPOOL_ADDS = 100;
+
+/**
+ * Add a spool to a color slot's stock (`{ kg, note? }`): kg from 0.01 to 99 (rounded to 2
+ * decimals), note up to 200 characters, at most `MAX_SPOOL_ADDS` per slot. The add keeps its
+ * date and who made it. Returns the new add's id.
+ */
+export function addSpool(
+	db: Db,
+	buildId: string,
+	userId: string,
+	role: string,
+	body: unknown
+): string {
+	if (!isObj(body)) bad('Invalid body');
+	const kg = body.kg;
+	if (typeof kg !== 'number' || !Number.isFinite(kg) || kg < 0.005 || kg > 99)
+		bad('kg must be a number from 0.01 to 99');
+	const rounded = Math.round(kg * 100) / 100;
+	if (rounded < 0.01) bad('kg must be a number from 0.01 to 99');
+	let note: string | null = null;
+	if (body.note !== undefined && body.note !== null) {
+		if (typeof body.note !== 'string') bad('note must be text');
+		if (body.note.length > 200) bad('note must be at most 200 characters');
+		note =
+			body.note
+				// eslint-disable-next-line no-control-regex
+				.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]+/g, ' ')
+				.trim() || null;
+	}
+	let id = '';
+	mutateBuild(db, buildId, userId, (tx, view, now) => {
+		if (!view.filaments.some((f) => f.key === role)) throw new ApiError(404, 'Unknown filament');
+		const row = tx
+			.select({ adds: buildFilaments.spoolAdds })
+			.from(buildFilaments)
+			.where(and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, role)))
+			.get();
+		const adds = row?.adds ?? [];
+		if (adds.length >= MAX_SPOOL_ADDS)
+			bad(`A color can hold at most ${MAX_SPOOL_ADDS} added spools`);
+		id = randomUUID();
+		tx.update(buildFilaments)
+			.set({
+				spoolAdds: [
+					...adds,
+					{ id, kg: rounded, at: now.getTime(), userId, ...(note ? { note } : {}) }
+				]
+			})
+			.where(and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, role)))
+			.run();
+		return {
+			kind: 'filament.stock.add',
+			payload: { role, addId: id, kg: rounded, ...(note ? { note } : {}) }
+		};
 	});
-	return runId;
+	return id;
+}
+
+/** Remove one earlier add from a color slot's stock (404 for an unknown add). */
+export function removeSpoolAdd(
+	db: Db,
+	buildId: string,
+	userId: string,
+	role: string,
+	addId: string
+): void {
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		if (!view.filaments.some((f) => f.key === role)) throw new ApiError(404, 'Unknown filament');
+		const row = tx
+			.select({ adds: buildFilaments.spoolAdds })
+			.from(buildFilaments)
+			.where(and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, role)))
+			.get();
+		const adds = row?.adds ?? [];
+		const gone = adds.find((a) => a.id === addId);
+		if (!gone) throw new ApiError(404, 'Unknown spool add');
+		tx.update(buildFilaments)
+			.set({ spoolAdds: adds.filter((a) => a.id !== addId) })
+			.where(and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, role)))
+			.run();
+		return {
+			kind: 'filament.stock.remove',
+			payload: { role, addId, kg: gone.kg, at: gone.at }
+		};
+	});
 }
 
 /** Link (or clear with null) a build filament slot to a Spoolman spool: `{ spoolId: number | null }`. */

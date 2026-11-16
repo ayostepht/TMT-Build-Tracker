@@ -118,7 +118,7 @@ describe('run deduction', () => {
 	let db: Db;
 	let buildId: string;
 	const run = (grams: number, result = 'Success') =>
-		addRun(db, buildId, 'owner', { plateNumber: 1, date: '2026-11-03', result, grams });
+		addRun(db, buildId, 'owner', { plateNumber: 1, date: '2026-11-03', result, grams }).runId;
 	const factory = (u: string) => new SpoolmanClient(u);
 
 	beforeEach(() => {
@@ -180,6 +180,33 @@ describe('run deduction', () => {
 		expect(spools.get(1)!.used_weight).toBe(110);
 		undoRun(db, buildId, 'owner', id2, { parts: [] });
 		await syncRunDeduction(db, buildId, id2, factory);
+		expect(spools.get(1)!.used_weight).toBe(100);
+	});
+
+	it('deducts both halves of a Partial with per-part results, and gives both back on undo', async () => {
+		const v = loadBuildView(db, buildId, 'owner')!;
+		const plate = v.plates.find((p) => !p.perPartRuns && p.runs === 1 && p.parts.length >= 2)!;
+		for (const s of plate.parts) {
+			const role = v.parts.find((p) => p.slug === s)!.role;
+			linkSpool(db, buildId, 'owner', role, { spoolId: 1 });
+		}
+		const { runId, runIds } = addRun(db, buildId, 'owner', {
+			plateNumber: plate.number,
+			date: '2026-11-03',
+			result: 'Partial',
+			hours: 4,
+			split: { keptSlugs: [plate.parts[0]], keptGrams: 60, lostGrams: 40 }
+		});
+		expect(runIds).toHaveLength(2);
+		for (const id of runIds) await syncRunDeduction(db, buildId, id, factory);
+		expect(spools.get(1)!.used_weight).toBe(200);
+		expect(getDeductions(db, 'org1')[runId]).toEqual([[1, 60]]);
+		const removed = undoRun(db, buildId, 'owner', runId, { parts: [], runIds });
+		for (const id of removed) await syncRunDeduction(db, buildId, id, factory);
+		expect(spools.get(1)!.used_weight).toBe(100);
+		// An older Partial row (no split) is still never deducted.
+		const old = run(25, 'Partial');
+		await syncRunDeduction(db, buildId, old, factory);
 		expect(spools.get(1)!.used_weight).toBe(100);
 	});
 

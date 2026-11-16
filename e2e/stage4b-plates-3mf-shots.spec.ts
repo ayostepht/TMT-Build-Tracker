@@ -85,7 +85,7 @@ test('Files tab screens', async ({ page }) => {
 		await page.getByTestId('change-bed').click();
 		await shot('change-bed', w, scheme);
 		await page.getByTestId('hide-bed').click();
-		await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (21 plates)' });
+		await page.getByTestId('plate-layout').selectOption({ label: 'Bambu H2D / H2S (22 plates)' });
 		await expect(page.getByTestId('layout-confirm')).toBeVisible();
 		await page.getByTestId('layout-confirm').scrollIntoViewIfNeeded();
 		await shot('layout-confirm', w, scheme, false);

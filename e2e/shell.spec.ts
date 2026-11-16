@@ -29,7 +29,7 @@ const overflow = (page: Page) =>
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-	test('top bar is one row, the build header one line, six tabs sit in a bottom bar', async ({
+	test('top bar is one row, the build header a title row and four cards, eight tabs sit in a bottom bar', async ({
 		page
 	}) => {
 		const { buildId } = await ownerWithBuild(page, 'shell');
@@ -58,8 +58,8 @@ test.describe('phone', () => {
 		});
 		console.log('PRINT-METRICS', JSON.stringify(m));
 		expect(m.topbar, 'one-row top bar').toBeLessThanOrEqual(56);
-		expect(m.header, 'one-line build header').toBeLessThanOrEqual(56);
-		expect(m.links).toHaveLength(6);
+		expect(m.header, 'title row plus the four cards').toBeLessThanOrEqual(130);
+		expect(m.links).toHaveLength(8);
 		for (const l of m.links) {
 			expect(l.l).toBeGreaterThanOrEqual(0);
 			expect(l.r).toBeLessThanOrEqual(390.5);
@@ -76,6 +76,13 @@ test.describe('phone', () => {
 
 	test('header details open on tap; menu panel reaches every nav item', async ({ page }) => {
 		const { buildId } = await ownerWithBuild(page, 'shellmenu');
+		await page.goto(`/builds/${buildId}`);
+		await page.waitForLoadState('networkidle');
+		// Nothing printing, nothing to reprint: no details line and no toggle.
+		await expect(page.getByTestId('header-details')).toHaveCount(0);
+		await page.goto(`/builds/${buildId}/print`);
+		await page.waitForLoadState('networkidle');
+		await chooseStatus(page.getByTestId('part-status').first(), 'Printing');
 		await page.goto(`/builds/${buildId}`);
 		await page.waitForLoadState('networkidle');
 		await expect(page.locator('.overall')).toBeHidden();
@@ -96,12 +103,12 @@ test.describe('phone', () => {
 	});
 
 	for (const width of [360, 390]) {
-		test(`no sideways scroll at ${width}px on Overview, Print, Files, Finish, Settings`, async ({
+		test(`no sideways scroll at ${width}px on Overview, Print, Files, Finish, Activity, Settings`, async ({
 			page
 		}) => {
 			const { buildId } = await ownerWithBuild(page, `ov${width}`);
 			await page.setViewportSize({ width, height: 844 });
-			for (const path of ['', '/print', '/files', '/finish', '/settings']) {
+			for (const path of ['', '/print', '/files', '/finish', '/activity', '/settings']) {
 				await page.goto(`/builds/${buildId}${path}`);
 				await page.waitForLoadState('networkidle');
 				const o = await overflow(page);
@@ -112,7 +119,7 @@ test.describe('phone', () => {
 						return { l: b.left, r: b.right, h: b.height };
 					})
 				);
-				expect(links).toHaveLength(6);
+				expect(links).toHaveLength(8);
 				for (const l of links) {
 					expect(l.l).toBeGreaterThanOrEqual(0);
 					expect(l.r).toBeLessThanOrEqual(width + 0.5);
@@ -485,7 +492,7 @@ test.describe('footer and compact Overview (phone)', () => {
 		await expect(page).toHaveURL(/\/terms$/);
 	});
 
-	test('Overview: compact filament rows, spools field opens from the row and saves', async ({
+	test('Overview: compact filament rows, spool + opens from the row and saves', async ({
 		page
 	}) => {
 		const { buildId } = await ownerWithBuild(page, 'ovspool');
@@ -497,24 +504,27 @@ test.describe('footer and compact Overview (phone)', () => {
 		expect((await first.boundingBox())!.height, 'about two lines').toBeLessThanOrEqual(92);
 		const o = await overflow(page);
 		expect(o.scroll).toBeLessThanOrEqual(o.client);
-		const toggle = first.getByRole('button');
+		const toggle = first.locator('.ft-head');
 		await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-		await expect(first.locator('input[type="number"]')).toHaveCount(0);
-		await toggle.click();
-		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-		const field = first.locator('input[type="number"]');
-		await field.fill('7');
-		await field.blur();
-		await page.reload();
-		await page.waitForLoadState('networkidle');
-		await page.getByTestId('filament-tile').first().getByRole('button').click();
-		await expect(
-			page.getByTestId('filament-tile').first().locator('input[type="number"]')
-		).toHaveValue('7');
+		await expect(first.getByTestId('spool-add')).toHaveCount(0);
+		// A tap that lands before the page has hydrated is lost: retry until the row is open.
+		await expect(async () => {
+			if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+			await expect(toggle).toHaveAttribute('aria-expanded', 'true', { timeout: 1500 });
+		}).toPass();
+		const before = await first.getByTestId('spool-total').innerText();
+		await first.getByTestId('spool-add').click();
+		await expect(first.getByTestId('spool-form')).toBeVisible();
+		await first.getByTestId('spool-kg').fill('2');
+		await first.getByTestId('spool-save').click();
+		await expect(first.getByTestId('spool-add-row')).toHaveCount(1);
+		await expect(first.getByTestId('spool-total')).not.toHaveText(before);
+		const o2 = await overflow(page);
+		expect(o2.scroll).toBeLessThanOrEqual(o2.client);
 	});
 });
 
-test('Overview on desktop shows the spools field in every filament row', async ({ page }) => {
+test('Overview on desktop shows the spools total and + in every filament row', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const { buildId } = await ownerWithBuild(page, 'ovwide');
 	await page.goto(`/builds/${buildId}`);
@@ -522,12 +532,11 @@ test('Overview on desktop shows the spools field in every filament row', async (
 	const rows = page.getByTestId('filament-tile');
 	const n = await rows.count();
 	expect(n).toBeGreaterThanOrEqual(2);
-	for (let i = 0; i < n - 1; i++)
-		await expect(rows.nth(i).locator('input[type="number"]')).toBeVisible();
+	for (let i = 0; i < n - 1; i++) await expect(rows.nth(i).getByTestId('spool-add')).toBeVisible();
 	expect((await rows.first().boundingBox())!.height).toBeLessThanOrEqual(80);
 });
 
-test('Help is a top-level item after Printers on phones, 44px tall, current on /help', async ({
+test('Help is a top-level item after Stats on phones, 44px tall, current on /help', async ({
 	page
 }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -535,7 +544,8 @@ test('Help is a top-level item after Printers on phones, 44px tall, current on /
 	await openNav(page);
 	const labels = await page.locator('nav[aria-label="Main"] > a').allInnerTexts();
 	expect(labels.at(-1)).toBe('Help');
-	expect(labels.slice(-2, -1)[0]).toMatch(/^Printers/);
+	expect(labels.slice(-2, -1)[0]).toBe('Stats');
+	expect(labels.slice(-3, -2)[0]).toMatch(/^Printers/);
 	for (const link of await page.locator('nav[aria-label="Main"] .navlink').all())
 		expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 	await expect(page.locator('#menu-account a', { hasText: /^(Help|About)$/ })).toHaveCount(0);

@@ -12,6 +12,7 @@
 			? []
 			: [{ label: 'Members', href: resolve('/(app)/teams/[slug]/members', { slug }) }]),
 		{ label: 'Printers', href: resolve('/(app)/teams/[slug]/printers', { slug }) },
+		{ label: 'Stats', href: resolve('/(app)/teams/[slug]/stats', { slug }) },
 		{ label: 'Integrations', href: resolve('/(app)/teams/[slug]/integrations', { slug }) }
 	]);
 </script>

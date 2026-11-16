@@ -1,7 +1,7 @@
 /** Data for the "Now printing" cards. */
-import { estPerRun, plateByNumber, units } from './accounting.ts';
+import { partGrams, plateByNumber, plateGrams, weakestGramsSource } from './accounting.ts';
 import { betweenRuns, runInfo } from './actions.ts';
-import type { BuildView, PartDef, Plate } from './types.ts';
+import type { BuildView, GramsSource, PartDef, Plate } from './types.ts';
 
 export interface NowCard {
 	plate: number;
@@ -9,7 +9,10 @@ export interface NowCard {
 	parts: PartDef[]; // the parts on the printer (a subset of the plate on multi-color plates)
 	roles: string[];
 	multiColor: boolean;
-	gramsPerRun: number | null; // slicer grams if set, else BOM estimate
+	gramsPerRun: number | null; // plateGrams: typed > sliced file > your slice / BOM of its parts
+	gramsSource: GramsSource; // where gramsPerRun comes from
+	gramsApprox: boolean; // an estimate (BOM based or missing parts)
+	gramsUnknown: string[]; // parts on the printer with no weight
 	slicerGrams: number | null; // what the slicer field shows, if set
 	startedAt: string | null;
 	estSeconds: number | null;
@@ -32,7 +35,6 @@ export function nowPrinting(view: BuildView): NowCard[] {
 		if (!pl) continue;
 		byPlate.set(pl.number, [...(byPlate.get(pl.number) ?? []), p]);
 	}
-	const all = units(view);
 	return [...byPlate.keys()]
 		.sort((a, b) => a - b)
 		.map((n) => {
@@ -45,10 +47,12 @@ export function nowPrinting(view: BuildView): NowCard[] {
 			const multiColor = new Set(onPlate.map((p) => p.role)).size > 1;
 			const raw = plate.perPartRuns ? plate.slicerByPart[slugs[0]] : plate.slicerGrams;
 			const slicerGrams = typeof raw === 'number' && raw > 0 ? raw : null;
-			const estimate = all
-				.filter((u) => u.plate === n && u.parts.some((p) => slugs.includes(p.slug)))
-				.reduce((a, u) => a + estPerRun(view, u), 0);
-			const gramsPerRun = slicerGrams ?? (estimate > 0 ? estimate : null);
+			// A perPartRuns plate prints its parts one by one: add the ones on the printer.
+			const infos = plate.perPartRuns
+				? slugs.map((s) => partGrams(view, s))
+				: [plateGrams(view, plate)];
+			const estimate = infos.reduce((a, i) => a + i.perRun, 0);
+			const gramsPerRun = estimate > 0 ? estimate : null;
 			const runEst = view.state[slugs[0]].runEstSeconds;
 			const startedAt =
 				slugs
@@ -63,6 +67,9 @@ export function nowPrinting(view: BuildView): NowCard[] {
 				roles: [...new Set(here.map((p) => p.role))],
 				multiColor,
 				gramsPerRun,
+				gramsSource: weakestGramsSource(infos.map((i) => i.source)),
+				gramsApprox: infos.some((i) => i.approx),
+				gramsUnknown: infos.flatMap((i) => i.unknown),
 				slicerGrams,
 				startedAt,
 				estSeconds,

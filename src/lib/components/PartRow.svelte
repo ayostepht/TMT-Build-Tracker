@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { PART_STATUSES, type PartDef, type PrintRun } from '#lib/domain/types.ts';
-	import { fmt, plateOf } from '#lib/domain/index.ts';
-	import { partRuns } from '#lib/domain/logrun.ts';
+	import { fmt, partGrams, plateOf } from '#lib/domain/index.ts';
+	import { parseGrams, partRuns } from '#lib/domain/logrun.ts';
 	import { runTargets } from '#lib/domain/actions.ts';
 	import { updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
@@ -11,6 +11,7 @@
 	import PlateControl from './PlateControl.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import StartOnPrinter from './StartOnPrinter.svelte';
+	import { focusIn } from '#lib/client/focus.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 
 	let {
@@ -46,6 +47,39 @@
 	function pickStatus(s: string) {
 		if (s === 'Printing' && hasPrinter && plate) where = true;
 		else void ctx.setPartStatus(part.slug, s as (typeof PART_STATUSES)[number]);
+	}
+
+	// Weight: typed > your slice > MakeGood BOM (domain/accounting.ts partGrams); unknown offers "Add weight".
+	const gi = $derived(partGrams(ctx.view, part.slug));
+	const typedG = $derived(st?.manualGrams ?? null);
+	let weightOpen = $state(false);
+	let wDraft = $state('');
+	let wBusy = $state(false);
+	const wParsed = $derived(parseGrams(wDraft));
+	const wInvalid = $derived(
+		wDraft.trim() !== '' && (Number.isNaN(wParsed) || (wParsed ?? 0) > 20000)
+	);
+	function openWeight() {
+		wDraft = typedG ? String(typedG) : '';
+		weightOpen = true;
+	}
+	async function saveWeight(e: Event) {
+		e.preventDefault();
+		if (wInvalid || wBusy) return;
+		// Empty or 0 clears the entry, as the server reads it.
+		const value = wParsed && wParsed > 0 ? wParsed : null;
+		if (value === null && !typedG) {
+			weightOpen = false;
+			return;
+		}
+		wBusy = true;
+		const ok = await ctx.act(() => updatePart(ctx.id, part.slug, { manualGrams: value }));
+		wBusy = false;
+		if (ok) weightOpen = false;
+	}
+	function clearWeight() {
+		wDraft = '';
+		void saveWeight(new Event('submit'));
 	}
 
 	function scopeOf(r: PrintRun): string {
@@ -112,7 +146,33 @@
 					{#if fil}<Swatch hex={fil.hex} tpu={fil.tpu} size="mini" />{/if}
 					{filLabel(fil, part.role)}
 				</span>
-				<span class="num">{part.bomGrams ? `~${fmt(part.bomGrams)} g` : 'weight n/a'}</span>
+				{#if gi.source === 'none'}
+					{#if ctx.canEdit}
+						<button
+							class="pill-link wt-add"
+							type="button"
+							data-testid="add-weight"
+							aria-label="Add the weight of {part.name}"
+							onclick={openWeight}>Add weight</button
+						>
+					{:else}<span class="num" data-testid="part-weight">weight n/a</span>{/if}
+				{:else}
+					<span
+						class="num"
+						data-testid="part-weight"
+						title="All {part.qty && part.qty > 1 ? `${part.qty} copies` : 'copies'}{gi.source ===
+						'bom'
+							? ', estimate from the MakeGood kit'
+							: ''}"
+						>{gi.source === 'bom' ? '~' : ''}{fmt(gi.total)} g{gi.source === 'user'
+							? ' · your entry'
+							: gi.source === 'slice'
+								? ' · from your slice'
+								: gi.source === 'file'
+									? ' · from your slicer'
+									: ''}</span
+					>
+				{/if}
 				{#if justNow}<span class="just-now" data-testid="printed-just-now">Printed just now</span
 					>{:else if st?.printedOn}<span>printed {st.printedOn}</span>{/if}
 			</div>
@@ -153,6 +213,37 @@
 			>
 		</div>
 	</div>
+	{#if weightOpen && ctx.canEdit}
+		<form class="wedit" onsubmit={saveWeight} use:focusIn>
+			<label for="w-{part.slug}"
+				>Weight of {part.name}{part.qty && part.qty > 1 ? `, all ${part.qty} copies` : ''} (g)</label
+			>
+			<input
+				id="w-{part.slug}"
+				type="text"
+				inputmode="decimal"
+				autocomplete="off"
+				placeholder={gi.source === 'bom' ? `~${fmt(gi.total)}` : 'g'}
+				aria-invalid={wInvalid}
+				data-testid="weight-input"
+				bind:value={wDraft}
+			/>
+			<button
+				class="btn sm primary"
+				type="submit"
+				disabled={wInvalid || wBusy}
+				data-testid="weight-save">Save</button
+			>
+			{#if typedG}<button class="btn sm" type="button" disabled={wBusy} onclick={clearWeight}
+					>Use the estimate</button
+				>{/if}
+			<button class="btn sm ghost" type="button" onclick={() => (weightOpen = false)}>Cancel</button
+			>
+			{#if wInvalid}<small class="err" role="alert"
+					>Enter the grams as a number up to 20000 (for example 162.5).</small
+				>{/if}
+		</form>
+	{/if}
 	{#if ctx.canEdit && plate}
 		<StartOnPrinter
 			bind:open={where}
@@ -223,6 +314,19 @@
 					</div>
 					<PlateControl {plate} only={plate.perPartRuns ? part.slug : null} />
 				{/if}
+				{#if ctx.canEdit && !weightOpen && gi.source !== 'none'}
+					<h3 style="margin-top:var(--sp-6)">Weight</h3>
+					<div class="meta" style="margin-bottom:var(--sp-3)">
+						{gi.source === 'user'
+							? 'Your entry, all copies.'
+							: gi.source === 'slice'
+								? 'From your slice.'
+								: 'Estimate from the MakeGood kit.'}
+					</div>
+					<button class="btn sm" type="button" onclick={openWeight}
+						>{typedG ? 'Change weight' : 'Enter weight'}</button
+					>
+				{/if}
 				<h3 style="margin-top:var(--sp-6)">Assigned to</h3>
 				<select
 					aria-label="Assigned to"
@@ -282,6 +386,34 @@
 		.pr-more {
 			width: 44px;
 			height: 44px;
+		}
+	}
+	/* Weight editor under the row: one line on desktop, wraps on a phone; 44px targets and 16px text on touch. */
+	.wedit {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--sp-3) var(--sp-4);
+		padding: 0 var(--sp-6) var(--sp-5);
+		font-size: var(--fs-sm);
+	}
+	.wedit input {
+		width: 8rem;
+	}
+	.wedit .err {
+		flex-basis: 100%;
+		color: var(--bad);
+	}
+	@media (pointer: coarse) {
+		.wedit input {
+			font-size: 16px;
+			min-height: 44px;
+		}
+		.wedit :global(.btn) {
+			min-height: 44px;
+		}
+		.wt-add {
+			min-height: 44px;
 		}
 	}
 	/* Status badge and the details toggle share one cell: one line of height on a phone. */

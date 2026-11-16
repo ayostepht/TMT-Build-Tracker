@@ -42,6 +42,55 @@ const goodManifest = () => ({
 	appMinVersion: '0.0.1'
 });
 
+describe('manifest otherLicenses (mixed licenses, backward compatible)', () => {
+	const notice = {
+		parts: ['push-handle-one-piece'],
+		name: 'CC BY-NC',
+		holder: 'jeepxj',
+		url: 'https://example.test/model',
+		note: 'Credit: jeepxj'
+	};
+	it('keeps a notice and drops nothing else', () => {
+		const m = parseManifest({ ...goodManifest(), otherLicenses: [notice] });
+		expect(m.otherLicenses).toEqual([notice]);
+		expect(m.license.holder).toBe('MakeGood');
+	});
+	it('accepts the limits exactly and an http url', () => {
+		const edge = {
+			...notice,
+			url: 'http://example.test/m',
+			name: 'x'.repeat(200),
+			holder: 'x'.repeat(200),
+			note: 'x'.repeat(1000)
+		};
+		expect(parseManifest({ ...goodManifest(), otherLicenses: [edge] }).otherLicenses).toEqual([
+			edge
+		]);
+		expect(
+			parseManifest({ ...goodManifest(), otherLicenses: Array.from({ length: 20 }, () => notice) })
+				.otherLicenses
+		).toHaveLength(20);
+	});
+	it('a manifest without the key parses as before (older packs)', () => {
+		expect(parseManifest(goodManifest()).otherLicenses).toBeUndefined();
+	});
+	it.each([
+		['not an array', { ...notice }],
+		['no parts', [{ ...notice, parts: [] }]],
+		['unsafe part slug', [{ ...notice, parts: ['../x'] }]],
+		['no holder', [{ ...notice, holder: undefined }]],
+		['name over 200 characters', [{ ...notice, name: 'x'.repeat(201) }]],
+		['holder over 200 characters', [{ ...notice, holder: 'x'.repeat(201) }]],
+		['note over 1000 characters', [{ ...notice, note: 'x'.repeat(1001) }]],
+		['more than 20 notices', Array.from({ length: 21 }, () => notice)],
+		['javascript: url', [{ ...notice, url: 'javascript:alert(1)' }]],
+		['data: url', [{ ...notice, url: 'data:text/html,x' }]],
+		['url without a scheme', [{ ...notice, url: 'example.test/m' }]]
+	])('rejects %s', (_n, bad) => {
+		expect(() => parseManifest({ ...goodManifest(), otherLicenses: bad })).toThrow(KitPackError);
+	});
+});
+
 describe('manifest validation', () => {
 	it('accepts a good manifest', () => {
 		expect(parseManifest(goodManifest()).templateSlug).toBe('makegood-tmt-revb');

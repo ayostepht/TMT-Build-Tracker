@@ -24,9 +24,15 @@
 	<section class="ds-card" aria-labelledby="a-credit">
 		<h2 id="a-credit">Credit to MakeGood</h2>
 		<p>
-			The chair is the <b>MakeGood 3D TMT</b> (toddler mobility trainer), designed by MakeGood and released
-			under CC0. The model and print files in this app are theirs; this app only helps you organize the
-			build. Thank you, MakeGood.
+			The chair is the <b>MakeGood 3D TMT</b> (toddler mobility trainer), designed by MakeGood and
+			released under CC0. The model and print files in this app are theirs; this app only helps you
+			organize the build. Thank you, MakeGood. The one exception is the optional one-piece push
+			handle, an experimental design by
+			<a
+				href="https://makerworld.com/en/models/3409242-3d-toddler-mobility-trainer-one-piece-push-handle"
+				target="_blank"
+				rel="noopener noreferrer">jeepxj</a
+			> under CC BY-NC, shared in MakeGood's official files.
 		</p>
 		<div class="about-actions">
 			<a class="btn" href={MAKEGOOD_MODEL_URL} target="_blank" rel="noopener noreferrer"

@@ -35,9 +35,37 @@ export const ROLE_LABEL: Record<string, string> = {
 	tire: 'Accent TPU'
 };
 
-/** Slot heading: the fixed role label for the kit roles, else the filament's own label (added slots). */
-export function roleLabel(key: string, f?: Pick<FilamentRole, 'name' | 'material'> | null): string {
-	return ROLE_LABEL[key] ?? filamentLabel(f, key);
+type SlotLike = Pick<FilamentRole, 'name' | 'material'> & { key?: string; kit?: boolean };
+
+/**
+ * Slot heading: the fixed role label for the kit roles, else the filament's own label (added slots).
+ * An added slot whose label equals a kit label (a locked part's old "Accent PETG") or another added
+ * slot's label gets a suffix ("Accent PETG · added", "… · added 2"), so two chips never read the same.
+ * Pass `all` (the build's filaments) to also tell added slots apart; the filament's own name is unchanged.
+ */
+export function roleLabel(
+	key: string,
+	f?: SlotLike | null,
+	all?: readonly SlotLike[] | null
+): string {
+	if (ROLE_LABEL[key]) return ROLE_LABEL[key];
+	const base = filamentLabel(f, key);
+	if (!f || f.kit !== false) return base;
+	const norm = base.trim().toLowerCase();
+	const collidesKit = Object.values(ROLE_LABEL).some((l) => l.toLowerCase() === norm);
+	const twins = (all ?? []).filter(
+		(o) =>
+			o.kit === false &&
+			filamentLabel(o, o.key ?? '')
+				.trim()
+				.toLowerCase() === norm
+	);
+	if (!collidesKit && twins.length < 2) return base;
+	const idx = Math.max(
+		0,
+		twins.findIndex((o) => o.key === key)
+	);
+	return `${base} · added${idx > 0 ? ` ${idx + 1}` : ''}`;
 }
 
 const KIT_ORDER = ['primary', 'accent', 'soft', 'tire'];

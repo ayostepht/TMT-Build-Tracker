@@ -12,7 +12,7 @@ import { buildPlates, builds, member, organization, templates, user } from '../d
 import { timeLeftText, timeStats } from '#lib/domain/accounting.ts';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
-import { addRun, setPrinter, setVariant } from './actions';
+import { addRun, setPrinter, setVariant, updatePlate } from './actions';
 import { createBuild } from './create';
 import { updateBuildDesign } from '../designs/mutate';
 import { arrangeForPrinter, buildArrangement, setPlateLayout } from './plates';
@@ -186,6 +186,23 @@ describe('arrangeForPrinter', () => {
 			after.parts.every((s) => view(id).parts.find((p) => p.slug === s)!.role === 'primary')
 		).toBe(true);
 		expect(buildArrangement(db, id, 'owner').stale).toBe(false);
+	});
+
+	it('re-arranging keeps typed plate grams and time on a plate with the same parts, drops nothing else', () => {
+		const id = mk(bed(256, 256, 1));
+		const pl = plateOf(id, 'wing-left');
+		updatePlate(db, id, 'owner', pl.number, { slicerGrams: 123, manualEstSeconds: 3600 });
+		arrangeForPrinter(db, id, 'owner');
+		const after = view(id).plates.find((p) => p.number === pl.number)!;
+		expect(after.parts).toEqual(pl.parts);
+		expect(after).toMatchObject({ slicerGrams: 123, gramsSource: 'user', estSeconds: 3600 });
+		// other plates carry nothing
+		for (const o of view(id).plates.filter((p) => p.number !== pl.number))
+			expect(o.slicerGrams).toBeNull();
+		// a plate whose parts changed does not keep the number
+		updateBuildDesign(db, id, 'owner', { partRoles: { 'wing-left': 'primary' } });
+		const moved = plateOf(id, 'wing-left');
+		if (moved.parts.join() !== pl.parts.join()) expect(moved.slicerGrams).toBeNull();
 	});
 
 	it('changing the printer or a variant re-arranges too', () => {

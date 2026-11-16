@@ -18,7 +18,10 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	).toBeVisible();
 
 	const buildId = await createBuild(page, 'Solo chair');
-	await expect(page.locator('.overall-top')).toContainText('of 33');
+	await expect(page.getByTestId('header-kpi-parts')).toHaveAttribute(
+		'aria-label',
+		/Parts printed: 0 of 33/
+	);
 
 	// Settings offers no target yet.
 	await page.goto(`/builds/${buildId}/settings`);
@@ -50,6 +53,6 @@ test('sign up lands on My builds, then a build moves to a new chapter', async ({
 	await page.getByRole('combobox', { name: 'Chapter' }).selectOption({ label: 'My builds' });
 	await expect(page.getByRole('heading', { level: 1, name: 'My builds' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Solo chair' })).toHaveCount(0);
-	await page.goto(`/builds/${buildId}`);
+	await page.goto(`/builds/${buildId}/activity`);
 	await expect(page.locator('.activity')).toContainText(`moved this build to ${chapterName}`);
 });

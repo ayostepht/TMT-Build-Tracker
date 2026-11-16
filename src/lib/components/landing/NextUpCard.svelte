@@ -4,6 +4,7 @@
 	import { getBuildCtx } from '../build-context.svelte.ts';
 	import PlateControl from '../PlateControl.svelte';
 	import PlateTime from '../PlateTime.svelte';
+	import PlateGrams from '../PlateGrams.svelte';
 	import RoleChip from '../RoleChip.svelte';
 
 	/** One build's next plate to print, with the shared start control (Start printing is one tap). */
@@ -37,6 +38,7 @@
 	<div class="nu-meta">
 		<span class="muted">{todo} part{todo === 1 ? '' : 's'} to print</span>
 		{#each roles as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
+		<PlateGrams {plate} />
 		<PlateTime {plate} />
 	</div>
 	<div class="nu-actions"><PlateControl {plate} size="md" /></div>

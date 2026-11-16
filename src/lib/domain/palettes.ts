@@ -363,12 +363,55 @@ export const EXCLUDED_FILAMENTS: readonly {
 export const ALLOWED_TPU_HARDNESS = '95A';
 
 /** Shore hardnesses mentioned in a TPU's text ("95A", "64D", "TPU90"); bare TPU numbers mean A. */
-function hardnesses(text: string): string[] {
+export function hardnesses(text: string): string[] {
 	const out: string[] = [];
 	for (const m of text.matchAll(/(?<![\d.])(\d{2,3})\s?-?([ad])(?![a-z])/gi))
 		out.push(`${m[1]}${m[2].toUpperCase()}`);
 	for (const m of text.matchAll(/tpu\s?-?(\d{2,3})(?![\d.])/gi))
 		if (!out.some((h) => h.startsWith(m[1]))) out.push(`${m[1]}A`);
+	return out;
+}
+
+const TPU_GRADE = /\b(medium|soft|hard|semi-?flex|for ams)\b/i;
+
+const SUBTYPE_LABELS: Record<string, string> = {
+	matte: 'Matte',
+	silk: 'Silk',
+	transparent: 'Translucent',
+	glow: 'Glow in the dark',
+	marble: 'Marble',
+	wood: 'Wood',
+	sparkle: 'Sparkle / glitter',
+	multicolor: 'Multi-color',
+	filled: 'Carbon / glass filled',
+	rock: 'Stone / speckle',
+	foam: 'Foaming'
+};
+
+export interface FilamentSubtype {
+	/** `matte`, `foam`, `hardness:98A`, `grade` … */
+	id: string;
+	label: string;
+}
+
+/**
+ * Every non-standard type a swatch carries (empty = standard: what palettes may pick). Built from
+ * the same rules as {@link exclusionReason}, so "standard" and "no subtypes" always agree.
+ * A swatch can carry several (a matte 98A TPU is both).
+ */
+export function filamentSubtypes(t: SwatchTuple): FilamentSubtype[] {
+	const text = `${t[1]} ${t[3]}`;
+	const flags = (t[4] ?? '').toLowerCase().split(/\s+/);
+	const out: FilamentSubtype[] = [];
+	if (materialFamily(t[3]) === 'tpu') {
+		for (const h of new Set(hardnesses(text)))
+			if (h !== ALLOWED_TPU_HARDNESS) out.push({ id: `hardness:${h}`, label: h });
+		if (TPU_GRADE.test(t[1]))
+			out.push({ id: 'grade', label: 'Named grade (Soft, Medium, Hard …)' });
+	}
+	for (const e of EXCLUDED_FILAMENTS)
+		if ((e.flag && flags.includes(e.flag)) || e.pattern.test(text))
+			out.push({ id: e.id, label: SUBTYPE_LABELS[e.id] ?? e.id });
 	return out;
 }
 
@@ -382,8 +425,7 @@ export function exclusionReason(t: SwatchTuple, allowMatte = false): string {
 	}
 	if (materialFamily(t[3]) === 'tpu') {
 		// Brands that name the grade instead of the number (Extrudr FLEX Medium / Soft / Hard).
-		if (/\b(medium|soft|hard|semi-?flex|for ams)\b/i.test(t[1]))
-			return 'only 95A TPU is used (a different grade is named)';
+		if (TPU_GRADE.test(t[1])) return 'only 95A TPU is used (a different grade is named)';
 		const h = hardnesses(`${t[1]} ${t[3]}`);
 		if (h.some((x) => x !== ALLOWED_TPU_HARDNESS))
 			return `only ${ALLOWED_TPU_HARDNESS} TPU is used (this is ${h.find((x) => x !== ALLOWED_TPU_HARDNESS)})`;

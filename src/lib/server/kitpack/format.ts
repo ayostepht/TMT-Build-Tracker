@@ -38,13 +38,32 @@ export interface PackSource {
 	role: SourceRole;
 }
 
+/** Credit and license of the pack's default content (MakeGood, CC0), or of the parts a notice names. */
+export interface PackLicense {
+	name: string;
+	holder: string;
+	url?: string;
+	note: string;
+}
+/**
+ * A license that differs from the pack's `license` for some parts (a community design by another
+ * author). Optional and additive: readers of the first 1.0.x packs ignore the key, so the format
+ * stays `tmt-kitpack-1` and `appMinVersion` does not change.
+ */
+export interface PackLicenseNotice extends PackLicense {
+	/** Part slugs the notice covers. */
+	parts: string[];
+}
+
 export interface PackManifest {
 	format: typeof PACK_FORMAT;
 	templateSlug: string;
 	version: string;
 	createdAt: string;
 	sources: PackSource[];
-	license: { name: string; holder: string; url?: string; note: string };
+	license: PackLicense;
+	/** Parts under another license than `license`; absent when the whole pack is under it. */
+	otherLicenses?: PackLicenseNotice[];
 	contents: {
 		parts: number;
 		meshes: number;
@@ -77,6 +96,7 @@ export const sha256Hex = (bytes: Uint8Array | Buffer): string =>
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const SHA = /^[0-9a-f]{64}$/;
+const MAX_NOTICES = 20;
 const VERSION = /^[0-9]+(\.[0-9]+){0,3}$/;
 
 /** Entry names in a pack: relative, no `..`, no leading slash. */
@@ -137,6 +157,35 @@ export function parseManifest(raw: unknown): PackManifest {
 		(lic.url !== undefined && typeof lic.url !== 'string')
 	)
 		throw new KitPackError('manifest.license is invalid');
+	let otherLicenses: PackLicenseNotice[] | undefined;
+	if (raw.otherLicenses !== undefined) {
+		const list = raw.otherLicenses;
+		if (!Array.isArray(list) || list.length > MAX_NOTICES)
+			throw new KitPackError('manifest.otherLicenses is invalid');
+		const short = (v: unknown, max: number): v is string =>
+			typeof v === 'string' && v.length <= max;
+		otherLicenses = list.map((n, i): PackLicenseNotice => {
+			if (
+				!isObj(n) ||
+				!short(n.name, 200) ||
+				!short(n.holder, 200) ||
+				!short(n.note, 1000) ||
+				(n.url !== undefined && (!short(n.url, 500) || !/^https?:\/\//i.test(n.url))) ||
+				!Array.isArray(n.parts) ||
+				!n.parts.length ||
+				n.parts.length > 100 ||
+				!n.parts.every((x) => typeof x === 'string' && SAFE_NAME.test(x))
+			)
+				throw new KitPackError(`manifest.otherLicenses[${i}] is invalid`);
+			return {
+				name: n.name,
+				holder: n.holder,
+				note: n.note,
+				...(n.url ? { url: n.url } : {}),
+				parts: n.parts as string[]
+			};
+		});
+	}
 	const c = raw.contents;
 	if (!isObj(c)) throw new KitPackError('manifest.contents is missing');
 	for (const k of ['parts', 'meshes', 'triangles', 'paintedFaces', 'placements', 'placed'])
@@ -158,6 +207,7 @@ export function parseManifest(raw: unknown): PackManifest {
 			note: lic.note,
 			...(lic.url ? { url: lic.url as string } : {})
 		},
+		...(otherLicenses?.length ? { otherLicenses } : {}),
 		contents: c as unknown as PackManifest['contents'],
 		appMinVersion
 	};

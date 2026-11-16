@@ -2,11 +2,14 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { applyDesign, setSetupStep, setVariant } from '#lib/client/api.ts';
+	import { applyDesign, previewApplyDesign, setSetupStep, setVariant } from '#lib/client/api.ts';
+	import { offerDesignUndo } from '#lib/client/design-undo.ts';
+	import { designSnapshot, type ApplyMode } from '#lib/domain/design-apply.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import DesignWorkspace from '#lib/components/build/DesignWorkspace.svelte';
 	import PlatesPanel from '#lib/components/build/PlatesPanel.svelte';
 	import TemplateStep from '#lib/components/build/TemplateStep.svelte';
+	import StartedApplyDialog from '#lib/components/design/share/StartedApplyDialog.svelte';
 	import ExportCard from '#lib/components/ExportCard.svelte';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
@@ -95,9 +98,38 @@
 	}
 
 	let designId = $state('');
+	/** The build has started printing: ask how to apply (colors only or also print files) first. */
+	let asking = $state(false);
 	async function useDesign() {
 		if (!designId) return;
+		if (ctx.view.started.started) {
+			asking = true;
+			return;
+		}
 		if (await ctx.act(() => applyDesign(designId, ctx.id))) designId = '';
+	}
+	/** Started build: apply in the chosen mode; errors go back to the dialog, which stays open. */
+	async function applyStarted(mode: ApplyMode) {
+		const d = data.designs.find((x) => x.id === designId);
+		if (!d) return;
+		const before = designSnapshot(ctx.view);
+		ctx.error = null;
+		const r = await applyDesign(d.id, ctx.id, {
+			mode,
+			...(mode === 'full' ? { confirm: true } : {})
+		});
+		await ctx.refresh();
+		const left = r.skipped?.length ?? 0;
+		offerDesignUndo(
+			mode === 'full'
+				? `Applied design "${d.name}" (colors and print files)`
+				: `Applied the colors of "${d.name}"${left ? `; ${left} ${left === 1 ? 'slot' : 'slots'} left as they were` : ''}`,
+			ctx.id,
+			before,
+			() => ctx.refresh()
+		);
+		asking = false;
+		designId = '';
 	}
 	const partNames = $derived(Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name])));
 </script>
@@ -212,6 +244,13 @@
 				</div>
 			{/if}
 		</div>
+		{#if asking && designId}
+			<StartedApplyDialog
+				load={() => previewApplyDesign(designId, ctx.id)}
+				onchoose={applyStarted}
+				oncancel={() => (asking = false)}
+			/>
+		{/if}
 		<DesignWorkspace embedded />
 	{:else if step === 4}
 		<section class="card intro">

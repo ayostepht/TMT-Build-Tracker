@@ -85,6 +85,14 @@ describe('theme tokens', () => {
 			expect(ratio(T['bed-text'], T.bed)).toBeGreaterThanOrEqual(4.5);
 			expect(ratio(T['bed-line'], T.bed)).toBeGreaterThanOrEqual(3);
 		});
+		it(`${name}: chart series colours reach 3:1 (graphics) against the card they are drawn on`, () => {
+			// WCAG 1.4.11. --chart-grid is decorative gridline ink (the values are also printed), so exempt.
+			const low = ['chart-good', 'chart-bad', 'chart-todo', 'accent']
+				.map((k) => [k, ratio(T[k], T.card)] as const)
+				.filter(([, r]) => r < 3)
+				.map(([k, r]) => `${k}: ${r.toFixed(2)}`);
+			expect(low).toEqual([]);
+		});
 		it(`${name}: --on-fill on solid accent, ok, bad and run fills reaches 4.5:1`, () => {
 			const low = ['accent', 'ok', 'bad', 'run']
 				.map((k) => [k, ratio(T['on-fill'], T[k])] as const)

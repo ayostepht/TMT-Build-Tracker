@@ -74,11 +74,11 @@ test('pick a printer, arrange plates, recolor a part, then try a small custom be
 	await expect(picker.locator('option')).toContainText([
 		/Arrange for my bed/,
 		/Bambu X1 \/ P1 \/ A1 \(24 plates\)/,
-		/Bambu H2D \/ H2S \(21 plates\)/,
+		/Bambu H2D \/ H2S \(22 plates\)/,
 		/Use my own sliced file/
 	]);
 	await expect(page.locator('.plate-layout-picker')).toContainText(
-		'Hand-tuned by MakeGood for Bambu X1 / P1 / A1 (24 plates) and Bambu H2D / H2S (21 plates)'
+		'Hand-tuned by MakeGood for Bambu X1 / P1 / A1 (24 plates) and Bambu H2D / H2S (22 plates)'
 	);
 
 	const wing = page.locator('section.plate-card [data-slug="wing-left"]').first();

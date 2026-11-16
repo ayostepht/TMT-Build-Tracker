@@ -66,6 +66,14 @@ describe('describeActivity', () => {
 		);
 		expect(say('part.update', { slug: part.slug, comps: true })).toContain('ticked off');
 	});
+	it('part.grams says what was entered or cleared', () => {
+		expect(say('part.grams', { slug: part.slug, manualGrams: 251.5 })).toBe(
+			`Steph set the weight of ${part.name} to 252 g`
+		);
+		expect(say('part.grams', { slug: part.slug, manualGrams: null, cleared: true })).toBe(
+			`Steph cleared the entered weight of ${part.name}`
+		);
+	});
 	it('names the printer on a start and on a logged run', () => {
 		expect(say('printing.start', { slugs: [part.slug], printer: 'Garage printer' })).toBe(
 			`Steph put ${part.name} on Garage printer`
@@ -180,10 +188,10 @@ describe('describeActivity', () => {
 	it('filaments use labels from the view', () => {
 		const f = view.filaments[0];
 		expect(say('filament.spools', { role: f.key, spools: 5 })).toBe(
-			`Steph set ${filamentLabel(f)} spools to 5`
+			`Steph set ${filamentLabel(f)} starting spools to 5 kg`
 		);
 		expect(say('filament.spools', { role: f.key, spools: 4.5 })).toBe(
-			`Steph set ${filamentLabel(f)} spools to 4.5`
+			`Steph set ${filamentLabel(f)} starting spools to 4.5 kg`
 		);
 		expect(say('filament.update', { role: f.key, hex: '#112233' })).toContain('#112233');
 	});
@@ -210,6 +218,7 @@ describe('describeActivitySegments', () => {
 			['build.create', {}],
 			['part.status', { slug: part.slug, to: 'Printing' }],
 			['part.update', { slug: part.slug, assigneeUserId: 'u2' }],
+			['part.grams', { slug: part.slug, manualGrams: 90 }],
 			['printing.start', { slugs: [part.slug, part2.slug] }],
 			['printing.stop', { slugs: [] }],
 			['run.add', { plateNumber: 13, result: 'Success', grams: 40 }],
@@ -224,6 +233,14 @@ describe('describeActivitySegments', () => {
 			['printer.job.release', { plateNumber: 7 }],
 			['printer.job.unstarted', { printer: 'CC', plateNumber: 8, result: 'cancelled' }],
 			['design.update', { moves: [{ slug: part.slug, role: 'accent', roleName: 'Blue' }] }],
+			['design.update', { palette: { label: 'Sunset', reset: 5, kept: 2 }, locked: ['Wing Left'] }],
+			[
+				'design.update',
+				{
+					removed: { key: 'x', name: 'Red', material: 'PETG', spools: 1, spoolmanSpoolId: 12 },
+					replacedBy: { key: 'primary', name: 'Primary', material: 'PETG' }
+				}
+			],
 			['something.new', {}]
 		];
 		for (const [kind, payload] of rows) {
@@ -289,5 +306,189 @@ describe('printer.job.unstarted', () => {
 		);
 		expect(text('cancelled')).toContain('before it started; nothing was logged');
 		expect(text('failed')).toContain('stopped');
+	});
+});
+
+describe('design.update palette, lock and removal sentences', () => {
+	const d = (payload: Record<string, unknown>) =>
+		describeActivity(act('design.update', payload), view);
+	const who = describeActivity(act('design.update', {}), view).replace(' changed the colors', '');
+
+	it('describes a palette apply with resets and kept locks', () => {
+		expect(d({ palette: { label: 'Sunset', reset: 5, kept: 2 } })).toBe(
+			`${who} applied the Sunset palette; 5 parts back to their kit colors, 2 locked parts kept`
+		);
+		expect(d({ palette: { label: 'Sunset', reset: 1, kept: 1 } })).toContain(
+			'1 part back to its kit color, 1 locked part kept'
+		);
+		expect(d({ palette: { label: 'Sunset', reset: 0, kept: 2 } })).toBe(
+			`${who} applied the Sunset palette; 2 locked parts kept`
+		);
+		expect(d({ palette: { label: 'Sunset', reset: 0, kept: 0 } })).toBe(
+			`${who} applied the Sunset palette`
+		);
+	});
+
+	it('describes locks, unlocks and locked parts moved to a new slot', () => {
+		expect(d({ locked: ['Wing Left'] })).toBe(`${who} locked the part color of Wing Left`);
+		expect(d({ unlocked: ['A', 'B'] })).toBe(`${who} unlocked the part color of A and B`);
+		expect(
+			d({
+				lockedAdded: [{ key: 'c1', name: 'Overture Red', material: 'PETG', parts: ['Wing Left'] }]
+			})
+		).toBe(`${who} kept Wing Left on a new color slot (Overture Red PETG)`);
+		expect(d({ lockedAdded: [{ key: 'c1', name: 'Overture Red' }] })).toContain(
+			'kept locked parts on a new color slot (Overture Red)'
+		);
+	});
+
+	it('describes a removal with replacement, Spoolman link and dropped spools', () => {
+		const base = {
+			removed: { key: 'x', name: 'Overture Red', material: 'PETG', parts: 3 },
+			replacedBy: { key: 'primary', name: 'Primary', material: 'PETG' }
+		};
+		expect(d(base)).toBe(`${who} removed Overture Red PETG; its 3 parts now use Primary PETG`);
+		expect(d({ ...base, removed: { ...base.removed, spoolmanSpoolId: 12, spools: 2 } })).toContain(
+			'and unlinked Spoolman spool #12 and dropped 2 spools of stock'
+		);
+		// old shape still reads
+		expect(d({ removed: { key: 'x', name: 'Red' } })).toBe(`${who} removed a color: Red`);
+	});
+
+	it('does not repeat a material the name already contains', () => {
+		const rep = { key: 'primary', name: 'Primary PETG', material: 'PETG' };
+		expect(
+			d({ removed: { key: 'x', name: 'Red PETG', material: 'PETG', parts: 2 }, replacedBy: rep })
+		).toBe(`${who} removed Red PETG; its 2 parts now use Primary PETG`);
+		expect(
+			d({ removed: { key: 'x', name: 'red petg', material: 'PETG', parts: 1 }, replacedBy: rep })
+		).toBe(`${who} removed red petg; its 1 part now uses Primary PETG`);
+		// word boundary: "PETGX" does not contain PETG
+		expect(d({ lockedAdded: [{ name: 'PETGX', material: 'PETG', parts: ['A'] }] })).toContain(
+			'(PETGX PETG)'
+		);
+		expect(d({ lockedAdded: [{ name: 'Blue PETG', material: 'PETG', parts: ['A'] }] })).toContain(
+			'on a new color slot (Blue PETG)'
+		);
+		expect(
+			d({
+				removed: { key: 'x', name: 'Black TPU', material: 'TPU 95A', parts: 2 },
+				replacedBy: { key: 'p', name: 'Soft TPU 95A', material: 'TPU 95A' }
+			})
+		).toBe(`${who} removed Black TPU 95A; its 2 parts now use Soft TPU 95A`);
+	});
+
+	it('describes a palette undo, with removed slots singular and plural', () => {
+		expect(d({ palette: { label: 'previous', slots: [] } })).toBe(
+			`${who} undid the palette change`
+		);
+		expect(d({ palette: { label: 'Sunset', undo: true } })).toBe(`${who} undid the palette change`);
+		expect(d({ palette: { undo: true, removeRoles: ['c1'] } })).toBe(
+			`${who} undid the palette change; removed 1 color slot added for locked parts`
+		);
+		expect(d({ palette: { undo: true, removeRoles: ['c1', 'c2'] } })).toBe(
+			`${who} undid the palette change; removed 2 color slots added for locked parts`
+		);
+	});
+
+	it('strips control characters from names', () => {
+		expect(d({ locked: ['A\u0001B'] })).toBe(`${who} locked the part color of AB`);
+	});
+});
+
+describe('Partial with per-part results and spool adds', () => {
+	const f = view.filaments[0];
+	it('describes a split run.add with both halves', () => {
+		const t = say('run.add', {
+			plateNumber: 3,
+			split: true,
+			result: 'Partial',
+			kept: [part.slug],
+			lost: [part2.slug],
+			keptGrams: 162.4,
+			lostGrams: 40
+		});
+		expect(t).toBe(
+			`Steph logged a partial print of plate 3: ${part.name} printed (162 g), ${part2.name} flagged for reprint (40 g lost)`
+		);
+		const segs = describeActivitySegments(
+			act('run.add', { plateNumber: 3, split: true, kept: [part.slug], lost: [part2.slug] }),
+			view
+		);
+		expect(segs.filter((x) => x.part).map((x) => x.part)).toEqual([part.slug, part2.slug]);
+		expect(segs.find((x) => x.plate === 3)).toBeTruthy();
+	});
+	it('describes the undo of a split', () => {
+		expect(
+			say('run.undo', { plateNumber: 3, split: true, result: 'Partial', runIds: ['a', 'b'] })
+		).toBe('Steph undid a partial print of plate 3 (both of its logs)');
+		expect(say('run.undo', { plateNumber: 3, result: 'Success' })).toBe(
+			'Steph undid a successful print of plate 3'
+		);
+	});
+	it('describes spool adds and removals', () => {
+		expect(say('filament.stock.add', { role: f.key, kg: 1, note: 'restock' })).toBe(
+			`Steph added 1 kg of ${filamentLabel(f)} (restock)`
+		);
+		expect(say('filament.stock.add', { role: f.key, kg: 0.5 })).toBe(
+			`Steph added 0.5 kg of ${filamentLabel(f)}`
+		);
+		expect(say('filament.stock.remove', { role: f.key, kg: 2 })).toBe(
+			`Steph removed an added spool of ${filamentLabel(f)} (2 kg)`
+		);
+		// a note cannot forge a link marker
+		const forged = say('filament.stock.add', {
+			role: f.key,
+			kg: 1,
+			note: '\u0001part:x\u0002y\u0003'
+		});
+		expect([...forged].some((ch) => ch.charCodeAt(0) <= 3)).toBe(false);
+	});
+});
+
+describe('design.recolor and design.apply modes', () => {
+	it('says colors only, plates and progress kept', () => {
+		expect(say('design.recolor', { designName: 'Sunset' })).toBe(
+			'Steph changed the colors to design "Sunset" (colors only; plates and progress kept)'
+		);
+	});
+	it('lists skipped slots with the reason', () => {
+		const text = say('design.recolor', {
+			designName: 'Sunset',
+			skipped: [
+				{ role: 'tire', name: 'Tire', reason: 'material' },
+				{ role: 'accent', reason: 'locked' }
+			]
+		});
+		expect(text).toContain(
+			'(colors only; plates and progress kept); left Tire (other material) and '
+		);
+		expect(text).toContain('(locked parts) as they were');
+	});
+	it('does not render the before snapshot and strips control characters', () => {
+		const text = say('design.recolor', {
+			designName: 'Sun\u0001set\u0003',
+			before: { roles: [{ key: 'primary', hex: '#123456' }], partRoles: {}, lockedParts: [] }
+		});
+		expect(text).toBe(
+			'Steph changed the colors to design "Sunset" (colors only; plates and progress kept)'
+		);
+		expect(text).not.toContain('123456');
+	});
+	it('marks a full apply', () => {
+		expect(
+			say('design.apply', {
+				designName: 'Sunset',
+				mode: 'full',
+				before: { roles: [], partRoles: {}, lockedParts: [] }
+			})
+		).toBe('Steph applied the color design "Sunset" (colors and part colors replaced)');
+		// Not started: no snapshot, so no suffix even if the server sends mode: 'full'.
+		expect(say('design.apply', { designName: 'Sunset', mode: 'full' })).toBe(
+			'Steph applied the color design "Sunset"'
+		);
+		expect(say('design.apply', { designName: 'Sunset' })).toBe(
+			'Steph applied the color design "Sunset"'
+		);
 	});
 });

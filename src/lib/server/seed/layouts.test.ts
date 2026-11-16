@@ -16,9 +16,10 @@ describe('built-in plate layouts', () => {
 		expect(layouts.filter((l) => l.isDefault)).toHaveLength(1);
 	});
 
-	it('h2d has 21 plates with real, unique part slugs and no times', () => {
+	it("h2d has MakeGood's 21 plates plus one for the one-piece handle, real unique slugs, no times", () => {
 		const h = layouts.find((l) => l.key === 'h2d')!;
-		expect(h.plates).toHaveLength(21);
+		expect(h.plates).toHaveLength(22);
+		expect(h.plates.find((p) => p.number === 22)!.parts).toEqual(['push-handle-one-piece']);
 		const slugs = new Set(tmtTemplate.parts.map((p) => p.slug));
 		const seen = new Set<string>();
 		for (const p of h.plates) {
@@ -40,7 +41,39 @@ describe('built-in plate layouts', () => {
 		const active = new Set(view.parts.map((p) => p.slug));
 		const h = layouts.find((l) => l.key === 'h2d')!;
 		const empty = h.plates.filter((p) => !p.parts.some((s) => active.has(s))).map((p) => p.number);
-		expect(empty).toEqual([8, 20]);
+		expect(empty).toEqual([8, 20, 22]);
+	});
+});
+
+describe('one-piece push handle on the built-in layouts', () => {
+	const choose = { 'push-handle': 'one-piece' };
+	const platesOf = (key: string) => {
+		const view = makeView(undefined, 0, choose);
+		const active = new Set(view.parts.map((p) => p.slug));
+		return layouts
+			.find((l) => l.key === key)!
+			.plates.map((p) => ({ ...p, parts: p.parts.filter((s) => active.has(s)) }))
+			.filter((p) => p.parts.length);
+	};
+	it('h2d: the four multi-part plates are gone, the handle has its own plate and the grip stays', () => {
+		const plates = platesOf('h2d');
+		const all = plates.flatMap((p) => p.parts);
+		expect(all).toContain('push-handle-one-piece');
+		expect(all).toContain('push-grip');
+		for (const s of ['push-top', 'push-bottom', 'push-brace', 'push-pin'])
+			expect(all, s).not.toContain(s);
+		expect(plates.find((p) => p.parts.includes('push-handle-one-piece'))!.parts).toEqual([
+			'push-handle-one-piece'
+		]);
+		// every active part is on exactly one plate except the bucket seat (no plate in either profile)
+		const view = makeView(undefined, 0, choose);
+		const missing = view.parts.map((p) => p.slug).filter((s) => !all.includes(s));
+		expect(missing).toEqual([]);
+	});
+	it('xpa has no plate for it (it does not fit a 256 mm bed): the part lands under "Other"', () => {
+		const all = platesOf('xpa').flatMap((p) => p.parts);
+		expect(all).not.toContain('push-handle-one-piece');
+		expect(all).not.toContain('push-top');
 	});
 });
 
