@@ -22,54 +22,40 @@ _Updated 2026-11-16. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
 
 ## State of `edge`
 
-`origin/edge` = 42e1437 (docs only on top of a71f3ac). Merged 2026-11-15: #50 (#46
-accounting), #51 (#47 Stats), #52/#57 (r56/r57 docs), #53 (chevron), #54 (CI docs fast
-path), #55 (Prettier rule), #58 (#56 design change on a started build), #60 (this handoff),
-#62 (r58 docs), #61/#63 (handoff). The test copy runs r58 = `edge` a71f3ac (#56 included; deployed
-2026-11-15, rehearsal clean). Next deploy, r59 = the header pull request, after it merges.
-No migrations.
+`origin/edge` = ce8afce. Merged 2026-11-16: #64/#65 (handoff), #66 (Stats tests pinned
+creation dates; they failed from 2026-11-16 on), #67 (build header Stats cards, Stats
+fixes, e2e fixes incl. the `kit-import` locator that also failed on `edge`). The test copy
+runs r58 = `edge` a71f3ac. **r59 = `edge` ce8afce** (image `sha-ce8afce`, no migrations):
+the CI image job was running at 01:42 UTC; once it's published the maintainer pulls it on
+Unraid (backup + rehearsal per routine).
 
 ## In flight
 
-### `feat/stats-header` (pushed, head da4b3e7, no pull request yet)
+### `release/0.9.2` (main checkout, from `edge` ce8afce, not pushed yet)
 
-- Stats fixes from the r57 check: chart x-labels thinned by collision (`visibleLabels` in
-  `charts/scale.ts`); "Show data" and the workspace builds table scroll inside their card
-  (sticky first column, edge shadow); the failures chart counts part-level failed runs
-  (plate, or a "Not on a plate" row); hours rounded alike (whole hours from 100 h logged).
-- `domain/kpis.ts` `buildKpis(view, now)` is the single source for the four headline numbers
-  (Stats tiles and header); shared pieces in `domain/stats-core.ts`; `stats.ts` re-exports.
-- Header (`BuildHeader.svelte`): four compact `StatTile` cards (Parts, Time, Filament,
-  Finish) linking to Stats on every build tab, four across on phones; Time and Filament show
-  a short "of ~382 h" line under the value at all widths (full sentence in the aria-label);
-  `StatTile` puts a real space before the unit ("3 of 33"); the details line holds only
-  "N printing · N to reprint · deliver-by" and hides when empty; cards hidden on the Design
-  tab at ≤760 px; drafts unchanged. `e2e/header-kpis.spec.ts` checks no truncation at 390.
-- Maintainer approved the 390/1440 screenshots (2026-11-15). STATUS and
-  `docs/architecture.md` notes are on the branch (merged with `edge` 79c2cec+).
-- Known, not blocking: at 1440 the Parts and Finish detail lines end in "…" (full text on
-  hover and in the details line), a possible small follow-up [app-shell].
-- **Now:** `verifier` is running on da4b3e7 in a fresh worktree (`npm ci`, check, lint, full
-  vitest, build, full e2e). No `security-reviewer` needed (no server, API or auth files).
-- **Next steps:** (1) verifier green → open the pull request into `edge`; red → send the
-  failure to the owning agent; (2) merge once CI is green; (3) r59 deploy on Unraid
-  (header, no migrations) with the maintainer's OK; (4) the release pull request (see the
-  goal above).
+- `release-pwa`: version 0.9.2 (package.json + lock), CHANGELOG `[0.9.2] - 2026-11-16`
+  with an upgrade note (back up `/data`; migrations 0001/0002, additive).
+- `kit-and-startup`: frozen fixture `src/lib/server/db/fixtures/v0.9.2/` (invented data,
+  exercises 0001/0002).
+- Then: `verifier` → pull request into `edge` → merge only after the maintainer signs off
+  r59 → maintainer runs "Promote edge to main", merges, tags `v0.9.2` (release form Target
+  `main`, see STATUS item 0).
 
-### `feat/spoolman-filaments` (#59; branch from a71f3ac, nothing written yet)
+### `feat/spoolman-filaments` (#59; pushed, head 451a07a, no pull request yet)
 
-- Prototype approved by the maintainer ("Looks great"):
-  https://claude.ai/artifact/McTWfeDj42QF26FJ74uDC3. Full plan, findings and the
-  maintainer's answers (all questions answered): `docs/dev/plans/issue59-spoolman.md`.
-- Three stacked pull requests: (1) discoverability, filament link, auto-advance, Spoolman
-  stock, a "kept up to date by: this app / something else" workspace setting, and handling
-  of prints from before the link; (2) adding a spool also creates the Spoolman spool
-  (archive on remove); (3) create vendor/filament in Spoolman.
-- Agent order: `kit-and-startup` (migration 0003) → `build-state` (contracts, activity) ‖
-  `filaments-catalog` → `printers` (client, `mock-spoolman.ts`, deduct with lock +
-  auto-advance, routes, shared components, Settings) → `app-shell` (wizard virtual step,
-  `FilamentTiles`) ‖ `design-studio-ui` (`SlotPanel`) → `e2e-playwright` →
-  `security-reviewer` → `verifier`. Expect a couple of feedback rounds.
+Nothing merges until 0.9.2 is on `main`. Plan, decisions and progress:
+`docs/dev/plans/issue59-spoolman.md`; contracts in `docs/architecture.md` (Build state, Kit
+and startup, Printers). Done: migration 0003 (incl. `print_runs.created_at`, maintainer:
+exact column), build-state rules/view/activity, catalog regenerated with SpoolmanDB ids
+(this environment now allows donkie.github.io; the script needs `NODE_USE_ENV_PROXY=1`
+here), printers stage 3, security review (no high/medium; four lows fixed). Decisions
+2026-11-16: catalog extended (not runtime lookup); fallback densities and 200 g spool weight
+OK; switching kept-by to "something else" keeps existing deductions.
+
+- Now: `app-shell` (FilamentTiles, wizard Spoolman step, picker warnings, Settings
+  screenshots) ‖ `design-studio-ui` (SlotPanel), both in the Spoolman worktree.
+- Next: show the maintainer screenshots → `e2e-playwright` (Spoolman spec, printers.spec on
+  the shared mock) → `verifier` (fresh worktree) → draft pull request into `edge`.
 
 ## Notes for the next orchestrator and its agents
 

@@ -6,6 +6,7 @@
 		edgeAnchor,
 		formatValue,
 		labelStep,
+		visibleLabels,
 		unitSuffix,
 		linearScale,
 		niceTicks,
@@ -60,6 +61,19 @@
 	const bw = $derived(Math.min(44, slot * 0.7));
 	const y = $derived(linearScale([0, axis.max], [top + plotH, top]));
 	const step = $derived(labelStep(slot, Math.max(...categories.map((c) => c.length), 1) * 6.4 + 8));
+	const cx = (i: number) => left + i * slot + slot / 2;
+	/** Every `step`-th label, then whatever still collides (or hugs the edge) is dropped. */
+	const shown = $derived.by(() => {
+		const idx = categories.map((_, i) => i).filter((i) => i === 0 || (n - 1 - i) % step === 0);
+		const vis = visibleLabels(
+			idx.map(cx),
+			idx.map((i) => truncate(categories[i], 12).length * 6.4),
+			W
+		);
+		const out: Record<number, boolean> = {};
+		idx.forEach((i, k) => (out[i] = vis[k]));
+		return out;
+	});
 
 	function cols(i: number) {
 		const x = left + i * slot + (slot - bw) / 2;
@@ -117,11 +131,11 @@
 						/>
 					{/if}
 				{/each}
-				{#if (n - 1 - i) % step === 0}
+				{#if shown[i]}
 					<text
 						x={left + i * slot + slot / 2}
 						y={H - 8}
-						text-anchor={edgeAnchor(left + i * slot + slot / 2, truncate(c, 12).length * 6.4, W)}
+						text-anchor={edgeAnchor(cx(i), truncate(c, 12).length * 6.4, W)}
 						class="sb-tick">{truncate(c, 12)}<title>{c}</title></text
 					>
 				{/if}

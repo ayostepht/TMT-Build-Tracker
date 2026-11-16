@@ -66,6 +66,7 @@
 <style>
 	.cf-fig {
 		margin: 0;
+		grid-template-columns: minmax(0, 1fr);
 	}
 	.cf-cap {
 		display: grid;
@@ -114,6 +115,26 @@
 	}
 	.cf-scroll {
 		overflow-x: auto;
+		max-width: 100%;
+		/* Scrolls sideways inside its own box; the shadow at an edge shows there is more that way. */
+		background:
+			linear-gradient(to right, var(--card) 30%, transparent) left center / 28px 100% no-repeat
+				local,
+			linear-gradient(to left, var(--card) 30%, transparent) right center / 28px 100% no-repeat
+				local,
+			radial-gradient(
+					farthest-side at 0 50%,
+					color-mix(in srgb, var(--ink) 32%, transparent),
+					transparent
+				)
+				left center / 14px 100% no-repeat scroll,
+			radial-gradient(
+					farthest-side at 100% 50%,
+					color-mix(in srgb, var(--ink) 32%, transparent),
+					transparent
+				)
+				right center / 14px 100% no-repeat scroll;
+		overscroll-behavior-x: contain;
 		margin-top: var(--sp-4);
 	}
 	.cf-table {
@@ -134,8 +155,17 @@
 		color: var(--muted);
 		font-weight: 600;
 	}
+	.cf-table thead th:first-child {
+		position: sticky;
+		left: 0;
+		background: var(--card);
+	}
 	.cf-table tbody th {
 		font-weight: 500;
+		/* the row name stays in view while the numbers scroll */
+		position: sticky;
+		left: 0;
+		background: var(--card);
 	}
 	.cf-table .cf-num {
 		text-align: right;

@@ -29,7 +29,7 @@ const overflow = (page: Page) =>
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-	test('top bar is one row, the build header one line, eight tabs sit in a bottom bar', async ({
+	test('top bar is one row, the build header a title row and four cards, eight tabs sit in a bottom bar', async ({
 		page
 	}) => {
 		const { buildId } = await ownerWithBuild(page, 'shell');
@@ -58,7 +58,7 @@ test.describe('phone', () => {
 		});
 		console.log('PRINT-METRICS', JSON.stringify(m));
 		expect(m.topbar, 'one-row top bar').toBeLessThanOrEqual(56);
-		expect(m.header, 'one-line build header').toBeLessThanOrEqual(56);
+		expect(m.header, 'title row plus the four cards').toBeLessThanOrEqual(130);
 		expect(m.links).toHaveLength(8);
 		for (const l of m.links) {
 			expect(l.l).toBeGreaterThanOrEqual(0);
@@ -76,6 +76,13 @@ test.describe('phone', () => {
 
 	test('header details open on tap; menu panel reaches every nav item', async ({ page }) => {
 		const { buildId } = await ownerWithBuild(page, 'shellmenu');
+		await page.goto(`/builds/${buildId}`);
+		await page.waitForLoadState('networkidle');
+		// Nothing printing, nothing to reprint: no details line and no toggle.
+		await expect(page.getByTestId('header-details')).toHaveCount(0);
+		await page.goto(`/builds/${buildId}/print`);
+		await page.waitForLoadState('networkidle');
+		await chooseStatus(page.getByTestId('part-status').first(), 'Printing');
 		await page.goto(`/builds/${buildId}`);
 		await page.waitForLoadState('networkidle');
 		await expect(page.locator('.overall')).toBeHidden();

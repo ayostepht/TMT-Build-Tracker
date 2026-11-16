@@ -6,6 +6,10 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-16
+
+**Upgrading:** back up your `/data` folder first. This release adds two database migrations (0001 and 0002, both additive: new columns for entered weights and spool adds). They run automatically when the container starts and cannot be undone, so to go back to 0.9.1 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
+
 ### Added
 
 - Stats: a Stats tab on every build (printing time and filament used, progress with a projected finish, failures per plate, filament by colour against your stock, plate time against the estimate, hours per day) and a Stats page for the workspace (hours per week, printers, most-used filaments, plates that fail most, a table of builds, over the last 3, 6, 12 or 24 months). Every chart has a sentence that says what it shows and a "Show data" table.
@@ -24,13 +28,18 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 ### Changed
 
 - Filament and time now tell used from lost: "used" is split into what ended up in printed parts and what failed prints took (older Partial logs count as lost), and logged hours the same way. The totals are unchanged for existing builds. After a Partial, only the parts still to print count toward what is left.
+- The build header shows four Stats cards (parts printed, printing time, filament used, projected finish) on every build tab, each linking to the Stats tab. On phones they sit four across under the build name, with a short "of ~382 h" estimate line under Time and Filament. The build details line (what is printing, parts to reprint, the deliver-by date) appears only when there is something to show, and still opens from the arrow beside the name on phones. The Design tab keeps its room for the chair: no cards there on phones.
 - Recent activity has its own Activity tab (after Finish, before Settings). The Overview now shows only the last change with an "All activity" link, so it stays lighter. Studio drafts have no Activity tab.
 - Choosing a palette now resets every part-level color change: unlocked parts go back to their kit colors, as the Apply bar says ("Resets N part changes · M locked kept"). Applying a palette is one saved change in the activity log, and Undo restores the colors and the parts together.
 - Filament picker: a new Type filter replaces the "All types" checkbox. It defaults to the standard types, shown as "95A" for TPU and "PETG", and lists each other type present with its count (TPU hardness such as 85A or 98A, foaming, silk, matte, carbon-filled, ...), plus "All types".
 
 ### Fixed
 
-- Applying a design (or a palette that resets part colors) to a build that was already printing no longer happens without a warning, and no longer rebuilds its plates. "Colors and print files" is refused while a plate is printing or a printer job is running, and now keeps parts whose color is locked. The confirmations on the Design tab and on a design's page no longer claim plates are kept when they are re-arranged. (#56)
+- Stats: the dates along the bottom of a chart no longer run into each other.
+- Stats: the "Show data" tables, and the table of builds on the workspace Stats page, scroll sideways inside their own card on phones instead of widening the page.
+- Stats: the failures chart now counts failed prints of single parts too (they appear under their plate, or under "Not on a plate"), so its rows add up to the failed prints.
+- Stats: hours are rounded the same way everywhere (whole hours from 100 h logged), so the Stats tab and the build header show the same numbers.
+- Applying a design (or a palette that resets part colors) to a build that was already printing no longer happens without a warning, and no longer rebuilds its plates. "Colors and print files" is refused while a plate is printing or a printer job is running, and now keeps parts whose color is locked. The confirmations on the Design tab and on a design's page no longer claim plates are kept when they are re-arranged.
 - Filament used: a print that was marked done with a failed attempt logged and the successful one logged without grams counted only the failed grams; it now uses the estimate for the kept print too. Parts with no weight at all are listed as missing instead of counting as 0 g.
 - Lock part color: it locks only the part you tapped, even with "Both sides" on (it used to lock the matching parts too, such as a wheel rim on a different color). A slot added for a locked part now reads "Accent PETG · added" instead of repeating the kit slot's name.
 - Filament picker: the number next to each Type now matches the swatches the picker lists for it (same-looking colors count once, as they are listed once), and a short list no longer repeats itself under "Closest to the current color" or hides its neutrals.
