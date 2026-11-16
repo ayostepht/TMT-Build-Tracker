@@ -211,7 +211,7 @@ export interface PrintRun {
 	userId: string | null;
 	userName: string | null;
 	note: string;
-	/** When the run was logged (ms since the epoch), from its `run.add` activity row; null/absent when unknown. Used by the Spoolman pre-link rule. */
+	/** When the run was logged (ms since the epoch), from `print_runs.created_at`; null/absent when unknown. Used by the Spoolman pre-link rule. */
 	createdAt?: number | null;
 }
 

@@ -196,6 +196,17 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
   defaults on once a part is Printed; parts that become Printed during a visit stay visible
   ("Printed just now", `groupParts(..., { keep })`). Specs use `keepPrintedVisible`.
 
+- **Spoolman (#59, unreleased):** `domain/spoolman.ts` holds the pre-link rule
+  (`isPreLinkRun`, `runCountsForDeduction`: runs created, or dated, before the slot's
+  `linkedAt` are never deducted, also on edit/undo; Partial rows never), the cached-stock
+  reader `readSpoolmanStock` and `haveGramsOf` (Spare while linked uses Spoolman's remaining
+  weight; kept-by 'app' also subtracts post-link grams the ledger hasn't delivered; pre-link
+  grams never count twice). `filamentStats` exposes `spareG`/`usedForSpare`/`haveSource`.
+  `loadBuildView` → `attachSpoolman` fills `BuildView.spoolman` and `FilamentRole.spoolman`
+  (link, `linkedAt`, `keptBy`, `sharedWith`, cached stock, ledger grams); `PrintRun.createdAt`
+  comes from `print_runs.created_at`. Activity kinds `filament.spoolman.link|unlink|spool|
+create|prelink`, plus `spoolmanSpoolId`/`archived` extras on `filament.stock.add|remove`.
+
 ## Plates and 3MF (`plates-3mf`)
 
 - **Plate replacement guard** (#56): `guardPlateReplace` (`builds/plates.ts`) runs before

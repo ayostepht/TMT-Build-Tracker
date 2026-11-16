@@ -510,17 +510,6 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		.map((p) => ({ ...p, parts: p.parts.filter((s) => !inactive.has(s)) }))
 		.filter((p) => p.parts.length > 0);
 
-	// A run's creation time is its `run.add` activity row (print_runs has no created-at column).
-	const runCreated = new Map<string, number>();
-	for (const a of db
-		.select({ payload: activity.payload, at: activity.at })
-		.from(activity)
-		.where(and(eq(activity.buildId, buildId), eq(activity.kind, 'run.add')))
-		.all()) {
-		const ids = [a.payload?.runId, ...(Array.isArray(a.payload?.runIds) ? a.payload.runIds : [])];
-		for (const rid of ids)
-			if (typeof rid === 'string' && !runCreated.has(rid)) runCreated.set(rid, a.at.getTime());
-	}
 	const runs: PrintRun[] = db
 		.select({ r: printRuns, userName: user.name })
 		.from(printRuns)
@@ -542,7 +531,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			userId: r.userId,
 			userName,
 			note: r.note,
-			createdAt: runCreated.get(r.id) ?? null
+			createdAt: r.createdAt ? r.createdAt.getTime() : null
 		}));
 
 	const acts: ActivityItem[] = db
