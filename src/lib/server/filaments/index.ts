@@ -9,7 +9,13 @@ import {
 	FLAG_TRANSLUCENT,
 	type SwatchTuple
 } from '#lib/domain/palettes.ts';
-import type { CatalogBrand, CatalogColor, FilamentCatalog, SearchHit } from './types.ts';
+import type {
+	CatalogBrand,
+	CatalogColor,
+	FilamentCatalog,
+	PublicCatalogColor,
+	SearchHit
+} from './types.ts';
 
 const catalog = raw as FilamentCatalog;
 
@@ -33,8 +39,21 @@ export function materials(brand: string): string[] {
 	return brandOf(brand)?.materials.map((m) => m.material) ?? [];
 }
 
-export function colors(brand: string, material: string): CatalogColor[] {
-	return brandOf(brand)?.materials.find((m) => eq(m.material, material))?.colors ?? [];
+/** Drops the Spoolman-only fields so API responses stay as small as before they existed. */
+export function toPublic(c: CatalogColor): PublicCatalogColor {
+	const rest: Record<string, unknown> = { ...c };
+	delete rest.sdbId;
+	delete rest.density;
+	delete rest.spoolWeightG;
+	return rest as PublicCatalogColor;
+}
+
+export function colors(brand: string, material: string): PublicCatalogColor[] {
+	return (
+		brandOf(brand)
+			?.materials.find((m) => eq(m.material, material))
+			?.colors.map(toPublic) ?? []
+	);
 }
 
 type Entry = { hay: string; hit: SearchHit };
@@ -46,7 +65,12 @@ function buildIndex(): Entry[] {
 			for (const c of m.colors)
 				out.push({
 					hay: `${b.name} ${m.material} ${c.name}`.toLowerCase(),
-					hit: { brand: b.name, material: m.material, color: c, name: suggestName(b.name, c.name) }
+					hit: {
+						brand: b.name,
+						material: m.material,
+						color: toPublic(c),
+						name: suggestName(b.name, c.name)
+					}
 				});
 	return out;
 }
@@ -112,3 +136,6 @@ export function swatches(family: SwatchFamily): SwatchTuple[] {
 	if (!out) swatchCache.set(family, (out = swatchesOf(catalog, family)));
 	return out;
 }
+
+export { resolveSlotOrigin } from './origin.ts';
+export type { SlotLike } from './origin.ts';
