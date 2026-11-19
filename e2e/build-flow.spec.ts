@@ -61,7 +61,9 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await expect(page.getByText('Nothing on the printer')).toBeVisible();
 
 	await page.getByRole('link', { name: 'Files', exact: true }).click();
-	const logged = page.getByRole('region', { name: `Plate ${plateNo}` }).locator('tbody tr');
+	const logged = page
+		.getByRole('region', { name: `Plate ${plateNo}`, exact: true })
+		.locator('tbody tr');
 	await expect(logged).toHaveCount(1);
 	await expect(logged).toContainText('Failed');
 	await expect(logged).toContainText('2.5');

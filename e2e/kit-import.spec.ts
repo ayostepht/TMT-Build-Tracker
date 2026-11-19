@@ -447,7 +447,7 @@ test('a sliced 3MF in the kit drop zone is offered to the build plates', async (
 	await expect(
 		page.getByRole('status').filter({ hasText: 'Plates organized from ECC_0.4_tmt' })
 	).toBeVisible();
-	const plate = page.getByRole('region', { name: 'Plate 1' });
+	const plate = page.getByRole('region', { name: 'Plate 1', exact: true });
 	await expect(plate).toContainText('~16 h');
 	await expect(plate).not.toContainText('(estimate)');
 	// Slicer time in the build header, no "(estimate)".
