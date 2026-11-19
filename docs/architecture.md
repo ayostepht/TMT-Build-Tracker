@@ -843,6 +843,17 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   `BroadcastChannel('tmt-auth')`; `initPwa` listens so other tabs clear too.
   `src/service-worker.ts` is excluded from svelte-check (`tsconfig.json`); `npm run build`
   type-checks it.
+- **Error logs**: `handleError` in `hooks.server.ts` logs unexpected errors as
+  `safeErrorText(e)` (`server/api.ts`: drops query `params:` and `cause`, collapses control
+  characters); every other server-side error log uses `safeErrorText` too. Never log a raw
+  error object.
+- **Expensive reads** (`server/quota.ts`): `acquireExpensiveReadSlot` per user; arrangement and
+  export preview pass `light` (self-host: concurrency slot only; public mode: bucket too);
+  `export.3mf` always spends the bucket (self-host 60 burst / 120 per min, public 20 / 60).
+  Site admins exempt. 429s carry `Retry-After`; ExportCard and PlatesPanel keep their last data
+  and retry once (`busyRetrySeconds`, `client/coalesce.ts`). 3MF limits (`threemf/index.ts`):
+  20,000 entries (checked before the zip directory is read), 8 MB XML configs, 256 thumbnails;
+  STEP zips 10,000 entries.
 - **Request pipeline** (`hooks.server.ts`): boot validation (`bootProblems`, exit 1) → body
   cap by route (`body-limits.ts`, default 1 MB) → `/api/auth/*` to Better Auth with a trusted
   client address (`client-ip.ts`: `ADDRESS_HEADER`/`XFF_DEPTH`; fails closed) → session →
