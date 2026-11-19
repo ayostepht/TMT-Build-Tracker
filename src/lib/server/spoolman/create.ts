@@ -5,13 +5,13 @@
  * Editors only (a viewer gets 403, a non-member 404). Every write runs under the workspace's
  * Spoolman lock, goes through the guarded client, and refreshes `spoolman_cache` afterwards.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne, or } from 'drizzle-orm';
 import { isObj } from '#lib/domain/guards.ts';
 import { suggestName } from '#lib/filament-catalog.ts';
 import { ApiError, buildAccess } from '../access';
 import { MAX_SPOOL_ADDS, mutateBuild } from '../builds/actions';
 import type { Db } from '../db';
-import { buildFilaments } from '../db/schema';
+import { buildFilaments, builds } from '../db/schema';
 import { resolveSlotOrigin } from '../filaments/index';
 import { spoolmanDefaults } from '../filaments/spoolman-defaults';
 import { getOrgSettings } from '../org-settings';
@@ -149,6 +149,18 @@ export interface CreateResult extends LinkResult {
 	vendorCreated: boolean;
 	/** The same filament already existed in Spoolman (a double click, a second editor): it was linked, not created again. */
 	reused: boolean;
+	/** The filament that was created or reused, as Spoolman has it. */
+	filament: {
+		id: number;
+		name: string;
+		vendor: string | null;
+		material: string | null;
+		colorHex: string | null;
+		density: number | null;
+		diameter: number | null;
+		weightG: number | null;
+		spoolWeightG: number | null;
+	};
 }
 
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -208,6 +220,8 @@ export async function createAndLinkFilament(
 						sameName(f.vendor, vendor!.name) &&
 						sameName(f.name, name) &&
 						sameName(f.material ?? '', material) &&
+						f.diameter != null &&
+						Math.abs(f.diameter - diameter) <= 0.01 &&
 						f.colorHex === `#${hex.toLowerCase()}`
 				);
 				reused = !!filament;
@@ -248,7 +262,18 @@ export async function createAndLinkFilament(
 		...link,
 		vendorId: made.vendor.id,
 		vendorCreated: made.vendorCreated,
-		reused: made.reused
+		reused: made.reused,
+		filament: {
+			id: made.filament.id,
+			name: made.filament.name,
+			vendor: made.filament.vendor ?? made.vendor.name,
+			material: made.filament.material,
+			colorHex: made.filament.colorHex,
+			density: made.filament.density,
+			diameter: made.filament.diameter,
+			weightG: made.filament.weightG,
+			spoolWeightG: made.filament.spoolWeightG
+		}
 	};
 }
 
@@ -278,19 +303,23 @@ export async function addSpoolmanSpool(
 	factory: ClientFactory = defaultFactory
 ): Promise<AddSpoolResult> {
 	const { org, url } = writeCtx(db, buildId, userId);
-	const slot = slotOf(db, buildId, role);
-	if (slot.spoolmanFilamentId == null)
+	const pre = slotOf(db, buildId, role);
+	if (pre.spoolmanFilamentId == null)
 		throw new ApiError(400, 'Link this filament to Spoolman first');
 	if (!isObj(body)) throw new ApiError(400, 'Invalid body');
 	const kg = Math.round(num(body.kg, 'kg', 0.01, 99) * 100) / 100;
 	const note = cleanText(body.note, 'note', 200, false) || null;
-	if (slot.spoolAdds.length >= MAX_SPOOL_ADDS)
-		throw new ApiError(400, `A color can hold at most ${MAX_SPOOL_ADDS} added spools`);
-	const filamentId = slot.spoolmanFilamentId;
 	const client = clientFor(url, factory);
 	if (isSpoolmanLocked(org)) throw new ApiError(409, BUSY);
 
 	return withSpoolmanLock(org, async () => {
+		// Read the slot only now: it may have changed while this call waited for the lock.
+		const slot = slotOf(db, buildId, role);
+		if (slot.spoolmanFilamentId == null)
+			throw new ApiError(400, 'Link this filament to Spoolman first');
+		if (slot.spoolAdds.length >= MAX_SPOOL_ADDS)
+			throw new ApiError(400, `A color can hold at most ${MAX_SPOOL_ADDS} added spools`);
+		const filamentId = slot.spoolmanFilamentId;
 		let created;
 		try {
 			const f = await client.getFilament(filamentId);
@@ -391,17 +420,40 @@ export async function removeSpoolmanSpoolAdd(
 	factory: ClientFactory = defaultFactory
 ): Promise<RemoveSpoolResult> {
 	const { org, url } = writeCtx(db, buildId, userId);
-	const slot = slotOf(db, buildId, role);
-	const entry = slot.spoolAdds.find((a) => a.id === addId);
-	if (!entry) throw new ApiError(404, 'Unknown spool add');
-	const spoolId = entry.spoolmanSpoolId;
-	const wantArchive = archive && spoolId != null;
+	const pre = slotOf(db, buildId, role).spoolAdds.find((a) => a.id === addId);
+	if (!pre) throw new ApiError(404, 'Unknown spool add');
 	const client = clientFor(url, factory);
-	if (wantArchive && isSpoolmanLocked(org)) throw new ApiError(409, BUSY);
+	if (archive && pre.spoolmanSpoolId != null && isSpoolmanLocked(org))
+		throw new ApiError(409, BUSY);
 
 	return withSpoolmanLock(org, async () => {
+		// Read the slot only now: it may have changed while this call waited for the lock.
+		const slot = slotOf(db, buildId, role);
+		const entry = slot.spoolAdds.find((a) => a.id === addId);
+		if (!entry) throw new ApiError(404, 'Unknown spool add');
+		const spoolId = entry.spoolmanSpoolId;
+		let wantArchive = archive && spoolId != null;
 		let archived: boolean | undefined = spoolId != null ? false : undefined;
 		let warning: string | undefined;
+		if (wantArchive) {
+			// Another build of this workspace still uses the spool: keep it in Spoolman.
+			const inUse = db
+				.select({ id: buildFilaments.buildId })
+				.from(buildFilaments)
+				.innerJoin(builds, eq(builds.id, buildFilaments.buildId))
+				.where(
+					and(
+						eq(builds.organizationId, org),
+						eq(buildFilaments.spoolmanSpoolId, spoolId!),
+						or(ne(buildFilaments.buildId, buildId), ne(buildFilaments.roleKey, role))
+					)
+				)
+				.get();
+			if (inUse) {
+				wantArchive = false;
+				warning = `Spool #${spoolId} is still in use by another build, so it was kept in Spoolman.`;
+			}
+		}
 		if (wantArchive) {
 			try {
 				await client.setArchived(spoolId!, true);

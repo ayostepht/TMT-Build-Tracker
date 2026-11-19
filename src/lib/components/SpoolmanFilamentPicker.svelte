@@ -61,6 +61,8 @@
 	let choice = $state<'current' | 'subtract'>('current');
 	// The apply took only part of the grams (Spoolman had less): keep the prompt open and say so.
 	let warning = $state('');
+	// The create form matched a filament Spoolman already had: say so instead of closing silently.
+	let reusedInfo = $state('');
 	// "Create in Spoolman" form.
 	let creating = $state(false);
 	let cform = $state<SpoolmanCreateFormDto | null>(null);
@@ -175,10 +177,12 @@
 			});
 			creating = false;
 			await onchange?.();
+			if (r.reused)
+				reusedInfo = `Linked to existing Spoolman filament ${r.filament.vendor ? `${r.filament.vendor} ` : ''}${r.filament.name}${r.filament.material ? ` (${r.filament.material}` : ''}${r.filament.density != null ? `, ${r.filament.density} g/cm³` : ''}${r.filament.diameter != null ? `, ${r.filament.diameter} mm` : ''}${r.filament.material ? ')' : ''}. Nothing new was created.`;
 			if (r.preLinkLoggedG > 0) {
 				done = r;
 				choice = 'current';
-			} else onclose?.();
+			} else if (!r.reused) onclose?.();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not create the filament';
 		}
@@ -214,6 +218,9 @@
 </script>
 
 <div class="smp" data-testid="spoolman-picker">
+	{#if reusedInfo}
+		<p class="hint" role="status" data-testid="spoolman-create-reused">{reusedInfo}</p>
+	{/if}
 	{#if done}
 		<div class="pre" data-testid="spoolman-prelink">
 			<p>
@@ -252,6 +259,15 @@
 					>
 				{/if}
 			</div>
+		</div>
+	{:else if reusedInfo}
+		<div class="smp-row">
+			<button
+				class="btn primary"
+				type="button"
+				data-testid="create-reused-done"
+				onclick={() => onclose?.()}>Done</button
+			>
 		</div>
 	{:else if creating}
 		<form class="cf" onsubmit={submitCreate} data-testid="spoolman-create-form">
@@ -472,7 +488,7 @@
 		{/if}
 	{/if}
 	{#if error}<div class="error" role="alert" style="white-space:normal">{error}</div>{/if}
-	{#if onclose && !done && !creating}
+	{#if onclose && !done && !creating && !reusedInfo}
 		<div class="smp-row">
 			<button class="btn ghost sm" type="button" onclick={() => onclose?.()}>Cancel</button>
 		</div>

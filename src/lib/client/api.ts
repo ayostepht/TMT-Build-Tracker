@@ -921,11 +921,24 @@ export const spoolmanCreateForm = (buildId: string, role: string) =>
 	call<SpoolmanCreateFormDto>('GET', `${sm(buildId, role)}/create`);
 /** Create the vendor (if missing) and filament in Spoolman and link the slot to it (editors). */
 export const createSpoolmanFilament = (buildId: string, role: string, input: SpoolmanCreateInput) =>
-	call<SpoolmanLinkResultDto & { vendorId: number; vendorCreated: boolean; reused: boolean }>(
-		'POST',
-		`${sm(buildId, role)}/create`,
-		input
-	);
+	call<
+		SpoolmanLinkResultDto & {
+			vendorId: number;
+			vendorCreated: boolean;
+			reused: boolean;
+			filament: {
+				id: number;
+				name: string;
+				vendor: string | null;
+				material: string | null;
+				colorHex: string | null;
+				density: number | null;
+				diameter: number | null;
+				weightG: number | null;
+				spoolWeightG: number | null;
+			};
+		}
+	>('POST', `${sm(buildId, role)}/create`, input);
 /** Add a spool of the linked filament in Spoolman (net kg, optional note) and record it in the colour's history. */
 export const addSpoolmanSpool = (buildId: string, role: string, kg: number, note?: string) =>
 	call<{ id: string; spoolmanSpoolId: number; current: boolean }>(

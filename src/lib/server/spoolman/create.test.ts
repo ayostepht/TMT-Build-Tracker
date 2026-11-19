@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { ApiError } from '../access';
 import { addSpool } from '../builds/actions';
@@ -145,6 +145,21 @@ describe('create vendor and filament, then link', () => {
 		expect(mock.calls.filter((c) => c.startsWith('POST /api/v1/filament'))).toHaveLength(1);
 		expect(kinds().filter((x) => x.k === 'filament.spoolman.create')).toHaveLength(2);
 	});
+	it('reuses only a filament with the same diameter and reports its values', async () => {
+		const a = await create();
+		const same = await create();
+		expect(same.reused).toBe(true);
+		expect(same.filament).toMatchObject({
+			id: a.filamentId,
+			name: 'Fresh Vendor Teal',
+			diameter: 1.75
+		});
+		const other = await create('editor', { diameter: 2.85 });
+		expect(other.reused).toBe(false);
+		expect(other.filamentId).not.toBe(a.filamentId);
+		expect(other.filament.diameter).toBe(2.85);
+		expect(mock.filaments.size).toBe(4);
+	});
 	it('runs under the Spoolman lock', async () => {
 		let release!: () => void;
 		const held = withSpoolmanLock('org1', () => new Promise<void>((r) => (release = r)));
@@ -278,7 +293,51 @@ describe('add a spool in Spoolman', () => {
 	});
 });
 
+describe('concurrent adds', () => {
+	it('two overlapping adds: at most one becomes current, the slot agrees with it', async () => {
+		mock.spools.get(1)!.used_weight = 1000;
+		mock.spools.get(2)!.archived = true;
+		await setFilamentLink(db, buildId, 'editor', role, { filamentId: 1 }, factory);
+		const rs = await Promise.allSettled([
+			addSpoolmanSpool(db, buildId, 'editor', role, { kg: 1 }, factory),
+			addSpoolmanSpool(db, buildId, 'editor', role, { kg: 1 }, factory)
+		]);
+		const ok = rs
+			.filter((r) => r.status === 'fulfilled')
+			.map(
+				(r) => (r as PromiseFulfilledResult<{ current: boolean; spoolmanSpoolId: number }>).value
+			);
+		expect(ok.length).toBeGreaterThanOrEqual(1);
+		const cur = ok.filter((r) => r.current);
+		expect(cur).toHaveLength(1);
+		expect(slot().spoolmanSpoolId).toBe(cur[0].spoolmanSpoolId);
+		expect(slot().spoolAdds).toHaveLength(ok.length);
+	});
+});
+
 describe('remove a Spoolman spool from the history', () => {
+	it('keeps a spool another build still uses, even when archiving was asked', async () => {
+		await setFilamentLink(db, buildId, 'editor', role, { filamentId: 1 }, factory);
+		const a = await addSpoolmanSpool(db, buildId, 'editor', role, { kg: 1 }, factory);
+		const templateId = db.select({ id: templates.id }).from(templates).get()!.id;
+		const other = createBuild(
+			db,
+			{ organizationId: 'org1', templateId, designId: null, name: 'B2' },
+			'owner'
+		);
+		db.update(buildFilaments)
+			.set({ spoolmanFilamentId: 1, spoolmanSpoolId: a.spoolmanSpoolId })
+			.where(and(eq(buildFilaments.buildId, other), eq(buildFilaments.roleKey, role)))
+			.run();
+		const r = await removeSpoolmanSpoolAdd(db, buildId, 'editor', role, a.id, true, factory);
+		expect(r.archived).toBe(false);
+		expect(r.warning).toContain(`Spool #${a.spoolmanSpoolId} is still in use by another build`);
+		expect(mock.spools.get(a.spoolmanSpoolId)!.archived).toBe(false);
+		expect(mock.calls.some((c) => c.startsWith('PATCH'))).toBe(false);
+		expect(slot().spoolAdds).toEqual([]);
+		const k = kinds().find((x) => x.k === 'filament.stock.remove')!;
+		expect(k.p).toMatchObject({ spoolmanSpoolId: a.spoolmanSpoolId, archived: false });
+	});
 	const added = async () => {
 		await setFilamentLink(db, buildId, 'editor', role, { filamentId: 1 }, factory);
 		return addSpoolmanSpool(db, buildId, 'editor', role, { kg: 1 }, factory);
