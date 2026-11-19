@@ -408,23 +408,35 @@ export async function undoPrelinkDeduction(
 
 /**
  * Legacy spool-only links (`spoolman_spool_id` set, no filament): read the spool's filament from
- * Spoolman and store it. `spoolman_linked_at` stays null, so no run is skipped. No activity row:
- * it changes nothing the maker chose. Returns an error text when Spoolman could not be asked.
+ * Spoolman and store it, and stamp `spoolman_linked_at` with now: from here on the link is a
+ * filament link, and every print logged before this moment is a pre-link print (Spoolman's weight
+ * already holds what the old per-spool deduction took; nothing is given back or taken twice).
+ * Also stamps rows that were back-filled earlier without a time (filament set, `linked_at` null),
+ * which needs no Spoolman call. No activity row: it changes nothing the maker chose. Returns an
+ * error text when Spoolman could not be asked. `stampAt` (default now) lets the deduction path
+ * stamp no later than the run it is about to deduct, so that run still counts as after the link.
  */
 export async function backfillFilamentIds(
 	db: Db,
 	buildId: string,
-	client: SpoolmanClient
+	client: SpoolmanClient,
+	stampAt: Date = new Date()
 ): Promise<string | undefined> {
 	const rows = db.select().from(buildFilaments).where(eq(buildFilaments.buildId, buildId)).all();
+	const slot = (role: string) =>
+		and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, role));
+	const now = stampAt;
+	for (const r of rows)
+		if (r.spoolmanFilamentId != null && r.spoolmanLinkedAt == null)
+			db.update(buildFilaments).set({ spoolmanLinkedAt: now }).where(slot(r.roleKey)).run();
 	for (const r of rows) {
 		if (r.spoolmanSpoolId == null || r.spoolmanFilamentId != null) continue;
 		try {
 			const fid = (await client.getSpool(r.spoolmanSpoolId)).filamentId;
 			if (fid != null)
 				db.update(buildFilaments)
-					.set({ spoolmanFilamentId: fid })
-					.where(and(eq(buildFilaments.buildId, buildId), eq(buildFilaments.roleKey, r.roleKey)))
+					.set({ spoolmanFilamentId: fid, spoolmanLinkedAt: now })
+					.where(slot(r.roleKey))
 					.run();
 		} catch (e) {
 			return spoolmanError(e).message;
@@ -435,8 +447,7 @@ export async function backfillFilamentIds(
 
 /**
  * Refresh what the app shows for a build's linked slots: back-fill the filament of legacy
- * spool-only links (the spool's filament is read from Spoolman; `spoolman_linked_at` stays null,
- * so nothing is skipped), then re-fetch each linked filament into `spoolman_cache`. Members may
+ * spool-only links (the spool's filament is read from Spoolman and the link time is stamped now), then re-fetch each linked filament into `spoolman_cache`. Members may
  * call it (it only reads Spoolman and updates the app's own cache). Unreachable Spoolman is
  * reported as `error`; the last good numbers stay as stale.
  */

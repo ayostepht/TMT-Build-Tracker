@@ -58,8 +58,22 @@ describe('cached stock', () => {
 			initialG: 2000,
 			stale: false
 		});
-		expect(readSpoolmanStock(data, row, 3).remainingG).toBe(50);
-		expect(readSpoolmanStock(data, row, 99).remainingG).toBeNull();
+		// the total never depends on which spool is current; the current one is read separately
+		expect(readSpoolmanStock(data, row, 1)).toMatchObject({
+			remainingG: 1300,
+			currentSpoolRemainingG: 400
+		});
+		expect(readSpoolmanStock(data, row, 3)).toMatchObject({
+			remainingG: 1300,
+			currentSpoolRemainingG: 50
+		});
+		expect(readSpoolmanStock(data, row, 99).currentSpoolRemainingG).toBeNull();
+		expect(readSpoolmanStock(data, row, null).currentSpoolRemainingG).toBeNull();
+		// every spool archived: nothing on hand
+		expect(
+			readSpoolmanStock({ spools: [{ id: 3, remaining_weight: 50, archived: true }] }, row, 3)
+				.remainingG
+		).toBe(0);
 	});
 	it('flags an error as stale and survives junk', () => {
 		expect(readSpoolmanStock(data, { fetchedAt: 5, error: 'down' }, null).stale).toBe(true);
@@ -78,7 +92,14 @@ const sm = (over: Partial<RoleSpoolman> = {}): RoleSpoolman => ({
 	linkedAt: LINK,
 	keptBy: 'app',
 	sharedWith: 0,
-	stock: { remainingG: 600, initialG: 1000, fetchedAt: 1, stale: false, error: null },
+	stock: {
+		remainingG: 600,
+		currentSpoolRemainingG: 600,
+		initialG: 1000,
+		fetchedAt: 1,
+		stale: false,
+		error: null
+	},
 	deductedG: 0,
 	prelinkDeductedG: 0,
 	preLinkLoggedG: 0,
@@ -102,6 +123,8 @@ describe('haveGramsOf', () => {
 	it('linked, kept by app: pre-link grams are never subtracted, only undelivered post-link ones', () => {
 		expect(haveGramsOf({ ...base, spoolman: sm({ deductedG: 100 }) }).usedGrams).toBe(0);
 		expect(haveGramsOf({ ...base, spoolman: sm({ deductedG: 60 }) }).usedGrams).toBe(40);
+		// more deducted than logged after the link (e.g. old entries): never negative
+		expect(haveGramsOf({ ...base, spoolman: sm({ deductedG: 250 }) }).usedGrams).toBe(0);
 		// the one-off pre-link deduction is in Spoolman's weight already and changes nothing here
 		expect(
 			haveGramsOf({ ...base, spoolman: sm({ deductedG: 100, prelinkDeductedG: 400 }) })
