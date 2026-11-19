@@ -241,7 +241,8 @@ Gotchas:
 - `/api/auth/*` is routed to `auth.handler` directly in `src/hooks.server.ts`. OIDC uses
   `signIn.social({ provider: 'oidc' })`; redirect URI `<BETTER_AUTH_URL>/api/auth/callback/oidc`.
 - Migrations load from `./drizzle`, so the server must start from the app root.
-- Origins: adapter-node v6 ignores `ORIGIN`. `scripts/proxy-origin.mjs` is preloaded
+- Origins: adapter-node 6.0.1 ignored `ORIGIN`; 6.0.2+ honours it and refuses an empty one.
+  `scripts/proxy-origin.mjs` drops an empty `ORIGIN`, mirrors the forced origin into it, and is preloaded
   (`node --import`, used by `npm start`, the Dockerfile and Playwright) and normalises
   `X-Forwarded-Proto/Host`. `PUBLIC_URL` set → that origin is forced and Better Auth uses
   it as `baseURL`; unset → the request's own origin, http, cookies never Secure.
