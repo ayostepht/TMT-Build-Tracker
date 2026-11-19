@@ -89,6 +89,25 @@ test('build header: four Stats cards on every build tab, live, linking to Stats'
 	await expect(page.getByTestId('header-kpi-time')).toContainText('h');
 	await expect(page.getByTestId('header-kpi-filament')).toContainText('270');
 
+	// Desktop: the short detail lines fit on one line (no "…"), and the full sentence is the hover title.
+	for (const w of [1440, 1920]) {
+		await page.setViewportSize({ width: w, height: 900 });
+		await page.waitForTimeout(150);
+		for (const k of ['parts', 'time', 'filament', 'finish']) {
+			const d = page.getByTestId(`header-kpi-${k}`).locator('.st-detail');
+			expect(
+				await d.evaluate((e) => e.scrollWidth <= e.clientWidth),
+				`${k} detail fits at ${w}`
+			).toBe(true);
+		}
+	}
+	const partsDetail = page.getByTestId('header-kpi-parts').locator('.st-detail');
+	await expect(partsDetail).toHaveText(/^\d+ to go · 1 failed$/);
+	await expect(partsDetail).toHaveAttribute('title', /^\d+ parts? to go · 1 failed print$/);
+	const finishDetail = page.getByTestId('header-kpi-finish').locator('.st-detail');
+	await expect(finishDetail).toHaveText(/^~[\d,.]+ h left$/);
+	await expect(finishDetail).toHaveAttribute('title', /^About [\d,.]+ h left at [\d.]+ h a day/);
+
 	// Every tab shows the strip, none of them scrolls sideways at 360 px.
 	for (const tab of [
 		'',
