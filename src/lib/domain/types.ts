@@ -35,6 +35,8 @@ export interface SpoolAddView {
 	userId: string | null;
 	userName: string | null;
 	note?: string;
+	/** Set when this spool was created in Spoolman by the app. */
+	spoolmanSpoolId?: number;
 }
 
 /** Who keeps Spoolman's weights up to date (workspace setting). */
