@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-19, 17:55 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-19, 22:55 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -17,24 +17,23 @@ _Updated 2026-11-19, 17:55 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 
 ## State
 
-- **0.9.2 released** 2026-11-16 (`main` 48c9649, tag `v0.9.2`; STATUS item 0).
-- **Test copy:** r60 = `edge` a501e5e (Spoolman part 1, migration 0003), deployed by the
-  maintainer on 2026-11-19 for testing. r61 (`edge` 5c17a88: #74 deps, #76 ORIGIN fix, #77
-  Spoolman parts 2-3) was published but not deployed separately.
-- **Merged into `edge` on 2026-11-19:** #76, #74, #77, #78 (overnight), #80 (header cards: short
-  detail lines on desktop; exact plate-name locators in e2e), #81 (fixes #79: Spare while
-  Spoolman-linked counts all open spools of the filament; links from before link times existed
-  get stamped on the next editor load, so older prints are never subtracted again; older
-  role-less deductions count as delivered).
-- **Next deploy, r62 = `edge` 1716662 image** (no migrations; brings #74, #76, #77, #80, #81):
-  needs the maintainer's OK; backup per routine. Check on the test copy: the three colours from
-  #79 (TPU 95A Black ≈ 685 g spare with two open spools; the two finished blues show their
-  Spoolman remaining, not short, after the first editor load), and the Spoolman create, add-spool
-  and archive flows against the real Spoolman. #79 closes with #81.
-- **Spoolman (#59)** is complete (all three parts). Plan and decisions:
-  `docs/dev/plans/issue59-spoolman.md`. Close #59 once r62 is checked.
+- **0.9.3 promoted to `main`** 2026-11-19: `edge` 5290765 (#85 "Release 0.9.3") → #86, `main`
+  a64fa26 (merge commit), version 0.9.3. **Waiting on the maintainer** to create tag `v0.9.3`
+  and the release from the release form (Target `main`, title `v0.9.3`, notes = CHANGELOG
+  `[0.9.3]`); then check the tag's image run publishes `latest`, `0.9.3`, `0.9` and
+  `sha-a64fa26`, and record it in STATUS item 0. 0.9.3 adds migration 0003 (upgrade note in
+  the CHANGELOG) and fixture `fixtures/v0.9.3/`.
+- **In 0.9.3** since 0.9.2: Spoolman filaments (#71, #77, #81 fixes #79), dependency updates
+  (#74), empty `ORIGIN` fix (#76), header detail lines and exact plate locators (#80),
+  resource limits from the public edition (#82) and their follow-up (#84: entry caps before
+  reading, self-host light-read bucket 600/min, `handleError` + `safeErrorText` everywhere,
+  public-mode 2 MB XML cap, form `maxlength`).
+- **Test copy:** r60 (`edge` a501e5e) deployed 2026-11-19; r62 (`edge` 1716662) ready but not
+  deployed yet. The 0.9.3 image (after the tag) supersedes it: check the #79 colours and the
+  Spoolman create/add/archive flows there.
+- **Spoolman (#59)** is complete; close #59 once 0.9.3 is checked on the test copy.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
-  "Update branch" on its pull requests instead.
+  "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 
 ## Notes for the next orchestrator and its agents
 
