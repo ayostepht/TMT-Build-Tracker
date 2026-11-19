@@ -266,20 +266,42 @@ describe('expensive read slots', () => {
 		for (let i = 0; i < 25; i++) acquireExpensiveReadSlot(db, boss, 5_000_000)();
 	});
 
-	it('self-hosted: light reads never spend the bucket, downloads have a generous one', () => {
+	it('self-hosted: light reads have their own generous bucket, downloads another', () => {
 		vi.stubEnv('TMT_MODE', 'selfhost');
 		const s = { id: 'shlight', email: 'shlight@example.test', emailVerified: false };
 		for (let i = 0; i < 100; i++) acquireExpensiveReadSlot(db, s, 40_000_000, { light: true })();
-		// the bucket is untouched, so a download still has its full burst
+		// the download bucket is untouched, so a download still has its full burst
 		for (let i = 0; i < 60; i++) acquireExpensiveReadSlot(db, s, 40_000_000)();
 		expect(() => acquireExpensiveReadSlot(db, s, 40_000_000)).toThrow(/Too many/);
-		// light reads stay free even with the bucket empty, but the concurrency cap holds
-		const held = [0, 1, 2, 3].map(() =>
-			acquireExpensiveReadSlot(db, s, 40_000_000, { light: true })
-		);
-		expect(() => acquireExpensiveReadSlot(db, s, 40_000_000, { light: true })).toThrow(QuotaError);
-		held.forEach((r) => r());
+		// a tight loop well past the light burst is refused with retryAfter
+		let err: unknown;
+		let ok = 0;
+		try {
+			for (let i = 0; i < 1000; i++) {
+				acquireExpensiveReadSlot(db, s, 40_000_000, { light: true })();
+				ok++;
+			}
+		} catch (e) {
+			err = e;
+		}
+		expect(ok).toBe(20); // 120 burst minus the 100 already taken
+		expect(err).toMatchObject({ status: 429, code: 'quota' });
+		expect((err as QuotaError).retryAfter).toBeGreaterThanOrEqual(1);
+		// after a minute the bucket has refilled
+		acquireExpensiveReadSlot(db, s, 40_000_000 + 60_000, { light: true })();
 		expect(openExpensiveReads('shlight')).toBe(0);
+		// the concurrency cap still holds for held slots
+		const s2 = { id: 'shlight2', email: 'shlight2@example.test', emailVerified: false };
+		const held = [0, 1, 2, 3].map(() =>
+			acquireExpensiveReadSlot(db, s2, 40_000_000, { light: true })
+		);
+		expect(() => acquireExpensiveReadSlot(db, s2, 40_000_000, { light: true })).toThrow(QuotaError);
+		held.forEach((r) => r());
+		// site admins are exempt
+		vi.stubEnv('ADMIN_EMAILS', 'boss4@example.test');
+		const boss = { id: 'boss4', email: 'boss4@example.test', emailVerified: true };
+		for (let i = 0; i < 1000; i++)
+			acquireExpensiveReadSlot(db, boss, 40_000_000, { light: true })();
 	});
 
 	it('public: light reads are still rate limited, 429 carries retryAfter, admins exempt', () => {

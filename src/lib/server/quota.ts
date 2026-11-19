@@ -553,6 +553,12 @@ export function openExpensiveReads(userId: string): number {
 /** Self-hosted budget for 3MF downloads: far above what one maker does by hand. */
 export const EXPENSIVE_READ_SELFHOST_PER_MIN = 120;
 export const EXPENSIVE_READ_SELFHOST_BURST = 60;
+/**
+ * Self-hosted budget for `light` reads (arrangement, export preview): a separate bucket, far
+ * above SSE-driven UI refresh at human speed, but finite so a loop cannot pin the main thread.
+ */
+export const LIGHT_READ_SELFHOST_PER_MIN = 600;
+export const LIGHT_READ_SELFHOST_BURST = 120;
 
 /**
  * Take one expensive-read slot (concurrency cap plus a per-user token bucket), or throw
@@ -560,10 +566,12 @@ export const EXPENSIVE_READ_SELFHOST_BURST = 60;
  * `release()`: call it in a `finally`, or when a response stream ends, cancels or errors.
  * Site admins are exempt.
  *
- * `light` reads (arrangement, export preview: synchronous, no file output) are not charged to
- * the bucket in self-hosted mode, since the UI refreshes them on every live update; they still
- * take a concurrency slot. In public mode every read is charged. Downloads use a generous
- * bucket when self-hosted and the strict one in public mode.
+ * `light` reads (arrangement, export preview: synchronous, no file output) are NOT bounded by
+ * the concurrency cap in practice (their handlers acquire and release in one tick, so `busy`
+ * never trips); the per-user token bucket is their only throttle. Self-hosted they spend a
+ * separate, generous bucket (`light:<id>`, since the UI refreshes them on every live update);
+ * in public mode every read spends the strict bucket. Downloads use a generous bucket when
+ * self-hosted and the strict one in public mode.
  */
 export function acquireExpensiveReadSlot(
 	db: Db,
@@ -574,16 +582,18 @@ export function acquireExpensiveReadSlot(
 	const current = readSlots.get(u.id) ?? 0;
 	const busy = current >= EXPENSIVE_READ_CONCURRENCY;
 	const pub = isPublicMode();
-	const charge = !busy && (pub || !opts.light);
-	const wait = charge
-		? takeWriteToken(
-				`read:${u.id}`,
+	const light = !pub && !!opts.light;
+	const wait = busy
+		? 0
+		: takeWriteToken(
+				light ? `light:${u.id}` : `read:${u.id}`,
 				pub
 					? { perMin: EXPENSIVE_READ_PER_MIN, burst: EXPENSIVE_READ_BURST }
-					: { perMin: EXPENSIVE_READ_SELFHOST_PER_MIN, burst: EXPENSIVE_READ_SELFHOST_BURST },
+					: light
+						? { perMin: LIGHT_READ_SELFHOST_PER_MIN, burst: LIGHT_READ_SELFHOST_BURST }
+						: { perMin: EXPENSIVE_READ_SELFHOST_PER_MIN, burst: EXPENSIVE_READ_SELFHOST_BURST },
 				now
-			)
-		: 0;
+			);
 	if ((busy || wait > 0) && !isSiteAdmin(db, u))
 		throw new QuotaError(
 			busy
