@@ -298,7 +298,8 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 					at: a.at,
 					userId: a.userId,
 					userName: null as string | null,
-					...(a.note ? { note: a.note } : {})
+					...(a.note ? { note: a.note } : {}),
+					...(a.spoolmanSpoolId != null ? { spoolmanSpoolId: a.spoolmanSpoolId } : {})
 				})),
 				recommendedSpools: t?.recommendedSpools ?? 1,
 				spoolmanSpoolId: f.spoolmanSpoolId,
