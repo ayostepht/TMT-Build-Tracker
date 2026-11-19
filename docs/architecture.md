@@ -848,11 +848,14 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   characters); every other server-side error log uses `safeErrorText` too. Never log a raw
   error object.
 - **Expensive reads** (`server/quota.ts`): `acquireExpensiveReadSlot` per user; arrangement and
-  export preview pass `light` (self-host: concurrency slot only; public mode: bucket too);
+  export preview pass `light` (self-host: own `light:<id>` bucket, 600/min, burst 120 —
+  the handlers are synchronous, so the concurrency slot never limits them; public mode: the
+  strict bucket);
   `export.3mf` always spends the bucket (self-host 60 burst / 120 per min, public 20 / 60).
   Site admins exempt. 429s carry `Retry-After`; ExportCard and PlatesPanel keep their last data
-  and retry once (`busyRetrySeconds`, `client/coalesce.ts`). 3MF limits (`threemf/index.ts`):
-  20,000 entries (checked before the zip directory is read), 8 MB XML configs, 256 thumbnails;
+  and retry once (`busyRetrySeconds`, `client/coalesce.ts`). 3MF limits (`threemf/limits.ts`, `defaultLimits()` read at parse time):
+  20,000 entries (checked before the zip directory is read), 8 MB XML configs (2 MB in public
+  mode), 256 thumbnails;
   STEP zips 10,000 entries.
 - **Request pipeline** (`hooks.server.ts`): boot validation (`bootProblems`, exit 1) → body
   cap by route (`body-limits.ts`, default 1 MB) → `/api/auth/*` to Better Auth with a trusted
