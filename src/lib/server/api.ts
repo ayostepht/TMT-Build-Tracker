@@ -61,10 +61,20 @@ export function safeErrorText(e: unknown): string {
 			// eslint-disable-next-line no-control-regex
 			.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
 			.trim();
-	const stack = (e.stack ?? '')
-		.split('\n')
+	// Frames only from after the header (`name: message`, which may span lines and carry
+	// `params:`), so a message cannot forge a frame line. Capped.
+	const raw = e.stack ?? '';
+	const header = `${e.name}: ${e.message}`;
+	const frames = (
+		raw.startsWith(header)
+			? raw.slice(header.length).split('\n')
+			: raw.split('\n').slice(String(e.message).split('\n').length)
+	)
 		.filter((l) => /^\s+at /.test(l))
-		.join('\n');
+		// eslint-disable-next-line no-control-regex
+		.map((l) => l.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').trimEnd())
+		.slice(0, 10);
+	const stack = frames.join('\n');
 	return `${strip(e.name)}: ${strip(e.message)}${stack ? `\n${stack}` : ''}`;
 }
 
