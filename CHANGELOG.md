@@ -11,6 +11,8 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 - Spoolman filaments: link each color of a build to its filament in Spoolman, from the Overview filaments, a new Spoolman step in the build setup, or a color slot on the Design tab. Matching filaments are suggested. While a color is linked, Spare uses what Spoolman says is left, and the build's own spools are hidden until you unlink (their history is kept).
 - Choose who keeps Spoolman up to date (chapter Settings, Integrations): "This app" takes each logged print's grams off the linked spool and moves on to the next spool of that filament when one runs out; "Something else" only reads Spoolman. A chapter that sets up Spoolman for the first time starts with "This app"; chapters that already use Spoolman keep their setting.
 - Prints logged before a color was linked are never taken off Spoolman. When you link, the app says how many grams were already logged and offers to subtract them once (with a way to give them back).
+- Create filaments in Spoolman: when no Spoolman filament matches a color, the link picker offers "Create in Spoolman" with the vendor, name, material, color, density and weights filled in from the filament catalog (all editable). A missing vendor is created too, and the color is linked to the new filament.
+- Add spools in Spoolman: on a linked color the + adds a spool of that filament in Spoolman (weight and an optional note). It shows in the color's history as a Spoolman spool, and removing it asks whether to archive it in Spoolman as well.
 
 ## [0.9.2] - 2026-11-16
 

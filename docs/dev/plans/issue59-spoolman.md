@@ -79,3 +79,10 @@ vendor/filament in Spoolman. The clickable prototype was approved ("Looks great"
   then links the colour to the new filament. No separate Spoolman page.
 - Parts 2 and 3 in one pull request (r61).
 - Editors' page-load refresh stays unthrottled (maintainer, 2026-11-19).
+
+## Progress (parts 2 and 3)
+
+- 2026-11-19: printers (client create vendor/filament/spool + archive, routes, mock,
+  picker "Create in Spoolman"), build-state (`SpoolAddView.spoolmanSpoolId`), app-shell
+  ("Add spool in Spoolman", archive question, e2e). Next: security review → verifier →
+  pull request → r61.

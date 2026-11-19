@@ -438,6 +438,14 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   failed fetch only sets `error`. `SpoolmanFilamentPicker` / `SpoolmanSlotLine` are
   self-contained for FilamentTiles, SlotPanel and the wizard. `mock-spoolman.ts`
   (`startMockSpoolman()`) serves unit and e2e tests.
+  Parts 2/3 (`spoolman/create.ts`): create vendor (if missing) + filament then link
+  (`.../spoolman/create`, GET prefilled form from `resolveSlotOrigin`/`spoolmanDefaults`,
+  POST; an identical existing filament is reused), add a Spoolman spool to a linked colour
+  (`.../spoolman/stock` POST; `SpoolAdd.spoolmanSpoolId`, note → spool `comment`) and remove
+  it with an optional archive (`.../spoolman/stock/[addId]` DELETE `?archive=1`). Editors
+  only, under the lock, drafts refused before any outbound call; a spool created in
+  Spoolman but not recorded is archived best-effort. FilamentTiles shows "Add spool in
+  Spoolman" on linked colours and asks "Also archive it in Spoolman?" on remove.
 
 ## Design studio (`design-studio-ui`)
 
