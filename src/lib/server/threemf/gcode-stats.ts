@@ -8,6 +8,7 @@
  */
 import { GcodeObjectScanner } from '#lib/domain/gcode-objects.ts';
 import type { ExactObject, ThreeMfSummary } from '#lib/domain/threemf.ts';
+import { DEFAULT_LIMITS } from './limits';
 import { EntryTooLargeError, entryChunks, readZipDirectory } from './zipfile';
 
 /** Max inflated bytes scanned from one plate's G-code. */
@@ -48,7 +49,8 @@ export async function attachGcodeObjectStats(
 	const rep: GcodeStatsReport = { plates: 0, withGcode: 0, ms: 0, note: null };
 	let dir;
 	try {
-		dir = await readZipDirectory(path);
+		// a directory over the entry cap is left as it is, like any unreadable one (never throws)
+		dir = await readZipDirectory(path, DEFAULT_LIMITS.maxEntries);
 	} catch {
 		return rep;
 	}

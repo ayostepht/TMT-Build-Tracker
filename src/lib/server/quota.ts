@@ -33,7 +33,7 @@ import { rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { ApiError, isSiteAdmin } from './access';
-import { quotas, uploadsDir, type Quotas } from './config';
+import { isPublicMode, quotas, uploadsDir, type Quotas } from './config';
 import { takeWriteToken } from './write-rate';
 import type { Db } from './db';
 import { member, organization } from './db/auth.schema';
@@ -55,7 +55,12 @@ export type QuotaKey = keyof Quotas;
 /** Refusal for a reached limit: 409 (429 for live streams) with `code: 'quota'`. */
 export class QuotaError extends ApiError {
 	readonly code = 'quota';
-	constructor(message: string, status = 409) {
+	constructor(
+		message: string,
+		status = 409,
+		/** Seconds until a retry can succeed; sent as `Retry-After` on 429 answers. */
+		readonly retryAfter?: number
+	) {
 		super(status, message);
 	}
 }
@@ -545,19 +550,48 @@ export function openExpensiveReads(userId: string): number {
 	return readSlots.get(userId) ?? 0;
 }
 
+/** Self-hosted budget for 3MF downloads: far above what one maker does by hand. */
+export const EXPENSIVE_READ_SELFHOST_PER_MIN = 120;
+export const EXPENSIVE_READ_SELFHOST_BURST = 60;
+/**
+ * Self-hosted budget for `light` reads (arrangement, export preview): a separate bucket, far
+ * above SSE-driven UI refresh at human speed, but finite so a loop cannot pin the main thread.
+ */
+export const LIGHT_READ_SELFHOST_PER_MIN = 600;
+export const LIGHT_READ_SELFHOST_BURST = 120;
+
 /**
  * Take one expensive-read slot (concurrency cap plus a per-user token bucket), or throw
- * QuotaError 429 with a friendly sentence. Returns an idempotent `release()`: call it in a
- * `finally`, or when a response stream ends, cancels or errors. Site admins are exempt.
+ * QuotaError 429 with a friendly sentence and `retryAfter` seconds. Returns an idempotent
+ * `release()`: call it in a `finally`, or when a response stream ends, cancels or errors.
+ * Site admins are exempt.
+ *
+ * `light` reads (arrangement, export preview: synchronous, no file output) are NOT bounded by
+ * the concurrency cap in practice (their handlers acquire and release in one tick, so `busy`
+ * never trips); the per-user token bucket is their only throttle. Self-hosted they spend a
+ * separate, generous bucket (`light:<id>`, since the UI refreshes them on every live update);
+ * in public mode every read spends the strict bucket. Downloads use a generous bucket when
+ * self-hosted and the strict one in public mode.
  */
-export function acquireExpensiveReadSlot(db: Db, u: SseUser, now = Date.now()): () => void {
+export function acquireExpensiveReadSlot(
+	db: Db,
+	u: SseUser,
+	now = Date.now(),
+	opts: { light?: boolean } = {}
+): () => void {
 	const current = readSlots.get(u.id) ?? 0;
 	const busy = current >= EXPENSIVE_READ_CONCURRENCY;
+	const pub = isPublicMode();
+	const light = !pub && !!opts.light;
 	const wait = busy
 		? 0
 		: takeWriteToken(
-				`read:${u.id}`,
-				{ perMin: EXPENSIVE_READ_PER_MIN, burst: EXPENSIVE_READ_BURST },
+				light ? `light:${u.id}` : `read:${u.id}`,
+				pub
+					? { perMin: EXPENSIVE_READ_PER_MIN, burst: EXPENSIVE_READ_BURST }
+					: light
+						? { perMin: LIGHT_READ_SELFHOST_PER_MIN, burst: LIGHT_READ_SELFHOST_BURST }
+						: { perMin: EXPENSIVE_READ_SELFHOST_PER_MIN, burst: EXPENSIVE_READ_SELFHOST_BURST },
 				now
 			);
 	if ((busy || wait > 0) && !isSiteAdmin(db, u))
@@ -565,7 +599,8 @@ export function acquireExpensiveReadSlot(db: Db, u: SseUser, now = Date.now()): 
 			busy
 				? 'Another export or plan is still being prepared. Wait for it to finish and try again.'
 				: 'Too many exports or plans in a short time. Wait a moment and try again.',
-			429
+			429,
+			busy ? 2 : Math.max(1, Math.ceil(wait))
 		);
 	readSlots.set(u.id, (readSlots.get(u.id) ?? 0) + 1);
 	let released = false;

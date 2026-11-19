@@ -1,5 +1,6 @@
 import { and, isNotNull, ne, or, sql } from 'drizzle-orm';
 import type { Db } from './db';
+import { safeErrorText } from './api.ts';
 import { account, session } from './db/auth.schema';
 
 /**
@@ -49,6 +50,6 @@ export function cleanupAuthDataAtStartup(db: Db): void {
 				`[tmt] auth cleanup: cleared IP address on ${sessions} session(s), stored sign-in tokens on ${accounts} account(s)`
 			);
 	} catch (e) {
-		console.error('[tmt] auth cleanup failed', e);
+		console.error('[tmt] auth cleanup failed', safeErrorText(e));
 	}
 }

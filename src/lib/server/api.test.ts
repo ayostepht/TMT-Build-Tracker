@@ -83,3 +83,32 @@ describe('respond error logging', () => {
 		expect(safeErrorText('x')).toBe('non-error thrown');
 	});
 });
+
+describe('safeErrorText', () => {
+	it('drops params, cause and collapses newlines and control characters', () => {
+		const err = Object.assign(
+			new Error('line one\nFAKE [tmt] line\r\u001b[31mred\nparams: a@b.test'),
+			{
+				cause: new Error('cause-secret')
+			}
+		);
+		const text = safeErrorText(err);
+		const first = text.split('\n')[0];
+		expect(first).toBe('Error: line one FAKE [tmt] line [31mred');
+		expect(text).not.toContain('a@b.test');
+		expect(text).not.toContain('cause-secret');
+		expect(text.split('\n').every((l, i) => i === 0 || /^\s+at /.test(l))).toBe(true);
+	});
+
+	it('does not let a message forge stack frames or leak params, and caps frames', () => {
+		const err = new Error('boom\nparams: x\n  at evil (forged)');
+		const real = Array.from({ length: 30 }, (_, i) => `    at real${i} (file.ts:${i}:1)`);
+		err.stack = `${err.name}: ${err.message}\n${real.join('\n')}`;
+		const text = safeErrorText(err);
+		expect(text).not.toContain('forged');
+		expect(text).not.toContain('evil');
+		expect(text).not.toContain('params');
+		expect(text).toContain('at real0 ');
+		expect(text.split('\n').length).toBeLessThanOrEqual(11);
+	});
+});

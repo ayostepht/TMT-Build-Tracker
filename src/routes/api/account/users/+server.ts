@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { ApiError } from '#lib/server/access.ts';
-import { requireUserId } from '#lib/server/api.ts';
+import { requireUserId, safeErrorText } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { searchUsers } from '#lib/server/site-admins.ts';
 import type { RequestHandler } from './$types';
@@ -13,7 +13,7 @@ export const GET: RequestHandler = (event) => {
 		return json({ users }, { headers: { 'cache-control': 'no-store' } });
 	} catch (e) {
 		if (e instanceof ApiError) return json({ error: e.message }, { status: e.status });
-		console.error('[tmt] user list failed', e);
+		console.error('[tmt] user list failed', safeErrorText(e));
 		return json({ error: 'Internal error' }, { status: 500 });
 	}
 };

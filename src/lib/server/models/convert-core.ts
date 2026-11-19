@@ -16,7 +16,12 @@ import { EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/exte
 import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 import type { Occt, OcctResult } from 'occt-import-js';
-import { entryChunks, readZipDirectory, type ZipFileEntry } from '../threemf/zipfile.ts';
+import {
+	TOO_MANY_ENTRIES,
+	entryChunks,
+	readZipDirectory,
+	type ZipFileEntry
+} from '../threemf/zipfile.ts';
 import { matchParts, type MatchPart } from './match.ts';
 
 export interface ReportEntry {
@@ -139,6 +144,8 @@ function concatGeo(list: Geo[]): Geo {
 }
 
 /** Largest single STEP entry we will inflate (fflate allocates the size the zip declares). */
+/** A STEP zip of the kit holds a few hundred files at most; this refuses a zip bomb of tiny entries. */
+export const MAX_STEP_ZIP_ENTRIES = 10_000;
 export const MAX_ENTRY_BYTES = 512 * 1024 * 1024;
 /** Largest total of inflated entries over one conversion. */
 export const MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
@@ -223,9 +230,16 @@ export async function convertStepZipToGlb(opts: {
 	// so memory never holds the whole zip.
 	let dir: ZipFileEntry[];
 	try {
-		dir = await readZipDirectory(zipPath);
-	} catch {
-		throw new Error('This is not a valid zip file (its directory is missing or damaged)');
+		dir = await readZipDirectory(zipPath, MAX_STEP_ZIP_ENTRIES);
+	} catch (e) {
+		if (e instanceof Error && e.message === TOO_MANY_ENTRIES)
+			throw new Error(
+				`This zip has too many files (more than ${MAX_STEP_ZIP_ENTRIES}); zip only the STEP files`,
+				{ cause: e }
+			);
+		throw new Error('This is not a valid zip file (its directory is missing or damaged)', {
+			cause: e
+		});
 	}
 	const byName = new Map(dir.map((e) => [e.name, e]));
 	const names = dir.map((e) => e.name);

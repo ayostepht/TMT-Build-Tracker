@@ -11,6 +11,13 @@
  *
  * Tasks handle their own errors; a rejection is swallowed here so the queue keeps going.
  */
+/** Seconds to wait before one retry after a 429 (`Retry-After` when sent, else 5, at most 60). */
+export function busyRetrySeconds(e: unknown): number | null {
+	const x = e as { status?: number; retryAfter?: number | null } | null;
+	if (!x || x.status !== 429) return null;
+	return Math.min(60, x.retryAfter && x.retryAfter > 0 ? x.retryAfter : 5);
+}
+
 export interface Coalescer {
 	schedule(task: () => Promise<unknown>): void;
 	cancel(): void;

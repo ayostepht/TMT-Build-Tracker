@@ -1,9 +1,15 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync, type Zippable } from 'fflate';
-import { DEFAULT_LIMITS, ThreeMfError, parseThreeMfBytes, parseThreeMfFile } from './index';
+import {
+	DEFAULT_LIMITS,
+	ThreeMfError,
+	defaultLimits,
+	parseThreeMfBytes,
+	parseThreeMfFile
+} from './index';
 import { attachGcodeObjectStats } from './gcode-stats';
 import { makeProjectThreeMf, TINY_PNG } from './fixtures';
 import type { ThreeMfSummary } from '#lib/domain/threemf.ts';
@@ -115,6 +121,49 @@ describe('3MF parser limits (file and stream readers)', () => {
 		await rejectsFast(parseThreeMfBytes(bytes), /too many entries|valid 3MF/);
 	});
 
+	it('refuses a file over the entry cap from its directory count, before reading the directory', async () => {
+		const files = base();
+		for (let i = 0; i < 50; i++) files[`x/${i}.txt`] = new Uint8Array(0);
+		const bytes = zip(files);
+		await rejectsFast(parseThreeMfFile(file(bytes), { maxEntries: 10 }), /too many entries/);
+		// the same file passes under a cap that fits it
+		await expect(parseThreeMfFile(file(bytes), { maxEntries: 100 })).resolves.toBeTruthy();
+	});
+
+	it('leaves G-code stats alone for a directory over the entry cap', async () => {
+		const files = base();
+		files['Metadata/plate_1.gcode'] = zeros(10);
+		for (let i = 0; i < DEFAULT_LIMITS.maxEntries; i++) files[`x/${i}.txt`] = new Uint8Array(0);
+		const rep = await attachGcodeObjectStats(file(zip(files)), {
+			plates: [{ index: 1 }]
+		} as unknown as ThreeMfSummary);
+		expect(rep.withGcode).toBe(0);
+		expect(rep.plates).toBe(0);
+	});
+
+	it('gcode-stats applies the entry cap from the shared limits module (no import cycle)', async () => {
+		const lim = await import('./limits');
+		expect(lim.DEFAULT_LIMITS.maxEntries).toBe(20_000);
+		// one entry over the cap, with a G-code plate that would be read if the cap were off
+		const files = base();
+		files['Metadata/plate_1.gcode'] = zeros(10);
+		for (let i = 0; i <= lim.DEFAULT_LIMITS.maxEntries; i++)
+			files[`y/${i}.txt`] = new Uint8Array(0);
+		const rep = await attachGcodeObjectStats(file(zip(files)), {
+			plates: [{ index: 1 }]
+		} as unknown as ThreeMfSummary);
+		expect(rep).toMatchObject({ withGcode: 0, plates: 0 });
+	});
+
+	it('keeps thumbnails for plates up to the cap and ignores the ones beyond it', async () => {
+		const files = base();
+		const last = DEFAULT_LIMITS.maxThumbs;
+		files[`Metadata/plate_${last}.png`] = TINY_PNG;
+		files[`Metadata/plate_${last + 1}.png`] = TINY_PNG;
+		const s = await parseThreeMfFile(file(zip(files)));
+		expect(s).toBeTruthy();
+	});
+
 	it('rejects when total inflated bytes pass the budget', async () => {
 		const files = base();
 		files['Metadata/plate_1.png'] = zeros(3 * MB);
@@ -124,7 +173,7 @@ describe('3MF parser limits (file and stream readers)', () => {
 		await rejectsFast(parseThreeMfBytes(bytes, { maxInflatedBytes: 4 * MB }), /too much/);
 	});
 
-	it('parses XML at the cap in well under a second for a flat config', async () => {
+	it('parses XML at the cap within a few seconds for a flat config', async () => {
 		const files = base();
 		const body = '<object id="1"><metadata key="a" value="b"/></object>'.repeat(
 			Math.floor((DEFAULT_LIMITS.maxXmlConfigBytes - 1024) / 54)
@@ -132,7 +181,8 @@ describe('3MF parser limits (file and stream readers)', () => {
 		files['Metadata/model_settings.config'] = strToU8(`<config>${body}</config>`);
 		const t0 = Date.now();
 		await parseThreeMfFile(file(zip(files)));
-		expect(Date.now() - t0).toBeLessThan(2000);
+		// ~1.8 s alone at the 8 MB cap; loaded CI machines need headroom
+		expect(Date.now() - t0).toBeLessThan(8000);
 	});
 });
 
@@ -170,5 +220,32 @@ describe('G-code scan limits', () => {
 		const rep = await attachGcodeObjectStats(gz(40 * MB), summary(), 1);
 		expect(rep.note).toMatch(/stopped after/);
 		expect(Date.now() - t0).toBeLessThan(2000);
+	});
+});
+
+describe('XML config cap by mode', () => {
+	afterEach(() => vi.unstubAllEnvs());
+
+	it('is 8 MB for self-host and 2 MB in public mode, resolved per call', async () => {
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		expect(defaultLimits().maxXmlConfigBytes).toBe(8 * MB);
+		vi.stubEnv('TMT_MODE', 'public');
+		expect(defaultLimits().maxXmlConfigBytes).toBe(2 * MB);
+		expect(defaultLimits().maxEntries).toBe(DEFAULT_LIMITS.maxEntries);
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		expect(defaultLimits().maxXmlConfigBytes).toBe(8 * MB);
+	});
+
+	it('refuses a 3 MB config in public mode but accepts it in self-host', async () => {
+		const files = base();
+		files['Metadata/model_settings.config'] = strToU8(
+			'<config>' + ' '.repeat(3 * MB) + '</config>'
+		);
+		const bytes = zip(files);
+		vi.stubEnv('TMT_MODE', 'public');
+		await rejectsFast(parseThreeMfFile(file(bytes)), /too large/);
+		await rejectsFast(parseThreeMfBytes(bytes), /too large/);
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		await expect(parseThreeMfFile(file(bytes))).resolves.toBeTruthy();
 	});
 });

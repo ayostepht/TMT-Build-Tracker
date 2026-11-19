@@ -54,12 +54,35 @@ export async function readTextCapped(request: Request, maxBytes: number): Promis
  */
 export function safeErrorText(e: unknown): string {
 	if (!(e instanceof Error)) return 'non-error thrown';
-	const strip = (t: string) => t.replace(/\n?params:[\s\S]*$/, '').trimEnd();
-	const stack = (e.stack ?? '')
-		.split('\n')
+	// Cut at `params:` first, then collapse control characters so a message cannot add log lines.
+	const strip = (t: string) =>
+		t
+			.replace(/\n?params:[\s\S]*$/, '')
+			// eslint-disable-next-line no-control-regex
+			.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
+			.trim();
+	// Frames only from after the header (`name: message`, which may span lines and carry
+	// `params:`), so a message cannot forge a frame line. Capped.
+	const raw = e.stack ?? '';
+	const header = `${e.name}: ${e.message}`;
+	const frames = (
+		raw.startsWith(header)
+			? raw.slice(header.length).split('\n')
+			: raw.split('\n').slice(String(e.message).split('\n').length)
+	)
 		.filter((l) => /^\s+at /.test(l))
-		.join('\n');
-	return `${e.name}: ${strip(e.message)}${stack ? `\n${stack}` : ''}`;
+		// eslint-disable-next-line no-control-regex
+		.map((l) => l.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').trimEnd())
+		.slice(0, 10);
+	const stack = frames.join('\n');
+	return `${strip(e.name)}: ${strip(e.message)}${stack ? `\n${stack}` : ''}`;
+}
+
+/** `Retry-After` (whole seconds) for an error that carries a positive `retryAfter`. */
+export function retryAfterHeaders(seconds: unknown): Record<string, string> {
+	return typeof seconds === 'number' && seconds > 0
+		? { 'retry-after': String(Math.ceil(seconds)) }
+		: {};
 }
 
 /** Run a handler body, mapping ApiError to `{ error }` JSON with its status. */
@@ -73,13 +96,14 @@ export async function respond(fn: () => unknown | Promise<unknown>): Promise<Res
 			const code = (e as { code?: unknown }).code;
 			// ...and extra JSON fields (`BuildStartedError` sends `started` and `summary`).
 			const extra = (e as { extra?: unknown }).extra;
+			const retryAfter = (e as { retryAfter?: unknown }).retryAfter;
 			return json(
 				{
 					...(extra && typeof extra === 'object' ? extra : {}),
 					error: e.message,
 					...(typeof code === 'string' ? { code } : {})
 				},
-				{ status: e.status }
+				{ status: e.status, headers: retryAfterHeaders(retryAfter) }
 			);
 		}
 		console.error('[tmt] api error', safeErrorText(e));

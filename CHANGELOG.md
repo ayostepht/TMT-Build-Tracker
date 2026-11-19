@@ -17,10 +17,11 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 ### Changed
 
 - Limits on very large or unusual 3MF files: a 3MF whose settings, thumbnails or other contents are far larger than any real sliced project is refused with a message instead of being read. Per-object filament measuring from G-code stops on very large files and falls back to sharing by volume; the upload still works.
-- Limits on export and arrange requests: each person can prepare a few 3MF exports, export previews or plate plans at once and a generous number per minute. Past that the app asks you to wait a moment. Site admins are not limited. The Files and Design tabs no longer send a request for every live update, so normal use stays well under the limit.
+- Limits on export and arrange requests: each person can prepare a few 3MF exports at once and a generous number per minute; past that the app asks you to wait a moment and says for how long. On a self-hosted server, plate and export-preview refreshes have their own, much higher limit that normal use never reaches; a server in public mode (`TMT_MODE=public`) counts them with exports. Site admins are not limited. When asked to wait, the Files tab keeps its last export preview and Download button, and both it and the plates view try again by themselves.
 - On a server running in public mode (`TMT_MODE=public`), only site admins can upload a STEP zip to convert a 3D model. Self-hosted servers in the default mode are unchanged. The converter now reads the zip one file at a time, so it needs less memory.
 - Build name, recipient and hospital are limited to 200 characters. A longer name is shortened; a longer recipient or hospital is refused with a message.
-- Server error logs no longer include database query values.
+- Server error logs no longer include database query values, from any part of the app.
+- Very large real projects are accepted: a 3MF may hold up to 20,000 files, 8 MB of slicer settings (2 MB on a server in public mode) and thumbnails for up to 256 plates. A STEP zip may hold up to 10,000 files.
 
 ## [0.9.2] - 2026-11-16
 
