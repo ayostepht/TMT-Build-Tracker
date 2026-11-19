@@ -8,7 +8,12 @@
  */
 import { GcodeObjectScanner } from '#lib/domain/gcode-objects.ts';
 import type { ExactObject, ThreeMfSummary } from '#lib/domain/threemf.ts';
-import { entryChunks, readZipDirectory } from './zipfile';
+import { EntryTooLargeError, entryChunks, readZipDirectory } from './zipfile';
+
+/** Max inflated bytes scanned from one plate's G-code. */
+export const GCODE_ENTRY_MAX_BYTES = 1024 * 1024 * 1024;
+/** Max inflated G-code bytes scanned from one upload, over all plates. */
+export const GCODE_TOTAL_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 
 const TAIL = /_id_\d+_copy_\d+$/i;
 export const stripCopyTail = (name: string) => name.replace(TAIL, '').trim();
@@ -36,7 +41,8 @@ export const gcodeBudgetMs = () => {
 export async function attachGcodeObjectStats(
 	path: string,
 	summary: ThreeMfSummary,
-	budgetMs = gcodeBudgetMs()
+	budgetMs = gcodeBudgetMs(),
+	caps = { entry: GCODE_ENTRY_MAX_BYTES, total: GCODE_TOTAL_MAX_BYTES }
 ): Promise<GcodeStatsReport> {
 	const t0 = performance.now();
 	const rep: GcodeStatsReport = { plates: 0, withGcode: 0, ms: 0, note: null };
@@ -46,18 +52,40 @@ export async function attachGcodeObjectStats(
 	} catch {
 		return rep;
 	}
+	let total = 0;
+	const timeNote = () =>
+		`Per-object measuring stopped after ${Math.round(budgetMs / 1000)} s; the remaining plates are shared by volume.`;
 	const byName = new Map(dir.map((e) => [e.name, e]));
 	for (const pl of summary.plates) {
 		const entry = byName.get(`Metadata/plate_${pl.index}.gcode`);
 		if (!entry) continue;
 		rep.withGcode++;
 		if (performance.now() - t0 > budgetMs) {
-			rep.note = `Per-object measuring stopped after ${Math.round(budgetMs / 1000)} s; the remaining plates are shared by volume.`;
+			rep.note = timeNote();
 			break;
 		}
 		try {
 			const scan = new GcodeObjectScanner();
-			for await (const chunk of entryChunks(path, entry)) scan.push(chunk);
+			let timedOut = false;
+			let overTotal = false;
+			for await (const chunk of entryChunks(path, entry, caps.entry)) {
+				total += chunk.length;
+				if (total > caps.total) {
+					overTotal = true;
+					break;
+				}
+				if (performance.now() - t0 > budgetMs) {
+					timedOut = true;
+					break;
+				}
+				scan.push(chunk);
+			}
+			if (timedOut || overTotal) {
+				rep.note = timedOut
+					? timeNote()
+					: 'The G-code is too large to measure per object; the remaining plates are shared by volume.';
+				break;
+			}
 			const res = scan.finish();
 			if (!res.hasMarkers) continue;
 			const merged = new Map<string, ExactObject>();
@@ -80,7 +108,9 @@ export async function attachGcodeObjectStats(
 				}));
 				rep.plates++;
 			}
-		} catch {
+		} catch (e) {
+			if (e instanceof EntryTooLargeError)
+				rep.note ??= `The G-code of plate ${pl.index} is too large to measure per object; it is shared by volume.`;
 			/* unreadable entry: this plate keeps the volume split */
 		}
 	}

@@ -8,7 +8,7 @@ import { getDb } from '#lib/server/db/index.ts';
 import { templates } from '#lib/server/db/schema.ts';
 import { acquireUploadSlot, assertUploadRoom } from '#lib/server/quota.ts';
 import { eq } from 'drizzle-orm';
-import { requireAdminForTemplate } from '#lib/server/models/guard.ts';
+import { assertModelConversionAllowed, requireAdminForTemplate } from '#lib/server/models/guard.ts';
 import { assertConversionSlot, createJob, kickQueue } from '#lib/server/models/jobs.ts';
 import { saveUpload } from '#lib/server/models/uploads.ts';
 import type { RequestHandler } from './$types';
@@ -17,7 +17,7 @@ import type { RequestHandler } from './$types';
 const MAX_ZIP_BYTES = 200 * 1024 * 1024;
 
 /**
- * Site admin: upload a STEP zip (the raw zip file as the request body, `?name=` for its
+ * Site admin (or, on a self-hosted server, an editor of a workspace's own kit copy): upload a STEP zip (the raw zip file as the request body, `?name=` for its
  * file name) and queue its conversion. Streamed to `<uploads>/imports/<jobId>.zip`.
  * Needs `BODY_SIZE_LIMIT` above the zip size (see the README).
  */
@@ -25,6 +25,8 @@ export const POST: RequestHandler = (event) =>
 	respond(async () => {
 		const userId = requireAdminForTemplate(event, event.params.id);
 		const db = getDb();
+		// Public mode: only site admins may run the (heavy) converter. Refused before the body is read.
+		assertModelConversionAllowed(db, event.locals.user!);
 		// Order: upload slot (429), conversion slot (409), already over the upload space (409),
 		// disk guard (507), then stream. All refusals come before any file is created.
 		const release = acquireUploadSlot(db, event.locals.user!);

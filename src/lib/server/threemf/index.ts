@@ -29,18 +29,33 @@ export class ThreeMfError extends Error {}
 export interface ParseLimits {
 	/** Max inflated size of a config entry (model_settings, slice_info, project_settings). */
 	maxConfigBytes: number;
+	/** Max inflated size of the XML config entries, which are parsed on the main thread. */
+	maxXmlConfigBytes: number;
 	/** Max inflated size of one thumbnail PNG; larger ones are dropped with a warning. */
 	maxThumbBytes: number;
 	/** Max inflated bytes scanned from `3D/3dmodel.model`. */
 	maxModelBytes: number;
 	/** Max zip entries looked at. */
 	maxEntries: number;
+	/** Max total bytes kept in memory across all retained entries (configs + thumbnails). */
+	maxRetainedBytes: number;
+	/** Max plate thumbnails kept; a thumbnail's plate number must be within 1..maxThumbs too. */
+	maxThumbs: number;
+	/** Max total inflated bytes read from one upload, over all entries. */
+	maxInflatedBytes: number;
 }
 export const DEFAULT_LIMITS: ParseLimits = {
-	maxConfigBytes: 64 * 1024 * 1024,
+	// real sliced projects have configs of tens to hundreds of KB
+	maxConfigBytes: 8 * 1024 * 1024,
+	// parsing costs up to ~0.4 s per MB on the main thread; real ones are well under 1 MB
+	maxXmlConfigBytes: 2 * 1024 * 1024,
 	maxThumbBytes: 8 * 1024 * 1024,
 	maxModelBytes: 512 * 1024 * 1024,
-	maxEntries: 200_000
+	// real projects have tens to a few hundred entries
+	maxEntries: 5_000,
+	maxRetainedBytes: 48 * 1024 * 1024,
+	maxThumbs: 64,
+	maxInflatedBytes: 1024 * 1024 * 1024
 };
 
 const CONFIGS = new Set([
@@ -59,6 +74,10 @@ interface Raw {
 	thumbs: Map<string, Uint8Array>;
 	model: ModelScan;
 	warnings: string[];
+	/** Bytes kept in `configs` + `thumbs`. */
+	retained: number;
+	/** Inflated bytes read so far over all entries. */
+	inflated: number;
 }
 interface ModelScan {
 	app: string | null;
@@ -127,7 +146,9 @@ function newRaw(): Raw {
 		configs: new Map(),
 		thumbs: new Map(),
 		model: { app: null, objects: new Map(), items: [], truncated: false },
-		warnings: []
+		warnings: [],
+		retained: 0,
+		inflated: 0
 	};
 }
 
@@ -139,10 +160,16 @@ function entrySink(
 	fail: (e: Error) => void
 ): EntrySink | null {
 	const isConfig = CONFIGS.has(name);
-	const isThumb = THUMB_RE.test(name);
+	const thumbN = THUMB_RE.exec(name);
+	const isThumb = thumbN !== null;
 	const isModel = name === MODEL;
 	if (!isConfig && !isThumb && !isModel) return null;
-	const cap = isConfig ? limits.maxConfigBytes : limits.maxThumbBytes;
+	if (isThumb) {
+		const n = Number(thumbN[1]);
+		if (!(n >= 1 && n <= limits.maxThumbs)) return null; // not a plate of this project
+		if (raw.thumbs.has(name) || raw.thumbs.size >= limits.maxThumbs * 2) return null;
+	}
+	const cap = configCap(name, limits) ?? limits.maxThumbBytes;
 	const scanner = isModel ? makeModelScanner(raw.model, limits.maxModelBytes) : null;
 	const chunks: Uint8Array[] = [];
 	let size = 0;
@@ -151,6 +178,12 @@ function entrySink(
 		if (dead) return undefined;
 		if (err) {
 			fail(new ThreeMfError(`Cannot read ${name}: ${err.message}`));
+			dead = true;
+			return 'stop';
+		}
+		raw.inflated += chunk.length;
+		if (raw.inflated > limits.maxInflatedBytes) {
+			fail(new ThreeMfError('The 3MF holds too much data to read'));
 			dead = true;
 			return 'stop';
 		}
@@ -169,8 +202,14 @@ function entrySink(
 			else raw.warnings.push(`Skipped oversized thumbnail ${name}`);
 			return 'stop';
 		}
+		if (raw.retained + size > limits.maxRetainedBytes) {
+			fail(new ThreeMfError('The 3MF holds too much configuration data to read'));
+			dead = true;
+			return 'stop';
+		}
 		chunks.push(chunk);
 		if (final) {
+			raw.retained += size;
 			const buf = new Uint8Array(size);
 			let o = 0;
 			for (const c of chunks) {
@@ -249,7 +288,7 @@ async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw> 
 		if (!sink) continue;
 		try {
 			let any = false;
-			for await (const chunk of entryChunks(path, e)) {
+			for await (const chunk of entryChunks(path, e, entryCap(e.name, limits))) {
 				any = true;
 				if (sink(null, chunk, false) === 'stop') break;
 			}
@@ -261,6 +300,19 @@ async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw> 
 		if (failure) throw failure;
 	}
 	return raw;
+}
+
+function configCap(name: string, limits: ParseLimits): number | null {
+	if (!CONFIGS.has(name)) return null;
+	return name === 'Metadata/project_settings.config'
+		? limits.maxConfigBytes
+		: limits.maxXmlConfigBytes;
+}
+
+/** Largest inflated size ever wanted from an entry (the zip's declared size is not trusted). */
+function entryCap(name: string, limits: ParseLimits): number {
+	if (name === MODEL) return limits.maxModelBytes + (1 << 20);
+	return (configCap(name, limits) ?? limits.maxThumbBytes) + (1 << 20);
 }
 
 const xml = new XMLParser({

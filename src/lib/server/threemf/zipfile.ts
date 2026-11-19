@@ -110,8 +110,19 @@ export async function readZipDirectory(
 	}
 }
 
-/** The inflated bytes of one entry as a stream of chunks. Stop early by breaking the loop. */
-export async function* entryChunks(path: string, e: ZipFileEntry): AsyncGenerator<Uint8Array> {
+/** Thrown by `entryChunks` when an entry inflates past the caller's byte cap. */
+export class EntryTooLargeError extends Error {}
+
+/**
+ * The inflated bytes of one entry as a stream of chunks. Stop early by breaking the loop.
+ * With `maxBytes`, the stream is aborted with `EntryTooLargeError` as soon as more than that
+ * has been inflated, whatever size the directory declares.
+ */
+export async function* entryChunks(
+	path: string,
+	e: ZipFileEntry,
+	maxBytes = Infinity
+): AsyncGenerator<Uint8Array> {
 	if (e.csize === 0) return;
 	if (e.method !== 0 && e.method !== 8) throw new Error(`unsupported compression in ${e.name}`);
 	const fh = await open(path, 'r');
@@ -125,14 +136,24 @@ export async function* entryChunks(path: string, e: ZipFileEntry): AsyncGenerato
 		await fh.close();
 	}
 	const src = createReadStream(path, { start, end: start + e.csize - 1, highWaterMark: 1 << 20 });
+	let seen = 0;
+	const check = (c: Uint8Array) => {
+		seen += c.length;
+		if (seen > maxBytes) throw new EntryTooLargeError(`${e.name} is too large`);
+		return c;
+	};
 	if (e.method === 0) {
-		yield* src;
+		try {
+			for await (const c of src) yield check(c);
+		} finally {
+			src.destroy();
+		}
 		return;
 	}
 	const inflate = createInflateRaw();
 	pipeline(src, inflate, () => {});
 	try {
-		yield* inflate;
+		for await (const c of inflate) yield check(c);
 	} finally {
 		inflate.destroy();
 		src.destroy();
