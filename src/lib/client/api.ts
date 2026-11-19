@@ -888,6 +888,62 @@ export const prelinkDeduct = (buildId: string, role: string) =>
 /** Give those grams back. */
 export const prelinkUndo = (buildId: string, role: string) =>
 	call<{ grams: number; warning?: string }>('DELETE', `${sm(buildId, role)}/prelink`);
+export interface SpoolmanCreateFormDto {
+	defaults: {
+		vendorName: string;
+		name: string;
+		material: string;
+		colorHex: string;
+		density: number;
+		diameter: number;
+		weightG: number;
+		spoolWeightG: number;
+		externalId: string | null;
+		source: 'catalog' | 'material' | 'generic';
+	};
+	vendors: { id: number; name: string }[];
+	/** Spoolman could not be asked for its vendors. */
+	error?: string;
+}
+export interface SpoolmanCreateInput {
+	vendorName: string;
+	name: string;
+	material: string;
+	colorHex: string;
+	density: number;
+	weightG: number;
+	spoolWeightG?: number | null;
+	diameter?: number;
+	externalId?: string | null;
+}
+/** Prefill and vendors for "Create in Spoolman" (editors). */
+export const spoolmanCreateForm = (buildId: string, role: string) =>
+	call<SpoolmanCreateFormDto>('GET', `${sm(buildId, role)}/create`);
+/** Create the vendor (if missing) and filament in Spoolman and link the slot to it (editors). */
+export const createSpoolmanFilament = (buildId: string, role: string, input: SpoolmanCreateInput) =>
+	call<SpoolmanLinkResultDto & { vendorId: number; vendorCreated: boolean; reused: boolean }>(
+		'POST',
+		`${sm(buildId, role)}/create`,
+		input
+	);
+/** Add a spool of the linked filament in Spoolman (net kg, optional note) and record it in the colour's history. */
+export const addSpoolmanSpool = (buildId: string, role: string, kg: number, note?: string) =>
+	call<{ id: string; spoolmanSpoolId: number; current: boolean }>(
+		'POST',
+		`${sm(buildId, role)}/stock`,
+		{ kg, note }
+	);
+/** Remove a history entry that has a Spoolman spool; `archive` also archives the spool in Spoolman. */
+export const removeSpoolmanSpoolAdd = (
+	buildId: string,
+	role: string,
+	addId: string,
+	archive: boolean
+) =>
+	call<{ archived?: boolean; warning?: string }>(
+		'DELETE',
+		`${sm(buildId, role)}/stock/${encodeURIComponent(addId)}${archive ? '?archive=1' : ''}`
+	);
 export const linkFilamentSpool = (
 	buildId: string,
 	role: string,

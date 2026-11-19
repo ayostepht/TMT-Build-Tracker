@@ -29,12 +29,15 @@ export interface MockSpool {
 	used_weight: number;
 	archived: boolean;
 	location?: string;
+	comment?: string;
+	spool_weight?: number;
 }
 
 export interface MockSpoolman {
 	/** Base address to save as the workspace's Spoolman address. */
 	url: string;
 	filaments: Map<number, MockFilament>;
+	vendors: Map<number, { id: number; name: string }>;
 	spools: Map<number, MockSpool>;
 	/** Every request as `METHOD path body`. */
 	calls: string[];
@@ -43,6 +46,7 @@ export interface MockSpoolman {
 	/** Wait this long before answering a `/use` call (to provoke races). */
 	useDelayMs: number;
 	addFilament(f: Partial<MockFilament> & { name: string }): MockFilament;
+	addVendor(name: string, id?: number): { id: number; name: string };
 	addSpool(s: Partial<MockSpool> & { filament_id: number }): MockSpool;
 	/** Grams left on a spool (initial minus used). */
 	remaining(id: number): number;
@@ -59,16 +63,26 @@ export async function startMockSpoolman(): Promise<MockSpoolman> {
 	const m: MockSpoolman = {
 		url: '',
 		filaments: new Map(),
+		vendors: new Map(),
 		spools: new Map(),
 		calls: [],
 		failing: false,
 		useDelayMs: 0,
+		addVendor(name, id) {
+			const have = [...m.vendors.values()].find((v) => v.name === name);
+			if (have && id == null) return have;
+			const vid = id ?? nextVendor++;
+			nextVendor = Math.max(nextVendor, vid + 1);
+			const v = { id: vid, name };
+			m.vendors.set(vid, v);
+			return v;
+		},
 		addFilament(f) {
 			const id = f.id ?? nextFilament++;
 			nextFilament = Math.max(nextFilament, id + 1);
 			const rec: MockFilament = {
 				id,
-				vendor: { id: nextVendor++, name: 'Acme' },
+				vendor: f.vendor ?? m.addVendor('Acme'),
 				material: 'PETG',
 				color_hex: '2B3F9E',
 				density: 1.27,
@@ -77,6 +91,7 @@ export async function startMockSpoolman(): Promise<MockSpoolman> {
 				spool_weight: 200,
 				...f
 			};
+			m.addVendor(rec.vendor.name, rec.vendor.id);
 			m.filaments.set(id, rec);
 			return rec;
 		},
@@ -93,6 +108,7 @@ export async function startMockSpoolman(): Promise<MockSpoolman> {
 		},
 		reset() {
 			m.filaments.clear();
+			m.vendors.clear();
 			m.spools.clear();
 			m.calls.length = 0;
 			m.failing = false;
@@ -105,6 +121,8 @@ export async function startMockSpoolman(): Promise<MockSpoolman> {
 		id: s.id,
 		archived: s.archived,
 		location: s.location,
+		comment: s.comment,
+		spool_weight: s.spool_weight,
 		initial_weight: s.initial_weight,
 		used_weight: s.used_weight,
 		remaining_weight: s.initial_weight - s.used_weight,
@@ -137,10 +155,32 @@ export async function startMockSpoolman(): Promise<MockSpoolman> {
 				const f = m.filaments.get(Number(fm[1]));
 				return f ? send(200, f) : send(404, {});
 			}
-			if (p === '/api/v1/filament' && req.method === 'POST')
-				return send(200, m.addFilament({ ...(data as { name: string }) }));
-			if (p === '/api/v1/vendor' && req.method === 'POST')
-				return send(200, { id: nextVendor++, name: String(data.name ?? '') });
+			if (p === '/api/v1/filament' && req.method === 'POST') {
+				// Like Spoolman: name and a known vendor are required; density/diameter must be positive.
+				const d = data as Record<string, unknown>;
+				const vendor = m.vendors.get(Number(d.vendor_id));
+				if (typeof d.name !== 'string' || !d.name || !vendor) return send(422, {});
+				if (!(Number(d.density) > 0) || !(Number(d.diameter) > 0)) return send(422, {});
+				return send(
+					200,
+					m.addFilament({
+						name: d.name,
+						vendor,
+						material: typeof d.material === 'string' ? d.material : undefined,
+						color_hex: typeof d.color_hex === 'string' ? d.color_hex : undefined,
+						density: Number(d.density),
+						diameter: Number(d.diameter),
+						weight: Number(d.weight) || undefined,
+						spool_weight: Number(d.spool_weight) || undefined,
+						external_id: typeof d.external_id === 'string' ? d.external_id : undefined
+					})
+				);
+			}
+			if (p === '/api/v1/vendor' && req.method === 'GET') return send(200, [...m.vendors.values()]);
+			if (p === '/api/v1/vendor' && req.method === 'POST') {
+				if (typeof data.name !== 'string' || !data.name) return send(422, {});
+				return send(200, m.addVendor(data.name, nextVendor));
+			}
 
 			if (p === '/api/v1/spool' && req.method === 'GET') {
 				const archived = u.searchParams.get('allow_archived') === 'true';
@@ -153,7 +193,12 @@ export async function startMockSpoolman(): Promise<MockSpoolman> {
 				);
 			}
 			if (p === '/api/v1/spool' && req.method === 'POST') {
-				const d = data as { filament_id: number; initial_weight?: number };
+				const d = data as {
+					filament_id: number;
+					initial_weight?: number;
+					spool_weight?: number;
+					comment?: string;
+				};
 				return m.filaments.has(d.filament_id) ? send(200, spoolJson(m.addSpool(d))) : send(400, {});
 			}
 			const sm = /^\/api\/v1\/spool\/(\d+)(\/use)?$/.exec(p);
