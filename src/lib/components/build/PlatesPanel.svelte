@@ -28,7 +28,7 @@
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
 	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
-	import { createCoalescer } from '#lib/client/coalesce.ts';
+	import { busyRetrySeconds, createCoalescer } from '#lib/client/coalesce.ts';
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 	import AskDialog from '#lib/components/AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
@@ -197,14 +197,29 @@
 	// collapse into one request, and never more than one runs at a time.
 	const arrLoads = createCoalescer();
 	$effect(() => () => arrLoads.cancel());
+	let arrRetry: ReturnType<typeof setTimeout> | null = null;
+	const clearArrRetry = () => {
+		if (arrRetry !== null) clearTimeout(arrRetry);
+		arrRetry = null;
+	};
+	$effect(() => () => clearArrRetry());
 	$effect(() => {
 		void arrKey;
 		const id = ctx.id;
-		arrLoads.schedule(() =>
+		clearArrRetry();
+		const run = (retry: boolean): Promise<unknown> =>
 			getArrangement(id)
 				.then((r) => (arr = r))
-				.catch(() => {})
-		);
+				.catch((e) => {
+					// over the server's read budget: keep what is shown and try once more shortly
+					const wait = busyRetrySeconds(e);
+					if (wait !== null && retry)
+						arrRetry = setTimeout(() => {
+							arrRetry = null;
+							arrLoads.schedule(() => run(false));
+						}, wait * 1000);
+				});
+		arrLoads.schedule(() => run(true));
 	});
 	const arranged = (n: number) => arr?.plates.find((p) => p.number === n);
 	const planWarnings = $derived(

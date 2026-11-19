@@ -14,7 +14,13 @@
  */
 import { Unzip, UnzipInflate, UnzipPassThrough, strFromU8 } from 'fflate';
 import { XMLParser } from 'fast-xml-parser';
-import { BAD_ZIP_MESSAGE, MAX_UNWANTED_BUFFER, entryChunks, readZipDirectory } from './zipfile';
+import {
+	BAD_ZIP_MESSAGE,
+	MAX_UNWANTED_BUFFER,
+	TOO_MANY_ENTRIES,
+	entryChunks,
+	readZipDirectory
+} from './zipfile';
 import {
 	decodeEntities,
 	runsHintFromName,
@@ -47,14 +53,14 @@ export interface ParseLimits {
 export const DEFAULT_LIMITS: ParseLimits = {
 	// real sliced projects have configs of tens to hundreds of KB
 	maxConfigBytes: 8 * 1024 * 1024,
-	// parsing costs up to ~0.4 s per MB on the main thread; real ones are well under 1 MB
-	maxXmlConfigBytes: 2 * 1024 * 1024,
+	// parsing costs up to ~0.4 s per MB on the main thread; big multi-plate projects reach a few MB
+	maxXmlConfigBytes: 8 * 1024 * 1024,
 	maxThumbBytes: 8 * 1024 * 1024,
 	maxModelBytes: 512 * 1024 * 1024,
-	// real projects have tens to a few hundred entries
-	maxEntries: 5_000,
+	// real projects have tens to a few hundred entries; ones with many plates and objects thousands
+	maxEntries: 20_000,
 	maxRetainedBytes: 48 * 1024 * 1024,
-	maxThumbs: 64,
+	maxThumbs: 256,
 	maxInflatedBytes: 1024 * 1024 * 1024
 };
 
@@ -275,12 +281,14 @@ async function readRaw(source: Source, limits: ParseLimits): Promise<Raw> {
 async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw> {
 	let dir;
 	try {
-		dir = await readZipDirectory(path);
-	} catch {
+		// the count is checked before the directory is read into memory
+		dir = await readZipDirectory(path, limits.maxEntries);
+	} catch (e) {
+		if (e instanceof Error && e.message === TOO_MANY_ENTRIES)
+			throw new ThreeMfError('The 3MF has too many entries');
 		// never fall back to the push parser for a file on disk: it buffers what it does not want
 		throw new ThreeMfError(BAD_ZIP_MESSAGE);
 	}
-	if (dir.length > limits.maxEntries) throw new ThreeMfError('The 3MF has too many entries');
 	const raw = newRaw();
 	let failure: Error | null = null;
 	for (const e of dir) {

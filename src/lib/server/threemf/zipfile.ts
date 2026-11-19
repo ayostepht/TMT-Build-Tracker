@@ -30,6 +30,8 @@ export const MAX_CD_BYTES = 64 * 1024 * 1024;
 /** The push parser may hold at most this much unwanted data (streams only; files use the directory). */
 export const MAX_UNWANTED_BUFFER = 64 * 1024 * 1024;
 /** Shown when a file on disk has no readable central directory. */
+/** Thrown by `readZipDirectory` when the directory lists more entries than the caller allows. */
+export const TOO_MANY_ENTRIES = 'The zip has too many entries';
 export const BAD_ZIP_MESSAGE =
 	'This is not a valid 3MF file (its zip directory is missing or damaged)';
 
@@ -66,7 +68,7 @@ export async function readZipDirectory(
 		if (cdOffset + cdSize > size) throw new Error('bad zip directory');
 		if (cdSize > MAX_CD_BYTES) throw new Error('zip directory is too large');
 		if (count * 46 > cdSize) throw new Error('bad zip directory');
-		if (count > maxEntries) throw new Error('The zip has too many entries');
+		if (count > maxEntries) throw new Error(TOO_MANY_ENTRIES);
 		const cd = Buffer.alloc(cdSize);
 		await fh.read(cd, 0, cdSize, cdOffset);
 		const out: ZipFileEntry[] = [];

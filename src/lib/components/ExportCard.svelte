@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { exportDownloadUrl, exportPreview, type ExportPreviewDto } from '#lib/client/api.ts';
-	import { createCoalescer } from '#lib/client/coalesce.ts';
+	import { busyRetrySeconds, createCoalescer } from '#lib/client/coalesce.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
@@ -17,6 +17,12 @@
 	let pv = $state<ExportPreviewDto | null>(null);
 	let error = $state<string | null>(null);
 	let loading = $state(false);
+	let busy = $state(false); // the last refresh got a 429: the previous preview stays
+	let retryTimer: ReturnType<typeof setTimeout> | null = null;
+	const clearRetry = () => {
+		if (retryTimer !== null) clearTimeout(retryTimer);
+		retryTimer = null;
+	};
 
 	// Reload whenever colors, plates or the printer change (same signals as the plate list).
 	const key = $derived(
@@ -32,10 +38,15 @@
 	// collapse into one request, and never more than one runs at a time.
 	let seq = 0;
 	const loads = createCoalescer();
-	$effect(() => () => loads.cancel());
+	$effect(() => () => {
+		loads.cancel();
+		clearRetry();
+	});
 	$effect(() => {
 		void key;
 		const mine = ++seq;
+		clearRetry();
+		busy = false;
 		if (!(ctx.view.printer ?? ctx.view.layoutPrinter)) {
 			loads.cancel();
 			pv = null;
@@ -46,22 +57,35 @@
 		loading = true;
 		const id = ctx.id;
 		const f = flavor;
-		loads.schedule(() =>
+		const run = (retry: boolean): Promise<unknown> =>
 			exportPreview(id, f)
 				.then((r) => {
 					if (mine !== seq) return;
 					pv = r;
 					error = null;
+					busy = false;
 				})
 				.catch((e) => {
 					if (mine !== seq) return;
+					const wait = busyRetrySeconds(e);
+					if (wait !== null) {
+						// over the server's read budget: keep the last good preview and Download, try once more
+						busy = true;
+						error = null;
+						if (retry)
+							retryTimer = setTimeout(() => {
+								retryTimer = null;
+								if (mine === seq) loads.schedule(() => run(false));
+							}, wait * 1000);
+						return;
+					}
 					pv = null;
 					error = e instanceof Error ? e.message : 'Could not prepare the export.';
 				})
 				.finally(() => {
 					if (mine === seq) loading = false;
-				})
-		);
+				});
+		loads.schedule(() => run(true));
 	});
 
 	const chosen = $derived(
@@ -203,7 +227,8 @@
 						>{downloadLabel}</button
 					>
 				{/if}
-				{#if loading}<span class="meta">Updating…</span>{/if}
+				{#if busy}<span class="meta" data-testid="export-busy">Busy — try again in a moment</span
+					>{:else if loading}<span class="meta">Updating…</span>{/if}
 			</div>
 		{/if}
 		<p class="meta">

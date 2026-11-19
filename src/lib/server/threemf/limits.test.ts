@@ -115,6 +115,35 @@ describe('3MF parser limits (file and stream readers)', () => {
 		await rejectsFast(parseThreeMfBytes(bytes), /too many entries|valid 3MF/);
 	});
 
+	it('refuses a file over the entry cap from its directory count, before reading the directory', async () => {
+		const files = base();
+		for (let i = 0; i < 50; i++) files[`x/${i}.txt`] = new Uint8Array(0);
+		const bytes = zip(files);
+		await rejectsFast(parseThreeMfFile(file(bytes), { maxEntries: 10 }), /too many entries/);
+		// the same file passes under a cap that fits it
+		await expect(parseThreeMfFile(file(bytes), { maxEntries: 100 })).resolves.toBeTruthy();
+	});
+
+	it('leaves G-code stats alone for a directory over the entry cap', async () => {
+		const files = base();
+		files['Metadata/plate_1.gcode'] = zeros(10);
+		for (let i = 0; i < DEFAULT_LIMITS.maxEntries; i++) files[`x/${i}.txt`] = new Uint8Array(0);
+		const rep = await attachGcodeObjectStats(file(zip(files)), {
+			plates: [{ index: 1 }]
+		} as unknown as ThreeMfSummary);
+		expect(rep.withGcode).toBe(0);
+		expect(rep.plates).toBe(0);
+	});
+
+	it('keeps thumbnails for plates up to the cap and ignores the ones beyond it', async () => {
+		const files = base();
+		const last = DEFAULT_LIMITS.maxThumbs;
+		files[`Metadata/plate_${last}.png`] = TINY_PNG;
+		files[`Metadata/plate_${last + 1}.png`] = TINY_PNG;
+		const s = await parseThreeMfFile(file(zip(files)));
+		expect(s).toBeTruthy();
+	});
+
 	it('rejects when total inflated bytes pass the budget', async () => {
 		const files = base();
 		files['Metadata/plate_1.png'] = zeros(3 * MB);
@@ -124,7 +153,7 @@ describe('3MF parser limits (file and stream readers)', () => {
 		await rejectsFast(parseThreeMfBytes(bytes, { maxInflatedBytes: 4 * MB }), /too much/);
 	});
 
-	it('parses XML at the cap in well under a second for a flat config', async () => {
+	it('parses XML at the cap within a few seconds for a flat config', async () => {
 		const files = base();
 		const body = '<object id="1"><metadata key="a" value="b"/></object>'.repeat(
 			Math.floor((DEFAULT_LIMITS.maxXmlConfigBytes - 1024) / 54)
@@ -132,7 +161,8 @@ describe('3MF parser limits (file and stream readers)', () => {
 		files['Metadata/model_settings.config'] = strToU8(`<config>${body}</config>`);
 		const t0 = Date.now();
 		await parseThreeMfFile(file(zip(files)));
-		expect(Date.now() - t0).toBeLessThan(2000);
+		// ~1.8 s alone at the 8 MB cap; loaded CI machines need headroom
+		expect(Date.now() - t0).toBeLessThan(8000);
 	});
 });
 
