@@ -26,7 +26,7 @@ test('A plate in the Activity feed links to its plate group on the Print tab', a
 
 	await page
 		.locator('.activity')
-		.getByRole('link', { name: `plate ${plate}` })
+		.getByRole('link', { name: `plate ${plate}`, exact: true })
 		.first()
 		.click();
 	await expect(page).toHaveURL(new RegExp(`/print#plate-${plate}$`));
@@ -41,7 +41,7 @@ test('A plate in the Activity feed links to its plate group on the Print tab', a
 	await page.getByRole('link', { name: 'Activity', exact: true }).click();
 	await page
 		.locator('.activity')
-		.getByRole('link', { name: `plate ${plate}` })
+		.getByRole('link', { name: `plate ${plate}`, exact: true })
 		.first()
 		.click();
 	await expect(page.getByLabel('Group by')).toHaveValue('plate');
@@ -62,7 +62,7 @@ test('A hash link shows the plate despite filters, without saving the overrides'
 	await page.getByRole('link', { name: 'Activity', exact: true }).click();
 	await page
 		.locator('.activity')
-		.getByRole('link', { name: `plate ${plate}` })
+		.getByRole('link', { name: `plate ${plate}`, exact: true })
 		.first()
 		.click();
 	await expect(page.locator(`#plate-${plate}`)).toBeInViewport();

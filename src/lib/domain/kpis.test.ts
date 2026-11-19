@@ -53,6 +53,8 @@ describe('buildKpis', () => {
 		expect(k.parts.total).toBe(v.parts.length);
 		expect(k.parts.label).toBe(`0 of ${v.parts.length}`);
 		expect(k.parts.detail).toMatch(/ · 1 failed print$/);
+		expect(k.parts.failedPrints).toBe(1);
+		expect(k.parts.toGo).toBe(v.parts.length);
 		expect(k.filament.usedKg).toBe(k.filament.keptKg + k.filament.lostKg);
 		expect(k.finish.projection).toEqual(projectFinish(v, NOW));
 		expect(k.finish.label).toBe('Not yet');
