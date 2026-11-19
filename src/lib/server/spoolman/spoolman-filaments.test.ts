@@ -126,7 +126,7 @@ describe('link and unlink', () => {
 		const sp = loadBuildView(db, buildId, 'owner')!.filaments.find(
 			(f) => f.key === role
 		)!.spoolman!;
-		expect(sp.stock).toMatchObject({ remainingG: 30, stale: false });
+		expect(sp.stock).toMatchObject({ remainingG: 1030, currentSpoolRemainingG: 30, stale: false });
 		expect(kinds().some((k) => k.k === 'filament.spoolman.link')).toBe(true);
 	});
 
@@ -162,7 +162,23 @@ describe('link and unlink', () => {
 		await refreshBuildSpoolman(db, buildId, 'viewer', factory); // viewers never write
 		expect(slot().spoolmanFilamentId).toBeNull();
 		await refreshBuildSpoolman(db, buildId, 'editor', factory);
-		expect(slot()).toMatchObject({ spoolmanFilamentId: 1, spoolmanLinkedAt: null });
+		expect(slot().spoolmanFilamentId).toBe(1);
+		// the back-fill stamps the link time: every print so far is a pre-link print
+		expect(slot().spoolmanLinkedAt).toBeInstanceOf(Date);
+	});
+
+	it('stamps a link time on a filament link that was back-filled without one', async () => {
+		db.update(buildFilaments)
+			.set({ spoolmanFilamentId: 1, spoolmanSpoolId: 1, spoolmanLinkedAt: null })
+			.where(eq(buildFilaments.buildId, buildId))
+			.run();
+		await refreshBuildSpoolman(db, buildId, 'viewer', factory); // viewers never write
+		expect(slot().spoolmanLinkedAt).toBeNull();
+		await refreshBuildSpoolman(db, buildId, 'editor', factory);
+		const at = slot().spoolmanLinkedAt;
+		expect(at).toBeInstanceOf(Date);
+		await refreshBuildSpoolman(db, buildId, 'editor', factory);
+		expect(slot().spoolmanLinkedAt).toEqual(at); // stamped once
 	});
 
 	it('refuses an unknown filament and a bad body', async () => {
@@ -495,11 +511,16 @@ describe('cache and offline', () => {
 		mock.failing = true;
 		const r = await refreshBuildSpoolman(db, buildId, 'viewer', factory);
 		expect(r.error).toMatch(/Spoolman/);
-		expect(stock()).toMatchObject({ remainingG: 30, stale: true });
+		expect(stock()).toMatchObject({ remainingG: 1030, currentSpoolRemainingG: 30, stale: true });
 		mock.failing = false;
 		mock.spools.get(1)!.used_weight = 900;
 		await refreshBuildSpoolman(db, buildId, 'viewer', factory);
-		expect(stock()).toMatchObject({ remainingG: 100, stale: false, error: null });
+		expect(stock()).toMatchObject({
+			remainingG: 1100,
+			currentSpoolRemainingG: 100,
+			stale: false,
+			error: null
+		});
 	});
 
 	it('a deduction that cannot reach Spoolman warns and is caught up later', async () => {

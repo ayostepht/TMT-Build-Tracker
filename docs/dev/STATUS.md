@@ -258,8 +258,8 @@ Route each to the agent named in brackets.
 - **Build header cards** (`feat/stats-header`, pull request open, ships as r59): four
   compact cards (Parts, Time, Filament, Finish) from `domain/kpis.ts` link to Stats on
   every build tab; Time and Filament show a short "of ~estimate" line so nothing truncates
-  at 390. Open: at 1440 the Parts and Finish detail lines end in "…" (full text on hover
-  and in the details line) [app-shell].
+  at 390. On desktop the Parts and Finish cards use short
+  detail lines; the full sentences are in the hover title.
 - **Overview on phones** (#53, merged 2026-11-15): filament rows show a chevron that flips
   when the row is open, so the spools + and history are easier to find.
 

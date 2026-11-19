@@ -744,7 +744,9 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   (Parts, Time, Filament, Finish, from `buildKpis`) linking to Stats on every build tab, four
   across on phones and hidden on the Design tab at ≤760 px; Time and Filament add a short
   "of ~estimate" line (the full sentence is in the aria-label). Below them, a details line
-  holds only "N printing · N to reprint · deliver-by" and hides when empty. Drafts keep the
+  holds only "N printing · N to reprint · deliver-by" and hides when empty. On desktop the Parts and Finish
+  cards show short detail lines ("N to go · N failed", "~N h left"); the full sentences
+  (with the pace) are in the hover title (`StatTile` `hint`) and the aria-label. Drafts keep the
   old header. `ErrorPage.svelte`
   serves both `+error.svelte` files (fixed wording per status).
 - `AppMark.svelte` is the app mark (`static/icons/icon.svg`; PNGs regenerate from it) in the

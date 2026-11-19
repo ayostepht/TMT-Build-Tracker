@@ -25,13 +25,16 @@
 	});
 	/** "30.5 h of ~382 h" -> "of ~382 h": the value above already says what is logged. */
 	const shortEst = (e: string) => e.replace(/^.*? of ~/, 'of ~');
+	/** "337 h": whole hours from 100 h, else one decimal (the same rounding as the full sentence). */
+	const hoursLeft = (h: number) =>
+		`${h.toLocaleString('en-US', { maximumFractionDigits: h >= 100 ? 0 : 1 })} h`;
 	const cards = $derived([
 		{
 			key: 'parts',
 			label: narrow ? 'Parts' : 'Parts printed',
 			value: String(k.parts.printed),
 			unit: narrow ? `/ ${k.parts.total}` : `of ${k.parts.total}`,
-			detail: k.parts.detail,
+			detail: `${k.parts.toGo} to go · ${k.parts.failedPrints} failed`,
 			est: false,
 			full: k.parts.detail,
 			name: `Parts printed: ${k.parts.label}`,
@@ -73,7 +76,10 @@
 			label: narrow ? 'Finish' : 'Projected finish',
 			value: k.finish.label,
 			unit: undefined,
-			detail: k.finish.detail,
+			detail:
+				k.finish.projection.kind === 'projected'
+					? `~${hoursLeft(k.finish.projection.hoursLeft)} left`
+					: k.finish.detail,
 			est: false,
 			full: k.finish.detail,
 			name: `Projected finish: ${k.finish.label}`,
@@ -135,6 +141,7 @@
 						value={c.value}
 						unit={c.unit}
 						detail={c.detail}
+						hint={c.full}
 						split={c.split}
 					/>
 				</span>

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
 import { filterSteps } from '#lib/domain/assembly.ts';
 import { linkedRunGrams } from '#lib/domain/accounting.ts';
-import { readSpoolmanStock } from '#lib/domain/spoolman.ts';
+import { isPreLinkRun, readSpoolmanStock, type SpoolmanCacheData } from '#lib/domain/spoolman.ts';
 import { buildStarted, type LiveJobs } from '#lib/domain/started.ts';
 import { inactiveSlugs, resolveChoices, variantOfPart } from '#lib/domain/variants.ts';
 import type {
@@ -210,19 +210,52 @@ function attachSpoolman(db: Db, view: BuildView, orgId: string): void {
 		}
 	const ledger = getDeductions(db, orgId);
 	const runIds = new Set(view.runs.map((r) => r.id));
+	const runById = new Map(view.runs.map((r) => [r.id, r]));
+	// Which slot an old role-less ledger entry [spoolId, g] belongs to: the one whose own spool it
+	// is, else the one whose linked filament holds that spool; null when none or several do.
+	const slotSpools = view.filaments.map((f) => {
+		const fid = links.get(f.key)?.spoolmanFilamentId;
+		const c = fid != null ? cache.get(fid) : undefined;
+		return {
+			key: f.key,
+			own: f.spoolmanSpoolId,
+			spools: new Set(
+				((c?.data as SpoolmanCacheData | null)?.spools ?? []).flatMap((x) => (x ? [x.id] : []))
+			)
+		};
+	});
+	const legacyOwner = (spoolId: number): string | null => {
+		const own = slotSpools.filter((x) => x.own === spoolId);
+		const hit = own.length ? own : slotSpools.filter((x) => x.spools.has(spoolId));
+		return hit.length === 1 ? hit[0].key : null;
+	};
 	for (const f of view.filaments) {
 		const l = links.get(f.key);
 		const filamentId = l?.spoolmanFilamentId ?? null;
 		const linkedAt = l?.spoolmanLinkedAt ? l.spoolmanLinkedAt.getTime() : null;
 		const c = filamentId != null ? cache.get(filamentId) : undefined;
+		const cached = c ? fromCacheData(c.data) : null;
 		let deductedG = 0;
-		for (const [key, entries] of Object.entries(ledger))
-			if (runIds.has(key)) for (const e of entries) if (ledgerRole(e) === f.key) deductedG += e[1];
+		for (const [key, entries] of Object.entries(ledger)) {
+			if (!runIds.has(key)) continue;
+			for (const e of entries) {
+				const role = ledgerRole(e);
+				if (role !== null) {
+					if (role === f.key) deductedG += e[1];
+					continue;
+				}
+				// Old two-element entry [spoolId, g]: the role was not stored. It is this slot's when
+				// the spool is this slot's own spool or one of its linked filament's spools, and no
+				// other slot claims the same spool. A pre-link run's entry was never part of the
+				// post-link grams, so it is not counted against them.
+				if (isPreLinkRun(runById.get(key)!, linkedAt)) continue;
+				if (legacyOwner(e[0]) === f.key) deductedG += e[1];
+			}
+		}
 		const prelink = (ledger[prelinkLedgerKey(view.build.id, f.key)] ?? []).reduce(
 			(a, e) => a + e[1],
 			0
 		);
-		const cached = c ? fromCacheData(c.data) : null;
 		const spool =
 			f.spoolmanSpoolId != null
 				? cached?.spools.find((x) => x.id === f.spoolmanSpoolId)

@@ -27,7 +27,15 @@ const gramsText = (g: number) => (g >= 1000 ? `${num(g / 1000, 1)} kg` : `${num(
 const kgText = (g: number) => `${num(g / 1000, g < 1000 ? 2 : 1)} kg`;
 
 export interface BuildKpis {
-	parts: { printed: number; total: number; label: string; detail: string };
+	parts: {
+		printed: number;
+		total: number;
+		/** Parts not printed yet, and failed prints so far (the numbers inside `detail`). */
+		toGo: number;
+		failedPrints: number;
+		label: string;
+		detail: string;
+	};
 	time: {
 		/** Hours, rounded alike: one decimal while the logged total is under 100 h, else whole. */
 		loggedH: number;
@@ -116,6 +124,8 @@ export function buildKpis(view: BuildView, now: Date = new Date()): BuildKpis {
 		parts: {
 			printed: op.printed,
 			total: op.total,
+			toGo: Math.max(0, op.total - op.printed),
+			failedPrints,
 			label: `${op.printed} of ${op.total}`,
 			detail: `${plural(Math.max(0, op.total - op.printed), 'part')} to go · ${plural(failedPrints, 'failed print')}`
 		},

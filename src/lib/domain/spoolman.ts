@@ -77,9 +77,12 @@ const finite = (v: unknown): number | null =>
 	typeof v === 'number' && Number.isFinite(v) ? v : null;
 
 /**
- * Read a cache row into the stock a slot shows. With a linked spool that spool's numbers are
- * used (archived or not); otherwise the sum over the filament's open spools. Null remaining when
- * Spoolman gave no spool numbers. Never throws on a malformed record.
+ * Read a cache row into the stock a slot shows. `remainingG` / `initialG` are the sum over ALL the
+ * filament's open (not archived) spools, whichever one is current: the grams on hand of that
+ * colour, which is what Spare starts from. `currentSpoolRemainingG` is the spool in use alone
+ * (`spoolId`, archived or not), null when none is chosen or it is not in the record. Null totals
+ * when Spoolman gave no spool numbers; 0 when every spool is archived. Never throws on a
+ * malformed record.
  */
 export function readSpoolmanStock(
 	data: unknown,
@@ -87,18 +90,20 @@ export function readSpoolmanStock(
 	spoolId: number | null
 ): SpoolmanStockView {
 	const d = (data && typeof data === 'object' ? data : {}) as SpoolmanCacheData;
-	const spools = Array.isArray(d.spools) ? d.spools : [];
-	const chosen =
-		spoolId != null
-			? spools.filter((s) => s && s.id === spoolId)
-			: spools.filter((s) => s && !s.archived);
-	const sum = (pick: (s: (typeof spools)[number]) => unknown): number | null => {
-		const vals = chosen.map((s) => finite(pick(s))).filter((x): x is number => x !== null);
+	const spools = Array.isArray(d.spools) ? d.spools.filter((s) => s && typeof s === 'object') : [];
+	const open = spools.filter((s) => !s.archived);
+	const sum = (
+		list: typeof spools,
+		pick: (s: (typeof spools)[number]) => unknown
+	): number | null => {
+		const vals = list.map((s) => finite(pick(s))).filter((x): x is number => x !== null);
 		return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
 	};
+	const current = spoolId != null ? spools.find((s) => s.id === spoolId) : undefined;
 	return {
-		remainingG: sum((s) => s.remaining_weight),
-		initialG: sum((s) => s.initial_weight ?? d.weight),
+		remainingG: sum(open, (s) => s.remaining_weight) ?? (spools.length ? 0 : null),
+		initialG: sum(open, (s) => s.initial_weight ?? d.weight),
+		currentSpoolRemainingG: current ? finite(current.remaining_weight) : null,
 		fetchedAt: row.fetchedAt,
 		stale: row.error != null,
 		error: row.error
@@ -135,7 +140,7 @@ export interface Have {
  * - not linked: the app's own stock minus everything logged (unchanged behaviour);
  * - linked, kept up to date by 'other': Spoolman's remaining weight only. It already reflects
  *   every print the other tool recorded, before and after the link;
- * - linked, kept by 'app': Spoolman's remaining weight minus the logged grams after the link that
+ * - linked, kept by 'app': Spoolman's remaining weight (all open spools) minus the logged grams after the link that
  *   the ledger has not yet taken from it (a failed or pending deduction). Pre-link grams are not
  *   in this figure, and the one-off pre-link deduction is already in Spoolman's weight.
  * While linked the app's own starting and added spools are not used (history is kept; they show
@@ -147,7 +152,7 @@ export function haveGramsOf(i: HaveInput): Have {
 	const remaining = sp?.stock?.remainingG ?? null;
 	if (remaining == null) return { haveGrams: 0, usedGrams: 0, source: 'unknown' };
 	if (sp!.keptBy === 'other') return { haveGrams: remaining, usedGrams: 0, source: 'spoolman' };
-	const pending = Math.round((i.postLinkUsedG - (sp!.deductedG || 0)) * 10) / 10;
+	const pending = Math.max(0, Math.round((i.postLinkUsedG - (sp!.deductedG || 0)) * 10) / 10);
 	return { haveGrams: remaining, usedGrams: pending, source: 'spoolman' };
 }
 

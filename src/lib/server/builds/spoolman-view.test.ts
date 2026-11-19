@@ -181,4 +181,82 @@ describe('view.spoolman', () => {
 		link(id, role, 8, new Date());
 		expect(status(() => linkSpool(db, id, 'owner', role, { spoolId: 1 }))).toBe(400);
 	});
+
+	// Real data, issue #79.
+	it('case A: a legacy back-filled link with role-less ledger entries is not short', () => {
+		const id = mk();
+		const v0 = view(id);
+		const plate = v0.plates.find((p) => !p.perPartRuns && p.parts.length)!;
+		const role = v0.parts.find((p) => p.slug === plate.parts[0])!.role;
+		const runs = [2000, 2319].map(
+			(g) =>
+				addRun(db, id, 'owner', {
+					plateNumber: plate.number,
+					date: '2026-02-01',
+					result: 'Success',
+					grams: g
+				}).runId
+		);
+		// filament id set by the lazy back-fill, link time never stamped
+		link(id, role, 7, null);
+		db.update(buildFilaments)
+			.set({ spoolmanSpoolId: 10 })
+			.where(and(eq(buildFilaments.buildId, id), eq(buildFilaments.roleKey, role)))
+			.run();
+		// the old code wrote role-less [spoolId, g] entries
+		setDeduction(db, orgId, runs[0], [[10, 2000]]);
+		setDeduction(db, orgId, runs[1], [[9, 2319]]); // an earlier spool of the same filament
+		db.insert(spoolmanCache)
+			.values({
+				organizationId: orgId,
+				spoolmanFilamentId: 7,
+				data: {
+					spools: [
+						{ id: 9, remaining_weight: 0, archived: true },
+						{ id: 10, remaining_weight: 114 }
+					]
+				},
+				fetchedAt: new Date(),
+				error: null
+			})
+			.run();
+		const v = view(id);
+		const sp = v.filaments.find((f) => f.key === role)!.spoolman!;
+		expect(sp.deductedG).toBe(4319);
+		const s = filamentStats(v).find((x) => x.role === role)!;
+		expect(s.haveGrams).toBe(114);
+		// nothing is subtracted for the 4,319 g already printed: only what is still to print
+		expect(s.spareG).toBeCloseTo(114 - s.need, 5);
+	});
+
+	it('case B: Spare counts every open spool of the filament, not only the current one', () => {
+		const id = mk();
+		const role = view(id).filaments[0].key;
+		link(id, role, 7, new Date());
+		db.update(buildFilaments)
+			.set({ spoolmanSpoolId: 10 })
+			.where(and(eq(buildFilaments.buildId, id), eq(buildFilaments.roleKey, role)))
+			.run();
+		db.insert(spoolmanCache)
+			.values({
+				organizationId: orgId,
+				spoolmanFilamentId: 7,
+				data: {
+					spools: [
+						{ id: 10, remaining_weight: 1000 },
+						{ id: 11, remaining_weight: 1000 },
+						{ id: 12, remaining_weight: 300, archived: true }
+					]
+				},
+				fetchedAt: new Date(),
+				error: null
+			})
+			.run();
+		const v = view(id);
+		const sp = v.filaments.find((f) => f.key === role)!.spoolman!;
+		expect(sp.stock).toMatchObject({ remainingG: 2000, currentSpoolRemainingG: 1000 });
+		const s = filamentStats(v).find((x) => x.role === role)!;
+		expect(s.haveGrams).toBe(2000);
+		expect(s.spareG).toBeCloseTo(2000 - s.need, 5);
+	});
 });
