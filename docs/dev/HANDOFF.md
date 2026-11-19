@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-19. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-19, 05:20 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -17,22 +17,29 @@ _Updated 2026-11-19. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
 
 ## State
 
-- **0.9.2 released** 2026-11-16: `main` 48c9649, tag `v0.9.2`, images `latest`/`0.9.2`/`0.9`
-  (STATUS item 0).
-- **Test copy:** r60 = `edge` a501e5e (Spoolman part 1, migration 0003) being deployed by the
-  maintainer on 2026-11-19 for testing (r59 = ce8afce before it).
-- **Spoolman (#59) part 1 merged** as #71. **Parts 2 and 3 in progress** as one pull request
-  from `feat/spoolman-create` (worktree `TMT-wt-spoolman2`, from `edge` 2797e2d). Decisions
-  (2026-11-19) are in `docs/dev/plans/issue59-spoolman.md`: on a linked colour the + becomes
-  "Add spool in Spoolman" (removing asks whether to archive in Spoolman); "Create in
-  Spoolman" (vendor + filament, prefilled from the catalog) lives in the link picker; editors'
-  page-load refresh stays unthrottled.
-  Order: `printers` (client, routes, mock, picker create flow) → `app-shell` (FilamentTiles
-  "Add spool in Spoolman" form, archive question) → `e2e-playwright` → `security-reviewer`
-  (new outbound writes) → `verifier` → pull request → r61 after the maintainer tests r60.
-- Follow-up: 1440 header detail lines truncate ("…") [app-shell].
-- The old worktrees were deleted (maintainer, 2026-11-19). This environment allows
-  donkie.github.io (catalog updates need `NODE_USE_ENV_PROXY=1` here).
+- **0.9.2 released** 2026-11-16 (`main` 48c9649, tag `v0.9.2`; STATUS item 0).
+- **Test copy:** r60 = `edge` a501e5e (Spoolman part 1, migration 0003), deployed by the
+  maintainer on 2026-11-19 for testing.
+- **Merged into `edge` overnight 2026-11-19** (maintainer's permission for work already
+  discussed):
+  - #76 startup: an empty `ORIGIN` is ignored and `ORIGIN` mirrors the forced origin
+    (needed for adapter-node 6.0.2, which honours `ORIGIN` and refuses an empty one);
+    security review: no high/medium, two lows fixed.
+  - #74 Dependabot npm minor/patch group (better-auth 1.7.25, better-sqlite3 13.2.0, SvelteKit
+    3.2.0, adapter-node 6.0.2, vite 8.3.8, …), after "Update branch" onto #76; CI green.
+  - #77 Spoolman parts 2 and 3 (create vendor/filament from the link picker, add spools in
+    Spoolman on linked colours, archive on remove); verifier + full e2e green; security
+    review: no high/medium, three lows fixed.
+- **Next deploy, r61 = `edge` 5c17a88 image** (no migrations; brings #74, #76, #77): needs the
+  maintainer's OK; backup per routine. Check the Spoolman create/add/archive flows against
+  the real Spoolman.
+- **Spoolman (#59) is complete** (all three parts). Plan and decisions:
+  `docs/dev/plans/issue59-spoolman.md`. Issue #59 can be closed once r61 is checked.
+- Follow-ups: 1440 header detail lines truncate ("…") [app-shell]; optional exact-name
+  locator hardening in `e2e/kit-import.spec.ts:450` (one unexplained, non-reproducing
+  strict-mode failure on 2026-11-19).
+- Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
+  "Update branch" on its pull requests instead.
 
 ## Notes for the next orchestrator and its agents
 
