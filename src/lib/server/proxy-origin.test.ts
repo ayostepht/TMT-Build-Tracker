@@ -34,6 +34,9 @@ describe('proxy-origin preload: ORIGIN', () => {
 		expect(
 			originAfterPreload({ PUBLIC_URL: 'https://a.example.com', ORIGIN: 'https://b.example.com' })
 		).toBe('https://a.example.com');
+		expect(originAfterPreload({ PUBLIC_URL: '  ', BETTER_AUTH_URL: 'https://x.example' })).toBe(
+			'https://x.example'
+		);
 		expect(originAfterPreload({ ORIGIN: 'http://192.0.2.1:3000' })).toBe('http://192.0.2.1:3000');
 	});
 });

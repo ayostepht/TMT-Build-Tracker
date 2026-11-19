@@ -18,17 +18,28 @@ installResponseDefaults(http.ServerResponse.prototype);
 process.env.PROTOCOL_HEADER ??= 'x-forwarded-proto';
 process.env.HOST_HEADER ??= 'x-forwarded-host';
 
+// First non-blank (trimmed) value, same order and rule as rawPublicUrl() in config.ts.
 function configuredOrigin() {
-	const raw = (
-		process.env.PUBLIC_URL ||
-		process.env.BETTER_AUTH_URL ||
-		process.env.ORIGIN ||
-		''
-	).trim();
+	let name = '';
+	let raw = '';
+	for (const candidate of ['PUBLIC_URL', 'BETTER_AUTH_URL', 'ORIGIN']) {
+		const value = (process.env[candidate] ?? '').trim();
+		if (value) {
+			name = candidate;
+			raw = value;
+			break;
+		}
+	}
 	if (!raw) return null;
-	const url = new URL(raw);
+	// Errors name the variable, never its value (it may carry credentials).
+	let url;
+	try {
+		url = new URL(raw);
+	} catch {
+		throw new Error(`${name} is not a valid URL.`);
+	}
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`PUBLIC_URL must start with http:// or https://: ${raw}`);
+		throw new Error(`${name} must start with http:// or https://.`);
 	}
 	return url;
 }
