@@ -54,12 +54,18 @@ export async function readTextCapped(request: Request, maxBytes: number): Promis
  */
 export function safeErrorText(e: unknown): string {
 	if (!(e instanceof Error)) return 'non-error thrown';
-	const strip = (t: string) => t.replace(/\n?params:[\s\S]*$/, '').trimEnd();
+	// Cut at `params:` first, then collapse control characters so a message cannot add log lines.
+	const strip = (t: string) =>
+		t
+			.replace(/\n?params:[\s\S]*$/, '')
+			// eslint-disable-next-line no-control-regex
+			.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
+			.trim();
 	const stack = (e.stack ?? '')
 		.split('\n')
 		.filter((l) => /^\s+at /.test(l))
 		.join('\n');
-	return `${e.name}: ${strip(e.message)}${stack ? `\n${stack}` : ''}`;
+	return `${strip(e.name)}: ${strip(e.message)}${stack ? `\n${stack}` : ''}`;
 }
 
 /** `Retry-After` (whole seconds) for an error that carries a positive `retryAfter`. */
