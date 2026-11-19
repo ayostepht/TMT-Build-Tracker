@@ -1,6 +1,7 @@
 import { unlink } from 'node:fs/promises';
 import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import { ApiError } from '../access.ts';
+import { safeErrorText } from '../api.ts';
 import { templateModelPath } from '../config.ts';
 import { assertUnder, QuotaError, quotaLimit } from '../quota.ts';
 import type { Db } from '../db/index.ts';
@@ -236,5 +237,5 @@ export function runQueue(db: Db): Promise<void> {
 
 /** Fire-and-forget version of `runQueue` for request handlers and startup. */
 export function kickQueue(db: Db): void {
-	runQueue(db).catch((e) => console.error('[tmt] model queue error', e));
+	runQueue(db).catch((e) => console.error('[tmt] model queue error', safeErrorText(e)));
 }

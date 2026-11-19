@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { getDb } from '#lib/server/db/index.ts';
 import { apiErrorResponse } from '#lib/server/api-file.ts';
 import { readGuidePage } from '#lib/server/guide.ts';
-import { requireUserId } from '#lib/server/api.ts';
+import { requireUserId, safeErrorText } from '#lib/server/api.ts';
 import { assertTemplateViewable } from '#lib/server/templates/fork.ts';
 import type { RequestHandler } from './$types';
 
@@ -30,7 +30,7 @@ export const GET: RequestHandler = async (event) => {
 	} catch (e) {
 		const r = apiErrorResponse(e);
 		if (r) return r;
-		console.error('[tmt] guide image error', e);
+		console.error('[tmt] guide image error', safeErrorText(e));
 		return json({ error: 'Internal error' }, { status: 500 });
 	}
 };

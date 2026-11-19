@@ -48,6 +48,7 @@ import { autoRearrangeBuild, REARRANGE_KINDS } from './arrange-plan';
 import { applyPatches, loadBuildView } from './view';
 import { isObj, type Obj } from '#lib/domain/guards.ts';
 import { sanePrintSeconds } from '#lib/domain/format.ts';
+import { BUILD_HOSPITAL_MAX, BUILD_NAME_MAX, BUILD_RECIPIENT_MAX, PART_SLUG_MAX } from './limits';
 
 interface Outcome {
 	kind: string;
@@ -63,7 +64,8 @@ function bad(msg: string): never {
 function optStr(v: unknown, field: string, max = 500): string | null | undefined {
 	if (v === undefined) return undefined;
 	if (v === null) return null;
-	if (typeof v !== 'string' || v.length > max) bad(`${field} must be a string`);
+	if (typeof v !== 'string' || v.length > max)
+		bad(`${field} must be text of at most ${max} characters`);
 	return v.trim() || null;
 }
 function optNum(v: unknown, field: string): number | null | undefined {
@@ -157,11 +159,11 @@ export function updateBuild(db: Db, buildId: string, userId: string, body: unkno
 		const set: Partial<typeof builds.$inferInsert> = {};
 		if (body.name !== undefined) {
 			if (typeof body.name !== 'string' || !body.name.trim()) bad('name is required');
-			set.name = body.name.trim().slice(0, 200);
+			set.name = body.name.trim().slice(0, BUILD_NAME_MAX);
 		}
-		const recipient = optStr(body.recipient, 'recipient');
+		const recipient = optStr(body.recipient, 'recipient', BUILD_RECIPIENT_MAX);
 		if (recipient !== undefined) set.recipient = recipient;
-		const hospital = optStr(body.hospital, 'hospital');
+		const hospital = optStr(body.hospital, 'hospital', BUILD_HOSPITAL_MAX);
 		if (hospital !== undefined) set.hospital = hospital;
 		if (body.deliveryDate !== undefined)
 			set.deliveryDate =
@@ -508,7 +510,7 @@ function runOutcome(
 		const plateNumber = optNum(body.plateNumber, 'plateNumber') ?? null;
 		if (plateNumber !== null && !view.plates.some((p) => p.number === plateNumber))
 			bad('Unknown plate');
-		const partSlug = optStr(body.partSlug, 'partSlug') ?? null;
+		const partSlug = optStr(body.partSlug, 'partSlug', PART_SLUG_MAX) ?? null;
 		if (partSlug && !hasPart(view, partSlug)) bad('Unknown part');
 		const partSlugs =
 			body.partSlugs === undefined || body.partSlugs === null
@@ -995,7 +997,7 @@ export function updateRun(
 			changed.printer = true;
 		}
 		if (body.partSlug !== undefined) {
-			const s = optStr(body.partSlug, 'partSlug') ?? null;
+			const s = optStr(body.partSlug, 'partSlug', PART_SLUG_MAX) ?? null;
 			if (s && !hasPart(view, s)) bad('Unknown part');
 			if (s === null && old.plateNumber === null) bad('A part log needs a part');
 			const pl =

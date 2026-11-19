@@ -26,6 +26,8 @@ export class ApiError extends Error {
 	status: number;
 	code: string | null;
 	body: Record<string, unknown>;
+	/** Seconds from a `Retry-After` header (429), else null. */
+	retryAfter: number | null = null;
 	constructor(message: string, status: number, body: Record<string, unknown> = {}) {
 		super(message);
 		this.name = 'ApiError';
@@ -53,12 +55,16 @@ async function call<T = Record<string, never>>(
 	}
 	// The session is gone: drop cached private kit models (fire and forget, never throws).
 	if (res.status === 401 && url.startsWith('/api/')) void clearPrivateCaches();
-	if (!res.ok)
-		throw new ApiError(
+	if (!res.ok) {
+		const err = new ApiError(
 			typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
 			res.status,
 			data
 		);
+		const ra = Number(res.headers?.get('retry-after'));
+		if (Number.isFinite(ra) && ra > 0) err.retryAfter = ra;
+		throw err;
+	}
 	return data as T;
 }
 

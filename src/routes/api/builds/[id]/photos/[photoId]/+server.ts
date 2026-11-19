@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { getDb } from '#lib/server/db/index.ts';
 import { deletePhoto, readPhoto } from '#lib/server/builds/photos.ts';
 import { apiErrorResponse } from '#lib/server/api-file.ts';
-import { requireUserId, respond } from '#lib/server/api.ts';
+import { requireUserId, respond, safeErrorText } from '#lib/server/api.ts';
 import type { RequestHandler } from './$types';
 
 /** The photo (members only); `?thumb=1` for the small version. */
@@ -25,7 +25,7 @@ export const GET: RequestHandler = async (event) => {
 	} catch (e) {
 		const r = apiErrorResponse(e);
 		if (r) return r;
-		console.error('[tmt] photo error', e);
+		console.error('[tmt] photo error', safeErrorText(e));
 		return json({ error: 'Internal error' }, { status: 500 });
 	}
 };
