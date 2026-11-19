@@ -12,7 +12,8 @@
 		unit,
 		detail,
 		split,
-		compact = false
+		compact = false,
+		hint
 	}: {
 		label: string;
 		value: string;
@@ -21,6 +22,8 @@
 		split?: { value: number; tone: Tone }[];
 		/** Small header-card variant: one line each for label and detail, smaller value. */
 		compact?: boolean;
+		/** Hover text for the detail line when it is a short form of a longer sentence (compact only). */
+		hint?: string;
 	} = $props();
 
 	/** A real space between value and unit (text, copy, screen readers); the visible gap is the unit margin. */
@@ -42,7 +45,7 @@
 			{/each}
 		</div>
 	{/if}
-	{#if detail}<p class="st-detail" title={compact ? detail : undefined}>{detail}</p>{/if}
+	{#if detail}<p class="st-detail" title={compact ? (hint ?? detail) : undefined}>{detail}</p>{/if}
 </div>
 
 <style>

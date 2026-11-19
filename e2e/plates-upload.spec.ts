@@ -19,10 +19,10 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 	await layout.selectOption({ label: 'Bambu H2D / H2S (22 plates)' });
 	await expect(page.getByTestId('layout-name')).toHaveText("MakeGood's Bambu H2D / H2S profile");
 	await expect(cards).toHaveCount(19);
-	await expect(page.getByRole('region', { name: 'Plate 12' })).toContainText(
+	await expect(page.getByRole('region', { name: 'Plate 12', exact: true })).toContainText(
 		'Print 4 times: 2 in the Accent color'
 	);
-	await expect(page.getByRole('region', { name: 'Plate 8' })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Plate 8', exact: true })).toHaveCount(0);
 
 	// Upload a small synthetic sliced 3MF (generated here, no MakeGood data).
 	const file = makeProjectThreeMf({
@@ -76,7 +76,7 @@ test('switch to the H2D layout, then organize plates from an uploaded 3MF', asyn
 	).toBeVisible();
 	await expect(page.getByTestId('layout-name')).toHaveText('Your uploaded 3MF');
 	await expect(cards).toHaveCount(1);
-	const plate = page.getByRole('region', { name: 'Plate 1' });
+	const plate = page.getByRole('region', { name: 'Plate 1', exact: true });
 	await expect(plate).toContainText('HANDLES (PRINT X2)');
 	await expect(plate).toContainText('Print 2 times');
 	await expect(plate).toContainText('~2.0 h per run');

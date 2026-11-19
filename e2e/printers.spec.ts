@@ -788,7 +788,9 @@ test('"Where is it printing?" with a print already running links it to the plate
 	// The Printers page lists the job as linked to that plate.
 	await page.goto(`${chapterUrl}/printers`);
 	const row = page.getByTestId('job-list').locator('li').filter({ hasText: 'benchy.gcode' });
-	await expect(row.getByRole('link', { name: `Plate ${plate}` })).toBeVisible({ timeout: 15_000 });
+	await expect(row.getByRole('link', { name: `Plate ${plate}`, exact: true })).toBeVisible({
+		timeout: 15_000
+	});
 	await expect(row).not.toContainText('Not linked to a plate');
 	idle();
 });
