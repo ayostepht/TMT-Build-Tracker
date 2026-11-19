@@ -28,6 +28,7 @@
 	import PlateLayoutPicker from '#lib/components/PlateLayoutPicker.svelte';
 	import PlateUpload from '#lib/components/PlateUpload.svelte';
 	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
+	import { createCoalescer } from '#lib/client/coalesce.ts';
 	import PlateArrangement from '#lib/components/PlateArrangement.svelte';
 	import AskDialog from '#lib/components/AskDialog.svelte';
 	import { createAsk } from '#lib/client/ask.svelte.ts';
@@ -192,11 +193,18 @@
 			arrRev
 		])
 	);
+	// Each load counts against the per-user expensive-read budget: live updates arriving in a burst
+	// collapse into one request, and never more than one runs at a time.
+	const arrLoads = createCoalescer();
+	$effect(() => () => arrLoads.cancel());
 	$effect(() => {
 		void arrKey;
-		getArrangement(ctx.id)
-			.then((r) => (arr = r))
-			.catch(() => {});
+		const id = ctx.id;
+		arrLoads.schedule(() =>
+			getArrangement(id)
+				.then((r) => (arr = r))
+				.catch(() => {})
+		);
 	});
 	const arranged = (n: number) => arr?.plates.find((p) => p.number === n);
 	const planWarnings = $derived(

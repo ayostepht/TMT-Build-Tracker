@@ -16,6 +16,9 @@
  *   when it pushes the workspace over. Call it BEFORE inserting the row that references it.
  * - Live streams: `acquireSseSlot(db, user)` returns an idempotent `release()`; it throws a
  *   `QuotaError` with status 429 at the per-user cap.
+ * - Expensive reads (3MF export, export preview, arrangement): `acquireExpensiveReadSlot(db, user)`
+ *   applies in both modes (fixed, generous caps), returns an idempotent `release()`; wrap a
+ *   streamed body in `releaseWhenDone(stream, release)`.
  *
  * No route imports. Self-hosted installs have every limit `null`, so nothing here costs a query.
  *
@@ -31,6 +34,7 @@ import { isAbsolute, join } from 'node:path';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { ApiError, isSiteAdmin } from './access';
 import { quotas, uploadsDir, type Quotas } from './config';
+import { takeWriteToken } from './write-rate';
 import type { Db } from './db';
 import { member, organization } from './db/auth.schema';
 import {
@@ -521,4 +525,85 @@ export function acquireSseSlot(db: Db, u: SseUser): () => void {
  */
 export function acquireUploadSlot(db: Db, u: SseUser): () => void {
 	return acquireSlot(db, u, 'concurrentUploadsPerUser', uploadSlots);
+}
+
+// ---- expensive reads (arranger, 3MF export); both modes, fixed limits
+
+const READ_KEY = Symbol.for('tmt.expensive-read-slots');
+const readSlots = slotMap(READ_KEY);
+/** At most this many expensive reads per user at once. */
+export const EXPENSIVE_READ_CONCURRENCY = 4;
+/** Per-user budget for expensive reads: a bucket of this size refilling this many per minute. */
+export const EXPENSIVE_READ_PER_MIN = 60;
+/** Bucket size: a burst of this many reads before the per-minute refill matters. */
+export const EXPENSIVE_READ_BURST = 20;
+/** A slot never stays taken longer than this, whatever happens to the response. */
+export const EXPENSIVE_READ_MAX_HOLD_MS = 10 * 60_000;
+
+/** Expensive reads a user has in progress right now (tests, diagnostics). */
+export function openExpensiveReads(userId: string): number {
+	return readSlots.get(userId) ?? 0;
+}
+
+/**
+ * Take one expensive-read slot (concurrency cap plus a per-user token bucket), or throw
+ * QuotaError 429 with a friendly sentence. Returns an idempotent `release()`: call it in a
+ * `finally`, or when a response stream ends, cancels or errors. Site admins are exempt.
+ */
+export function acquireExpensiveReadSlot(db: Db, u: SseUser, now = Date.now()): () => void {
+	const current = readSlots.get(u.id) ?? 0;
+	const busy = current >= EXPENSIVE_READ_CONCURRENCY;
+	const wait = busy
+		? 0
+		: takeWriteToken(
+				`read:${u.id}`,
+				{ perMin: EXPENSIVE_READ_PER_MIN, burst: EXPENSIVE_READ_BURST },
+				now
+			);
+	if ((busy || wait > 0) && !isSiteAdmin(db, u))
+		throw new QuotaError(
+			busy
+				? 'Another export or plan is still being prepared. Wait for it to finish and try again.'
+				: 'Too many exports or plans in a short time. Wait a moment and try again.',
+			429
+		);
+	readSlots.set(u.id, (readSlots.get(u.id) ?? 0) + 1);
+	let released = false;
+	const timer = setTimeout(() => release(), EXPENSIVE_READ_MAX_HOLD_MS);
+	timer.unref?.();
+	function release() {
+		if (released) return;
+		released = true;
+		clearTimeout(timer);
+		const left = (readSlots.get(u.id) ?? 1) - 1;
+		if (left <= 0) readSlots.delete(u.id);
+		else readSlots.set(u.id, left);
+	}
+	return release;
+}
+
+/** Pass `stream` through, calling `release` once it ends, errors or is cancelled. */
+export function releaseWhenDone(
+	stream: ReadableStream<Uint8Array>,
+	release: () => void
+): ReadableStream<Uint8Array> {
+	const reader = stream.getReader();
+	return new ReadableStream<Uint8Array>({
+		async pull(c) {
+			try {
+				const { done, value } = await reader.read();
+				if (done) {
+					release();
+					c.close();
+				} else c.enqueue(value);
+			} catch (e) {
+				release();
+				c.error(e);
+			}
+		},
+		async cancel(reason) {
+			release();
+			await reader.cancel(reason);
+		}
+	});
 }

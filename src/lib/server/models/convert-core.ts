@@ -9,14 +9,14 @@
  */
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { unzipSync } from 'fflate';
 import { Document, NodeIO } from '@gltf-transform/core';
 import { EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/extensions';
 import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 import type { Occt, OcctResult } from 'occt-import-js';
+import { entryChunks, readZipDirectory, type ZipFileEntry } from '../threemf/zipfile.ts';
 import { matchParts, type MatchPart } from './match.ts';
 
 export interface ReportEntry {
@@ -169,6 +169,46 @@ export function entryFilter(
 	};
 }
 
+/**
+ * Inflate one zip entry into memory, counting the bytes actually produced (not the size the zip
+ * declares) against the per-file and total limits.
+ */
+export async function readEntry(
+	zipPath: string,
+	e: ZipFileEntry,
+	budget: { used: number },
+	maxEntry = MAX_ENTRY_BYTES,
+	maxTotal = MAX_TOTAL_BYTES
+): Promise<Uint8Array> {
+	const short = e.name.split('/').pop();
+	if (e.usize > maxEntry)
+		throw new Error(
+			`${short} claims ${Math.round(e.usize / 1048576)} MB uncompressed, over the ${Math.round(maxEntry / 1048576)} MB limit per file`
+		);
+	const chunks: Uint8Array[] = [];
+	let n = 0;
+	for await (const c of entryChunks(zipPath, e)) {
+		n += c.length;
+		if (n > maxEntry)
+			throw new Error(
+				`${short} is larger than the ${Math.round(maxEntry / 1048576)} MB limit per file`
+			);
+		if (budget.used + n > maxTotal)
+			throw new Error(
+				`The zip holds more than ${Math.round(maxTotal / 1048576)} MB of STEP files uncompressed`
+			);
+		chunks.push(c);
+	}
+	budget.used += n;
+	const out = new Uint8Array(n);
+	let o = 0;
+	for (const c of chunks) {
+		out.set(c, o);
+		o += c.length;
+	}
+	return out;
+}
+
 export async function convertStepZipToGlb(opts: {
 	zipPath: string;
 	/** Final GLB is written here via `<outPath>.tmp` + rename. */
@@ -179,14 +219,16 @@ export async function convertStepZipToGlb(opts: {
 	const t0 = Date.now();
 	const { zipPath, outPath, parts, onProgress } = opts;
 	onProgress(2, 'Reading the zip');
-	const zip = new Uint8Array(readFileSync(zipPath));
-	const names: string[] = [];
-	unzipSync(zip, {
-		filter: (f) => {
-			names.push(f.name);
-			return false;
-		}
-	});
+	// Only the central directory is read up front; each STEP entry is inflated on its own below,
+	// so memory never holds the whole zip.
+	let dir: ZipFileEntry[];
+	try {
+		dir = await readZipDirectory(zipPath);
+	} catch {
+		throw new Error('This is not a valid zip file (its directory is missing or damaged)');
+	}
+	const byName = new Map(dir.map((e) => [e.name, e]));
+	const names = dir.map((e) => e.name);
 	const plan = matchParts(parts, names);
 
 	const report: ReportEntry[] = [];
@@ -217,8 +259,9 @@ export async function convertStepZipToGlb(opts: {
 		const t = Date.now();
 		onProgress(5 + Math.round((85 * done) / total), `Converting ${f.entry.split('/').pop()}`);
 		try {
-			const data = unzipSync(zip, { filter: entryFilter(f.entry, budget) })[f.entry];
-			if (!data) throw new Error('Entry could not be read');
+			const ze = byName.get(f.entry);
+			if (!ze) throw new Error('Entry could not be read');
+			const data = await readEntry(zipPath, ze, budget);
 			const res = occt.ReadStepFile(data, TESSELLATION);
 			if (!res.success) throw new Error('OpenCascade could not read the STEP file');
 			const geo = mergeMeshes(res);

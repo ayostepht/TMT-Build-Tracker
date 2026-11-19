@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { exportDownloadUrl, exportPreview, type ExportPreviewDto } from '#lib/client/api.ts';
+	import { createCoalescer } from '#lib/client/coalesce.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
@@ -27,30 +28,40 @@
 			ctx.view.filaments.map((f) => [f.key, f.hex, f.name, f.material])
 		])
 	);
+	// A preview counts against the per-user expensive-read budget: live updates arriving in a burst
+	// collapse into one request, and never more than one runs at a time.
 	let seq = 0;
+	const loads = createCoalescer();
+	$effect(() => () => loads.cancel());
 	$effect(() => {
 		void key;
 		const mine = ++seq;
 		if (!(ctx.view.printer ?? ctx.view.layoutPrinter)) {
+			loads.cancel();
 			pv = null;
 			error = null;
+			loading = false;
 			return;
 		}
 		loading = true;
-		exportPreview(ctx.id, flavor)
-			.then((r) => {
-				if (mine !== seq) return;
-				pv = r;
-				error = null;
-			})
-			.catch((e) => {
-				if (mine !== seq) return;
-				pv = null;
-				error = e instanceof Error ? e.message : 'Could not prepare the export.';
-			})
-			.finally(() => {
-				if (mine === seq) loading = false;
-			});
+		const id = ctx.id;
+		const f = flavor;
+		loads.schedule(() =>
+			exportPreview(id, f)
+				.then((r) => {
+					if (mine !== seq) return;
+					pv = r;
+					error = null;
+				})
+				.catch((e) => {
+					if (mine !== seq) return;
+					pv = null;
+					error = e instanceof Error ? e.message : 'Could not prepare the export.';
+				})
+				.finally(() => {
+					if (mine === seq) loading = false;
+				})
+		);
 	});
 
 	const chosen = $derived(

@@ -1,6 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { ApiError, type SiteAdminCandidate } from '../access.ts';
+import { ApiError, isSiteAdmin, type SiteAdminCandidate } from '../access.ts';
+import { isPublicMode } from '../config.ts';
 import { requireUserId } from '../api.ts';
 import { getDb, type Db } from '../db/index.ts';
 import { templates } from '../db/schema.ts';
@@ -25,4 +26,15 @@ export function requireAdminForTemplate(event: RequestEvent, templateId: string)
 	const userId = requireUserId(event);
 	assertTemplateAdmin(getDb(), event.locals.user!, templateId);
 	return userId;
+}
+
+/**
+ * Converting a STEP zip to a 3D model runs OpenCascade in a child process with a large memory
+ * budget. On a public server (`TMT_MODE=public`) only site admins may start one (403 with a plain
+ * message for everyone else); a self-hosted server keeps letting workspace editors convert their
+ * own kit copies. Kit copies and print-geometry imports do not use the converter.
+ */
+export function assertModelConversionAllowed(db: Db, user: SiteAdminCandidate): void {
+	if (isPublicMode() && !isSiteAdmin(db, user))
+		throw new ApiError(403, 'Only site admins can convert 3D models on this server.');
 }

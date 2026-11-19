@@ -47,6 +47,21 @@ export async function readTextCapped(request: Request, maxBytes: number): Promis
 	return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
+/**
+ * Text to log for an unexpected error: name, message and stack only. Database errors carry the
+ * bound query parameters (and a `cause`); those are never logged, and the message of a Drizzle
+ * query error (which embeds them after `params:`) is cut before them.
+ */
+export function safeErrorText(e: unknown): string {
+	if (!(e instanceof Error)) return 'non-error thrown';
+	const strip = (t: string) => t.replace(/\n?params:[\s\S]*$/, '').trimEnd();
+	const stack = (e.stack ?? '')
+		.split('\n')
+		.filter((l) => /^\s+at /.test(l))
+		.join('\n');
+	return `${e.name}: ${strip(e.message)}${stack ? `\n${stack}` : ''}`;
+}
+
 /** Run a handler body, mapping ApiError to `{ error }` JSON with its status. */
 export async function respond(fn: () => unknown | Promise<unknown>): Promise<Response> {
 	try {
@@ -67,7 +82,7 @@ export async function respond(fn: () => unknown | Promise<unknown>): Promise<Res
 				{ status: e.status }
 			);
 		}
-		console.error('[tmt] api error', e);
+		console.error('[tmt] api error', safeErrorText(e));
 		return json({ error: 'Internal error' }, { status: 500 });
 	}
 }

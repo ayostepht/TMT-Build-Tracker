@@ -14,6 +14,14 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 - Create filaments in Spoolman: when no Spoolman filament matches a color, the link picker offers "Create in Spoolman" with the vendor, name, material, color, density and weights filled in from the filament catalog (all editable). A missing vendor is created too, and the color is linked to the new filament.
 - Add spools in Spoolman: on a linked color the + adds a spool of that filament in Spoolman (weight and an optional note). It shows in the color's history as a Spoolman spool, and removing it asks whether to archive it in Spoolman as well.
 
+### Changed
+
+- Limits on very large or unusual 3MF files: a 3MF whose settings, thumbnails or other contents are far larger than any real sliced project is refused with a message instead of being read. Per-object filament measuring from G-code stops on very large files and falls back to sharing by volume; the upload still works.
+- Limits on export and arrange requests: each person can prepare a few 3MF exports, export previews or plate plans at once and a generous number per minute. Past that the app asks you to wait a moment. Site admins are not limited. The Files and Design tabs no longer send a request for every live update, so normal use stays well under the limit.
+- On a server running in public mode (`TMT_MODE=public`), only site admins can upload a STEP zip to convert a 3D model. Self-hosted servers in the default mode are unchanged. The converter now reads the zip one file at a time, so it needs less memory.
+- Build name, recipient and hospital are limited to 200 characters. A longer name is shortened; a longer recipient or hospital is refused with a message.
+- Server error logs no longer include database query values.
+
 ## [0.9.2] - 2026-11-16
 
 **Upgrading:** back up your `/data` folder first. This release adds two database migrations (0001 and 0002, both additive: new columns for entered weights and spool adds). They run automatically when the container starts and cannot be undone, so to go back to 0.9.1 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).

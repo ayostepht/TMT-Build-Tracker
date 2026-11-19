@@ -11,6 +11,7 @@
 	} from '#lib/domain/design.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import { getArrangement, setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
+	import { createCoalescer } from '#lib/client/coalesce.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import VariantChooser from '#lib/components/VariantChooser.svelte';
 	import ModelStage from '#lib/components/design/ModelStage.svelte';
@@ -173,15 +174,23 @@
 			ctx.view.printer
 		])
 	);
+	// Each check counts against the per-user expensive-read budget: recolors in quick succession
+	// collapse into one request, and never more than one runs at a time.
+	const staleLoads = createCoalescer();
+	$effect(() => () => staleLoads.cancel());
 	$effect(() => {
 		void staleKey;
 		if (embedded || !ctx.canEdit || ctx.view.build.kind !== 'build' || !ctx.view.printer) {
+			staleLoads.cancel();
 			platesStale = false;
 			return;
 		}
-		getArrangement(ctx.id)
-			.then((r) => (platesStale = r.stale))
-			.catch(() => {});
+		const id = ctx.id;
+		staleLoads.schedule(() =>
+			getArrangement(id)
+				.then((r) => (platesStale = r.stale))
+				.catch(() => {})
+		);
 	});
 	const showStale = $derived(platesStale && dismissedKey !== staleKey);
 
