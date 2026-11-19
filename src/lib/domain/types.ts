@@ -44,8 +44,10 @@ export type SpoolmanKeptBy = 'app' | 'other';
 
 /** Last-seen Spoolman stock for a linked filament, from `spoolman_cache` (works offline). */
 export interface SpoolmanStockView {
-	/** Grams left on the linked spool, or (no spool linked) on the filament's open spools; null = unknown. */
+	/** Grams left on ALL open (not archived) spools of the linked filament, whichever is current; null = unknown. */
 	remainingG: number | null;
+	/** Grams left on the spool in use alone (`spoolId`); null when none is chosen or it is not in the record. */
+	currentSpoolRemainingG: number | null;
 	/** Grams the spool(s) held when new; null = unknown. */
 	initialG: number | null;
 	/** When the cache row was fetched (ms since the epoch). */
