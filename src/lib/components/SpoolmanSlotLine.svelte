@@ -121,7 +121,10 @@
 			</div>
 			<div class="meta muted">
 				{#if sp?.spoolId != null}<span
-						>Spool #{sp.spoolId} in use{sp.spoolName ? ` (${sp.spoolName})` : ''}</span
+						>Spool #{sp.spoolId} in use{sp.spoolName ? ` (${sp.spoolName})` : ''}{sp.stock
+							?.currentSpoolRemainingG != null
+							? `, ${fmt(sp.stock.currentSpoolRemainingG)} g left`
+							: ''}</span
 					>{/if}
 				{#if sp && sp.sharedWith > 0}
 					<span data-testid="spoolman-shared"

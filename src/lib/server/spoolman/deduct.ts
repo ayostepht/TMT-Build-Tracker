@@ -156,7 +156,16 @@ async function syncLocked(
 		return { warning: e instanceof Error ? e.message : 'Invalid Spoolman address' };
 	}
 
-	await backfillFilamentIds(db, buildId, client);
+	// A legacy link gets its link time stamped here: never later than this run, so the run (and
+	// its later edits) still counts as after the link; older runs become pre-link.
+	const stampAt = new Date(
+		Math.min(
+			Date.now(),
+			runWhen?.createdAt ?? Date.now(),
+			runWhen ? Date.parse(`${runWhen.date}T00:00:00Z`) || Date.now() : Date.now()
+		)
+	);
+	await backfillFilamentIds(db, buildId, client, stampAt);
 	slots = loadSlots();
 	const deadline = Date.now() + LOCK_BUDGET_MS;
 	let entries = ledger.map((e) => [...e] as DeductionEntry);
