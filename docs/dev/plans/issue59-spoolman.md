@@ -3,9 +3,9 @@
 _Recovered 2026-11-16 from the previous orchestrator session. Rewrite in place as decisions
 change._
 
-Branch `feat/spoolman-filaments` (from `edge` 3420884), developed in its own worktree(s).
-**Nothing merges until 0.9.2 is on `main`** (maintainer, 2026-11-16); pull requests may be
-opened as drafts. Three stacked pull requests: (1) discoverability, filament link,
+Part 1 merged as #71 (2026-11-16, after 0.9.2 was on `main`). Parts 2 and 3 ship together
+as one pull request from `feat/spoolman-create` (maintainer, 2026-11-19). Originally three
+stacked pull requests: (1) discoverability, filament link,
 auto-advance, Spoolman stock, the "kept up to date by" workspace setting and pre-link
 prints; (2) adding a spool also creates the Spoolman spool (archive on remove); (3) create
 vendor/filament in Spoolman. The clickable prototype was approved ("Looks great").
@@ -66,3 +66,16 @@ vendor/filament in Spoolman. The clickable prototype was approved ("Looks great"
 - Next: security review; place `SpoolmanSlotLine` in FilamentTiles / wizard (app-shell) and
   SlotPanel (design-studio-ui) with screenshots; e2e spec + printers.spec on the shared mock;
   verifier; draft pull request (no merge before 0.9.2 is on `main`).
+
+## Maintainer answers (2026-11-19), parts 2 and 3
+
+- Adding a spool on a **linked** colour: the + comes back as "Add spool in Spoolman". It
+  creates a spool of the linked filament in Spoolman (weight; optional note), shows in the
+  colour's history, and stock keeps coming from Spoolman. Removing it asks "Also archive it in
+  Spoolman?". Unlinked colours keep today's app-only spools.
+- Creating vendors and filaments: in the link picker. When nothing matches, "Create in
+  Spoolman" with vendor, name, material, colour, density and spool weight prefilled from the
+  catalog (`resolveSlotOrigin` / `spoolmanDefaults`, editable); creates the vendor if missing,
+  then links the colour to the new filament. No separate Spoolman page.
+- Parts 2 and 3 in one pull request (r61).
+- Editors' page-load refresh stays unthrottled (maintainer, 2026-11-19).
