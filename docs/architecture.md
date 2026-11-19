@@ -797,7 +797,10 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   backup-and-upgrade, printers, environment, troubleshooting, phone-install, site-admin,
   slicer-export). A new env variable goes in `guides/environment.md`. Contributor docs:
   `CONTRIBUTING.md`, `SECURITY.md`, `.nvmrc` (22).
-- Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`). The preload
+- Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`). adapter-node 6.0.2+ honours
+  `ORIGIN`: the preload deletes an empty one and sets it to the forced origin (`PUBLIC_URL`,
+  then `BETTER_AUTH_URL`, then `ORIGIN`), so the two never disagree
+  (`src/lib/server/proxy-origin.test.ts`). The preload
   strips any inbound `x-tmt-forwarded-original` and sets it only when the client itself sent
   a forwarding header; `client-ip.ts` `shouldWarnUndeclaredProxy` reads only that marker for
   the one-time "reverse proxy" log hint (never for trust). `writeRateResponse` gets the host
