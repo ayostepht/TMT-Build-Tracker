@@ -438,6 +438,14 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   failed fetch only sets `error`. `SpoolmanFilamentPicker` / `SpoolmanSlotLine` are
   self-contained for FilamentTiles, SlotPanel and the wizard. `mock-spoolman.ts`
   (`startMockSpoolman()`) serves unit and e2e tests.
+  Parts 2/3 (`spoolman/create.ts`): create vendor (if missing) + filament then link
+  (`.../spoolman/create`, GET prefilled form from `resolveSlotOrigin`/`spoolmanDefaults`,
+  POST; an identical existing filament is reused), add a Spoolman spool to a linked colour
+  (`.../spoolman/stock` POST; `SpoolAdd.spoolmanSpoolId`, note → spool `comment`) and remove
+  it with an optional archive (`.../spoolman/stock/[addId]` DELETE `?archive=1`). Editors
+  only, under the lock, drafts refused before any outbound call; a spool created in
+  Spoolman but not recorded is archived best-effort. FilamentTiles shows "Add spool in
+  Spoolman" on linked colours and asks "Also archive it in Spoolman?" on remove.
 
 ## Design studio (`design-studio-ui`)
 
@@ -797,7 +805,10 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   backup-and-upgrade, printers, environment, troubleshooting, phone-install, site-admin,
   slicer-export). A new env variable goes in `guides/environment.md`. Contributor docs:
   `CONTRIBUTING.md`, `SECURITY.md`, `.nvmrc` (22).
-- Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`). The preload
+- Origins: see `CLAUDE.md` Stack (`scripts/proxy-origin.mjs`, `PUBLIC_URL`). adapter-node 6.0.2+ honours
+  `ORIGIN`: the preload deletes an empty one and sets it to the forced origin (`PUBLIC_URL`,
+  then `BETTER_AUTH_URL`, then `ORIGIN`), so the two never disagree
+  (`src/lib/server/proxy-origin.test.ts`). The preload
   strips any inbound `x-tmt-forwarded-original` and sets it only when the client itself sent
   a forwarding header; `client-ip.ts` `shouldWarnUndeclaredProxy` reads only that marker for
   the one-time "reverse proxy" log hint (never for trust). `writeRateResponse` gets the host

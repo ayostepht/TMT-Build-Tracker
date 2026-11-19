@@ -1,9 +1,12 @@
 <script lang="ts">
 	import {
+		createSpoolmanFilament,
 		linkSpoolmanFilament,
+		spoolmanCreateForm,
 		prelinkDeduct,
 		setSpoolmanSpool,
 		spoolmanSuggestions,
+		type SpoolmanCreateFormDto,
 		type SpoolmanLinkResultDto,
 		type SpoolmanSuggestionDto
 	} from '#lib/client/api.ts';
@@ -19,6 +22,9 @@
 	 * mode 'filament': suggestions first (best match, with why), a search over all of Spoolman's
 	 *   filaments. After linking, when prints were logged before the link, it asks whether to also
 	 *   subtract them from Spoolman (only offered when `keptBy` is 'app').
+	 *   "Create in Spoolman" (last option; editors only, the parent places the picker for editors):
+	 *   a form prefilled from the catalog (vendor, name, material, colour, density, weights) creates
+	 *   the vendor if missing and the filament, then links the slot like a normal link.
 	 * mode 'spool': the linked filament's spools, pick the one deductions start on.
 	 */
 	let {
@@ -55,6 +61,22 @@
 	let choice = $state<'current' | 'subtract'>('current');
 	// The apply took only part of the grams (Spoolman had less): keep the prompt open and say so.
 	let warning = $state('');
+	// The create form matched a filament Spoolman already had: say so instead of closing silently.
+	let reusedInfo = $state('');
+	// "Create in Spoolman" form.
+	let creating = $state(false);
+	let cform = $state<SpoolmanCreateFormDto | null>(null);
+	let cvendors = $state<string[]>([]);
+	let fVendor = $state('');
+	let fName = $state('');
+	let fMaterial = $state('');
+	let fHex = $state('#808080');
+	let fDensity = $state('');
+	let fDiameter = $state('');
+	let fWeight = $state('');
+	let fSpool = $state('');
+	let fExternal = $state<string | null>(null);
+	let vendorWarn = $state('');
 
 	$effect(() => {
 		void load();
@@ -110,6 +132,62 @@
 		}
 		busy = false;
 	}
+	async function openCreate() {
+		error = '';
+		busy = true;
+		try {
+			const r = await spoolmanCreateForm(buildId, role);
+			cform = r;
+			cvendors = r.vendors.map((v) => v.name);
+			fVendor = r.defaults.vendorName;
+			fName = r.defaults.name;
+			fMaterial = r.defaults.material;
+			fHex = r.defaults.colorHex;
+			fDensity = String(r.defaults.density);
+			fDiameter = String(r.defaults.diameter);
+			fWeight = String(r.defaults.weightG);
+			fSpool = String(r.defaults.spoolWeightG);
+			fExternal = r.defaults.externalId;
+			vendorWarn = r.error ? `Spoolman's vendors could not be loaded: ${r.error}` : '';
+			// Only now: the fields must be filled before the maker can type in them.
+			creating = true;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not load the form';
+		}
+		busy = false;
+	}
+	const vendorIsNew = $derived(
+		!!fVendor.trim() && !cvendors.some((v) => v.toLowerCase() === fVendor.trim().toLowerCase())
+	);
+	async function submitCreate(ev: SubmitEvent) {
+		ev.preventDefault();
+		busy = true;
+		error = '';
+		try {
+			const r = await createSpoolmanFilament(buildId, role, {
+				vendorName: fVendor.trim(),
+				name: fName.trim(),
+				material: fMaterial.trim(),
+				colorHex: fHex,
+				density: Number(fDensity),
+				diameter: Number(fDiameter),
+				weightG: Number(fWeight),
+				spoolWeightG: fSpool.trim() === '' ? null : Number(fSpool),
+				externalId: fExternal
+			});
+			creating = false;
+			await onchange?.();
+			if (r.reused)
+				reusedInfo = `Linked to existing Spoolman filament ${r.filament.vendor ? `${r.filament.vendor} ` : ''}${r.filament.name}${r.filament.material ? ` (${r.filament.material}` : ''}${r.filament.density != null ? `, ${r.filament.density} g/cm³` : ''}${r.filament.diameter != null ? `, ${r.filament.diameter} mm` : ''}${r.filament.material ? ')' : ''}. Nothing new was created.`;
+			if (r.preLinkLoggedG > 0) {
+				done = r;
+				choice = 'current';
+			} else if (!r.reused) onclose?.();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not create the filament';
+		}
+		busy = false;
+	}
 	async function confirmPrelink() {
 		busy = true;
 		error = '';
@@ -140,6 +218,9 @@
 </script>
 
 <div class="smp" data-testid="spoolman-picker">
+	{#if reusedInfo}
+		<p class="hint" role="status" data-testid="spoolman-create-reused">{reusedInfo}</p>
+	{/if}
 	{#if done}
 		<div class="pre" data-testid="spoolman-prelink">
 			<p>
@@ -179,6 +260,131 @@
 				{/if}
 			</div>
 		</div>
+	{:else if reusedInfo}
+		<div class="smp-row">
+			<button
+				class="btn primary"
+				type="button"
+				data-testid="create-reused-done"
+				onclick={() => onclose?.()}>Done</button
+			>
+		</div>
+	{:else if creating}
+		<form class="cf" onsubmit={submitCreate} data-testid="spoolman-create-form">
+			<p class="hint">
+				Creates the filament in Spoolman{vendorIsNew ? ' (and the new vendor)' : ''}, then links
+				this color to it. Values come from the filament catalog; check them against the spool.
+			</p>
+			{#if cform?.error}<p class="warn" role="status">{vendorWarn}</p>{/if}
+			<label class="f"
+				><span>Vendor</span>
+				<input
+					list="smp-vendors-{role}"
+					bind:value={fVendor}
+					required
+					maxlength="200"
+					autocomplete="off"
+					data-testid="create-vendor"
+				/>
+				<datalist id="smp-vendors-{role}">
+					{#each cvendors as v (v)}<option value={v}></option>{/each}
+				</datalist>
+				{#if vendorIsNew}<span class="note" data-testid="create-vendor-new"
+						>Not in Spoolman yet: it will be created.</span
+					>{/if}
+			</label>
+			<label class="f"
+				><span>Name</span>
+				<input bind:value={fName} required maxlength="200" data-testid="create-name" /></label
+			>
+			<div class="two">
+				<label class="f"
+					><span>Material</span>
+					<input
+						bind:value={fMaterial}
+						required
+						maxlength="60"
+						data-testid="create-material"
+					/></label
+				>
+				<label class="f"
+					><span>Color</span>
+					<span class="hexrow"
+						><input type="color" bind:value={fHex} aria-label="Color" data-testid="create-hex" />
+						<code>{fHex}</code></span
+					></label
+				>
+			</div>
+			<div class="two">
+				<label class="f"
+					><span>Density (g/cm³)</span>
+					<input
+						type="number"
+						step="0.01"
+						min="0.1"
+						max="10"
+						inputmode="decimal"
+						bind:value={fDensity}
+						required
+						data-testid="create-density"
+					/></label
+				>
+				<label class="f"
+					><span>Diameter (mm)</span>
+					<input
+						type="number"
+						step="0.01"
+						min="0.5"
+						max="5"
+						inputmode="decimal"
+						bind:value={fDiameter}
+						required
+						data-testid="create-diameter"
+					/></label
+				>
+			</div>
+			<div class="two">
+				<label class="f"
+					><span>Net weight (g)</span>
+					<input
+						type="number"
+						step="1"
+						min="1"
+						max="20000"
+						inputmode="numeric"
+						bind:value={fWeight}
+						required
+						data-testid="create-weight"
+					/></label
+				>
+				<label class="f"
+					><span>Empty spool (g)</span>
+					<input
+						type="number"
+						step="1"
+						min="0"
+						max="5000"
+						inputmode="numeric"
+						bind:value={fSpool}
+						data-testid="create-spool-weight"
+					/></label
+				>
+			</div>
+			<div class="smp-row">
+				<button class="btn primary" type="submit" disabled={busy} data-testid="create-submit"
+					>Create and link</button
+				>
+				<button
+					class="btn ghost"
+					type="button"
+					disabled={busy}
+					onclick={() => {
+						creating = false;
+						error = '';
+					}}>Back</button
+				>
+			</div>
+		</form>
 	{:else if mode === 'spool'}
 		<p class="hint">Deductions start on this spool. When it runs out, the next open one is used.</p>
 		<ul class="list">
@@ -269,9 +475,20 @@
 			{/if}
 		{/if}
 		{#if loading}<p class="muted">Loading…</p>{/if}
+		{#if !loading && !offline}
+			<div class="smp-row">
+				<button
+					class="btn ghost sm"
+					type="button"
+					disabled={busy}
+					data-testid="spoolman-create-open"
+					onclick={openCreate}>Create in Spoolman…</button
+				>
+			</div>
+		{/if}
 	{/if}
 	{#if error}<div class="error" role="alert" style="white-space:normal">{error}</div>{/if}
-	{#if onclose && !done}
+	{#if onclose && !done && !creating && !reusedInfo}
 		<div class="smp-row">
 			<button class="btn ghost sm" type="button" onclick={() => onclose?.()}>Cancel</button>
 		</div>
@@ -349,6 +566,43 @@
 	.num {
 		font-size: var(--fs-sm);
 		text-align: right;
+	}
+	.cf {
+		display: grid;
+		gap: var(--sp-4);
+	}
+	.f {
+		display: grid;
+		gap: 4px;
+		font-size: var(--fs-sm);
+		min-width: 0;
+	}
+	.f > span:first-child {
+		color: var(--muted);
+	}
+	.f input:not([type='color']) {
+		padding: 9px var(--sp-5);
+		border: 1px solid var(--field-line);
+		border-radius: var(--r-md);
+		background: var(--paper);
+		color: var(--ink);
+		font-size: var(--fs-base);
+		min-width: 0;
+	}
+	.two {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--sp-4);
+	}
+	.hexrow {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-4);
+		min-height: 40px;
+	}
+	.note {
+		font-size: var(--fs-xs);
+		color: var(--muted);
 	}
 	.pad {
 		padding: var(--sp-5);

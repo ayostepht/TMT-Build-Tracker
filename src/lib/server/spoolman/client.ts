@@ -189,6 +189,42 @@ export function fromCacheData(data: unknown): FilamentWithSpools | null {
 	return { ...f, spools };
 }
 
+export interface SpoolmanVendor {
+	id: number;
+	name: string;
+}
+
+/** Fields the app sends when it creates a filament in Spoolman (already validated by the caller). */
+export interface NewSpoolmanFilament {
+	name: string;
+	vendorId: number;
+	material: string;
+	/** `#rrggbb` */
+	colorHex: string;
+	density: number;
+	diameter: number;
+	weightG: number;
+	spoolWeightG: number | null;
+	externalId?: string | null;
+}
+
+/** Fields the app sends when it creates a spool in Spoolman. */
+export interface NewSpoolmanSpool {
+	filamentId: number;
+	/** Net filament weight on the new spool (g). */
+	initialG: number;
+	/** Empty spool weight (g); omitted = the filament's. */
+	spoolWeightG?: number | null;
+	comment?: string | null;
+}
+
+export function parseVendor(raw: unknown): SpoolmanVendor | null {
+	if (!isObj(raw) || typeof raw.id !== 'number' || !Number.isInteger(raw.id) || raw.id < 1)
+		return null;
+	const name = text(raw.name);
+	return name ? { id: raw.id, name } : null;
+}
+
 export class SpoolmanClient {
 	readonly base: string;
 	constructor(
@@ -322,5 +358,59 @@ export class SpoolmanClient {
 		const sp = await this.getSpool(id);
 		const used = Math.max(0, (sp.usedG ?? 0) - grams);
 		await this.req('PATCH', `/spool/${id}`, { used_weight: Math.round(used * 10) / 10 });
+	}
+
+	async listVendors(): Promise<SpoolmanVendor[]> {
+		const j = await this.req('GET', '/vendor');
+		if (!Array.isArray(j) || j.length > MAX_LIST)
+			throw new SpoolmanError('Spoolman sent something unexpected.');
+		return j.map(parseVendor).filter((x): x is SpoolmanVendor => !!x);
+	}
+
+	async createVendor(name: string): Promise<SpoolmanVendor> {
+		const v = parseVendor(await this.req('POST', '/vendor', { name }));
+		if (!v) throw new SpoolmanError('Spoolman sent something unexpected.');
+		return v;
+	}
+
+	/** `POST /filament`; the answer must be the record that was asked for. */
+	async createFilament(f: NewSpoolmanFilament): Promise<SpoolmanFilament> {
+		const made = parseFilament(
+			await this.req('POST', '/filament', {
+				name: f.name,
+				vendor_id: f.vendorId,
+				material: f.material,
+				color_hex: f.colorHex.replace(/^#/, ''),
+				density: f.density,
+				diameter: f.diameter,
+				weight: f.weightG,
+				...(f.spoolWeightG != null && f.spoolWeightG > 0 ? { spool_weight: f.spoolWeightG } : {}),
+				...(f.externalId ? { external_id: f.externalId } : {})
+			})
+		);
+		if (!made) throw new SpoolmanError('Spoolman sent something unexpected.');
+		return made;
+	}
+
+	/** `POST /spool`; returns the new spool's stock numbers and filament. */
+	async createSpool(
+		sp: NewSpoolmanSpool
+	): Promise<{ stock: SpoolmanSpoolStock; filamentId: number | null }> {
+		const raw = await this.req('POST', '/spool', {
+			filament_id: sp.filamentId,
+			initial_weight: sp.initialG,
+			...(sp.spoolWeightG != null && sp.spoolWeightG > 0 ? { spool_weight: sp.spoolWeightG } : {}),
+			...(sp.comment ? { comment: sp.comment } : {})
+		});
+		const stock = parseSpoolStock(raw);
+		const summary = toSpoolSummary(raw);
+		if (!stock || !summary) throw new SpoolmanError('Spoolman sent something unexpected.');
+		return { stock, filamentId: summary.filamentId };
+	}
+
+	/** Archive (or restore) a spool: `PATCH /spool/{id}` with `archived`. Its weight and history stay. */
+	async setArchived(id: number, archived: boolean): Promise<void> {
+		const sp = parseSpoolStock(await this.req('PATCH', `/spool/${id}`, { archived }));
+		if (!sp || sp.id !== id) throw new SpoolmanError('Spoolman sent something unexpected.');
 	}
 }
