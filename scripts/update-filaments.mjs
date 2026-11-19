@@ -28,6 +28,32 @@ function hex(v) {
 	return m ? `#${m[1].toLowerCase()}` : null;
 }
 
+/** Most common value of `key` over the colors (ties: the smaller value), or undefined. */
+function modeOf(colors, key) {
+	const n = new Map();
+	for (const c of colors) if (c[key] !== undefined) n.set(c[key], (n.get(c[key]) ?? 0) + 1);
+	let best;
+	for (const [v, k] of n) if (!best || k > best[1] || (k === best[1] && v < best[0])) best = [v, k];
+	return best?.[0];
+}
+
+/**
+ * Keeps the file small: density and spool weight are almost always the same for every color of a
+ * brand's material, so the most common value moves to the material and only colors that differ keep
+ * their own. Effective value of a color = `color.x ?? material.x` (see `effectiveOf` in index.ts).
+ */
+function hoistDefaults(material, colors) {
+	const out = { material };
+	for (const key of ['density', 'spoolWeightG']) {
+		const v = modeOf(colors, key);
+		if (v === undefined) continue;
+		out[key] = v;
+		for (const c of colors) if (c[key] === v) delete c[key];
+	}
+	out.colors = colors;
+	return out;
+}
+
 /**
  * Normalise the SpoolmanDB array (one row per brand/material/color/size) into
  * the nested catalog. Only 1.75 mm rows are kept, duplicates by
@@ -50,6 +76,10 @@ export function normalise(rows, { fetchedAt = new Date().toISOString() } = {}) {
 		if (r.translucent) color.translucent = true;
 		if (r.glow) color.glow = true;
 		if (Number.isFinite(r.weight) && r.weight > 0 && r.weight !== 1000) color.weightG = r.weight;
+		// Spoolman suggestions: SpoolmanDB id, density (g/cm3) and empty-spool weight (g), kept as given.
+		if (typeof r.id === 'string' && r.id.trim()) color.sdbId = r.id.trim();
+		if (Number.isFinite(r.density) && r.density > 0) color.density = r.density;
+		if (Number.isFinite(r.spool_weight) && r.spool_weight > 0) color.spoolWeightG = r.spool_weight;
 		const mats = brands.get(brand) ?? new Map();
 		brands.set(brand, mats);
 		const cols = mats.get(material) ?? new Map();
@@ -62,10 +92,12 @@ export function normalise(rows, { fetchedAt = new Date().toISOString() } = {}) {
 		fetchedAt,
 		brands: [...brands.keys()].sort(cmp).map((name) => ({
 			name,
-			materials: [...brands.get(name).keys()].sort(cmp).map((material) => ({
-				material,
-				colors: [...brands.get(name).get(material).values()].sort((a, b) => cmp(a.name, b.name))
-			}))
+			materials: [...brands.get(name).keys()].sort(cmp).map((material) =>
+				hoistDefaults(
+					material,
+					[...brands.get(name).get(material).values()].sort((a, b) => cmp(a.name, b.name))
+				)
+			)
 		}))
 	};
 }
@@ -86,15 +118,19 @@ export function mergeSupplement(catalog, supplement) {
 	const brands = new Map();
 	for (const b of catalog.brands) {
 		const mats = new Map();
-		for (const m of b.materials)
-			mats.set(lc(m.material), { material: m.material, colors: [...m.colors] });
+		for (const m of b.materials) mats.set(lc(m.material), { ...m, colors: [...m.colors] });
 		brands.set(lc(b.name), { name: b.name, mats });
 	}
 	for (const v of vendors) {
 		const brand = brands.get(lc(v.name)) ?? { name: v.name, mats: new Map() };
 		brands.set(lc(v.name), brand);
 		for (const m of v.materials) {
-			const mat = brand.mats.get(lc(m.material)) ?? { material: m.material, colors: [] };
+			const mat = brand.mats.get(lc(m.material)) ?? {
+				material: m.material,
+				...(m.density > 0 ? { density: m.density } : {}),
+				...(m.spoolWeightG > 0 ? { spoolWeightG: m.spoolWeightG } : {}),
+				colors: []
+			};
 			brand.mats.set(lc(m.material), mat);
 			const have = new Set(mat.colors.map((c) => lc(c.name)));
 			for (const c of m.colors ?? []) {
@@ -117,7 +153,7 @@ export function mergeSupplement(catalog, supplement) {
 				materials: [...b.mats.values()]
 					.sort((x, y) => cmp(x.material, y.material))
 					.map((m) => ({
-						material: m.material,
+						...m,
 						colors: [...m.colors].sort((x, y) => cmp(x.name, y.name))
 					}))
 			}))

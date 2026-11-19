@@ -26,6 +26,8 @@ export class ApiError extends Error {
 	status: number;
 	code: string | null;
 	body: Record<string, unknown>;
+	/** Seconds from a `Retry-After` header (429), else null. */
+	retryAfter: number | null = null;
 	constructor(message: string, status: number, body: Record<string, unknown> = {}) {
 		super(message);
 		this.name = 'ApiError';
@@ -53,12 +55,16 @@ async function call<T = Record<string, never>>(
 	}
 	// The session is gone: drop cached private kit models (fire and forget, never throws).
 	if (res.status === 401 && url.startsWith('/api/')) void clearPrivateCaches();
-	if (!res.ok)
-		throw new ApiError(
+	if (!res.ok) {
+		const err = new ApiError(
 			typeof data.error === 'string' ? data.error : `Request failed (${res.status})`,
 			res.status,
 			data
 		);
+		const ra = Number(res.headers?.get('retry-after'));
+		if (Number.isFinite(ra) && ra > 0) err.retryAfter = ra;
+		throw err;
+	}
 	return data as T;
 }
 
@@ -714,6 +720,8 @@ export interface SpoolDto {
 export interface OrgSettingsDto {
 	spoolmanUrl: string | null;
 	spoolmanAutoDeduct: boolean;
+	/** Who keeps Spoolman's weights up to date: 'app' (this app deducts logged grams) or 'other'. */
+	spoolmanKeptBy: 'app' | 'other';
 	autoLogPrints: boolean;
 }
 
@@ -823,8 +831,138 @@ export const buildSpoolman = (buildId: string, all = false) =>
 		autoDeduct: boolean;
 		linked: Record<string, SpoolDto | null>;
 		spools: SpoolDto[];
+		/** The server re-fetched linked filaments and their cached stock differs from before. */
+		changed?: boolean;
 		error?: string;
 	}>('GET', `${b(buildId)}/spoolman${all ? '?all=1' : ''}`);
+export interface SpoolmanSpoolStockDto {
+	id: number;
+	remainingG: number | null;
+	initialG: number | null;
+	usedG: number | null;
+	archived: boolean;
+	location: string | null;
+}
+export interface SpoolmanFilamentDto {
+	id: number;
+	name: string;
+	vendor: string | null;
+	material: string | null;
+	colorHex: string | null;
+	density: number | null;
+	diameter: number | null;
+	weightG: number | null;
+	spoolWeightG: number | null;
+	externalId: string | null;
+	spools: SpoolmanSpoolStockDto[];
+}
+export interface SpoolmanSuggestionDto {
+	filament: SpoolmanFilamentDto;
+	score: number;
+	level: 'exact' | 'likely' | 'possible' | 'other';
+	reasons: string[];
+	openSpoolCount: number;
+}
+export interface SpoolmanSuggestionsDto {
+	configured: boolean;
+	offline: boolean;
+	error?: string;
+	suggestions: SpoolmanSuggestionDto[];
+}
+export interface SpoolmanLinkResultDto {
+	linked: boolean;
+	filamentId: number | null;
+	filamentName: string | null;
+	spoolId: number | null;
+	/** Grams logged on this build for the slot before it was linked. */
+	preLinkLoggedG: number;
+}
+const sm = (buildId: string, role: string) =>
+	`${b(buildId)}/filaments/${encodeURIComponent(role)}/spoolman`;
+/** Spoolman filaments ranked for a slot. */
+export const spoolmanSuggestions = (buildId: string, role: string) =>
+	call<SpoolmanSuggestionsDto>('GET', sm(buildId, role));
+/** Link a slot to a Spoolman filament, or unlink it with null. */
+export const linkSpoolmanFilament = (buildId: string, role: string, filamentId: number | null) =>
+	call<SpoolmanLinkResultDto>('PUT', sm(buildId, role), { filamentId });
+/** Choose (null clears) the spool of the linked filament that deductions start on. */
+export const setSpoolmanSpool = (buildId: string, role: string, spoolId: number | null) =>
+	call<{ spoolId: number | null }>('PUT', `${sm(buildId, role)}/spool`, { spoolId });
+/** Subtract the grams logged before the link from Spoolman, once. */
+export const prelinkDeduct = (buildId: string, role: string) =>
+	call<{ grams: number; warning?: string }>('POST', `${sm(buildId, role)}/prelink`);
+/** Give those grams back. */
+export const prelinkUndo = (buildId: string, role: string) =>
+	call<{ grams: number; warning?: string }>('DELETE', `${sm(buildId, role)}/prelink`);
+export interface SpoolmanCreateFormDto {
+	defaults: {
+		vendorName: string;
+		name: string;
+		material: string;
+		colorHex: string;
+		density: number;
+		diameter: number;
+		weightG: number;
+		spoolWeightG: number;
+		externalId: string | null;
+		source: 'catalog' | 'material' | 'generic';
+	};
+	vendors: { id: number; name: string }[];
+	/** Spoolman could not be asked for its vendors. */
+	error?: string;
+}
+export interface SpoolmanCreateInput {
+	vendorName: string;
+	name: string;
+	material: string;
+	colorHex: string;
+	density: number;
+	weightG: number;
+	spoolWeightG?: number | null;
+	diameter?: number;
+	externalId?: string | null;
+}
+/** Prefill and vendors for "Create in Spoolman" (editors). */
+export const spoolmanCreateForm = (buildId: string, role: string) =>
+	call<SpoolmanCreateFormDto>('GET', `${sm(buildId, role)}/create`);
+/** Create the vendor (if missing) and filament in Spoolman and link the slot to it (editors). */
+export const createSpoolmanFilament = (buildId: string, role: string, input: SpoolmanCreateInput) =>
+	call<
+		SpoolmanLinkResultDto & {
+			vendorId: number;
+			vendorCreated: boolean;
+			reused: boolean;
+			filament: {
+				id: number;
+				name: string;
+				vendor: string | null;
+				material: string | null;
+				colorHex: string | null;
+				density: number | null;
+				diameter: number | null;
+				weightG: number | null;
+				spoolWeightG: number | null;
+			};
+		}
+	>('POST', `${sm(buildId, role)}/create`, input);
+/** Add a spool of the linked filament in Spoolman (net kg, optional note) and record it in the colour's history. */
+export const addSpoolmanSpool = (buildId: string, role: string, kg: number, note?: string) =>
+	call<{ id: string; spoolmanSpoolId: number; current: boolean }>(
+		'POST',
+		`${sm(buildId, role)}/stock`,
+		{ kg, note }
+	);
+/** Remove a history entry that has a Spoolman spool; `archive` also archives the spool in Spoolman. */
+export const removeSpoolmanSpoolAdd = (
+	buildId: string,
+	role: string,
+	addId: string,
+	archive: boolean
+) =>
+	call<{ archived?: boolean; warning?: string }>(
+		'DELETE',
+		`${sm(buildId, role)}/stock/${encodeURIComponent(addId)}${archive ? '?archive=1' : ''}`
+	);
 export const linkFilamentSpool = (
 	buildId: string,
 	role: string,

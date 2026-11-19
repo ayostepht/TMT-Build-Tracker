@@ -1,6 +1,7 @@
 import { building } from '$app/env';
-import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
+import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks';
 import type { RequestEvent } from '@sveltejs/kit';
+import { safeErrorText } from '#lib/server/api.ts';
 import { getAuth } from '#lib/server/auth-instance.ts';
 import { startup } from '#lib/server/startup.ts';
 import { compressResponse } from '#lib/server/compress.ts';
@@ -102,6 +103,17 @@ const handleLimited = async (event: RequestEvent, resolve: Parameters<Handle>[0]
 	);
 	if (limited) return limited;
 	return compressResponse(event.request, await resolve(event));
+};
+
+/**
+ * Unexpected errors from page loads, form actions and endpoints that do not use `respond()`.
+ * SvelteKit's default logs the raw error, and a database error carries its bound query values.
+ * Log the safe text only. Returning nothing keeps SvelteKit's generic user-facing message
+ * (500 "Internal Error"); app errors (`error(...)`) and framework errors (404) are intended
+ * responses and are not logged.
+ */
+export const handleError: HandleServerError = ({ error, kind }) => {
+	if (kind === 'unknown') console.error('[tmt] unhandled error', safeErrorText(error));
 };
 
 export const handle: Handle = async (input) => {

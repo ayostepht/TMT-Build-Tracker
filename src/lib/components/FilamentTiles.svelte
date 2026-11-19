@@ -8,11 +8,18 @@
 		timeLeftText,
 		stockKg
 	} from '#lib/domain/index.ts';
-	import { addSpool, removeSpoolAdd } from '#lib/client/api.ts';
+	import {
+		addSpool,
+		addSpoolmanSpool,
+		removeSpoolAdd,
+		removeSpoolmanSpoolAdd
+	} from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import Swatch from './Swatch.svelte';
 	import SpoolRemaining from './SpoolRemaining.svelte';
+	import SpoolmanSlotLine from './SpoolmanSlotLine.svelte';
 
 	const ctx = getBuildCtx();
 	const stats = $derived(filamentStats(ctx.view));
@@ -32,6 +39,14 @@
 		mq.addEventListener('change', on);
 		return () => mq.removeEventListener('change', on);
 	});
+	// Spoolman (#59): each colour gets a line; "Connect Spoolman" only for editors of a workspace without it.
+	const spoolmanOn = $derived(ctx.view.spoolman?.configured ?? false);
+	const integrationsHref = $derived.by(() => {
+		const slug = (page.data as { teams?: { id: string; slug: string }[] }).teams?.find(
+			(t) => t.id === ctx.view.build.organizationId
+		)?.slug;
+		return ctx.canEdit && slug ? resolve('/(app)/teams/[slug]/integrations', { slug }) : null;
+	});
 	const printUrl = $derived(resolve('/(app)/builds/[id]/print', { id: ctx.id }));
 	const settingsUrl = $derived(resolve('/(app)/builds/[id]/settings', { id: ctx.id }));
 	const nameOf = (slug: string) => ctx.view.allParts.find((p) => p.slug === slug)?.name ?? slug;
@@ -44,6 +59,8 @@
 	let note = $state('');
 	let formError = $state('');
 	let busy = $state(false);
+	/** Spoolman said something worth showing after a remove (e.g. the archive did not go through). */
+	let rmWarning = $state('');
 
 	function openForm(role: string) {
 		formRole = role;
@@ -51,15 +68,16 @@
 		note = '';
 		formError = '';
 	}
-	async function saveAdd(role: string) {
+	async function saveAdd(role: string, inSpoolman: boolean) {
 		const v = Math.round((Number(kg) || 0) * 100) / 100;
 		if (!(v >= 0.01 && v <= 99)) {
 			formError = 'Enter a weight from 0.01 to 99 kg.';
 			return;
 		}
 		busy = true;
+		const n = note.trim() || undefined;
 		const ok = await ctx.act(() =>
-			addSpool(ctx.id, role, { kg: v, note: note.trim() || undefined })
+			inSpoolman ? addSpoolmanSpool(ctx.id, role, v, n) : addSpool(ctx.id, role, { kg: v, note: n })
 		);
 		busy = false;
 		if (ok) {
@@ -67,9 +85,18 @@
 			histOpen[role] = true;
 		}
 	}
-	async function removeAdd(role: string, id: string) {
-		confirmId = null;
-		await ctx.act(() => removeSpoolAdd(ctx.id, role, id));
+	/** `archive` is undefined for an app-only spool; a Spoolman spool asks first and passes the answer. */
+	async function removeAdd(role: string, id: string, archive?: boolean) {
+		rmWarning = '';
+		busy = true;
+		const ok = await ctx.act(async () => {
+			if (archive === undefined) return removeSpoolAdd(ctx.id, role, id);
+			const r = await removeSpoolmanSpoolAdd(ctx.id, role, id, archive);
+			if (r?.warning) rmWarning = r.warning;
+		});
+		busy = false;
+		// A failed archive (Spoolman down) keeps the entry and the question so they can retry or answer No.
+		if (ok) confirmId = null;
 	}
 	const dateOf = (ms: number) =>
 		new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -88,7 +115,10 @@
 	<ul class="ft-list">
 		{#each stats as s (s.role)}
 			{@const f = ctx.filament(s.role)}
-			{@const spare = s.haveGrams - s.used - s.need}
+			{@const spare = s.spareG}
+			{@const linked = s.haveSource !== 'app'}
+			{@const spoolmanLinked = f?.spoolman?.filamentId != null}
+			{@const unknownStock = s.haveSource === 'unknown'}
 			{@const scale = Math.max(s.haveGrams, s.used + s.need, 1)}
 			{@const isOpen = openRole === s.role}
 			{@const more = Math.ceil(-spare / 1000)}
@@ -110,12 +140,13 @@
 					<span
 						class="ds-badge ft-verdict"
 						data-testid="filament-spare"
-						class:ds-badge--ok={spare >= 0}
-						class:ds-badge--bad={spare < 0}
-						>{#if spare >= 0}{s.unknownParts.length ? '≤ ' : ''}{fmt(spare)} g spare{:else}short {s
-								.unknownParts.length
-								? '≥ '
-								: ''}{fmt(-spare)} g{/if}</span
+						class:ds-badge--ok={!unknownStock && spare >= 0}
+						class:ds-badge--bad={!unknownStock && spare < 0}
+						>{#if unknownStock}spare unknown{:else if spare >= 0}{s.unknownParts.length
+								? '≤ '
+								: ''}{fmt(spare)} g spare{:else}short {s.unknownParts.length ? '≥ ' : ''}{fmt(
+								-spare
+							)} g{/if}</span
 					>
 				{/snippet}
 				{#snippet gap()}
@@ -151,6 +182,20 @@
 							></span>{/if}
 					</span>
 				{/snippet}
+				{#snippet spoolmanLine()}
+					{#if spoolmanOn}
+						<div class="ft-sm" data-testid="filament-spoolman">
+							<SpoolmanSlotLine
+								buildId={ctx.id}
+								slot={{ key: s.role, name: filLabel(f, s.role), spoolman: f?.spoolman }}
+								workspaceConfigured={spoolmanOn}
+								canEdit={canAdd}
+								{integrationsHref}
+								onchange={() => ctx.refresh()}
+							/>
+						</div>
+					{/if}
+				{/snippet}
 				{#snippet stock()}
 					<span class="ft-stock">
 						<button
@@ -161,17 +206,28 @@
 							aria-controls="ft-hist-{s.role}"
 							onclick={() => (histOpen[s.role] = !hist)}
 						>
-							<span class="ft-total-n">{fmtSpools(stockKg(f ?? { spools: 0 }))} kg</span>
-							<span class="sr-only"> of spools, show history</span>
+							<span class="ft-total-n"
+								>{#if linked}{unknownStock ? '? g' : `${fmt(s.haveGrams)} g`}{:else}{fmtSpools(
+										stockKg(f ?? { spools: 0 })
+									)} kg{/if}</span
+							>
+							<span class="sr-only">
+								{linked
+									? 'in Spoolman, show the earlier spool history'
+									: 'of spools, show history'}</span
+							>
 							<span class="ft-caret" aria-hidden="true">{hist ? '▴' : '▾'}</span>
 						</button>
 						{#if canAdd}
 							<button
 								type="button"
 								class="btn sm ft-plus"
-								data-testid="spool-add"
+								data-testid={spoolmanLinked ? 'spoolman-add' : 'spool-add'}
 								aria-expanded={formRole === s.role}
-								aria-label="Add a spool of {filLabel(f, s.role)}"
+								aria-label={spoolmanLinked
+									? `Add spool in Spoolman for ${filLabel(f, s.role)}`
+									: `Add a spool of ${filLabel(f, s.role)}`}
+								title={spoolmanLinked ? 'Add spool in Spoolman' : undefined}
 								onclick={() => (formRole === s.role ? (formRole = null) : openForm(s.role))}
 								>+</button
 							>
@@ -182,12 +238,15 @@
 					{#if formRole === s.role && canAdd}
 						<form
 							class="ft-form"
-							data-testid="spool-form"
+							data-testid={spoolmanLinked ? 'spoolman-add-form' : 'spool-form'}
 							onsubmit={(e) => {
 								e.preventDefault();
-								saveAdd(s.role);
+								saveAdd(s.role, spoolmanLinked);
 							}}
 						>
+							{#if spoolmanLinked}
+								<span class="ft-f-title">Add spool in Spoolman</span>
+							{/if}
 							<label class="ft-f"
 								>Weight (kg)
 								<input
@@ -215,7 +274,7 @@
 									type="submit"
 									class="btn primary sm"
 									data-testid="spool-save"
-									disabled={busy}>Save</button
+									disabled={busy}>{spoolmanLinked ? 'Add in Spoolman' : 'Save'}</button
 								>
 								<button
 									type="button"
@@ -229,6 +288,17 @@
 					{/if}
 					{#if hist}
 						<ul class="ft-hist" id="ft-hist-{s.role}" data-testid="spool-history">
+							{#if rmWarning}
+								<li class="ft-h-note" role="status" data-testid="spool-remove-warning">
+									{rmWarning}
+								</li>
+							{/if}
+							{#if linked}
+								<li class="ft-h-note" data-testid="spool-hidden-note">
+									Linked to Spoolman: these spools are not counted while the link is on. Unlink to
+									use them again.
+								</li>
+							{/if}
 							<li data-testid="spool-start">
 								<span class="ft-h-main">Starting spools <b>{fmtSpools(f?.spools ?? 0)} kg</b></span>
 								{#if ctx.canEdit}<a class="ft-h-link" href={settingsUrl}>Change in Settings</a>{/if}
@@ -236,15 +306,47 @@
 							{#each adds as a (a.id)}
 								<li data-testid="spool-add-row">
 									<span class="ft-h-main"
-										>Added <b>{fmtSpools(a.kg)} kg</b>
+										>Added <b>{fmtSpools(a.kg)} kg</b>{#if a.spoolmanSpoolId != null}
+											<span class="ft-h-sm" data-testid="spool-spoolman-tag"
+												>Spoolman spool #{a.spoolmanSpoolId}</span
+											>{/if}
 										<span class="ft-h-meta"
 											>{dateOf(a.at)}{a.userName ? ` · ${a.userName}` : ''}{a.note
 												? ` · ${a.note}`
 												: ''}</span
 										></span
 									>
-									{#if canAdd}
-										{#if confirmId === a.id}
+									{#if canAdd && (!linked || a.spoolmanSpoolId != null)}
+										{#if confirmId === a.id && a.spoolmanSpoolId != null}
+											<span
+												class="ft-h-confirm"
+												role="group"
+												aria-label="Also archive it in Spoolman?"
+												data-testid="spool-archive-question"
+											>
+												<span>Also archive it in Spoolman?</span>
+												<button
+													type="button"
+													class="btn danger sm"
+													data-testid="spool-archive-yes"
+													disabled={busy}
+													onclick={() => removeAdd(s.role, a.id, true)}>Yes</button
+												>
+												<button
+													type="button"
+													class="btn ghost sm"
+													data-testid="spool-archive-no"
+													disabled={busy}
+													onclick={() => removeAdd(s.role, a.id, false)}>No</button
+												>
+												<button
+													type="button"
+													class="btn ghost sm"
+													data-testid="spool-archive-cancel"
+													onclick={() => (confirmId = null)}>Cancel</button
+												>
+											</span>
+										{:else if confirmId === a.id}
 											<span class="ft-h-confirm" role="group" aria-label="Remove this spool?">
 												<span>Remove?</span>
 												<button
@@ -266,7 +368,10 @@
 												class="btn ghost sm"
 												data-testid="spool-remove"
 												aria-label="Remove the {fmtSpools(a.kg)} kg spool added {dateOf(a.at)}"
-												onclick={() => (confirmId = a.id)}>Remove</button
+												onclick={() => {
+													rmWarning = '';
+													confirmId = a.id;
+												}}>Remove</button
 											>
 										{/if}
 									{/if}
@@ -290,10 +395,14 @@
 					</div>
 					<div class="ft-sub">
 						{@render gap()}
-						<SpoolRemaining role={s.role} />
-						{#if spare < 0}<span class="ft-more">Get {more} more spool{more > 1 ? 's' : ''}.</span
+						{#if !f?.spoolman?.filamentId}<SpoolRemaining role={s.role} />{/if}
+						{#if spare < 0 && !unknownStock}<span class="ft-more"
+								>{linked
+									? 'Short of filament.'
+									: `Get ${more} more spool${more > 1 ? 's' : ''}.`}</span
 							>{/if}
 					</div>
+					{@render spoolmanLine()}
 					{#if formRole === s.role || hist}<div class="ft-panel">{@render panel()}</div>{/if}
 				{:else}
 					<button
@@ -338,15 +447,28 @@
 						<div class="ft-edit" id="ft-edit-{s.role}">
 							{@render gap()}
 							{@render stock()}
-							{#if spare < 0}<span class="ft-more">Get {more} more spool{more > 1 ? 's' : ''}.</span
+							{#if spare < 0 && !unknownStock}<span class="ft-more"
+									>{linked
+										? 'Short of filament.'
+										: `Get ${more} more spool${more > 1 ? 's' : ''}.`}</span
 								>{/if}
-							<SpoolRemaining role={s.role} />
+							{#if !f?.spoolman?.filamentId}<SpoolRemaining role={s.role} />{/if}
+							{@render spoolmanLine()}
 							<div class="ft-panel ft-panel-m">{@render panel()}</div>
 						</div>
 					{/if}
 				{/if}
 			</li>
 		{/each}
+
+		{#if !spoolmanOn && integrationsHref && stats.length}
+			<li class="ft-row ft-sm-off" data-testid="spoolman-line-off">
+				<p class="muted">
+					Track these filaments' grams in Spoolman.
+					<a href={integrationsHref}>Connect Spoolman</a>
+				</p>
+			</li>
+		{/if}
 
 		<li class="ft-row ft-time" data-testid="filament-tile">
 			<div class="ft-timehead">
@@ -534,6 +656,26 @@
 	.ft-edit .ft-gap {
 		flex-basis: 100%;
 	}
+	.ft-sm {
+		padding: 4px var(--sp-5) 10px;
+		min-width: 0;
+	}
+	.ft-sm-off p {
+		margin: 0;
+		padding: 8px var(--sp-5);
+		font-size: var(--fs-sm);
+	}
+	.ft-sm :global(.sl) {
+		justify-items: start;
+	}
+	.ft-edit .ft-sm {
+		flex-basis: 100%;
+		padding: 0;
+	}
+	.ft-hist .ft-h-note {
+		color: var(--muted);
+		font-size: var(--fs-xs);
+	}
 	.ft-more {
 		font-size: var(--fs-sm);
 		color: var(--muted);
@@ -678,8 +820,20 @@
 	}
 	.ft-h-confirm {
 		display: inline-flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--sp-3);
+	}
+	.ft-h-sm {
+		margin-left: var(--sp-3);
+		color: var(--muted);
+		font-size: var(--fs-xs);
+		white-space: nowrap;
+	}
+	.ft-f-title {
+		flex: 1 0 100%;
+		font-weight: 600;
+		font-size: var(--fs-sm);
 	}
 	.ft-h-link {
 		color: var(--ink);
@@ -719,6 +873,9 @@
 		.ft-wide .ft-total {
 			min-width: 9ch;
 			justify-content: flex-end;
+		}
+		.ft-sm {
+			padding: 0 var(--sp-6) 10px;
 		}
 		.ft-sub:has(> *) {
 			display: flex;

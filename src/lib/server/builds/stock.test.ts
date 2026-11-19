@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { openDb, runMigrations, type Db } from '../db';
-import { activity, member, organization, templates, user } from '../db/schema';
+import { activity, buildFilaments, member, organization, templates, user } from '../db/schema';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { addSpool, MAX_SPOOL_ADDS, removeSpoolAdd, updateFilament } from './actions';
@@ -53,6 +53,26 @@ const acts = (id: string, kind: string) =>
 		.filter((a) => a.kind === kind);
 
 describe('spool adds', () => {
+	it('view carries spoolmanSpoolId only for Spoolman-added spools', () => {
+		const id = mk();
+		const key = view(id).filaments[0].key;
+		addSpool(db, id, 'editor', key, { kg: 1 });
+		const row = db.select().from(buildFilaments).where(eq(buildFilaments.buildId, id)).all()[0];
+		db.update(buildFilaments)
+			.set({
+				spoolAdds: [
+					...row.spoolAdds,
+					{ id: 'sm1', kg: 1, at: 1, userId: null, spoolmanSpoolId: 12 }
+				]
+			})
+			.where(and(eq(buildFilaments.buildId, id), eq(buildFilaments.roleKey, row.roleKey)))
+			.run();
+		const adds = view(id).filaments.find((f) => f.key === row.roleKey)!.spoolAdds!;
+		expect(adds.find((a) => a.id === 'sm1')!.spoolmanSpoolId).toBe(12);
+		const app = adds.find((a) => a.id !== 'sm1')!;
+		expect('spoolmanSpoolId' in app).toBe(false);
+	});
+
 	it('adds with a date, user and note; stock is start + adds', () => {
 		const id = mk();
 		const f0 = view(id).filaments[0];

@@ -1,5 +1,4 @@
-import { createServer, type Server } from 'node:http';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { addRun, deleteRun, linkSpool, updateRun, undoRun } from '../builds/actions';
 import { createBuild } from '../builds/create';
@@ -11,78 +10,37 @@ import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { normalizeSpoolmanUrl, SpoolmanClient, SpoolmanError } from './client';
 import { syncRunDeduction } from './deduct';
+import { startMockSpoolman, type MockSpoolman } from './mock-spoolman';
 
-interface Spool {
-	id: number;
-	used_weight: number;
-	initial_weight: number;
-	remaining_weight: number;
-	filament: { name: string; material: string; color_hex: string; vendor: { name: string } };
-}
-
-let srv: Server;
+let mock: MockSpoolman;
 let base = '';
-let spools: Map<number, Spool>;
-let calls: string[];
-let fail = false;
-
-beforeEach(async () => {
-	spools = new Map([
-		[
-			1,
-			{
-				id: 1,
-				used_weight: 100,
-				initial_weight: 1000,
-				remaining_weight: 900,
-				filament: {
-					name: 'Overture Blue',
-					material: 'PETG',
-					color_hex: '2B3F9E',
-					vendor: { name: 'Overture' }
-				}
-			}
-		],
-		[
-			2,
-			{
-				id: 2,
-				used_weight: 0,
-				initial_weight: 1000,
-				remaining_weight: 1000,
-				filament: { name: 'Black', material: 'TPU', color_hex: '111111', vendor: { name: 'X' } }
-			}
-		]
-	]);
-	calls = [];
-	fail = false;
-	srv = createServer((req, res) => {
-		let body = '';
-		req.on('data', (c) => (body += c));
-		req.on('end', () => {
-			calls.push(`${req.method} ${req.url} ${body}`);
-			res.setHeader('content-type', 'application/json');
-			if (fail) return res.writeHead(500).end('{"message":"boom"}');
-			const m = /^\/api\/v1\/spool\/(\d+)(\/use)?$/.exec(req.url ?? '');
-			if (req.url === '/api/v1/info') return res.end('{"version":"0.22.1"}');
-			if ((req.url ?? '').startsWith('/api/v1/spool?'))
-				return res.end(JSON.stringify([...spools.values()]));
-			if (m) {
-				const s = spools.get(Number(m[1]));
-				if (!s) return res.writeHead(404).end('{}');
-				if (m[2] && req.method === 'PUT') {
-					s.used_weight += JSON.parse(body).use_weight;
-				} else if (req.method === 'PATCH') s.used_weight = JSON.parse(body).used_weight;
-				s.remaining_weight = s.initial_weight - s.used_weight;
-				return res.end(JSON.stringify(s));
-			}
-			res.writeHead(404).end('{}');
-		});
-	});
-	await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
-	base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+beforeAll(async () => {
+	mock = await startMockSpoolman();
+	base = mock.url;
+	calls = mock.calls;
 });
-afterEach(() => new Promise((r) => srv.close(() => r(null))));
+afterAll(() => mock.close());
+beforeEach(() => {
+	mock.reset();
+	mock.addFilament({
+		name: 'Overture Blue',
+		vendor: { id: 1, name: 'Overture' },
+		material: 'PETG',
+		color_hex: '2B3F9E'
+	});
+	mock.addFilament({
+		name: 'Black',
+		vendor: { id: 2, name: 'X' },
+		material: 'TPU',
+		color_hex: '111111'
+	});
+	mock.addSpool({ filament_id: 1, used_weight: 100 });
+	mock.addSpool({ filament_id: 2 });
+});
+const spools = {
+	get: (id: number) => ({ used_weight: mock.spools.get(id)!.used_weight })
+};
+let calls: string[] = [];
 
 describe('SpoolmanClient', () => {
 	it('normalises addresses', () => {
@@ -109,7 +67,7 @@ describe('SpoolmanClient', () => {
 		await expect(new SpoolmanClient('http://127.0.0.1:1', 500).listSpools()).rejects.toThrow(
 			/Cannot reach Spoolman/
 		);
-		fail = true;
+		mock.failing = true;
 		await expect(new SpoolmanClient(base).listSpools()).rejects.toThrow(/^Spoolman returned 500$/); // the remote's own text ("boom") is not repeated
 	});
 });
@@ -161,7 +119,7 @@ describe('run deduction', () => {
 		await syncRunDeduction(db, buildId, id, factory);
 		expect(spools.get(1)!.used_weight).toBe(140);
 		expect(calls.filter((c) => c.includes('/use'))).toHaveLength(1);
-		expect(getDeductions(db, 'org1')[id]).toEqual([[1, 40]]);
+		expect(getDeductions(db, 'org1')[id]).toEqual([[1, 40, expect.any(String)]]);
 	});
 
 	it('adjusts on edit and gives grams back on delete and undo', async () => {
@@ -200,7 +158,7 @@ describe('run deduction', () => {
 		expect(runIds).toHaveLength(2);
 		for (const id of runIds) await syncRunDeduction(db, buildId, id, factory);
 		expect(spools.get(1)!.used_weight).toBe(200);
-		expect(getDeductions(db, 'org1')[runId]).toEqual([[1, 60]]);
+		expect(getDeductions(db, 'org1')[runId].reduce((a, e) => a + e[1], 0)).toBe(60);
 		const removed = undoRun(db, buildId, 'owner', runId, { parts: [], runIds });
 		for (const id of removed) await syncRunDeduction(db, buildId, id, factory);
 		expect(spools.get(1)!.used_weight).toBe(100);
@@ -214,21 +172,21 @@ describe('run deduction', () => {
 		setOrgSettings(db, 'org1', { spoolmanAutoDeduct: false });
 		const id = run(40);
 		await syncRunDeduction(db, buildId, id, factory);
-		expect(calls).toHaveLength(0);
+		expect(calls.filter((c) => !c.startsWith('GET /api/v1/info'))).toHaveLength(0);
 		setOrgSettings(db, 'org1', { spoolmanAutoDeduct: true });
 		db.update(buildFilaments).set({ spoolmanSpoolId: null }).run();
 		await syncRunDeduction(db, buildId, id, factory);
-		expect(calls).toHaveLength(0);
+		expect(calls.filter((c) => !c.startsWith('GET /api/v1/info'))).toHaveLength(0);
 	});
 
 	it('keeps going and warns when Spoolman is down, then catches up', async () => {
 		const id = run(40);
-		fail = true;
+		mock.failing = true;
 		const r = await syncRunDeduction(db, buildId, id, factory);
 		expect(r.warning).toMatch(/Spoolman/);
 		expect(spools.get(1)!.used_weight).toBe(100);
 		expect(getDeductions(db, 'org1')[id]).toBeUndefined();
-		fail = false;
+		mock.failing = false;
 		await syncRunDeduction(db, buildId, id, factory);
 		expect(spools.get(1)!.used_weight).toBe(140);
 	});
