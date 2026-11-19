@@ -30,6 +30,8 @@ export const MAX_CD_BYTES = 64 * 1024 * 1024;
 /** The push parser may hold at most this much unwanted data (streams only; files use the directory). */
 export const MAX_UNWANTED_BUFFER = 64 * 1024 * 1024;
 /** Shown when a file on disk has no readable central directory. */
+/** Thrown by `readZipDirectory` when the directory lists more entries than the caller allows. */
+export const TOO_MANY_ENTRIES = 'The zip has too many entries';
 export const BAD_ZIP_MESSAGE =
 	'This is not a valid 3MF file (its zip directory is missing or damaged)';
 
@@ -66,7 +68,7 @@ export async function readZipDirectory(
 		if (cdOffset + cdSize > size) throw new Error('bad zip directory');
 		if (cdSize > MAX_CD_BYTES) throw new Error('zip directory is too large');
 		if (count * 46 > cdSize) throw new Error('bad zip directory');
-		if (count > maxEntries) throw new Error('The zip has too many entries');
+		if (count > maxEntries) throw new Error(TOO_MANY_ENTRIES);
 		const cd = Buffer.alloc(cdSize);
 		await fh.read(cd, 0, cdSize, cdOffset);
 		const out: ZipFileEntry[] = [];
@@ -110,8 +112,19 @@ export async function readZipDirectory(
 	}
 }
 
-/** The inflated bytes of one entry as a stream of chunks. Stop early by breaking the loop. */
-export async function* entryChunks(path: string, e: ZipFileEntry): AsyncGenerator<Uint8Array> {
+/** Thrown by `entryChunks` when an entry inflates past the caller's byte cap. */
+export class EntryTooLargeError extends Error {}
+
+/**
+ * The inflated bytes of one entry as a stream of chunks. Stop early by breaking the loop.
+ * With `maxBytes`, the stream is aborted with `EntryTooLargeError` as soon as more than that
+ * has been inflated, whatever size the directory declares.
+ */
+export async function* entryChunks(
+	path: string,
+	e: ZipFileEntry,
+	maxBytes = Infinity
+): AsyncGenerator<Uint8Array> {
 	if (e.csize === 0) return;
 	if (e.method !== 0 && e.method !== 8) throw new Error(`unsupported compression in ${e.name}`);
 	const fh = await open(path, 'r');
@@ -125,14 +138,24 @@ export async function* entryChunks(path: string, e: ZipFileEntry): AsyncGenerato
 		await fh.close();
 	}
 	const src = createReadStream(path, { start, end: start + e.csize - 1, highWaterMark: 1 << 20 });
+	let seen = 0;
+	const check = (c: Uint8Array) => {
+		seen += c.length;
+		if (seen > maxBytes) throw new EntryTooLargeError(`${e.name} is too large`);
+		return c;
+	};
 	if (e.method === 0) {
-		yield* src;
+		try {
+			for await (const c of src) yield check(c);
+		} finally {
+			src.destroy();
+		}
 		return;
 	}
 	const inflate = createInflateRaw();
 	pipeline(src, inflate, () => {});
 	try {
-		yield* inflate;
+		for await (const c of inflate) yield check(c);
 	} finally {
 		inflate.destroy();
 		src.destroy();

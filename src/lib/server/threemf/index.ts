@@ -14,7 +14,14 @@
  */
 import { Unzip, UnzipInflate, UnzipPassThrough, strFromU8 } from 'fflate';
 import { XMLParser } from 'fast-xml-parser';
-import { BAD_ZIP_MESSAGE, MAX_UNWANTED_BUFFER, entryChunks, readZipDirectory } from './zipfile';
+import { defaultLimits, type ParseLimits } from './limits';
+import {
+	BAD_ZIP_MESSAGE,
+	MAX_UNWANTED_BUFFER,
+	TOO_MANY_ENTRIES,
+	entryChunks,
+	readZipDirectory
+} from './zipfile';
 import {
 	decodeEntities,
 	runsHintFromName,
@@ -26,22 +33,7 @@ import {
 
 export class ThreeMfError extends Error {}
 
-export interface ParseLimits {
-	/** Max inflated size of a config entry (model_settings, slice_info, project_settings). */
-	maxConfigBytes: number;
-	/** Max inflated size of one thumbnail PNG; larger ones are dropped with a warning. */
-	maxThumbBytes: number;
-	/** Max inflated bytes scanned from `3D/3dmodel.model`. */
-	maxModelBytes: number;
-	/** Max zip entries looked at. */
-	maxEntries: number;
-}
-export const DEFAULT_LIMITS: ParseLimits = {
-	maxConfigBytes: 64 * 1024 * 1024,
-	maxThumbBytes: 8 * 1024 * 1024,
-	maxModelBytes: 512 * 1024 * 1024,
-	maxEntries: 200_000
-};
+export { DEFAULT_LIMITS, defaultLimits, type ParseLimits } from './limits';
 
 const CONFIGS = new Set([
 	'Metadata/model_settings.config',
@@ -59,6 +51,10 @@ interface Raw {
 	thumbs: Map<string, Uint8Array>;
 	model: ModelScan;
 	warnings: string[];
+	/** Bytes kept in `configs` + `thumbs`. */
+	retained: number;
+	/** Inflated bytes read so far over all entries. */
+	inflated: number;
 }
 interface ModelScan {
 	app: string | null;
@@ -127,7 +123,9 @@ function newRaw(): Raw {
 		configs: new Map(),
 		thumbs: new Map(),
 		model: { app: null, objects: new Map(), items: [], truncated: false },
-		warnings: []
+		warnings: [],
+		retained: 0,
+		inflated: 0
 	};
 }
 
@@ -139,10 +137,16 @@ function entrySink(
 	fail: (e: Error) => void
 ): EntrySink | null {
 	const isConfig = CONFIGS.has(name);
-	const isThumb = THUMB_RE.test(name);
+	const thumbN = THUMB_RE.exec(name);
+	const isThumb = thumbN !== null;
 	const isModel = name === MODEL;
 	if (!isConfig && !isThumb && !isModel) return null;
-	const cap = isConfig ? limits.maxConfigBytes : limits.maxThumbBytes;
+	if (isThumb) {
+		const n = Number(thumbN[1]);
+		if (!(n >= 1 && n <= limits.maxThumbs)) return null; // not a plate of this project
+		if (raw.thumbs.has(name) || raw.thumbs.size >= limits.maxThumbs * 2) return null;
+	}
+	const cap = configCap(name, limits) ?? limits.maxThumbBytes;
 	const scanner = isModel ? makeModelScanner(raw.model, limits.maxModelBytes) : null;
 	const chunks: Uint8Array[] = [];
 	let size = 0;
@@ -151,6 +155,12 @@ function entrySink(
 		if (dead) return undefined;
 		if (err) {
 			fail(new ThreeMfError(`Cannot read ${name}: ${err.message}`));
+			dead = true;
+			return 'stop';
+		}
+		raw.inflated += chunk.length;
+		if (raw.inflated > limits.maxInflatedBytes) {
+			fail(new ThreeMfError('The 3MF holds too much data to read'));
 			dead = true;
 			return 'stop';
 		}
@@ -169,8 +179,14 @@ function entrySink(
 			else raw.warnings.push(`Skipped oversized thumbnail ${name}`);
 			return 'stop';
 		}
+		if (raw.retained + size > limits.maxRetainedBytes) {
+			fail(new ThreeMfError('The 3MF holds too much configuration data to read'));
+			dead = true;
+			return 'stop';
+		}
 		chunks.push(chunk);
 		if (final) {
+			raw.retained += size;
 			const buf = new Uint8Array(size);
 			let o = 0;
 			for (const c of chunks) {
@@ -236,12 +252,14 @@ async function readRaw(source: Source, limits: ParseLimits): Promise<Raw> {
 async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw> {
 	let dir;
 	try {
-		dir = await readZipDirectory(path);
-	} catch {
+		// the count is checked before the directory is read into memory
+		dir = await readZipDirectory(path, limits.maxEntries);
+	} catch (e) {
+		if (e instanceof Error && e.message === TOO_MANY_ENTRIES)
+			throw new ThreeMfError('The 3MF has too many entries');
 		// never fall back to the push parser for a file on disk: it buffers what it does not want
 		throw new ThreeMfError(BAD_ZIP_MESSAGE);
 	}
-	if (dir.length > limits.maxEntries) throw new ThreeMfError('The 3MF has too many entries');
 	const raw = newRaw();
 	let failure: Error | null = null;
 	for (const e of dir) {
@@ -249,7 +267,7 @@ async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw> 
 		if (!sink) continue;
 		try {
 			let any = false;
-			for await (const chunk of entryChunks(path, e)) {
+			for await (const chunk of entryChunks(path, e, entryCap(e.name, limits))) {
 				any = true;
 				if (sink(null, chunk, false) === 'stop') break;
 			}
@@ -261,6 +279,19 @@ async function readRawFromFile(path: string, limits: ParseLimits): Promise<Raw> 
 		if (failure) throw failure;
 	}
 	return raw;
+}
+
+function configCap(name: string, limits: ParseLimits): number | null {
+	if (!CONFIGS.has(name)) return null;
+	return name === 'Metadata/project_settings.config'
+		? limits.maxConfigBytes
+		: limits.maxXmlConfigBytes;
+}
+
+/** Largest inflated size ever wanted from an entry (the zip's declared size is not trusted). */
+function entryCap(name: string, limits: ParseLimits): number {
+	if (name === MODEL) return limits.maxModelBytes + (1 << 20);
+	return (configCap(name, limits) ?? limits.maxThumbBytes) + (1 << 20);
 }
 
 const xml = new XMLParser({
@@ -504,7 +535,7 @@ export async function parseThreeMf(
 	limits: Partial<ParseLimits> = {},
 	prepared?: Raw
 ): Promise<ThreeMfSummary> {
-	const raw = prepared ?? (await readRaw(source, { ...DEFAULT_LIMITS, ...limits }));
+	const raw = prepared ?? (await readRaw(source, { ...defaultLimits(), ...limits }));
 	const isProject =
 		raw.configs.has('Metadata/model_settings.config') &&
 		raw.configs.has('Metadata/project_settings.config');
@@ -518,6 +549,6 @@ export function parseThreeMfBytes(bytes: Uint8Array, limits?: Partial<ParseLimit
 }
 
 export async function parseThreeMfFile(path: string, limits?: Partial<ParseLimits>) {
-	const all = { ...DEFAULT_LIMITS, ...limits };
+	const all = { ...defaultLimits(), ...limits };
 	return parseThreeMf([], all, await readRawFromFile(path, all));
 }

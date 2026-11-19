@@ -134,3 +134,30 @@ describe('STEP zip entry caps', () => {
 		);
 	});
 });
+
+describe('STEP zip entry reading', () => {
+	it('inflates one entry from disk and counts real bytes against the limits', async () => {
+		const { zipSync } = await import('fflate');
+		const { mkdtempSync, writeFileSync } = await import('node:fs');
+		const { tmpdir } = await import('node:os');
+		const { join } = await import('node:path');
+		const { readZipDirectory } = await import('../threemf/zipfile');
+		const { readEntry } = await import('./convert-core');
+		const dir = mkdtempSync(join(tmpdir(), 'tmt-zip-'));
+		const path = join(dir, 'a.zip');
+		writeFileSync(
+			path,
+			zipSync({ 'a.step': new Uint8Array(1000).fill(7), 'b.step': new Uint8Array(500).fill(1) })
+		);
+		const entries = await readZipDirectory(path);
+		const a = entries.find((e) => e.name === 'a.step')!;
+		const b = entries.find((e) => e.name === 'b.step')!;
+		const budget = { used: 0 };
+		const data = await readEntry(path, a, budget);
+		expect(data.length).toBe(1000);
+		expect(data[0]).toBe(7);
+		expect(budget.used).toBe(1000);
+		await expect(readEntry(path, a, { used: 0 }, 999)).rejects.toThrow(/limit per file/);
+		await expect(readEntry(path, b, budget, 1000, 1200)).rejects.toThrow(/uncompressed/);
+	});
+});

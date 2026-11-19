@@ -61,16 +61,21 @@
 	<form class="card" onsubmit={saveBuild}>
 		<h2>Build details</h2>
 		<div class="form-grid">
-			<label class="field">Name <input bind:value={name} disabled={!ctx.canEdit} required /></label>
+			<label class="field"
+				>Name <input bind:value={name} disabled={!ctx.canEdit} required maxlength="200" /></label
+			>
 			<label class="field"
 				>Phase
 				<select bind:value={phase} disabled={!ctx.canEdit}>
 					{#each BUILD_PHASES as p (p)}<option value={p}>{p}</option>{/each}
 				</select>
 			</label>
-			<label class="field">Recipient <input bind:value={recipient} disabled={!ctx.canEdit} /></label
+			<label class="field"
+				>Recipient <input bind:value={recipient} disabled={!ctx.canEdit} maxlength="200" /></label
 			>
-			<label class="field">Hospital <input bind:value={hospital} disabled={!ctx.canEdit} /></label>
+			<label class="field"
+				>Hospital <input bind:value={hospital} disabled={!ctx.canEdit} maxlength="200" /></label
+			>
 			<label class="field"
 				>Delivery date <input
 					type="date"

@@ -1,4 +1,5 @@
 import { backfillBuildParts } from './builds/backfill';
+import { safeErrorText } from './api.ts';
 import { repairTwinPlates } from './builds/twin-repair';
 import { failStaleModelJobs, kickQueue } from './models/jobs';
 import { getDb, runMigrations } from './db';
@@ -27,7 +28,7 @@ export function startup(): void {
 		if (fixed.length)
 			console.log(`[tmt] repaired ${fixed.length} uploaded plate(s) with twin parts`);
 	} catch (e) {
-		console.error('[tmt] twin plate repair failed', e);
+		console.error('[tmt] twin plate repair failed', safeErrorText(e));
 	}
 	const stale = failStaleModelJobs(db);
 	if (stale) console.log(`[tmt] marked ${stale} interrupted 3D model job(s) as failed`);
@@ -36,7 +37,7 @@ export function startup(): void {
 		.catch(() => {});
 	kickQueue(db);
 	// MakeGood's kit (CC0, one community part under CC BY-NC) from the baked-in or downloaded kit pack; in the background, never blocks start.
-	installKitPacks(db).catch((e) => console.error('[tmt] kit pack install error', e));
+	installKitPacks(db).catch((e) => console.error('[tmt] kit pack install error', safeErrorText(e)));
 	if (process.env.TMT_PRINTERS !== 'off') startSupervisor(db);
 	done = true;
 }

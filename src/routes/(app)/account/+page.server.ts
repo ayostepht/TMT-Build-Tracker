@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { and, eq, sql } from 'drizzle-orm';
 import { ApiError } from '#lib/server/access.ts';
+import { safeErrorText } from '#lib/server/api.ts';
 import {
 	AccountDeletionError,
 	deleteAccount,
@@ -142,7 +143,7 @@ export const actions: Actions = {
 			if (e instanceof AccountDeletionError)
 				return fail(e.status, { error: e.message, code: e.code });
 			if (e instanceof ApiError) return fail(e.status, { error: e.message });
-			console.error('[tmt] account deletion failed', e);
+			console.error('[tmt] account deletion failed', safeErrorText(e));
 			return fail(500, { error: 'Could not delete the account. Nothing was changed.' });
 		}
 		redirect(303, '/login?notice=deleted');

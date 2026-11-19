@@ -10,6 +10,10 @@ import { seedTemplates } from '../seed/run';
 import { makeProjectThreeMf } from '../threemf/fixtures';
 import { parseThreeMfBytes } from '../threemf';
 import {
+	acquireExpensiveReadSlot,
+	EXPENSIVE_READ_MAX_HOLD_MS,
+	openExpensiveReads,
+	releaseWhenDone,
 	acquireUploadSlot,
 	assertUploadRoom,
 	openUploadSlots,
@@ -191,6 +195,163 @@ describe('upload slots', () => {
 		const r = [acquireUploadSlot(db, boss), acquireUploadSlot(db, boss)];
 		r.forEach((x) => x());
 		expect(openUploadSlots('boss')).toBe(0);
+	});
+});
+
+describe('expensive read slots', () => {
+	const u = { id: 'reader', email: 'reader@example.test', emailVerified: false };
+
+	it('caps concurrent reads and releases exactly once', () => {
+		const held: (() => void)[] = [];
+		for (let i = 0; i < 4; i++) held.push(acquireExpensiveReadSlot(db, u, 0));
+		expect(openExpensiveReads('reader')).toBe(4);
+		expect(() => acquireExpensiveReadSlot(db, u, 0)).toThrow(QuotaError);
+		try {
+			acquireExpensiveReadSlot(db, u, 0);
+		} catch (e) {
+			expect(e).toMatchObject({ status: 429, code: 'quota' });
+		}
+		held[0]();
+		held[0]();
+		expect(openExpensiveReads('reader')).toBe(3);
+		held.forEach((r) => r());
+		expect(openExpensiveReads('reader')).toBe(0);
+	});
+
+	it('applies in self-hosted mode too', () => {
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		const s = { id: 'selfhoster', email: 'selfhoster@example.test', emailVerified: false };
+		const held: (() => void)[] = [];
+		for (let i = 0; i < 4; i++) held.push(acquireExpensiveReadSlot(db, s, 1_000_000));
+		expect(() => acquireExpensiveReadSlot(db, s, 1_000_000)).toThrow(QuotaError);
+		held.forEach((r) => r());
+		expect(openExpensiveReads('selfhoster')).toBe(0);
+	});
+
+	it('a slot held by an abandoned response is freed by the safety timeout', () => {
+		vi.useFakeTimers();
+		try {
+			const x = { id: 'abandoned', email: 'abandoned@example.test', emailVerified: false };
+			acquireExpensiveReadSlot(db, x, 20_000_000);
+			expect(openExpensiveReads('abandoned')).toBe(1);
+			vi.advanceTimersByTime(EXPENSIVE_READ_MAX_HOLD_MS + 1);
+			expect(openExpensiveReads('abandoned')).toBe(0);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('an erroring stream frees its slot', async () => {
+		const x = { id: 'errs', email: 'errs@example.test', emailVerified: false };
+		const rel = acquireExpensiveReadSlot(db, x, 30_000_000);
+		const bad = new ReadableStream<Uint8Array>({
+			pull(c) {
+				c.error(new Error('boom'));
+			}
+		});
+		await releaseWhenDone(bad, rel)
+			.getReader()
+			.read()
+			.catch(() => {});
+		expect(openExpensiveReads('errs')).toBe(0);
+	});
+
+	it('limits the rate per user, and admins are exempt', () => {
+		const v = { id: 'burst', email: 'burst@example.test', emailVerified: false };
+		for (let i = 0; i < 20; i++) acquireExpensiveReadSlot(db, v, 5_000_000)();
+		expect(() => acquireExpensiveReadSlot(db, v, 5_000_000)).toThrow(/Too many/);
+		expect(openExpensiveReads('burst')).toBe(0);
+		vi.stubEnv('ADMIN_EMAILS', 'boss2@example.test');
+		const boss = { id: 'boss2', email: 'boss2@example.test', emailVerified: true };
+		for (let i = 0; i < 25; i++) acquireExpensiveReadSlot(db, boss, 5_000_000)();
+	});
+
+	it('self-hosted: light reads have their own generous bucket, downloads another', () => {
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		const s = { id: 'shlight', email: 'shlight@example.test', emailVerified: false };
+		for (let i = 0; i < 100; i++) acquireExpensiveReadSlot(db, s, 40_000_000, { light: true })();
+		// the download bucket is untouched, so a download still has its full burst
+		for (let i = 0; i < 60; i++) acquireExpensiveReadSlot(db, s, 40_000_000)();
+		expect(() => acquireExpensiveReadSlot(db, s, 40_000_000)).toThrow(/Too many/);
+		// a tight loop well past the light burst is refused with retryAfter
+		let err: unknown;
+		let ok = 0;
+		try {
+			for (let i = 0; i < 1000; i++) {
+				acquireExpensiveReadSlot(db, s, 40_000_000, { light: true })();
+				ok++;
+			}
+		} catch (e) {
+			err = e;
+		}
+		expect(ok).toBe(20); // 120 burst minus the 100 already taken
+		expect(err).toMatchObject({ status: 429, code: 'quota' });
+		expect((err as QuotaError).retryAfter).toBeGreaterThanOrEqual(1);
+		// after a minute the bucket has refilled
+		acquireExpensiveReadSlot(db, s, 40_000_000 + 60_000, { light: true })();
+		expect(openExpensiveReads('shlight')).toBe(0);
+		// the concurrency cap still holds for held slots
+		const s2 = { id: 'shlight2', email: 'shlight2@example.test', emailVerified: false };
+		const held = [0, 1, 2, 3].map(() =>
+			acquireExpensiveReadSlot(db, s2, 40_000_000, { light: true })
+		);
+		expect(() => acquireExpensiveReadSlot(db, s2, 40_000_000, { light: true })).toThrow(QuotaError);
+		held.forEach((r) => r());
+		// site admins are exempt
+		vi.stubEnv('ADMIN_EMAILS', 'boss4@example.test');
+		const boss = { id: 'boss4', email: 'boss4@example.test', emailVerified: true };
+		for (let i = 0; i < 1000; i++)
+			acquireExpensiveReadSlot(db, boss, 40_000_000, { light: true })();
+	});
+
+	it('public: light reads are still rate limited, 429 carries retryAfter, admins exempt', () => {
+		vi.stubEnv('TMT_MODE', 'public');
+		const v = { id: 'publight', email: 'publight@example.test', emailVerified: false };
+		for (let i = 0; i < 20; i++) acquireExpensiveReadSlot(db, v, 41_000_000, { light: true })();
+		let err: unknown;
+		try {
+			acquireExpensiveReadSlot(db, v, 41_000_000, { light: true });
+		} catch (e) {
+			err = e;
+		}
+		expect(err).toMatchObject({ status: 429, code: 'quota' });
+		expect((err as QuotaError).retryAfter).toBeGreaterThanOrEqual(1);
+		vi.stubEnv('ADMIN_EMAILS', 'boss3@example.test');
+		const boss = { id: 'boss3', email: 'boss3@example.test', emailVerified: true };
+		for (let i = 0; i < 100; i++) acquireExpensiveReadSlot(db, boss, 41_000_000, { light: true })();
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		for (let i = 0; i < 100; i++) acquireExpensiveReadSlot(db, boss, 42_000_000)();
+	});
+
+	it('respond() turns retryAfter into a Retry-After header', async () => {
+		const { respond } = await import('../api');
+		const res = await respond(() => {
+			throw new QuotaError('slow down', 429, 7);
+		});
+		expect(res.status).toBe(429);
+		expect(res.headers.get('retry-after')).toBe('7');
+		const plain = await respond(() => {
+			throw new QuotaError('full');
+		});
+		expect(plain.headers.get('retry-after')).toBeNull();
+	});
+
+	it('a stream frees its slot when it ends or is cancelled', async () => {
+		const mk = () =>
+			new ReadableStream<Uint8Array>({
+				start(c) {
+					c.enqueue(new Uint8Array([1]));
+					c.close();
+				}
+			});
+		const w = { id: 'streamer', email: 'streamer@example.test', emailVerified: false };
+		const r1 = acquireExpensiveReadSlot(db, w, 9_000_000);
+		const rd = releaseWhenDone(mk(), r1).getReader();
+		while (!(await rd.read()).done);
+		expect(openExpensiveReads('streamer')).toBe(0);
+		const r2 = acquireExpensiveReadSlot(db, w, 9_000_000);
+		await releaseWhenDone(mk(), r2).cancel();
+		expect(openExpensiveReads('streamer')).toBe(0);
 	});
 });
 

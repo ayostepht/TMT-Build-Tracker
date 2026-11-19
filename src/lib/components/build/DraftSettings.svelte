@@ -28,7 +28,9 @@
 
 <form class="card" onsubmit={save} data-testid="draft-settings">
 	<h2>Draft name</h2>
-	<label class="field">Name <input bind:value={name} disabled={!ctx.canEdit} required /></label>
+	<label class="field"
+		>Name <input bind:value={name} disabled={!ctx.canEdit} required maxlength="200" /></label
+	>
 	{#if ctx.canEdit}
 		<div>
 			<button class="btn primary" type="submit">Save name</button>

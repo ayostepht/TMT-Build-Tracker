@@ -3,6 +3,7 @@ import { requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
 import { buildFilaments } from '#lib/server/db/schema.ts';
 import { getOrgSettings } from '#lib/server/org-settings.ts';
+import { refreshBuildSpoolman } from '#lib/server/spoolman/link.ts';
 import { SpoolmanClient, SpoolmanError, type SpoolSummary } from '#lib/server/spoolman/client.ts';
 import { eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
@@ -25,6 +26,17 @@ export const GET: RequestHandler = (event) =>
 			.where(eq(buildFilaments.buildId, event.params.id))
 			.all()
 			.filter((l) => l.id != null) as { role: string; id: number }[];
+		// Back-fill legacy links and refresh the cached stock; Spoolman being down is reported below.
+		// Throttled: a page load by any member must not hit Spoolman every time.
+		const refreshed = await refreshBuildSpoolman(
+			db,
+			event.params.id,
+			requireUserId(event),
+			undefined,
+			{
+				throttleMs: 30_000
+			}
+		);
 		try {
 			const client = new SpoolmanClient(cfg.spoolmanUrl);
 			const all = event.url.searchParams.get('all') === '1';
@@ -34,6 +46,8 @@ export const GET: RequestHandler = (event) =>
 			return {
 				configured: true,
 				autoDeduct: cfg.spoolmanAutoDeduct,
+				keptBy: cfg.spoolmanKeptBy,
+				changed: refreshed.changed === true,
 				linked,
 				spools: all ? spools : []
 			};

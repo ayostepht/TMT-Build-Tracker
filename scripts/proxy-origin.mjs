@@ -1,6 +1,6 @@
 // Preloaded with `node --import ./scripts/proxy-origin.mjs build` (see `npm start`
-// and the Dockerfile). adapter-node v6 ignores ORIGIN and, without a protocol
-// header, assumes https, so SvelteKit rejects form posts made over plain http as
+// and the Dockerfile). adapter-node 6.0.1 ignores ORIGIN (6.0.2+ honours it, see below) and,
+// without a protocol header, assumes https, so SvelteKit rejects form posts made over plain http as
 // cross-site. This makes the request origin explicit and safe:
 //
 //  - PUBLIC_URL (or BETTER_AUTH_URL / ORIGIN) set: that origin is used for every
@@ -18,22 +18,42 @@ installResponseDefaults(http.ServerResponse.prototype);
 process.env.PROTOCOL_HEADER ??= 'x-forwarded-proto';
 process.env.HOST_HEADER ??= 'x-forwarded-host';
 
+// First non-blank (trimmed) value, same order and rule as rawPublicUrl() in config.ts.
 function configuredOrigin() {
-	const raw = (
-		process.env.PUBLIC_URL ||
-		process.env.BETTER_AUTH_URL ||
-		process.env.ORIGIN ||
-		''
-	).trim();
+	let name = '';
+	let raw = '';
+	for (const candidate of ['PUBLIC_URL', 'BETTER_AUTH_URL', 'ORIGIN']) {
+		const value = (process.env[candidate] ?? '').trim();
+		if (value) {
+			name = candidate;
+			raw = value;
+			break;
+		}
+	}
 	if (!raw) return null;
-	const url = new URL(raw);
+	// Errors name the variable, never its value (it may carry credentials).
+	let url;
+	try {
+		url = new URL(raw);
+	} catch {
+		throw new Error(`${name} is not a valid URL.`);
+	}
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`PUBLIC_URL must start with http:// or https://: ${raw}`);
+		throw new Error(`${name} must start with http:// or https://.`);
 	}
 	return url;
 }
 
+// adapter-node 6.0.2+ reads ORIGIN itself and throws on an empty value; 6.0.1 ignored it.
+// An empty ORIGIN= (common in Docker/Unraid templates) means "not set": drop it before the
+// adapter reads the env.
+if (!process.env.ORIGIN?.trim()) delete process.env.ORIGIN;
+
 const fixed = configuredOrigin();
+
+// Keep the adapter's own ORIGIN (6.0.2+) identical to the origin forced below, so a stale
+// ORIGIN can never disagree with PUBLIC_URL / BETTER_AUTH_URL. Harmless on 6.0.1.
+if (fixed) process.env.ORIGIN = fixed.origin;
 const first = (value) =>
 	String(Array.isArray(value) ? value[0] : (value ?? ''))
 		.split(',')[0]

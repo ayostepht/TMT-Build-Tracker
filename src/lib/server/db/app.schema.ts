@@ -329,7 +329,15 @@ const buildId = () =>
 		.references(() => builds.id, { onDelete: 'cascade' });
 
 /** One "added a spool" entry on a build filament slot (kg, ms timestamp). */
-export type SpoolAdd = { id: string; kg: number; at: number; userId: string | null; note?: string };
+export type SpoolAdd = {
+	id: string;
+	kg: number;
+	at: number;
+	userId: string | null;
+	note?: string;
+	/** Spoolman spool created for this add (issue #59, later work); absent on older entries. */
+	spoolmanSpoolId?: number;
+};
 
 export const buildFilaments = sqliteTable(
 	'build_filaments',
@@ -345,7 +353,14 @@ export const buildFilaments = sqliteTable(
 			.$type<SpoolAdd[]>()
 			.notNull()
 			.default(sql`'[]'`),
-		spoolmanSpoolId: integer('spoolman_spool_id')
+		spoolmanSpoolId: integer('spoolman_spool_id'),
+		/** Spoolman filament this slot is linked to (null = none / not yet backfilled). */
+		spoolmanFilamentId: integer('spoolman_filament_id'),
+		/**
+		 * When the slot was linked to Spoolman (ms). Runs dated or created before this are never
+		 * deducted. Null = unknown (legacy spool links keep today's behaviour).
+		 */
+		spoolmanLinkedAt: integer('spoolman_linked_at', { mode: 'timestamp_ms' })
 	},
 	(t) => [primaryKey({ columns: [t.buildId, t.roleKey] })]
 );
@@ -427,7 +442,12 @@ export const printRuns = sqliteTable(
 		estSeconds: integer('est_seconds'),
 		printer: text('printer'),
 		userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
-		note: text('note').notNull().default('')
+		note: text('note').notNull().default(''),
+		/**
+		 * Exact creation time (set on insert by the app). Nullable only because SQLite cannot add a
+		 * column with an expression default; migration 0003 back-fills every existing row.
+		 */
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date())
 	},
 	(t) => [index('print_runs_build_idx').on(t.buildId)]
 );
@@ -624,6 +644,24 @@ export const organizationSettings = sqliteTable('organization_settings', {
 		.default(sql`'{}'`),
 	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
 });
+
+/** Last-seen Spoolman filament per workspace, so pickers and stock lines work offline. */
+export const spoolmanCache = sqliteTable(
+	'spoolman_cache',
+	{
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		/** The filament's id in that workspace's Spoolman. */
+		spoolmanFilamentId: integer('spoolman_filament_id').notNull(),
+		/** The Spoolman filament record as fetched (opaque JSON). */
+		data: text('data', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+		fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+		/** Last fetch error (null = last fetch succeeded); data is then stale. */
+		error: text('error')
+	},
+	(t) => [primaryKey({ columns: [t.organizationId, t.spoolmanFilamentId] })]
+);
 
 /** A team's own filaments (brand, type, color), reusable across its builds and shown first in pickers. */
 export const customFilaments = sqliteTable(

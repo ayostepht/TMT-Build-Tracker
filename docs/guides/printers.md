@@ -103,7 +103,7 @@ Choose **Not connected** under **Add a printer** when the printer has no connect
 
 ## Spoolman and automatic logging
 
-The **Integrations** page also holds the optional Spoolman address (a private address, see above) and a switch to log finished prints automatically. Neither is needed to use the app. Spoolman needs the app on your own network, so it is not available on a hosted site.
+The **Integrations** page also holds the optional Spoolman address (a private address, see above) and a switch to log finished prints automatically. Neither is needed to use the app. With Spoolman you can link each color of a build to its filament in Spoolman (from the Overview, the build setup or the Design tab), create a missing filament or spool there, and choose in the chapter's **Settings** whether this app or something else keeps Spoolman up to date. Spoolman needs the app on your own network, so it is not available on a hosted site.
 
 ## Problems
 

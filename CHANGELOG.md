@@ -6,6 +6,34 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-11-19
+
+**Upgrading:** back up your `/data` folder first. This release adds database migration 0003 (additive: a Spoolman filament link and cache, and a creation time on print logs, filled in for your existing prints). It runs automatically when the container starts and cannot be undone, so to go back to 0.9.2 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
+
+**Security:** this release adds resource limits for uploads, exports and 3D model conversion, so one request or one account cannot use up the server's memory, disk or time. They matter most for a server run in public mode (`TMT_MODE=public`); a normal self-hosted server keeps working as before, and the details are under Changed below and in the [environment reference](docs/guides/environment.md). Everyone on `latest` should update.
+
+### Added
+
+- Spoolman filaments: link each color of a build to its filament in Spoolman, from the Overview filaments, a new Spoolman step in the build setup, or a color slot on the Design tab. Matching filaments are suggested. While a color is linked, Spare counts what Spoolman says is left on all of that filament's open spools, and the build's own spools are hidden until you unlink (their history is kept).
+- Choose who keeps Spoolman up to date (chapter Settings, Integrations): "This app" takes each logged print's grams off the linked spool and moves on to the next spool of that filament when one runs out; "Something else" only reads Spoolman. A chapter that sets up Spoolman for the first time starts with "This app"; chapters that already use Spoolman keep their setting.
+- Prints logged before a color was linked are never taken off Spoolman by themselves. When you link, the app says how many grams were already logged and offers to subtract them once (with a way to give them back).
+- Create filaments in Spoolman: when no Spoolman filament matches a color, the link picker offers "Create in Spoolman" with the vendor, name, material, color, density and weights filled in from the filament catalog (all editable). A missing vendor is created too, and the color is linked to the new filament.
+- Add and archive spools in Spoolman: on a linked color the + adds a spool of that filament in Spoolman (weight and an optional note). It shows in the color's history as a Spoolman spool, and removing it asks whether to archive it in Spoolman as well.
+
+### Changed
+
+- The build header cards no longer cut their detail lines short on desktop: parts printed reads "30 to go · 1 failed" and projected finish "~337 h left". The full sentences, including your printing pace, are in each card's hover text.
+- Limits on very large or unusual 3MF files: a 3MF whose settings, thumbnails or other contents are far larger than any real sliced project is refused with a message instead of being read. Real projects are accepted: up to 20,000 files, 8 MB of slicer settings (2 MB on a server in public mode) and thumbnails for up to 256 plates. Per-object filament measuring from G-code stops on very large files and falls back to sharing by volume; the upload still works.
+- Limits on export and arrange requests: each person can prepare a few 3MF exports at once and a generous number per minute; past that the app asks you to wait a moment and says for how long. On a self-hosted server, plate and export-preview refreshes have their own, much higher limit that normal use never reaches; a server in public mode counts them with exports. Site admins are not limited. When asked to wait, the Files tab keeps its last export preview and Download button, and both it and the plates view try again by themselves.
+- On a server running in public mode, only site admins can upload a STEP zip to convert a 3D model. Self-hosted servers in the default mode are unchanged. The converter now reads the zip one file at a time (up to 10,000 files), so it needs less memory.
+- Form limits: build name, recipient and hospital are limited to 200 characters. The fields stop at 200 characters as you type; text sent another way is shortened (name) or refused with a message (recipient, hospital).
+- Server error logs no longer include database query values.
+- Dependencies updated to their latest compatible versions.
+
+### Fixed
+
+- A blank `ORIGIN=` (an empty `ORIGIN` environment variable, as some templates and compose files leave) no longer stops the server from starting. The app now keeps `ORIGIN` and `PUBLIC_URL` in step, so the two cannot disagree.
+
 ## [0.9.2] - 2026-11-16
 
 **Upgrading:** back up your `/data` folder first. This release adds two database migrations (0001 and 0002, both additive: new columns for entered weights and spool adds). They run automatically when the container starts and cannot be undone, so to go back to 0.9.1 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).

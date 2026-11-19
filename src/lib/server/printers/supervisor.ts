@@ -4,6 +4,7 @@
  * One instance per process (`getSupervisor`); started from `startup()`.
  */
 import { eq } from 'drizzle-orm';
+import { safeErrorText } from '../api.ts';
 import type { PrinterStatus } from '#lib/printers/status.ts';
 import { shareLinkFor } from '#lib/printers/share-link.ts';
 import { isPublicMode } from '../config';
@@ -59,11 +60,7 @@ export class Supervisor {
 		try {
 			handle = this.adapters[cfg.kind](cfg);
 		} catch (e) {
-			console.error(
-				'[tmt] printer connect failed',
-				row.name,
-				maskSecrets(e instanceof Error ? e.message : '')
-			);
+			console.error('[tmt] printer connect failed', row.name, maskSecrets(safeErrorText(e)));
 			return;
 		}
 		const conn: Conn = { handle, unsub: () => {}, lastWrite: 0, lastKey: '' };
@@ -123,10 +120,7 @@ export class Supervisor {
 				lastSeenAt: s.state !== 'offline' ? new Date(now).toISOString() : undefined
 			});
 		} catch (e) {
-			console.error(
-				'[tmt] printer status error',
-				maskSecrets(e instanceof Error ? e.message : String(e))
-			);
+			console.error('[tmt] printer status error', maskSecrets(safeErrorText(e)));
 		}
 	}
 

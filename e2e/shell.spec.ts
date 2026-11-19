@@ -372,6 +372,8 @@ test('Settings: spools fit their card, colors point to Design', async ({ page })
 	await page.goto(`/builds/${buildId}/settings`);
 	await page.waitForLoadState('networkidle');
 	await expect(page.getByTestId('change-colors')).toBeVisible();
+	for (const label of ['Name', 'Recipient', 'Hospital'])
+		await expect(page.getByLabel(label, { exact: true })).toHaveAttribute('maxlength', '200');
 	const bad = await page.evaluate(() => {
 		const card = document
 			.querySelector('[data-testid="settings-filament"]')!

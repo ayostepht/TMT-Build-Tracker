@@ -1,6 +1,7 @@
 import { lstat, readdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { inArray } from 'drizzle-orm';
+import { safeErrorText } from './api.ts';
 import { importsDir } from './config.ts';
 import type { Db } from './db/index.ts';
 import { templateModelJobs } from './db/schema.ts';
@@ -58,7 +59,7 @@ export async function sweepImportsDir(
 			}
 		}
 	} catch (e) {
-		console.error('[tmt] imports sweep failed', e);
+		console.error('[tmt] imports sweep failed', safeErrorText(e));
 	}
 	return removed;
 }
