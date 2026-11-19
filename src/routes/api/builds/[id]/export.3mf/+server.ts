@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { getDb } from '#lib/server/db/index.ts';
 import { ApiError } from '#lib/server/access.ts';
-import { requireUserId, safeErrorText } from '#lib/server/api.ts';
+import { requireUserId, retryAfterHeaders, safeErrorText } from '#lib/server/api.ts';
 import { acquireExpensiveReadSlot, releaseWhenDone } from '#lib/server/quota.ts';
 import { exportBuild3mf, parseFlavor, parsePlates } from '#lib/server/threemf-export/index.ts';
 import type { RequestHandler } from './$types';
@@ -38,7 +38,10 @@ export const GET: RequestHandler = (event) => {
 			const code = (e as { code?: unknown }).code;
 			return json(
 				{ error: e.message, ...(typeof code === 'string' ? { code } : {}) },
-				{ status: e.status }
+				{
+					status: e.status,
+					headers: retryAfterHeaders((e as { retryAfter?: unknown }).retryAfter)
+				}
 			);
 		}
 		console.error('[tmt] export error', safeErrorText(e));

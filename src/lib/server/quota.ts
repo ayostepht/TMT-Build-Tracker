@@ -33,7 +33,7 @@ import { rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { ApiError, isSiteAdmin } from './access';
-import { quotas, uploadsDir, type Quotas } from './config';
+import { isPublicMode, quotas, uploadsDir, type Quotas } from './config';
 import { takeWriteToken } from './write-rate';
 import type { Db } from './db';
 import { member, organization } from './db/auth.schema';
@@ -55,7 +55,12 @@ export type QuotaKey = keyof Quotas;
 /** Refusal for a reached limit: 409 (429 for live streams) with `code: 'quota'`. */
 export class QuotaError extends ApiError {
 	readonly code = 'quota';
-	constructor(message: string, status = 409) {
+	constructor(
+		message: string,
+		status = 409,
+		/** Seconds until a retry can succeed; sent as `Retry-After` on 429 answers. */
+		readonly retryAfter?: number
+	) {
 		super(status, message);
 	}
 }
@@ -545,27 +550,47 @@ export function openExpensiveReads(userId: string): number {
 	return readSlots.get(userId) ?? 0;
 }
 
+/** Self-hosted budget for 3MF downloads: far above what one maker does by hand. */
+export const EXPENSIVE_READ_SELFHOST_PER_MIN = 120;
+export const EXPENSIVE_READ_SELFHOST_BURST = 60;
+
 /**
  * Take one expensive-read slot (concurrency cap plus a per-user token bucket), or throw
- * QuotaError 429 with a friendly sentence. Returns an idempotent `release()`: call it in a
- * `finally`, or when a response stream ends, cancels or errors. Site admins are exempt.
+ * QuotaError 429 with a friendly sentence and `retryAfter` seconds. Returns an idempotent
+ * `release()`: call it in a `finally`, or when a response stream ends, cancels or errors.
+ * Site admins are exempt.
+ *
+ * `light` reads (arrangement, export preview: synchronous, no file output) are not charged to
+ * the bucket in self-hosted mode, since the UI refreshes them on every live update; they still
+ * take a concurrency slot. In public mode every read is charged. Downloads use a generous
+ * bucket when self-hosted and the strict one in public mode.
  */
-export function acquireExpensiveReadSlot(db: Db, u: SseUser, now = Date.now()): () => void {
+export function acquireExpensiveReadSlot(
+	db: Db,
+	u: SseUser,
+	now = Date.now(),
+	opts: { light?: boolean } = {}
+): () => void {
 	const current = readSlots.get(u.id) ?? 0;
 	const busy = current >= EXPENSIVE_READ_CONCURRENCY;
-	const wait = busy
-		? 0
-		: takeWriteToken(
+	const pub = isPublicMode();
+	const charge = !busy && (pub || !opts.light);
+	const wait = charge
+		? takeWriteToken(
 				`read:${u.id}`,
-				{ perMin: EXPENSIVE_READ_PER_MIN, burst: EXPENSIVE_READ_BURST },
+				pub
+					? { perMin: EXPENSIVE_READ_PER_MIN, burst: EXPENSIVE_READ_BURST }
+					: { perMin: EXPENSIVE_READ_SELFHOST_PER_MIN, burst: EXPENSIVE_READ_SELFHOST_BURST },
 				now
-			);
+			)
+		: 0;
 	if ((busy || wait > 0) && !isSiteAdmin(db, u))
 		throw new QuotaError(
 			busy
 				? 'Another export or plan is still being prepared. Wait for it to finish and try again.'
 				: 'Too many exports or plans in a short time. Wait a moment and try again.',
-			429
+			429,
+			busy ? 2 : Math.max(1, Math.ceil(wait))
 		);
 	readSlots.set(u.id, (readSlots.get(u.id) ?? 0) + 1);
 	let released = false;

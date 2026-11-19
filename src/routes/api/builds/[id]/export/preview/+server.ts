@@ -8,7 +8,9 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = (event) =>
 	respond(() => {
 		const userId = requireUserId(event);
-		const release = acquireExpensiveReadSlot(getDb(), event.locals.user!);
+		const release = acquireExpensiveReadSlot(getDb(), event.locals.user!, Date.now(), {
+			light: true
+		});
 		try {
 			const q = event.url.searchParams;
 			return previewExport(getDb(), event.params.id, userId, {

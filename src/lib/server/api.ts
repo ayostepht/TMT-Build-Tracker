@@ -62,6 +62,13 @@ export function safeErrorText(e: unknown): string {
 	return `${e.name}: ${strip(e.message)}${stack ? `\n${stack}` : ''}`;
 }
 
+/** `Retry-After` (whole seconds) for an error that carries a positive `retryAfter`. */
+export function retryAfterHeaders(seconds: unknown): Record<string, string> {
+	return typeof seconds === 'number' && seconds > 0
+		? { 'retry-after': String(Math.ceil(seconds)) }
+		: {};
+}
+
 /** Run a handler body, mapping ApiError to `{ error }` JSON with its status. */
 export async function respond(fn: () => unknown | Promise<unknown>): Promise<Response> {
 	try {
@@ -73,13 +80,14 @@ export async function respond(fn: () => unknown | Promise<unknown>): Promise<Res
 			const code = (e as { code?: unknown }).code;
 			// ...and extra JSON fields (`BuildStartedError` sends `started` and `summary`).
 			const extra = (e as { extra?: unknown }).extra;
+			const retryAfter = (e as { retryAfter?: unknown }).retryAfter;
 			return json(
 				{
 					...(extra && typeof extra === 'object' ? extra : {}),
 					error: e.message,
 					...(typeof code === 'string' ? { code } : {})
 				},
-				{ status: e.status }
+				{ status: e.status, headers: retryAfterHeaders(retryAfter) }
 			);
 		}
 		console.error('[tmt] api error', safeErrorText(e));
