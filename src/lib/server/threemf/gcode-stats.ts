@@ -8,7 +8,7 @@
  */
 import { GcodeObjectScanner } from '#lib/domain/gcode-objects.ts';
 import type { ExactObject, ThreeMfSummary } from '#lib/domain/threemf.ts';
-import { DEFAULT_LIMITS } from './index';
+import { DEFAULT_LIMITS } from './limits';
 import { EntryTooLargeError, entryChunks, readZipDirectory } from './zipfile';
 
 /** Max inflated bytes scanned from one plate's G-code. */

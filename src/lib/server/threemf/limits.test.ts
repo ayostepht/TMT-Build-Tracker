@@ -1,9 +1,15 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync, type Zippable } from 'fflate';
-import { DEFAULT_LIMITS, ThreeMfError, parseThreeMfBytes, parseThreeMfFile } from './index';
+import {
+	DEFAULT_LIMITS,
+	ThreeMfError,
+	defaultLimits,
+	parseThreeMfBytes,
+	parseThreeMfFile
+} from './index';
 import { attachGcodeObjectStats } from './gcode-stats';
 import { makeProjectThreeMf, TINY_PNG } from './fixtures';
 import type { ThreeMfSummary } from '#lib/domain/threemf.ts';
@@ -135,6 +141,20 @@ describe('3MF parser limits (file and stream readers)', () => {
 		expect(rep.plates).toBe(0);
 	});
 
+	it('gcode-stats applies the entry cap from the shared limits module (no import cycle)', async () => {
+		const lim = await import('./limits');
+		expect(lim.DEFAULT_LIMITS.maxEntries).toBe(20_000);
+		// one entry over the cap, with a G-code plate that would be read if the cap were off
+		const files = base();
+		files['Metadata/plate_1.gcode'] = zeros(10);
+		for (let i = 0; i <= lim.DEFAULT_LIMITS.maxEntries; i++)
+			files[`y/${i}.txt`] = new Uint8Array(0);
+		const rep = await attachGcodeObjectStats(file(zip(files)), {
+			plates: [{ index: 1 }]
+		} as unknown as ThreeMfSummary);
+		expect(rep).toMatchObject({ withGcode: 0, plates: 0 });
+	});
+
 	it('keeps thumbnails for plates up to the cap and ignores the ones beyond it', async () => {
 		const files = base();
 		const last = DEFAULT_LIMITS.maxThumbs;
@@ -200,5 +220,32 @@ describe('G-code scan limits', () => {
 		const rep = await attachGcodeObjectStats(gz(40 * MB), summary(), 1);
 		expect(rep.note).toMatch(/stopped after/);
 		expect(Date.now() - t0).toBeLessThan(2000);
+	});
+});
+
+describe('XML config cap by mode', () => {
+	afterEach(() => vi.unstubAllEnvs());
+
+	it('is 8 MB for self-host and 2 MB in public mode, resolved per call', async () => {
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		expect(defaultLimits().maxXmlConfigBytes).toBe(8 * MB);
+		vi.stubEnv('TMT_MODE', 'public');
+		expect(defaultLimits().maxXmlConfigBytes).toBe(2 * MB);
+		expect(defaultLimits().maxEntries).toBe(DEFAULT_LIMITS.maxEntries);
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		expect(defaultLimits().maxXmlConfigBytes).toBe(8 * MB);
+	});
+
+	it('refuses a 3 MB config in public mode but accepts it in self-host', async () => {
+		const files = base();
+		files['Metadata/model_settings.config'] = strToU8(
+			'<config>' + ' '.repeat(3 * MB) + '</config>'
+		);
+		const bytes = zip(files);
+		vi.stubEnv('TMT_MODE', 'public');
+		await rejectsFast(parseThreeMfFile(file(bytes)), /too large/);
+		await rejectsFast(parseThreeMfBytes(bytes), /too large/);
+		vi.stubEnv('TMT_MODE', 'selfhost');
+		await expect(parseThreeMfFile(file(bytes))).resolves.toBeTruthy();
 	});
 });
