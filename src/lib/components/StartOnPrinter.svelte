@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { expectOnPrinter, jobAction, printing } from '#lib/client/api.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
@@ -24,7 +25,8 @@
 		label,
 		parts = [],
 		confirm = true,
-		partial = false
+		partial = false,
+		note = ''
 	}: {
 		open?: boolean;
 		slugs: string[];
@@ -41,6 +43,8 @@
 		 * job is linked to those parts only. Whole-plate starts leave it off and send nothing extra.
 		 */
 		partial?: boolean;
+		/** One line under the dialog title for a partial start: which parts are being started. */
+		note?: string;
 	} = $props();
 	const ctx = getBuildCtx();
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
@@ -89,6 +93,9 @@
 		else void ctx.startParts(which, label, chosen?.name);
 	}
 
+	// The build's Overview lists unlinked jobs itself (PrinterJobs, with this same question): the
+	// plate cards there must not ask a second time.
+	const onOverview = $derived(page.route.id === '/(app)/builds/[id]');
 	let dismissed = $state(false);
 	const asking = $derived(
 		dismissed || plateNumber == null
@@ -98,9 +105,9 @@
 </script>
 
 {#if ctx.canEdit && open}
-	<WherePrinting printers={list} {parts} onconfirm={done} onclose={() => (open = false)} />
+	<WherePrinting printers={list} {parts} {note} onconfirm={done} onclose={() => (open = false)} />
 {/if}
-{#if ctx.canEdit && confirm}
+{#if ctx.canEdit && confirm && !onOverview}
 	{#each asking as e (e.printerId)}
 		<ExpectedConfirm exp={e} onother={() => (dismissed = true)} />
 	{/each}

@@ -119,6 +119,11 @@
 			: `plate ${plate.number}`
 	);
 	const partsLabel = (n: number) => `${n} ${n === 1 ? 'part' : 'parts'} of plate ${plate.number}`;
+	// "2 of 3 parts of plate 10: Headrest Bolt, Rear Caster Mount Left" for the printer dialog.
+	const partsNote = (slugs: string[]) =>
+		`${slugs.length} of ${plate.parts.length} parts of plate ${plate.number}: ${slugs
+			.map((s) => ctx.view.parts.find((x) => x.slug === s)?.name ?? s)
+			.join(', ')}`;
 	const choices = $derived(
 		plate.perPartRuns && !only && idle.length > 1
 			? idle.map((s) => ({ slug: s, name: name(s) }))
@@ -197,6 +202,7 @@
 			label={someSlugs ? partsLabel(someSlugs.length) : startLabel}
 			parts={someSlugs ? [] : choices}
 			partial={!!someSlugs}
+			note={someSlugs ? partsNote(someSlugs) : ''}
 			{confirm}
 		/>
 	{/if}
