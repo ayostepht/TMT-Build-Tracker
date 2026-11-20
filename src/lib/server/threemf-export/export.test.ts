@@ -14,7 +14,8 @@ import { ApiError } from '../access';
 import { planArrangement } from '../builds/arrange-plan';
 import { createBuild } from '../builds/create';
 import { setPrinter } from '../builds/actions';
-import { arrangeForPrinter, buildArrangement } from '../builds/plates';
+import { updateBuildDesign } from '../designs/mutate';
+import { arrangeForPrinter, buildArrangement, setPlateLayout } from '../builds/plates';
 import { loadBuildView } from '../builds/view';
 import { openDb, runMigrations, type Db } from '../db';
 import { buildPlates, builds, member, organization, templates, user } from '../db/schema';
@@ -256,6 +257,47 @@ describe('plan', () => {
 		const w = p.warnings.find((x) => x.code === 'slots' && x.plate === merged.number);
 		expect(w?.severity).toBe('error');
 		expect(w?.message).toMatch(/needs 2 filaments/);
+	});
+
+	it('a plate printed in runs of its own counts the filaments of one print and says what the other prints are', () => {
+		const view = viewFor();
+		view.printer = { ...cc, mmSlots: 1 };
+		const fps = footprints();
+		const plates = planArrangement({ ...view, printer: { ...cc, mmSlots: 4 } }, fps)!.result.plates;
+		const wl = view.parts.find((x) => x.slug === 'wing-left')!;
+		const wr = view.parts.find((x) => x.slug === 'wing-right')!;
+		wl.role = 'accent';
+		wr.role = 'primary';
+		// one print: one wing on the bed, the other wing is printed in its own runs (another color)
+		const one = plates.flatMap((p) => p.items).find((i) => i.slug === 'wing-left')!;
+		const runPlate: ArrangedPlate = {
+			...plates[0],
+			name: 'Wings',
+			parts: ['wing-left', 'wing-right'],
+			roles: ['accent'],
+			runs: 2,
+			perPartRuns: true,
+			items: [{ ...one, role: 'accent' }]
+		};
+		const p = buildExportPlan({ view, plates: [runPlate], footprints: fps, flavor: 'orca' });
+		// one filament per print, so a one-slot printer is fine
+		expect(p.warnings.find((x) => x.code === 'slots' && x.severity === 'error')).toBeUndefined();
+		const note = p.warnings.find((x) => x.plate === runPlate.number && x.severity === 'info');
+		expect(note?.message).toMatch(/one print of the same object, printed 2 times for each of/);
+		expect(note?.message).toMatch(/change the color in your slicer/);
+		expect(p.plates).toHaveLength(1);
+		expect(p.plates[0].items).toHaveLength(1);
+		expect(p.plates[0].runs).toBe(2);
+		// the name counts every print: 2 per part x 2 parts
+		expect(p.plates[0].name).toBe('Wings (print x4)');
+		// the same plate without the flag and with two roles is an error on a one-slot printer
+		const plain = buildExportPlan({
+			view,
+			plates: [{ ...runPlate, perPartRuns: undefined, roles: ['accent', 'primary'] }],
+			footprints: fps,
+			flavor: 'orca'
+		});
+		expect(plain.warnings.find((x) => x.code === 'slots')?.severity).toBe('error');
 	});
 
 	it('skips parts without geometry, with a warning, and reports them', () => {
@@ -698,6 +740,106 @@ describe('exportBuild3mf with a database', () => {
 		);
 		const v = loadBuildView(db, id, 'owner')!;
 		expect(v.printer?.name).toBe('Elegoo Centauri Carbon');
+	});
+
+	describe('export follows the plates the app shows', () => {
+		const GEOM = Object.keys(SHAPES);
+		const slugsOf = (p: ReturnType<typeof prepareExport>['plan']) =>
+			p.plates.map((pl) => ({
+				number: pl.number,
+				slugs: [
+					...new Set(pl.items.map((i) => p.objects.find((o) => o.id === i.objectId)!.slug))
+				].sort()
+			}));
+
+		it('an arranged build: the same plates, numbers and parts as the Print tab', () => {
+			const id = mk();
+			setPrinter(db, id, 'owner', { printer: cc });
+			importSynthetic();
+			arrangeForPrinter(db, id, 'owner');
+			const view = loadBuildView(db, id, 'owner')!;
+			expect(view.plates.every((p) => p.source === 'arranged')).toBe(true);
+			const { plan: p } = prepareExport(db, id, 'owner', { flavor: 'orca' });
+			expect(p.warnings.some((w) => /fresh arrangement/.test(w.message))).toBe(false);
+			const got = slugsOf(p);
+			expect(got.length).toBeGreaterThan(0);
+			for (const g of got) {
+				const shown = view.plates.find((pl) => pl.number === g.number)!;
+				expect(shown, `plate ${g.number} is on the Print tab`).toBeTruthy();
+				expect(g.slugs).toEqual(shown.parts.filter((s) => GEOM.includes(s)).sort());
+			}
+		});
+
+		it('a chosen layout nobody recolored: every exported plate is the Print tab plate', () => {
+			const id = mk();
+			setPrinter(db, id, 'owner', { printer: cc });
+			setPlateLayout(db, id, 'owner', { key: 'xpa' });
+			importSynthetic();
+			const view = loadBuildView(db, id, 'owner')!;
+			const { plan: p } = prepareExport(db, id, 'owner', { flavor: 'orca' });
+			for (const g of slugsOf(p)) {
+				const shown = view.plates.find((pl) => pl.number === g.number)!;
+				expect(g.slugs).toEqual(shown.parts.filter((s) => GEOM.includes(s)).sort());
+			}
+		});
+
+		it('a recolored part leaves its kit plate and joins a multi-part plate of its own filament', () => {
+			const id = mk();
+			setPrinter(db, id, 'owner', { printer: cc });
+			setPlateLayout(db, id, 'owner', { key: 'xpa' });
+			db.update(buildPlates)
+				.set({ parts: ['wing-left', 'push-pin'] })
+				.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, 6)))
+				.run();
+			importSynthetic();
+			updateBuildDesign(db, id, 'owner', { partRoles: { 'push-pin': 'primary' } });
+			const view = loadBuildView(db, id, 'owner')!;
+			const last = Math.max(...view.plates.map((pl) => pl.number));
+			const { plan: p } = prepareExport(db, id, 'owner', { flavor: 'orca' });
+			const got = slugsOf(p);
+			expect(got.find((g) => g.number === 6)!.slugs).toEqual(['wing-left']);
+			// the pin is primary: it joins a primary plate that holds several parts in the kit layout, no new plate
+			const pin = got.find((g) => g.slugs.includes('push-pin'))!;
+			expect(pin.number).toBeLessThanOrEqual(last);
+			const home = view.plates.find((pl) => pl.number === pin.number)!;
+			expect(home.parts.length).toBeGreaterThanOrEqual(2);
+			expect(home.parts).not.toContain('push-pin');
+			const note = p.warnings.find((w) => w.code === 'arrangement' && w.plate === 6);
+			expect(note?.message).toMatch(/no longer shares a filament/);
+			expect(note?.message).toMatch(
+				new RegExp(
+					`Push Handle Pin joined plate ${pin.number} \\(.*\\), which prints in the same filament`
+				)
+			);
+			// single-part plates are untouched
+			for (const g of got.filter(
+				(x) => x.number !== 6 && x.number <= last && x.number !== pin.number
+			)) {
+				const shown = view.plates.find((pl) => pl.number === g.number)!;
+				expect(g.slugs).toEqual(shown.parts.filter((s) => GEOM.includes(s)).sort());
+			}
+		});
+
+		it('an arranged build: a part that joined a plate is on that plate in the file and on the Print tab', () => {
+			const id = mk();
+			setPrinter(db, id, 'owner', { printer: cc });
+			arrangeForPrinter(db, id, 'owner');
+			importSynthetic();
+			// the pin prints in primary now: it leaves its accent plate and joins a primary one
+			updateBuildDesign(db, id, 'owner', { partRoles: { 'push-pin': 'primary' } });
+			const view = loadBuildView(db, id, 'owner')!;
+			expect(view.plates.every((p) => p.source === 'arranged')).toBe(true);
+			const shown = view.plates.find((pl) => pl.parts.includes('push-pin'))!;
+			expect(shown.parts.length).toBeGreaterThanOrEqual(2);
+			const { plan: p } = prepareExport(db, id, 'owner', { flavor: 'orca' });
+			expect(p.warnings.some((w) => /fresh arrangement/.test(w.message))).toBe(false);
+			const got = slugsOf(p);
+			expect(got.find((g) => g.slugs.includes('push-pin'))!.number).toBe(shown.number);
+			for (const g of got) {
+				const pl = view.plates.find((x) => x.number === g.number)!;
+				expect(g.slugs).toEqual(pl.parts.filter((s) => GEOM.includes(s)).sort());
+			}
+		});
 	});
 
 	describe('a corrupt stored arrangement', () => {

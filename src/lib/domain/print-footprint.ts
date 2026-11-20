@@ -143,3 +143,53 @@ export function deriveUnits(
 		return { unitsPerPlate: qty, copies: counts.map((c) => c / qty) };
 	return { unitsPerPlate: 1, copies: counts.map((c) => Math.max(1, c)) };
 }
+
+/** Widest brim the arranger reserves room for, mm (a mistyped setting must not eat the bed). */
+export const MAX_BRIM_MM = 20;
+
+/**
+ * Brim width in mm a piece is printed with: the author's object settings (`brim_type` other than
+ * "no_brim" with `brim_width`), else the part's own "10 mm" text (kit seed, the plate legend's brim
+ * chip), else 0. The arranger counts it as part of the piece's footprint.
+ */
+export function pieceBrimMm(
+	piece: Pick<PrintPiece, 'settings' | 'partSettings'> | undefined,
+	partBrimText?: string | null
+): number {
+	const clamp = (n: number) => (Number.isFinite(n) && n > 0 ? Math.min(MAX_BRIM_MM, n) : 0);
+	const s = { ...(piece?.settings ?? {}), ...(piece?.partSettings ?? {}) };
+	if (s.brim_type !== undefined) {
+		if (/^no[_ ]?brim$/i.test(s.brim_type.trim())) return 0;
+		return clamp(parseFloat(s.brim_width ?? ''));
+	}
+	if (s.brim_width !== undefined && clamp(parseFloat(s.brim_width)) > 0)
+		return clamp(parseFloat(s.brim_width));
+	const m = /(\d+(?:[.,]\d+)?)\s*mm/i.exec(partBrimText ?? '');
+	return m ? clamp(parseFloat(m[1].replace(',', '.'))) : 0;
+}
+
+/**
+ * True when two parts are the same printed geometry (the wheel rim halves: one object, two colors): the
+ * same number of pieces with the same sizes, copies per unit and outline, and the same units per plate.
+ * Names and meshes are not compared (the parts are named for what they are, not for their shape).
+ */
+export function sameGeometry(a: PrintFootprint, b: PrintFootprint): boolean {
+	if (a.pieces.length !== b.pieces.length) return false;
+	if ((a.unitsPerPlate ?? null) !== (b.unitsPerPlate ?? null)) return false;
+	return a.pieces.every((pc, i) => {
+		const o = b.pieces[i];
+		if (
+			Math.abs(pc.w - o.w) >= 0.05 ||
+			Math.abs(pc.d - o.d) >= 0.05 ||
+			Math.max(1, pc.copies) !== Math.max(1, o.copies)
+		)
+			return false;
+		if (!pc.hull || !o.hull) return true;
+		return (
+			pc.hull.length === o.hull.length &&
+			pc.hull.every(
+				(p, k) => Math.abs(p[0] - o.hull![k][0]) < 0.05 && Math.abs(p[1] - o.hull![k][1]) < 0.05
+			)
+		);
+	});
+}

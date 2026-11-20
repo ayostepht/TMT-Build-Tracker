@@ -10,6 +10,10 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 - **Print some parts of a plate.** If you split a plate in your slicer (for example the straps on their own), a plate on the Print tab now has a "Print some parts…" button. Pick the parts that are on the printer (all are ticked to start with), and mark them as printing as one print, or log them as one print without marking them first. With a printer connected, "Where is it printing?" still asks, and that printer's job is linked to the picked parts only. The rest of the plate stays to do. Now printing shows only the parts you picked, with their share of the plate's grams and time.
 
+### Changed
+
+- **The plate arranger follows the kit's layout.** Plates follow the kit's layout first (or your uploaded file's): a plate stays as the kit has it while its parts share a filament, a part that is alone on its plate stays alone, only parts whose filament no longer matches move, and brims count toward a part's space. A part that moves joins a kit plate of the same filament that already holds several parts when it fits without crowding it (at most 60% of the bed, the parts already there stay put); otherwise it gets a new plate at the end. A plate the kit prints several times with the same shape (the wheel rims) stays one plate and says how many times to print it, in which colors. Plates keep the kit's numbers, so a standard-palette build on a 256 mm bed has the kit's 24 plates. The 3MF export holds one copy of a repeat-printed plate with a note. Builds you already have keep their plates exactly as they are until you re-arrange them.
+
 ## [0.9.3] - 2026-11-19
 
 **Upgrading:** back up your `/data` folder first. This release adds database migration 0003 (additive: a Spoolman filament link and cache, and a creation time on print logs, filled in for your existing prints). It runs automatically when the container starts and cannot be undone, so to go back to 0.9.2 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
@@ -36,6 +40,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Fixed
 
+- On a plate the kit prints several times per part, such as the wheel rims, the grams and time are now per print, the counter counts prints ("0/4 printed"), the fields read "per print", the exported plate name says "(print x4)", and the tires diagram no longer quotes both runs' grams as one run. Tires keep "per run".
 - A blank `ORIGIN=` (an empty `ORIGIN` environment variable, as some templates and compose files leave) no longer stops the server from starting. The app now keeps `ORIGIN` and `PUBLIC_URL` in step, so the two cannot disagree.
 
 ## [0.9.2] - 2026-11-16

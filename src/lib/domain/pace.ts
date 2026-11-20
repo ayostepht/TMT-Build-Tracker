@@ -117,8 +117,9 @@ export function plateTimeBadge(plate: Plate, pace: Pace | null): PlateTimeBadge 
 	if (!plate.estSeconds) return null;
 	const src = SOURCE[plate.estSource ?? ''] ?? '';
 	const rough = plate.estSource === 'estimate' && plate.estRough ? 'rough estimate' : src;
-	const perRun = plate.runs > 1 ? ' per run' : '';
 	const runs = plate.perPartRuns ? plate.runs * plate.parts.length : plate.runs;
+	// the rims: the time is one print (one bed load), of which there are runs x parts
+	const perRun = runs > 1 ? (plate.perPartRuns ? ' per print' : ' per run') : '';
 	if (pace) {
 		const adj = plate.estSeconds * pace.ratio;
 		return {

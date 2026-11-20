@@ -130,6 +130,13 @@ describe('pace', () => {
 		const multi = plateTimeBadge({ ...pl, runs: 2, perPartRuns: false }, pace)!;
 		expect(multi.main).toBe('≈ 9.4 h per run at your pace');
 		expect(multi.total).toBe('19 h total');
+		// the rims: runs 2 x 2 parts = 4 prints; the time is one print
+		const rims = plateTimeBadge(
+			{ ...pl, runs: 2, perPartRuns: true, parts: ['rims-1-4', 'rims-2-3'] },
+			null
+		)!;
+		expect(rims.main).toBe('~10 h per print');
+		expect(rims.total).toBe('41 h total');
 	});
 });
 

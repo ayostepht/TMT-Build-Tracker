@@ -464,3 +464,23 @@ export const rectPoly = (x: number, y: number, w: number, d: number): Pt[] => [
 export function turnedOutlineBox(outline: readonly Pt[], deg: number) {
 	return turnedBox(outline, deg);
 }
+
+/**
+ * A convex outline grown by `by` mm all round (Minkowski sum with a regular 32-gon that has points on
+ * the axes). The 32-gon is point-symmetric, so the grown outline's box keeps its centre when turned.
+ * Used to count a brim as part of a part's footprint.
+ */
+export function inflateOutline(outline: readonly Pt[], by: number): Pt[] {
+	if (!(by > 0)) return outline.map((p) => [...p] as Pt);
+	const N = 32;
+	const pts: Pt[] = [];
+	for (const [x, y] of outline)
+		for (let k = 0; k < N; k++) {
+			const a = (2 * Math.PI * k) / N;
+			pts.push([x + by * Math.cos(a), y + by * Math.sin(a)]);
+		}
+	return convexHull(pts).map(([x, y]) => [
+		Math.round(x * 1000) / 1000,
+		Math.round(y * 1000) / 1000
+	]);
+}

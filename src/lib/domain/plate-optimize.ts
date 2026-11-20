@@ -707,3 +707,102 @@ export function findFreePosition(
 		}
 	return best;
 }
+
+export interface NestItem {
+	/** Convex outline around the box centre, counter-clockwise, unrotated. */
+	outline: readonly Pt[];
+	/** Flat angles (degrees about z) to try for this item. */
+	angles: readonly number[];
+}
+
+export interface NestPlacement {
+	rot: number;
+	/** Centre of the turned outline's box, bed mm. */
+	x: number;
+	y: number;
+	ox: number;
+	oy: number;
+	/** Box size after turning. */
+	w: number;
+	d: number;
+}
+
+const NEST_STEP = 2;
+
+/**
+ * Place outlines (true hulls, not boxes) on one empty plate: biggest first, each at the lowest then
+ * leftmost spot over a 2 mm grid where it keeps `spacing` to the items already placed and the usable
+ * edges and keep-out areas, trying every angle offered. Lets parts nest into each other's concave
+ * sides where a box packer sees no room. Flat rotations only. Returns null when one does not fit.
+ * `fixed` items (stored position, turn and pivot, as `OptItem`) are already on the plate: they stay
+ * exactly where they are and the new items keep `spacing` to them (not checked among the fixed ones).
+ * Deterministic; work is bounded by the grid and the few items it is given.
+ */
+export function nestOutlines(
+	items: readonly NestItem[],
+	setup: OptSetup,
+	fixed: readonly OptItem[] = []
+): NestPlacement[] | null {
+	const opt: OptItem[] = items.map((i) => ({
+		outline: i.outline,
+		rotatable: false,
+		rot: 0,
+		x: 0,
+		y: 0,
+		w: 0,
+		d: 0
+	}));
+	const L = new Layout([...fixed, ...opt], setup);
+	const placed: { t: Turn; x: number; y: number; w: World }[] = [];
+	// items already on the plate (never moved or turned): the new ones keep `spacing` to them
+	fixed.forEach((f, k) => {
+		const t = L.turn(L.nodes[k], f.rot);
+		placed.push({ t, x: f.x, y: f.y, w: L.world(t, f.x, f.y) });
+	});
+	const out: NestPlacement[] = new Array(items.length);
+	for (let k = 0; k < items.length; k++) {
+		const node = L.nodes[fixed.length + k];
+		let best: { t: Turn; x: number; y: number; key: [number, number] } | null = null;
+		for (const a of new Set(items[k].angles.map(norm))) {
+			const t = L.turn(node, a);
+			const x0 = L.ux0 - t.minX + t.ox;
+			const x1 = L.ux1 - t.maxX + t.ox;
+			const y0 = L.uy0 - t.minY + t.oy;
+			const y1 = L.uy1 - t.maxY + t.oy;
+			if (x1 < x0 - 1e-6 || y1 < y0 - 1e-6) continue;
+			const axis = (lo: number, hi: number) => {
+				const v: number[] = [];
+				for (let c = lo; c <= hi + 1e-9; c += NEST_STEP) v.push(Math.round(c * 10) / 10);
+				if (!v.length || v[v.length - 1] < hi - 1e-6) v.push(Math.round(hi * 10) / 10);
+				return v;
+			};
+			for (const y of axis(y0, y1))
+				for (const x of axis(x0, x1)) {
+					const top = y + (t.maxY - t.oy);
+					if (best && (top > best.key[0] + 1e-6 || (top > best.key[0] - 1e-6 && x >= best.key[1])))
+						continue;
+					if (L.clearance(t, x, y) < -1e-6) continue;
+					const w = L.world(t, x, y);
+					let ok = true;
+					for (const p of placed)
+						if (L.gap(t, x, y, w, p.t, p.x, p.y, p.w, setup.spacing) < setup.spacing - 1e-6) {
+							ok = false;
+							break;
+						}
+					if (ok) best = { t, x, y, key: [top, x] };
+				}
+		}
+		if (!best) return null;
+		placed.push({ t: best.t, x: best.x, y: best.y, w: L.world(best.t, best.x, best.y) });
+		out[k] = {
+			rot: best.t.deg,
+			x: best.x,
+			y: best.y,
+			ox: best.t.ox,
+			oy: best.t.oy,
+			w: best.t.w,
+			d: best.t.d
+		};
+	}
+	return out;
+}

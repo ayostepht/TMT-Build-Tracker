@@ -58,7 +58,9 @@ import {
 	hasPlateRuns,
 	layoutHintFor,
 	loadFootprints,
+	PLANNER_VERSION,
 	planArrangement,
+	planForBuild,
 	signature,
 	carryManuals,
 	manualTimes,
@@ -603,7 +605,8 @@ export function applyUpload(
 			if (b.arrange === true) {
 				// re-read the view so the arrangement sees the new data
 				const fresh = loadBuildView(tx, buildId, userId)!;
-				const plan = planArrangement(
+				const plan = planForBuild(
+					tx,
 					fresh,
 					loadFootprints(tx, fresh.build.templateId),
 					layoutHintFor(tx, fresh.build.templateId)
@@ -768,7 +771,8 @@ export function arrangeForPrinter(
 	let result = { plates: 0, convertedRuns: 0, warnings: [] as ArrangeWarning[] };
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		if (!view.printer) bad('Choose a printer first');
-		const plan = planArrangement(
+		const plan = planForBuild(
+			tx,
 			view,
 			loadFootprints(tx, view.build.templateId),
 			layoutHintFor(tx, view.build.templateId)
@@ -859,7 +863,20 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 	const onPlates = new Set(stored.flatMap((pl) => pl.parts));
 	ensureSilhouettes(db, view.build.templateId, onPlates);
 	const footprints = loadFootprints(db, view.build.templateId);
-	const plan = planArrangement(view, footprints, layoutHintFor(db, view.build.templateId));
+	const hint = layoutHintFor(db, view.build.templateId);
+	const plan = planForBuild(db, view, footprints, hint);
+	// Plates stored before the kit layout came first were planned by the plain arranger: they are
+	// "stale" only when that planner would now plan something else (a color or variant change), never
+	// just because the planner changed. Their numbers and plates stay as they are.
+	// Plates stored by planner 2 (before run plates and joins) are compared with that planner's rules.
+	const storedV =
+		stored.length && stored.every((pl) => pl.v === stored[0].v) ? stored[0].v : undefined;
+	const compare =
+		stored.length === 0 || storedV === PLANNER_VERSION
+			? plan
+			: storedV === 2
+				? planForBuild(db, view, footprints, hint, 2)
+				: planArrangement(view, footprints, hint, undefined, 'legacy');
 	const used: Record<string, PrintFootprint> = {};
 	for (const pl of stored)
 		for (const s of pl.parts) {
@@ -902,8 +919,8 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 				pl.items.some((i) => typeof i === 'object' && i !== null && 'pose' in i)
 			) ||
 			(row?.plateLayout === ARRANGED_LAYOUT &&
-				!!plan &&
-				signature(plan.result.plates) !== signature(stored)) ||
+				!!compare &&
+				signature(compare.result.plates) !== signature(stored)) ||
 			(row?.plateLayout !== ARRANGED_LAYOUT && !!plan && templateColorsChanged(view)),
 		template: view.printTemplate
 			? { fileName: view.printTemplate.fileName, printer: view.printTemplate.printer }

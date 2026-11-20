@@ -23,23 +23,26 @@ export interface LegendRow {
 }
 
 export function legendRows(
-	plate: Pick<ArrangedPlate, 'items' | 'parts'>,
+	plate: Pick<ArrangedPlate, 'items' | 'parts' | 'perPartRuns'>,
 	nameOf: (slug: string) => string,
 	hasOutline: (item: ArrangedPlate['items'][number]) => boolean = (it) => !!it.sil
 ): LegendRow[] {
 	const order = [...new Set([...plate.parts, ...plate.items.map((i) => i.slug)])].filter((s) =>
 		plate.items.some((i) => i.slug === s)
 	);
+	// a plate printed in runs of its own shows one print: the parts that are not drawn are printed in other runs
+	const others = plate.perPartRuns ? plate.parts.filter((s) => !order.includes(s)) : [];
 	return order.map((slug, idx) => {
 		const its = plate.items.filter((i) => i.slug === slug);
 		const pieces = new Set(its.map((i) => i.piece)).size;
 		const name = nameOf(slug);
-		const label =
+		const base =
 			its.length <= 1
 				? name
 				: pieces > 1
 					? `${name}: ${its.length} pieces`
 					: `${name} ×${its.length}`;
+		const label = others.length ? `${base} (same shape: ${others.map(nameOf).join(', ')})` : base;
 		const rot = its.find((i) => i.rotation % 90 !== 0);
 		return {
 			slug,

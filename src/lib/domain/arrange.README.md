@@ -5,6 +5,65 @@ filament, and where each part sits. It is pure and deterministic: the same input
 the same plates. The server applies the result to a build (`build_plates`), and an
 exporter can turn each plate into a 3MF.
 
+## The kit layout comes first
+
+The app does not call `arrange()` straight for a build. `planArrangement(..., kit)` in
+`builds/arrange-plan.ts` hands the kit's own plate layout (or the plates of the file the maker
+uploaded) to `arrangeFromSource` in `arrange-source.ts`, and `arrange()` only places what the source
+cannot (`loadKitSource` picks the layout: the build's own MakeGood profile, else the one whose bed is
+the biggest the printer still holds):
+
+- **A plate stays** (same number, name, parts, positions) while its parts still print together: one
+  filament, or different filaments that the kit already printed in different colors, and the printer's
+  slots and materials allow it. It is placed alone (never merged, no brim margin: "as authored"); the
+  pack stores membership only, so positions come from `arrange()` of that one plate, at a gap that steps
+  down to 2 mm and with a few-parts order/turn search and an outline nester (`options.thorough`) so the
+  plate fits where the author's did. A source that carries positions (`SourcePlate.items`) keeps them.
+- **Only what must move moves**: a part whose filament no longer matches the rest of its plate (a design
+  that colors two parts of one kit color differently), a part that does not fit this bed, and parts the
+  source does not list go off their plate. The largest same-filament group stays in place. A part that left
+  for its filament first tries to **join an existing plate** (below); the rest go to NEW plates numbered
+  after the last, packed together by `arrange()`.
+- **A moved part may join a multi-part plate** (planner 3, `tryJoin`): a plate that already had several parts
+  in the source, that now prints in the part's own filament only (the same role key: never mixing, never
+  PETG with TPU), that prints as often as the part needs (`runs`), and that is not a run plate. Parts
+  already on it do not move or turn; the newcomer's outline (brim counted) is nested into the free space with
+  the printer's normal gap to the plate's items (their brims counted too), the edge margin and the keep-outs;
+  there is no step-down to the kit's 2 mm gap. The plate's used share of the usable bed after joining
+  (`ArrangedPlate.utilisation`, boxes with brims) must stay at or under `JOIN_MAX_UTILISATION` (60 %).
+  Several candidates: most room left first, ties to the lowest plate number. A part with rigid source groups
+  does not join. A plate with a single part in the source never receives one (below). Nothing fits: a new plate.
+- **Crowding limit, grounded in the kit** (xpa layout, Centauri Carbon 256 x 256 + cutter keep-out; used
+  share of the usable bed, boxes with brims): Seat Back 22 %, Connectors 47 %, Push Handle Bottom 49 %,
+  Caster Mount (Kit) 60 %, Push Handle Top 68 %, Headrest 94 % (median 54.5 %; the wheel rim plate shows 89 %
+  for its one print and is not a multi-part plate). The cap is a little above the typical multi-part plate and
+  below the fullest one; 60 % is also where `arrange()` stops calling a plate underfilled (`mergeBelow`).
+- **A plate printed in runs of its own is one plate** (planner 3, `isRunPlate`): a source plate that lists 2+
+  parts of the SAME geometry (same pieces, sizes, copies, outline, units per plate) and either says so
+  (`perPartRuns`) or is printed more than once (`runs` > 1). The wheel rims are one object, `3DTMT O WHEEL RIM
+REV B`, printed twice in Accent (`rims-1-4`) and twice in Primary (`rims-2-3`): one plate, one rim on the
+  bed per print. It is laid out for ONE print (the first part's items for one run: `unitsPerPlate`), stays
+  whole in the kit's number and name, is never split because its parts "do not fit together" (they are never on
+  the bed at once) or because their colors cannot share a printer, and the result carries
+  `ArrangedPlate.perPartRuns` (the build's plate is stored `perPartRuns`, like the kit's own). `items` show one
+  print, `parts` all parts, `roles` the filament of that print, `runs` the runs of each part. A plate that
+  stays whole is printed as often as the source says (the tires: 8 segments per print, `runs` 2). Plates with
+  different geometry, or printed once and not flagged, are not run plates.
+- **A plate with one part in the source is sacred** (`soloParts`, `options.solo`): it never gets another
+  part, and may use the relaxed edge margin (`SOLO_MARGIN`, 1 mm) when the printer's margin leaves no room.
+- **Brims count** for parts the arranger places (`ArrangePart.brims`, from `pieceBrimMm`): the footprint
+  used for the gap to neighbours, the bed edge and keep-outs is the outline grown by the brim; the item
+  box `w` x `d` includes it. A part that fits only without its brim is placed without it (warning `brim`).
+- **No layout for the bed** (a layout for a bigger bed than the printer's, a custom kit): plain
+  `arrange()` with `options.solo` from the nearest layout.
+- Plates carry `v` (`PLANNER_VERSION` 3). A planner change must never flag or rewrite an existing build: the
+  "stale" check compares a stored arrangement with the planner that made it. Version 3 = run plates and joins
+  (`RULES_V3`); version 2 = the kit layout first, movers always on new plates (`RULES_V2`,
+  `planArrangement(..., kit, 2)`); no version = the plain arranger (`planArrangement(..., 'legacy')`). Only
+  an explicit "Arrange"/"Re-arrange" or an automatic re-arrange after a design change writes version 3.
+
+Plain `arrange()` without `solo`, `brims` and `thorough` is unchanged (`arrange-tmt-snapshot.test.ts`).
+
 ## Getting the arranged plates for a build
 
 Server side (preferred):
@@ -34,6 +93,7 @@ in `src/lib/server/builds/arrange-plan.ts` (returns `{ result: ArrangeResult, un
 ```ts
 ArrangedPlate {
   number, name, runs,              // runs: print the plate this many times (rims: 2)
+  perPartRuns?,                    // true: one print holds ONE part's items; every part is printed `runs` times (rims)
   parts: string[],                 // part slugs
   roles: string[],                 // filament role keys on the plate
   estGrams: Record<role, number>,  // per run, from BOM grams (an estimate)
