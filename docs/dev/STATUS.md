@@ -10,15 +10,17 @@ done. Keep it under ~150 lines.
 
 ## Pick up here
 
-0. **0.9.2 released (2026-11-16).** `main` 48c9649 (merge commit of #70, promote of `edge`
-   8f473ad = #69 "Release 0.9.2"); tag `v0.9.2` on 48c9649, created by the maintainer from the
-   release form with Target `main` (cloud sessions could not push the tag: the git proxy cut
-   tag pushes). Image run 43801476939 succeeded; `latest`, `0.9.2`, `0.9` and `sha-48c9649`
-   share one digest (checked anonymously 2026-11-16). 0.9.2 adds migrations 0001/0002
-   (additive) and the frozen fixture `fixtures/v0.9.2/`. Contents since 0.9.1: #32, #33,
-   #35, #36, #38, #41, #43, #48–#51, #53, #54, #58, #66, #67. The test copy runs r62 =
-   `edge` 5290765 (the 0.9.3 app code, migration 0003 live since r60; see `docs/dev/CHANGELOG.md`).
-   Spoolman (#59, #71) was held until 0.9.2 was on `main` and may merge now.
+0. **0.9.3 released (2026-11-19).** `main` a64fa26 (merge commit of #86, promote of `edge`
+   5290765 = #85 "Release 0.9.3"); tag `v0.9.3` on a64fa26, created by the maintainer from the
+   release form with Target `main`. Image run 44640633512: `latest`, `0.9.3`, `0.9` and
+   `sha-a64fa26` share one digest (`sha256:84f708…`, checked anonymously 2026-11-20). 0.9.3
+   adds migration 0003 (additive: Spoolman links, `print_runs.created_at`,
+   `spoolman_cache`) and the frozen fixture `fixtures/v0.9.3/`. Contents since 0.9.2:
+   Spoolman filaments (#71, #77, #81 fixes #79), dependency updates (#74), empty `ORIGIN`
+   fix (#76), header detail lines and exact plate locators (#80), resource limits from the
+   public edition (#82, #84). The test copy runs r62 = `edge` 5290765 (the 0.9.3 app code;
+   see `docs/dev/CHANGELOG.md`); the maintainer confirmed the #79 Spare figures on real data,
+   and #59 is closed. 0.9.2 (2026-11-16): `main` 48c9649, migrations 0001/0002.
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes
    `promote/<sha>` but cannot open the PR while "Allow GitHub Actions to create and approve
