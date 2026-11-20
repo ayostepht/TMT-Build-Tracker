@@ -302,6 +302,27 @@ export function plateGrams(view: BuildView, plate: Plate): GramsInfo {
 	};
 }
 
+/**
+ * The share (0 to 1) of one print of a plate that `slugs` make up, by estimated grams
+ * (`weightShare`). 1 for a perPartRuns plate (its parts print one by one), for the whole plate, and
+ * for a selection with nothing on the plate. Used when only some parts of a plate are on the printer
+ * (or logged) together, e.g. the straps picked off a plate that is printed in two goes.
+ */
+export function subsetShare(view: BuildView, plate: Plate, slugs: readonly string[]): number {
+	if (plate.perPartRuns) return 1;
+	const all = plate.parts.filter((s) => view.parts.some((p) => p.slug === s));
+	const mine = all.filter((s) => slugs.includes(s));
+	if (!mine.length || mine.length >= all.length) return 1;
+	return weightShare(view, all, mine);
+}
+
+/** `plateGrams` for the part of the plate that is printed together: scaled by `subsetShare`. */
+export function printGrams(view: BuildView, plate: Plate, slugs: readonly string[]): GramsInfo {
+	const g = plateGrams(view, plate);
+	const share = subsetShare(view, plate, slugs);
+	return share === 1 ? g : { ...g, perRun: g.perRun * share, total: g.total * share };
+}
+
 /** Grams of one unit (a whole plate, one part of a perPartRuns plate, or a part on no plate). */
 function unitGrams(view: BuildView, u: Unit): GramsInfo {
 	const pl = plateByNumber(view, u.plate);

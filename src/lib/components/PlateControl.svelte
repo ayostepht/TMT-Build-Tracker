@@ -7,6 +7,7 @@
 	import LogRunSheet from './LogRunSheet.svelte';
 	import StartOnPrinter from './StartOnPrinter.svelte';
 	import StatusBadge from './StatusBadge.svelte';
+	import PartPickSheet from './PartPickSheet.svelte';
 
 	/**
 	 * THE status / start / finish / log control for a plate, used on the Print tab (plate headings and
@@ -43,6 +44,9 @@
 	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
 	let open = $state(false);
 	let where = $state(false);
+	let picking = $state(false);
+	let logPicked = $state<string[] | null>(null);
+	let logSome = $state(false);
 
 	const status = (s: string) => ctx.view.state[s]?.status;
 	const scope = $derived(only ? [only] : plate.parts);
@@ -115,6 +119,25 @@
 			: []
 	);
 
+	// "Print some parts…": a single-run plate with two or more parts still to start. Not for a
+	// perPartRuns plate (it already prints one part per run) or a plate with one part left.
+	const canPickSome = $derived(
+		ctx.canEdit && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length >= 2
+	);
+	// Some parts: one start for exactly them. All of what is left is the plate's own Printing action.
+	function printSome(picked: string[]) {
+		if (picked.length >= idle.length) pick('Printing');
+		else
+			void ctx.startParts(
+				picked,
+				`${picked.length} of ${plate.parts.length} parts, plate ${plate.number}`
+			);
+	}
+	function logSomeParts(picked: string[]) {
+		logPicked = picked;
+		logSome = true;
+	}
+
 	function pick(s: string) {
 		if (s === 'Printing') {
 			if (!startSlugs.length) return;
@@ -149,6 +172,15 @@
 				onclick={() => (open = true)}>Log a print…</button
 			>
 		{/if}
+		{#if canPickSome}
+			<button
+				class="{cls} ghost plc-text"
+				type="button"
+				data-testid="plate-print-some"
+				aria-label="Print some parts of plate {plate.number}"
+				onclick={() => (picking = true)}>Print some parts…</button
+			>
+		{/if}
 		<StartOnPrinter
 			bind:open={where}
 			slugs={startSlugs}
@@ -160,6 +192,22 @@
 	{/if}
 </span>
 {#if ctx.canEdit}
+	<PartPickSheet
+		bind:open={picking}
+		plateNumber={plate.number}
+		slugs={idle}
+		onprint={printSome}
+		onlog={logSomeParts}
+	/>
+	{#if logPicked}
+		<LogRunSheet
+			bind:open={logSome}
+			quick
+			plateNumber={plate.number}
+			slugs={logPicked}
+			title="Log a print: {logPicked.length} of {plate.parts.length} parts, plate {plate.number}"
+		/>
+	{/if}
 	<LogRunSheet
 		bind:open
 		quick={logSlugs.length > 0}

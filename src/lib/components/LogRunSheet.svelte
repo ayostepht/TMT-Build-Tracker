@@ -16,7 +16,7 @@
 		partGrams,
 		partialPrefill,
 		partialTicksOk,
-		plateGrams,
+		printGrams,
 		progressGrams,
 		recomputeParts,
 		runInfo,
@@ -24,6 +24,7 @@
 		runOutcomeSummary,
 		snapshotParts,
 		startedOnPrinter,
+		subsetShare,
 		toLocalInput,
 		today,
 		weakestGramsSource
@@ -165,7 +166,7 @@
 		if (plate) {
 			return plate.perPartRuns
 				? partGrams(ctx.view, pickedSlug ?? slugs[0])
-				: plateGrams(ctx.view, plate);
+				: printGrams(ctx.view, plate, slugs);
 		}
 		const infos = slugs.map((s) => partGrams(ctx.view, s));
 		return {
@@ -191,8 +192,19 @@
 				? 'From your slice; edit if different.'
 				: 'From your slicer; edit if different.'
 	);
+	/** "3 of 5 parts" when the print is only some parts of the plate (figures are their share). */
+	const partShare = $derived(
+		plate && !editRun && subsetShare(ctx.view, plate, slugs) < 1
+			? `${slugs.length} of ${plate.parts.length} parts`
+			: ''
+	);
 	/** The plate's own time per run, used when the print has no start time. */
-	const planned = $derived(quick && !startedAt && plate?.estSeconds ? plate.estSeconds : null);
+	// Only some parts of the plate (picked on their own): their share of it, as for the grams.
+	const planned = $derived(
+		quick && !startedAt && plate?.estSeconds
+			? Math.round(plate.estSeconds * (editRun ? 1 : subsetShare(ctx.view, plate, slugs)))
+			: null
+	);
 	const plannedLabel = $derived(
 		plate?.estSource === 'manual'
 			? 'Your entered time'
@@ -614,7 +626,9 @@
 					/>
 					{#if durInvalid}<small class="err">Try 13h 07m, 13:07 or 1.5 (hours).</small>
 					{:else if startedAt && !durEdited}<small>From the start time to finish.</small>
-					{:else if planned && !durEdited}<small>{plannedLabel}; edit if different.</small>{/if}
+					{:else if planned && !durEdited}<small
+							>{plannedLabel}{partShare ? `, ${partShare}` : ''}; edit if different.</small
+						>{/if}
 				</label>
 
 				{#if showPct}
@@ -717,7 +731,8 @@
 						{:else if result === 'Failed' && !gramsEdited}<small
 								>Optional: grams actually used. Left empty it counts as 0 g.</small
 							>
-						{:else if slicerDefault != null && !gramsEdited && !editRun}<small>{gramsSource}</small
+						{:else if slicerDefault != null && !gramsEdited && !editRun}<small
+								>{gramsSource}{partShare ? ` Share of the plate: ${partShare}.` : ''}</small
 							>{/if}
 					</label>
 				{/if}
