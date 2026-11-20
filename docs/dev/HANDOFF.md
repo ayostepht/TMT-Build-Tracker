@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-20, 18:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-20, 19:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -20,16 +20,13 @@ _Updated 2026-11-20, 18:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
-- **Test copy:** r62 = `edge` 5290765 (the 0.9.3 app code) deployed 2026-11-19; see
+- **Test copy:** r63 = `edge` 230614a (0.9.3 plus #90) deployed 2026-11-20; see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
 - **#90 "Print some parts of a plate" merged** into `edge` 2026-11-20 as 230614a (the
   maintainer and the public site developer cleared it; CI green). A plate's control gets
-  "Print some parts…"; no schema or server change. Not on the test copy yet (still r62). No
-  pull requests in flight, no agents running.
-- **Next step:** with the maintainer's OK, deploy the `edge` image of 230614a to the test
-  copy (backup and rehearsal as usual; no migration) and add the `docs/dev/CHANGELOG.md`
-  entry. Then pick from the follow-ups below or STATUS "Next steps".
+  "Print some parts…"; no schema or server change. On the test copy since r63. No agents running.
+- **Next step:** pick from the follow-ups below or STATUS "Next steps".
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 
