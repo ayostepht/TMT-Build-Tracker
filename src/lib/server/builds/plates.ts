@@ -646,7 +646,11 @@ export function applyUpload(
 		requireConversion(view, convertRuns);
 
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
-		const manualFor = manualTimes(tx, buildId);
+		const manualFor = manualTimes(
+			tx,
+			buildId,
+			rows.map(({ pl, slugs }) => ({ number: pl.index, parts: slugs }))
+		);
 		tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 		clearBuildThumbs(buildId);
 		const twinPlates: ApplyResult['twinPlates'] = [];
