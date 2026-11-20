@@ -3,7 +3,7 @@
  * Each run is compared with the best time its plate has (`Plate.estSeconds`, already chosen
  * by precedence slicer > learned print template > MakeGood profile > our estimate), weighted
  * by hours (sum of actual over sum of estimated). Failed and partial runs, runs with no hours,
- * part-subset runs and outliers (under 30% or over 300% of the plate time) are ignored.
+ * part-subset runs (parts or pieces) and outliers (under 30% or over 300% of the plate time) are ignored.
  * Pure: no DB, no Svelte.
  */
 import { fmtH } from './format.ts';
@@ -51,6 +51,8 @@ export interface TimedRun {
 export function timedRun(view: BuildView, r: PrintRun): TimedRun | null {
 	const h = Number(r.hours) || 0;
 	if (!(h > 0) || r.result !== 'Success' || r.plateNumber == null) return null;
+	// Some pieces of one part are a subset run: they never stand for the whole plate's time.
+	if (r.comps?.length) return null;
 	const pl = view.plates.find((p) => p.number === r.plateNumber);
 	// The run's own time (what was planned when it was logged) comes before the plate's.
 	const own = r.estSeconds && r.estSeconds > 0 ? r.estSeconds : 0;

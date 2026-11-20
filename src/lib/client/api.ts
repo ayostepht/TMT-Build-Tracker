@@ -139,7 +139,10 @@ export interface PartialSplitBody {
 	keptGrams: number | null;
 	lostGrams: number | null;
 }
-/** Logs a run; with `split` (result Partial) two runs are made. `id` is the printed one, `ids` all of them. */
+/**
+ * Logs a run; with `split` (result Partial) two runs are made. `id` is the printed one, `ids` all of them.
+ * With `comps` (and `partSlug`, no `partSlugs`; Success or Failed) it is a print of those pieces of the part.
+ */
 export const logRun = (id: string, input: PrintRunInput & { split?: PartialSplitBody }) =>
 	call<{ id: string; ids?: string[]; spoolmanWarning?: string }>(
 		'POST',
@@ -189,6 +192,12 @@ export const printing = (
 		seconds?: number | null;
 		/** `start` only: the printer's name, kept in the activity row ("put Plate 3 on Garage printer"). */
 		printer?: string;
+		/**
+		 * `start` only, with exactly one slug: indexes of the pieces (`PartDef.components`) of that part that
+		 * are on this print ("Print some pieces…"). Distinct, unticked, fewer than all of them; every piece
+		 * still to print is the same as leaving it out.
+		 */
+		comps?: number[];
 	}
 ) => call('POST', `${b(id)}/printing`, body);
 

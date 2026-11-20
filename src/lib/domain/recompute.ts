@@ -3,7 +3,7 @@
  * edited or deleted. Pure; it replays the runs through `applyRun`, so the rules
  * are the ones used when logging.
  */
-import { applyRun, runTargets, type RunOpts } from './actions.ts';
+import { applyRun, isPieceRun, runTargets, type RunOpts } from './actions.ts';
 import type { BuildView, PartPatch, PartState, PrintRun } from './types.ts';
 
 /**
@@ -14,26 +14,44 @@ import type { BuildView, PartPatch, PartState, PrintRun } from './types.ts';
  * leaves Reprint; some Success runs but not enough -> Printing only when the
  * part is Printing now, else To print; no runs -> To print.
  * A slug in `opts.livePrinting` that is Printing now stays Printing (start time and estimate kept)
- * unless the history completes it: a newer print is running on a live job.
+ * unless the history completes it: a newer print is running on a live job. So does a part with a
+ * piece print on the printer (`printingComps`), whatever runs are edited.
+ * Piece runs (`PrintRun.comps`): the ticks they made are replayed too. The part's ticks are first
+ * stripped of the pieces its piece Success runs in the OLD history (`view.runs`) ticked, then the NEW
+ * history ticks its own again, so deleting or failing a piece run unticks exactly those pieces and
+ * pieces ticked by hand otherwise stay.
  * Returns only the patches that change something.
  */
 export function recomputeParts(
 	view: BuildView,
 	runs: PrintRun[],
 	slugs: string[],
-	opts: RunOpts = {}
+	opts: RunOpts & {
+		/** Default true: a part with a piece print on the printer stays Printing (see above). `releaseUnstarted` sets false. */
+		keepPieces?: boolean;
+	} = {}
 ): PartPatch[] {
 	const out: PartPatch[] = [];
 	for (const slug of new Set(slugs)) {
 		const cur = view.state[slug];
 		if (!cur) continue;
 
+		// Pieces the old history's successful piece runs ticked: not the part's own to keep.
+		const pieceSuccess = (rs: readonly PrintRun[]) =>
+			rs.filter((r) => r.result === 'Success' && isPieceRun(r) && r.partSlug === slug && r.comps);
+		const oldPieces = pieceSuccess(view.runs);
+		const touchesPieces = oldPieces.length > 0 || pieceSuccess(runs).length > 0;
+		const baseTicks = { ...cur.comps };
+		for (const r of oldPieces) for (const i of r.comps ?? []) delete baseTicks[String(i)];
+
 		let sim: PartState = {
 			...cur,
 			status: 'To print',
 			startedAt: null,
 			printedOn: null,
-			runEstSeconds: null
+			runEstSeconds: null,
+			comps: touchesPieces ? baseTicks : cur.comps,
+			printingComps: null
 		};
 		let compsPatch: Record<string, boolean> | undefined;
 		const seen: PrintRun[] = [];
@@ -45,7 +63,10 @@ export function recomputeParts(
 					const { slug: _s, comps, ...rest } = p;
 					void _s;
 					sim = { ...sim, ...rest };
-					if (comps) compsPatch = comps;
+					// A piece run's ticks carry on to the next run; a whole run's "all ticked" is only
+					// written back when it completes a part that was not Printed before.
+					if (comps && isPieceRun(r)) sim.comps = comps;
+					else if (comps) compsPatch = comps;
 				}
 			}
 			seen.push(r);
@@ -56,6 +77,10 @@ export function recomputeParts(
 		if (status !== 'Printed' && cur.status === 'Printing' && opts.livePrinting?.has(slug)) {
 			status = 'Printing';
 		}
+		// A piece print on the printer now is newer than any run edited here.
+		const pieceOnPrinter =
+			opts.keepPieces !== false && cur.status === 'Printing' && !!cur.printingComps?.length;
+		if (status !== 'Printed' && pieceOnPrinter) status = 'Printing';
 		const keepPrinting = status === 'Printing';
 		const printedOn = status === 'Printed' ? sim.printedOn : null;
 		const startedAt = keepPrinting ? cur.startedAt : null;
@@ -67,6 +92,14 @@ export function recomputeParts(
 		if (startedAt !== cur.startedAt) patch.startedAt = startedAt;
 		if (runEstSeconds !== cur.runEstSeconds) patch.runEstSeconds = runEstSeconds;
 		if (status === 'Printed' && cur.status !== 'Printed' && compsPatch) patch.comps = compsPatch;
+		if (touchesPieces) {
+			const ticks = status === 'Printed' && patch.comps ? patch.comps : sim.comps;
+			const same = (a: Record<string, boolean>, b: Record<string, boolean>) =>
+				[...new Set([...Object.keys(a), ...Object.keys(b)])].every((k) => !!a[k] === !!b[k]);
+			if (!same(ticks, cur.comps ?? {})) patch.comps = ticks;
+		}
+		// The piece list goes with a print that is no longer on the printer.
+		if (cur.printingComps && !(keepPrinting && pieceOnPrinter)) patch.printingComps = null;
 		if (Object.keys(patch).length > 1) out.push(patch);
 	}
 	return out;
@@ -80,10 +113,13 @@ export function recomputeParts(
  */
 export function releaseUnstarted(view: BuildView, slugs: string[]): PartPatch[] {
 	const printing = slugs.filter((s) => view.state[s]?.status === 'Printing');
-	const byRuns = new Map(recomputeParts(view, view.runs, printing).map((p) => [p.slug, p]));
+	const byRuns = new Map(
+		recomputeParts(view, view.runs, printing, { keepPieces: false }).map((p) => [p.slug, p])
+	);
 	return printing.map((slug) => {
 		const p = byRuns.get(slug);
 		const patch: PartPatch = { slug, startedAt: null, runEstSeconds: null };
+		if (view.state[slug].printingComps) patch.printingComps = null;
 		if (p?.status === 'To print' && view.state[slug].printedOn) {
 			patch.status = 'Printed';
 			return patch;

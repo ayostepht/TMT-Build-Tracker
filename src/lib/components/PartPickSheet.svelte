@@ -1,37 +1,51 @@
-<script lang="ts">
-	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
+<script lang="ts" module>
+	export interface PickItem {
+		id: string;
+		name: string;
+		/** Small text on the right (the part's filament, the piece's settings). */
+		hint?: string;
+	}
+</script>
 
+<script lang="ts">
 	/**
-	 * "Print some parts…" on a plate: a small sheet listing the plate's parts that are not printed and
-	 * not on the printer yet, all ticked, with All / None. Confirming marks the ticked parts as ONE
-	 * print (the caller does the start); "Log … instead" hands them to the log sheet without marking
-	 * them Printing first. All ticked is the same as the plate's own Printing action.
+	 * A small pick sheet, used twice. "Print some parts…" on a plate lists the plate's parts that are
+	 * not printed and not on the printer yet; "Print some pieces…" on a part lists the part's pieces
+	 * that are not ticked yet. All are ticked by default, with All / None. Confirming marks the ticked
+	 * ones as ONE print (the caller does the start); "Log … instead" hands them to the log sheet
+	 * without marking them Printing first. All ticked is the same as the whole's own Printing action.
+	 *
+	 * Ids are strings (a part slug, or a piece index as text). Test ids: `part-pick*` for parts,
+	 * `piece-pick*` for pieces (`unit`).
 	 */
 	let {
 		open = $bindable(false),
-		plateNumber,
-		slugs,
+		title,
+		unit = 'part',
+		items,
 		onprint,
 		onlog
 	}: {
 		open?: boolean;
-		plateNumber: number;
-		/** Parts that can be picked, in plate order. */
-		slugs: string[];
+		title: string;
+		unit?: 'part' | 'piece';
+		/** What can be picked, in order. */
+		items: PickItem[];
 		onprint: (picked: string[]) => void;
 		onlog: (picked: string[]) => void;
 	} = $props();
 
-	const ctx = getBuildCtx();
 	const uid = $props.id();
+	const tid = $derived(`${unit}-pick`);
 	let dlg = $state<HTMLDialogElement>();
 	let trigger: HTMLElement | null = null;
 	let ticked = $state<string[]>([]);
+	const ids = $derived(items.map((i) => i.id));
 
 	$effect(() => {
 		if (!dlg) return;
 		if (open && !dlg.open) {
-			ticked = [...slugs];
+			ticked = [...ids];
 			trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 			dlg.showModal();
 		} else if (!open && dlg.open) dlg.close();
@@ -41,10 +55,9 @@
 		if (trigger?.isConnected) trigger.focus();
 		trigger = null;
 	}
-	const picked = $derived(slugs.filter((s) => ticked.includes(s)));
-	const part = (s: string) => ctx.view.parts.find((p) => p.slug === s);
+	const picked = $derived(ids.filter((s) => ticked.includes(s)));
 	const n = $derived(picked.length);
-	const plural = (k: number) => `${k} part${k === 1 ? '' : 's'}`;
+	const plural = (k: number) => `${k} ${unit}${k === 1 ? '' : 's'}`;
 	function toggle(s: string, on: boolean) {
 		ticked = on ? [...ticked, s] : ticked.filter((x) => x !== s);
 	}
@@ -64,14 +77,14 @@
 	bind:this={dlg}
 	class="ds-modal ds-modal--sheet"
 	aria-labelledby="{uid}-t"
-	data-testid="part-pick"
+	data-testid={tid}
 	{onclose}
 	onclick={(e) => e.target === dlg && (open = false)}
 >
 	{#if open}
 		<div class="pps">
 			<header class="ds-modal__head pps-head">
-				<h2 id="{uid}-t">Print some parts of plate {plateNumber}</h2>
+				<h2 id="{uid}-t">{title}</h2>
 				<button class="pps-x" type="button" aria-label="Cancel" onclick={() => (open = false)}
 					>×</button
 				>
@@ -81,30 +94,28 @@
 					<button
 						class="btn sm"
 						type="button"
-						data-testid="part-pick-all"
-						onclick={() => (ticked = [...slugs])}>All</button
+						data-testid="{tid}-all"
+						onclick={() => (ticked = [...ids])}>All</button
 					>
 					<button
 						class="btn sm"
 						type="button"
-						data-testid="part-pick-none"
+						data-testid="{tid}-none"
 						onclick={() => (ticked = [])}>None</button
 					>
-					<span class="meta num">{n} of {slugs.length} ticked</span>
+					<span class="meta num">{n} of {items.length} ticked</span>
 				</div>
 				<ul class="pps-list">
-					{#each slugs as s (s)}
+					{#each items as it (it.id)}
 						<li>
-							<label class="pps-item" data-testid="part-pick-item">
+							<label class="pps-item" data-testid="{tid}-item">
 								<input
 									type="checkbox"
-									checked={ticked.includes(s)}
-									onchange={(e) => toggle(s, e.currentTarget.checked)}
+									checked={ticked.includes(it.id)}
+									onchange={(e) => toggle(it.id, e.currentTarget.checked)}
 								/>
-								<span>{part(s)?.name ?? s}</span>
-								<small class="meta"
-									>{filLabel(ctx.filament(part(s)?.role ?? ''), part(s)?.role)}</small
-								>
+								<span>{it.name}</span>
+								{#if it.hint}<small class="meta">{it.hint}</small>{/if}
 							</label>
 						</li>
 					{/each}
@@ -114,14 +125,14 @@
 				<button
 					class="btn primary"
 					type="button"
-					data-testid="part-pick-confirm"
+					data-testid="{tid}-confirm"
 					disabled={!n}
 					onclick={confirm}
-					>{n === slugs.length
+					>{n === items.length
 						? `Mark all ${plural(n)} printing`
-						: `Mark ${n} of ${slugs.length} parts printing`}</button
+						: `Mark ${n} of ${items.length} ${unit}s printing`}</button
 				>
-				<button class="btn" type="button" data-testid="part-pick-log" disabled={!n} onclick={log}
+				<button class="btn" type="button" data-testid="{tid}-log" disabled={!n} onclick={log}
 					>Log {plural(n)} instead…</button
 				>
 				<button class="btn ghost" type="button" onclick={() => (open = false)}>Cancel</button>
