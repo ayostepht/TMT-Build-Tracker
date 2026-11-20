@@ -540,6 +540,16 @@ describe('a stale piece list (the kit changed under a stored list)', () => {
 	});
 });
 
+describe('hand ticks keep only piece indexes of the part', () => {
+	it('drops other keys instead of refusing them', () => {
+		const id = mk();
+		updatePart(db, id, 'owner', H, {
+			comps: { '1': true, x: true, '-1': true, '9': true, '99': true, '2': false }
+		});
+		expect(view(id).state[H].comps).toEqual({ '1': true, '2': false });
+	});
+});
+
 describe('undo snapshot ticks', () => {
 	it("keeps only the part's own piece indexes and caps the entries", () => {
 		const id = mk();

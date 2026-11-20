@@ -304,10 +304,12 @@ export function updatePart(
 			if (!isObj(body.comps)) bad('comps must be an object');
 			const entries = Object.entries(body.comps);
 			if (entries.length > MAX_PIECES) bad('comps lists too many pieces');
+			const nPieces = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
 			const comps: Record<string, boolean> = {};
 			for (const [k, v] of entries) {
 				if (typeof v !== 'boolean') bad('comps values must be booleans');
-				comps[k] = v;
+				// Only the part's own piece indexes are kept; other keys are dropped, not refused.
+				if (/^\d+$/.test(k) && Number(k) < nPieces) comps[k] = v;
 			}
 			patch.comps = comps;
 			ticked = setPieceTicks(view, slug, comps, now)[0] ?? null;
