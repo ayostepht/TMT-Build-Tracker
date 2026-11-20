@@ -24,17 +24,16 @@ _Updated 2026-11-20, 23:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
 - **Merged into `edge` 2026-11-20, not on the test copy yet (it is on r63 = 230614a):**
-  #92 "Plates follow the kit's layout first" (6ba6bf7; kit-first arranger, planner version
+  #92 "Plates follow the kit's layout first" (6ba6bf7, with its follow-up #94 7efeb4d; kit-first arranger, planner version
   3, plan cache; no schema change) and #93 "Print some pieces of a part" (3c6ea33;
   **migration `0004_piece_prints`**, additive). #90 "Print some parts of a plate" is on the
   test copy since r63.
-- **In flight:** #94 "Typed plate values: one plate at most" (branch
-  `claude/elegant-fermi-ea7mci`, a small follow-up to #92 from another session): reviewed,
-  fine; the maintainer said merge when CI is green. Hosted edition: draft
+- **In flight:** nothing in this repository (#94, the typed-plate-values follow-up to #92,
+  merged as 7efeb4d). Hosted edition: draft
   ayostepht/TMT-build-tracker-public#33 (branch `port/print-some-pieces`) carries the shared
   code of #93 and a port brief; the server half (Postgres migration, server actions,
   printer jobs, routes) is that repository's to do, and the draft must not merge before it.
-- **Next step:** deploy the `edge` image of 3c6ea33 (or later) to the test copy: back up
+- **Next step:** deploy the `edge` image of 7efeb4d (or later) to the test copy: back up
   `/data`, **rehearse migration 0004 on a copy of the real database first** (it was only
   run against the frozen release databases and an empty one; no Docker in the cloud
   session), then add the `docs/dev/CHANGELOG.md` entry. The maintainer wants this image
