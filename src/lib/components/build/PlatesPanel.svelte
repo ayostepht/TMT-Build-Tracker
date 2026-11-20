@@ -347,7 +347,24 @@
 		document.getElementById(`plate-${n}`)?.scrollIntoView({ block: 'start' });
 	}
 	const flavorShort = $derived(FLAVOR_OPTIONS.find((f) => f.key === exportPref.flavor)?.short);
-	const plateSecs = (pl: Plate) => (pl.estSeconds ? pl.estSeconds * Math.max(1, pl.runs) : 0);
+	// the plate time is one print; a plate printed in runs of its own (the rims) has runs x parts of them
+	const printsOf = (pl: Plate) =>
+		Math.max(1, pl.runs) * (pl.perPartRuns ? Math.max(1, pl.parts.length) : 1);
+	const plateSecs = (pl: Plate) => (pl.estSeconds ? pl.estSeconds * printsOf(pl) : 0);
+	/**
+	 * Prints done on a plate printed in runs of its own: each part's finished prints (all of them once
+	 * the part is Printed), so the counter agrees with "Print 4 times". Null on other plates.
+	 */
+	function printsDone(pl: Plate): number | null {
+		if (!pl.perPartRuns || pl.runs < 2) return null;
+		return pl.parts.reduce((a, s) => {
+			if (status(s) === 'Printed') return a + pl.runs;
+			const wins = ctx.view.runs.filter(
+				(r) => r.plateNumber === pl.number && r.partSlug === s && r.result === 'Success'
+			).length;
+			return a + Math.min(wins, pl.runs);
+		}, 0);
+	}
 
 	// Plates that have both a slicer thumbnail and an arrangement: which one to show.
 	let diagramOn = $state<Record<number, boolean>>({});
@@ -359,10 +376,21 @@
 	const roleOf = (slug: string) => partOf(slug)?.role ?? '';
 	const rolesOf = (pl: Plate) => [...new Set(pl.parts.map(roleOf))];
 	const status = (slug: string) => ctx.view.state[slug]?.status;
+	/**
+	 * "Print 4 times: 2 in Accent, 2 in Primary" for a plate whose parts are printed in runs of their own
+	 * (the wheel rims: one object per print), else "Print N times".
+	 */
+	function runsLabel(pl: Plate): string {
+		if (!pl.perPartRuns || pl.parts.length < 2) return `Print ${pl.runs} times`;
+		const per = pl.parts.map(
+			(s) => `${pl.runs} in ${filLabel(ctx.filament(roleOf(s)), roleOf(s))}`
+		);
+		return `Print ${pl.runs * pl.parts.length} times: ${per.join(', ')}`;
+	}
 
 	/** The grams field's label: says whose number it holds (typed, or read from the file). */
 	function gramsLabel(pl: Plate, per: boolean, name?: string): string {
-		const base = `${name ?? 'Grams'}${per ? ' per run' : ''}`;
+		const base = `${name ?? 'Grams'}${per ? (pl.perPartRuns ? ' per print' : ' per run') : ''}`;
 		const has = pl.perPartRuns ? Object.keys(pl.slicerByPart).length > 0 : !!pl.slicerGrams;
 		if (!has) return base;
 		return `${base} · ${pl.gramsSource === 'user' ? 'your entry' : pl.gramsSource === 'file' ? 'from file' : 'entered'}`;
@@ -660,16 +688,18 @@
 			<div class="group-head">
 				<h2>Plate {pl.number} · {pl.name}</h2>
 				<span class="meta num"
-					>{draft ? `${pl.parts.length} parts` : `${done}/${pl.parts.length} printed`}</span
+					>{draft
+						? `${pl.parts.length} parts`
+						: printsDone(pl) != null
+							? `${printsDone(pl)}/${printsOf(pl)} printed`
+							: `${done}/${pl.parts.length} printed`}</span
 				>
 				{#each rolesOf(pl) as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
 				<PlateGrams plate={pl} />
 				<PlateTime plate={pl} />
 				{#if pl.runNote || pl.runs > 1}
 					<span class="meta" style="color:var(--warn);font-weight:600"
-						>{pl.runNote ?? `Print ${pl.runs} times`}{ri
-							? ` · run ${ri.run} of ${ri.of}`
-							: ''}</span
+						>{pl.runNote ?? runsLabel(pl)}{ri ? ` · run ${ri.run} of ${ri.of}` : ''}</span
 					>
 				{/if}
 				{#if logged}
@@ -722,7 +752,8 @@
 				<div class="fil-grams">
 					{#each Object.entries(pl.filamentGrams) as [role, g] (role)}
 						<span class="meta num"
-							>{filLabel(ctx.filament(role), role)} {fmt(g)} g{pl.runs > 1 ? ' per run' : ''}</span
+							>{filLabel(ctx.filament(role), role)}
+							{fmt(g)} g{pl.runs > 1 ? (pl.perPartRuns ? ' per print' : ' per run') : ''}</span
 						>
 					{/each}
 				</div>
@@ -773,7 +804,9 @@
 						/>
 					{/if}
 					<SlicerTimeInput
-						label={pl.runs > 1 ? 'Slicer time per run' : 'Slicer time'}
+						label={printsOf(pl) > 1
+							? `Slicer time per ${pl.perPartRuns ? 'print' : 'run'}`
+							: 'Slicer time'}
 						value={pl.estSource === 'manual' ? pl.estSeconds : null}
 						placeholder={pl.baseEstSeconds || pl.estSeconds
 							? fmtH(pl.baseEstSeconds || pl.estSeconds || 0)

@@ -89,7 +89,11 @@
 					{#each Object.entries(plate.estGrams) as [role, g] (role)}
 						<span class="meta num g" data-testid="plate-grams"
 							><span class="pa-dot" style="background:{colorOf(role)}" aria-hidden="true"
-							></span>{filamentLabel(role)} ~{fmt(g)} g{perRun ? ' per run' : ''}</span
+							></span>{filamentLabel(role)} ~{fmt(g)} g{perRun
+								? plate.perPartRuns
+									? ' per print'
+									: ' per run'
+								: ''}</span
 						>
 					{/each}
 				</div>

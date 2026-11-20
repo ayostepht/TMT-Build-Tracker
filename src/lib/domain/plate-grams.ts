@@ -56,10 +56,15 @@ export function plateGramsBadge(view: BuildView, plate: Plate): PlateGramsBadge 
 			source: 'none'
 		};
 	const mark = n ? '≥ ' : g.approx || g.source === 'bom' ? '~' : '';
-	const runs = g.perRun > 0 ? g.total / g.perRun : 1;
-	const multi = runs > 1.01;
+	// A plate printed in runs of its own (the rims) adds one print of every part: the figure shown is
+	// one print (the average of the parts that have a weight), and the total covers all prints.
+	const inBuild = plate.parts.filter((s) => view.parts.some((p) => p.slug === s)).length;
+	const weighed = plate.perPartRuns ? Math.max(1, inBuild - n) : 1;
+	const perPrint = g.perRun / weighed;
+	const prints = perPrint > 0 ? g.total / perPrint : 1;
+	const multi = prints > 1.01;
 	return {
-		main: `${mark}${fmt(g.perRun)} g${multi ? ' per run' : ''}`,
+		main: `${mark}${fmt(perPrint)} g${multi ? (plate.perPartRuns ? ' per print' : ' per run') : ''}`,
 		note: NOTE[g.source] ?? '',
 		total: multi ? `${mark}${fmt(g.total)} g total` : '',
 		flag,
