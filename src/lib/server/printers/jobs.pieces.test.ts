@@ -11,6 +11,8 @@ import { catalogPrinter } from '#lib/printers/catalog.ts';
 import type { PrinterStatus } from '#lib/printers/status.ts';
 import { openDb, runMigrations, type Db } from '../db';
 import {
+	activity,
+	buildParts,
 	buildPlates,
 	builds,
 	member,
@@ -24,7 +26,7 @@ import {
 import { createBuild } from '../builds/create';
 import { printingAction, setPartStatus, updatePart } from '../builds/actions';
 import { loadBuildView } from '../builds/view';
-import { getExpected, setOrgSettings } from '../org-settings';
+import { getExpected, setExpected, setOrgSettings } from '../org-settings';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { plateRunGrams } from '#lib/domain/printer-match.ts';
@@ -371,5 +373,60 @@ describe('validation', () => {
 		);
 		expect(code(() => linkJob(db, startJob(), 'org1', 'owner', draft, 18, [H], [0, 1]))).toBe(400);
 		expect(jobs()[0].comps).toBeNull();
+	});
+});
+
+describe('a stored piece list that no longer fits the part', () => {
+	// A kit update left the job's list pointing at pieces the part no longer has.
+	const staleJob = () => {
+		const jobId = startJob();
+		linkJob(db, jobId, 'org1', 'owner', buildId, 18, [H], [0, 1, 2]);
+		db.update(printerJobs)
+			.set({ comps: [0, 40] })
+			.where(eq(printerJobs.id, jobId))
+			.run();
+		// (the part's own list is cleared so only the job's stale list is under test)
+		db.update(buildParts)
+			.set({ printingComps: null })
+			.where(and(eq(buildParts.buildId, buildId), eq(buildParts.partSlug, H)))
+			.run();
+		return jobId;
+	};
+	const doneActivity = () =>
+		db
+			.select()
+			.from(activity)
+			.where(eq(activity.buildId, buildId))
+			.all()
+			.filter((a) => a.kind === 'printer.job.done');
+	it('auto-log falls back to one plain run, without throwing, and writes the activity', () => {
+		setOrgSettings(db, 'org1', { autoLogPrints: true } as never);
+		staleJob();
+		expect(() => finish('done', 100)).not.toThrow();
+		expect(runs()).toHaveLength(1);
+		expect(runs()[0].comps).toBeNull();
+		expect(doneActivity()).toHaveLength(1);
+	});
+	it('confirm logs a plain run too', () => {
+		const jobId = staleJob();
+		finish('done', 100);
+		expect(doneActivity()).toHaveLength(1);
+		confirmJobRuns(db, jobId, 'org1', 'owner', {});
+		expect(runs()).toHaveLength(1);
+		expect(runs()[0].comps).toBeNull();
+	});
+	it('a stale expectation links the part without pieces; a typed bad list is still refused', () => {
+		const jobId = startJob();
+		setExpected(db, 'org1', printerId, {
+			buildId,
+			plate: 18,
+			partSlugs: [H],
+			comps: [0, 40],
+			jobId,
+			at: Date.now()
+		});
+		expect(code(() => link(jobId, [0, 41]))).toBe(400);
+		link(jobId, [0, 40]);
+		expect(jobs()[0]).toMatchObject({ buildId, partSlugs: [H], comps: null });
 	});
 });

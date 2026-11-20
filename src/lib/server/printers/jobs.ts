@@ -7,7 +7,7 @@
  */
 import { and, desc, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { fileMentionsBuild, matchPlate, plateRunGrams } from '#lib/domain/printer-match.ts';
-import { jobNeverStarted, piecesLeft, stopPrinting } from '#lib/domain/actions.ts';
+import { jobNeverStarted, pieceListError, piecesLeft, stopPrinting } from '#lib/domain/actions.ts';
 import { releaseUnstarted } from '#lib/domain/recompute.ts';
 import { progressGrams } from '#lib/domain/logrun.ts';
 import { defaultRunParts } from '#lib/domain/run-choice.ts';
@@ -95,6 +95,20 @@ export function checkPieces(
 	assertPiecePlate(view, slug, plateNumber);
 	const comps = pieceList(raw, view, slug, 'start');
 	return comps.length === piecesLeft(view, slug).length ? undefined : comps;
+}
+
+/**
+ * The piece list of a job (or expectation) when it still fits its single part: distinct indexes within
+ * the part's current pieces (a kit or template update may have changed them), fewer than all. Otherwise
+ * null: the job is then handled as a plain whole-part one, never failing on a stale list.
+ */
+export function fittingComps(
+	view: BuildView,
+	slugs: readonly string[] | null | undefined,
+	comps: readonly number[] | null | undefined
+): number[] | null {
+	if (!comps?.length || slugs?.length !== 1) return null;
+	return pieceListError(view, slugs[0], comps, 'log') ? null : [...comps];
 }
 
 /**
@@ -244,14 +258,15 @@ function attach(
 	// Pieces: the chosen ones, or the list a single Printing part already carries (a piece print
 	// marked first, then linked by hand without saying so).
 	const only = slugs.length === 1 ? c.view.state[slugs[0]] : undefined;
-	const comps =
-		slugs.length === 1
-			? c.comps?.length
-				? c.comps
-				: only?.status === 'Printing' && only.printingComps?.length
-					? only.printingComps
-					: null
-			: null;
+	const comps = fittingComps(
+		c.view,
+		slugs,
+		c.comps?.length
+			? c.comps
+			: only?.status === 'Printing' && only.printingComps?.length
+				? only.printingComps
+				: null
+	);
 	const dropped =
 		job.buildId === c.view.build.id && job.plateNumber === c.plate
 			? (job.partSlugs ?? []).filter((s) => !slugs.includes(s))
@@ -451,7 +466,7 @@ function runBody(
 ) {
 	const plate = view.plates.find((p) => p.number === job.plateNumber);
 	// Some pieces of one part: a run of that part with `comps` (never split, never Partial).
-	const pieces = job.comps?.length && job.partSlugs?.length === 1 ? job.comps : null;
+	const pieces = fittingComps(view, job.partSlugs, job.comps);
 	// A perPartRuns plate counts runs per part: one part is logged as `partSlug`.
 	const single =
 		pieces || (plate?.perPartRuns && job.partSlugs?.length === 1) ? job.partSlugs![0] : null;
@@ -683,7 +698,14 @@ export function linkJob(
 		throw new ApiError(400, 'Drafts cannot be linked to print jobs.');
 	if (!view.plates.some((p) => p.number === plateNumber)) throw new ApiError(400, 'Unknown plate');
 	const chosen = checkPartSlugs(view, plateNumber, partSlugs);
-	const pieces = checkPieces(view, plateNumber, chosen, comps);
+	// An expectation made before a kit or template update may carry a list that no longer fits the part:
+	// confirming it links the part without pieces. A list the client typed is still validated strictly.
+	const exp = getExpected(db, printer.organizationId, printer.id);
+	const stale =
+		Array.isArray(comps) &&
+		JSON.stringify(comps) === JSON.stringify(exp?.comps) &&
+		!fittingComps(view, chosen, comps);
+	const pieces = stale ? undefined : checkPieces(view, plateNumber, chosen, comps);
 	const status = (printer.lastStatus ?? {
 		state: 'printing',
 		progress: job.progress
@@ -801,7 +823,10 @@ export function confirmJobRuns(
 	const view = loadBuildView(db, job.buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
 	// A print of some pieces logs Success or Failed, never a split (the run is of exactly those pieces).
-	if (job.comps?.length && (result === 'Partial' || (o.split !== undefined && o.split !== null)))
+	if (
+		fittingComps(view, job.partSlugs, job.comps) &&
+		(result === 'Partial' || (o.split !== undefined && o.split !== null))
+	)
 		throw new ApiError(400, 'Log Success or Failed for a print of some pieces');
 	let split: { keptSlugs: string[]; keptGrams: number | null; lostGrams: number | null } | null =
 		null;
