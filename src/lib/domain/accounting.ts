@@ -313,14 +313,42 @@ export function subsetShare(view: BuildView, plate: Plate, slugs: readonly strin
 	const all = plate.parts.filter((s) => view.parts.some((p) => p.slug === s));
 	const mine = all.filter((s) => slugs.includes(s));
 	if (!mine.length || mine.length >= all.length) return 1;
-	return weightShare(view, all, mine);
+	const share = weightShare(view, all, mine);
+	// Nothing weighs anything: split by part count rather than give a real print no time.
+	return share > 0 ? share : mine.length / all.length;
 }
 
-/** `plateGrams` for the part of the plate that is printed together: scaled by `subsetShare`. */
+/**
+ * `plateGrams` for the parts printed together: scaled by `subsetShare`. Picked parts without a
+ * weight are listed in `unknown`; when none of them has one the grams are unknown (0, source
+ * 'none'), never a share invented from the other parts (and likewise when the plate has no weight);
+ * when no part of the plate has a weight but the plate has a total, it is split by part count.
+ */
 export function printGrams(view: BuildView, plate: Plate, slugs: readonly string[]): GramsInfo {
 	const g = plateGrams(view, plate);
 	const share = subsetShare(view, plate, slugs);
-	return share === 1 ? g : { ...g, perRun: g.perRun * share, total: g.total * share };
+	if (share === 1) return g;
+	const picked = plate.parts.filter(
+		(s) => slugs.includes(s) && view.parts.some((p) => p.slug === s)
+	);
+	const unknown = picked.filter((s) => partGrams(view, s).source === 'none');
+	if (!(g.perRun > 0)) return { perRun: 0, total: 0, source: 'none', approx: false, unknown };
+	if (unknown.length === picked.length) {
+		// Weighed parts elsewhere on the plate would make a share a guess; with no part weighed the
+		// plate's own (typed or file) total is split by part count.
+		const anyKnown = plate.parts.some(
+			(s) => view.parts.some((p) => p.slug === s) && partGrams(view, s).source !== 'none'
+		);
+		if (anyKnown) return { perRun: 0, total: 0, source: 'none', approx: false, unknown };
+		return { ...g, perRun: g.perRun * share, total: g.total * share, approx: true, unknown: [] };
+	}
+	return {
+		...g,
+		perRun: g.perRun * share,
+		total: g.total * share,
+		approx: g.approx || unknown.length > 0,
+		unknown
+	};
 }
 
 /** Grams of one unit (a whole plate, one part of a perPartRuns plate, or a part on no plate). */

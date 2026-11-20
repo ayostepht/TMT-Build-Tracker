@@ -198,3 +198,54 @@ describe('pace ignores runs of some parts', () => {
 		expect(paceOf(s)).toBeNull();
 	});
 });
+
+describe('picked parts without a weight', () => {
+	const noWeight = (v: ReturnType<typeof makeView>, slugs: string[]) => {
+		const strip = <T extends { slug: string; bomGrams: number | null }>(p: T): T =>
+			slugs.includes(p.slug) ? { ...p, bomGrams: null } : p;
+		return { ...v, parts: v.parts.map(strip), allParts: v.allParts.map(strip) };
+	};
+	it('all picked parts weightless: time by part count, grams unknown (never 0 g or a guess)', () => {
+		const { v, plate, top, bottom } = setup();
+		const w = noWeight(v, [top]);
+		const withTyped = {
+			...w,
+			plates: w.plates.map((p) => (p.number === 10 ? { ...p, slicerGrams: 300 } : p))
+		};
+		const pl = withTyped.plates.find((p) => p.number === 10)!;
+		const info = printGrams(withTyped, pl, [top]);
+		expect(info.perRun).toBe(0);
+		expect(info.source).toBe('none');
+		expect(info.unknown).toEqual([top]);
+		const card = nowPrinting(applyPatches(withTyped, startPrinting(withTyped, [top], now)))[0];
+		expect(card.gramsPerRun).toBeNull();
+		expect(card.gramsUnknown).toEqual([top]);
+		expect(card.estSeconds).toBe(Math.round(plate.estSeconds! * subsetShare(withTyped, pl, [top])));
+		expect(card.estSeconds).toBeGreaterThan(0);
+		expect(bottom).toBeTruthy();
+	});
+	it('some picked parts weightless: scaled grams, flagged approximate, parts listed', () => {
+		const v = makeView();
+		const plate = v.plates.find((p) => p.number === 14)!;
+		const [mount, , bolt] = plate.parts; // bolt has no weight
+		const info = printGrams(v, plate, [mount, bolt]);
+		expect(info.perRun).toBeGreaterThan(0);
+		expect(info.unknown).toEqual([bolt]);
+		expect(info.approx).toBe(true);
+		const card = nowPrinting(applyPatches(v, startPrinting(v, [mount, bolt], now)))[0];
+		expect(card.gramsUnknown).toEqual([bolt]);
+		expect(card.gramsPerRun).toBeGreaterThan(0);
+	});
+	it('a plate with no weight at all: time by part count, grams unknown', () => {
+		const { v, plate, top, bottom } = setup();
+		const w = noWeight(v, [top, bottom]);
+		const pl = w.plates.find((p) => p.number === 10)!;
+		expect(subsetShare(w, pl, [top])).toBeCloseTo(0.5, 5);
+		const info = printGrams(w, pl, [top]);
+		expect(info.perRun).toBe(0);
+		expect(info.unknown).toEqual([top]);
+		const card = nowPrinting(applyPatches(w, startPrinting(w, [top], now)))[0];
+		expect(card.gramsPerRun).toBeNull();
+		expect(card.estSeconds).toBe(Math.round(plate.estSeconds! * 0.5));
+	});
+});
