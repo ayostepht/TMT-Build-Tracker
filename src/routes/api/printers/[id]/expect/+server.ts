@@ -1,7 +1,7 @@
 import { ApiError, buildAccess, requireEditor } from '#lib/server/access.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
 import { getDb } from '#lib/server/db/index.ts';
-import { checkPartSlugs, expectOnPrinterJob } from '#lib/server/printers/jobs.ts';
+import { checkPartSlugs, checkPieces, expectOnPrinterJob } from '#lib/server/printers/jobs.ts';
 import { loadBuildView } from '#lib/server/builds/view.ts';
 import { getPrinter } from '#lib/server/printers/store.ts';
 import type { RequestHandler } from './$types';
@@ -29,12 +29,15 @@ export const POST: RequestHandler = (event) =>
 		if (!view || !view.plates.some((pl) => pl.number === body.plateNumber))
 			throw new ApiError(400, 'Unknown plate');
 		const partSlugs = checkPartSlugs(view, body.plateNumber, body.partSlugs);
+		// "Print some pieces…": some pieces of the single part in `partSlugs` (same rules as the start action).
+		const comps = checkPieces(view, body.plateNumber, partSlugs, body.comps);
 		// A printer that is not connected never reports a job: nothing to remember or confirm. The
 		// caller records the printer on the run it logs (`printer` = the name below).
 		if (p.kind === 'manual') return { manual: true, printer: { id: p.id, name: p.name } };
 		expectOnPrinterJob(db, p.id, {
 			buildId: body.buildId,
 			plate: body.plateNumber,
-			...(partSlugs ? { partSlugs } : {})
+			...(partSlugs ? { partSlugs } : {}),
+			...(comps ? { comps } : {})
 		});
 	});

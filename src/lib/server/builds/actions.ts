@@ -103,7 +103,7 @@ function slugList(v: unknown, view: BuildView, field = 'slugs'): string[] {
  * A request's list of piece indexes of one part: distinct whole numbers, each a piece of that part
  * (and for `start`, not ticked yet), fewer than all of them, at most `MAX_PIECES`. Sorted.
  */
-function pieceList(
+export function pieceList(
 	v: unknown,
 	view: BuildView,
 	slug: string,
@@ -118,7 +118,7 @@ function pieceList(
 }
 
 /** A piece print needs a plate that prints once (or no plate): see `canPrintPieces`. */
-function assertPiecePlate(view: BuildView, slug: string, plateNumber: number | null): void {
+export function assertPiecePlate(view: BuildView, slug: string, plateNumber: number | null): void {
 	const plate =
 		plateNumber === null
 			? view.plates.find((p) => p.parts.includes(slug))

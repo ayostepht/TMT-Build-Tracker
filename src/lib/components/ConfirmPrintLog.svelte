@@ -38,6 +38,14 @@
 	const targets = $derived(
 		(job.partSlugs ?? plate?.parts ?? []).filter((s) => ctx.view.state[s] !== undefined)
 	);
+	// "3 of 9 pieces of Harness and Straps" for a job that carries only some pieces of its part.
+	const pieceNote = $derived.by(() => {
+		const part =
+			job.partSlugs?.length === 1 && ctx.view.parts.find((p) => p.slug === job.partSlugs![0]);
+		return part && job.comps?.length
+			? `${job.comps.length} of ${part.components.length} pieces of ${part.name}`
+			: '';
+	});
 	const splittable = $derived(
 		!!plate && !plate.perPartRuns && plate.runs <= 1 && targets.length >= 2
 	);
@@ -122,7 +130,8 @@
 	<div>
 		<b>Confirm print log</b>
 		<div>
-			Plate {job.plateNumber}
+			Plate {job.plateNumber}{#if pieceNote}
+				({pieceNote}){/if}
 			{job.status === 'done' ? 'finished' : job.status === 'failed' ? 'failed' : 'was stopped'} on
 			{job.printerName}
 			<span class="file">{job.fileName}</span>

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { canPrintPieces, piecesLeft } from '#lib/domain/index.ts';
+	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
+	import StartOnPrinter from './StartOnPrinter.svelte';
 	import PartPickSheet, { type PickItem } from './PartPickSheet.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
 
@@ -8,7 +10,9 @@
 	 * "Print some pieces…" for one part that has several pieces (`PartDef.components`): a button that
 	 * opens the pick sheet (the part's unticked pieces, all ticked), then either marks those pieces
 	 * printing (`ctx.startPieces`: the part is Printing with `printingComps`) or logs them as a run of
-	 * pieces. Ticking every piece still to print is the part's normal Printing action, which the
+	 * pieces. With an enabled printer, "Mark as printing" first asks "Where is it printing?"
+	 * (`StartOnPrinter` with `comps`: the printer's job is linked to this part and those pieces only);
+	 * "Not on a connected printer" is the direct start. Ticking every piece still to print is the part's normal Printing action, which the
 	 * parent knows how to run (`onwhole`: it may ask "Where is it printing?").
 	 *
 	 * Renders nothing unless the viewer can edit and `canPrintPieces` says the part qualifies (two or
@@ -32,6 +36,10 @@
 	let picking = $state(false);
 	let logging = $state(false);
 	let logComps = $state<number[]>([]);
+	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
+	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
+	let where = $state(false);
+	let whereComps = $state<number[]>([]);
 
 	const part = $derived(ctx.view.parts.find((p) => p.slug === slug));
 	const eligible = $derived(
@@ -48,11 +56,19 @@
 	const plate = $derived(ctx.view.plates.find((p) => p.parts.includes(slug)) ?? null);
 	const label = (k: number) =>
 		`${k} of ${part?.components.length ?? k} pieces of ${part?.name ?? slug}`;
+	// "3 of 9 pieces of Harness and Straps: Harness Right, Harness Left, Buckle Holder ×5" for the printer dialog.
+	const piecesNote = (comps: number[]) =>
+		`${label(comps.length)}: ${comps
+			.map((i) => part?.components[i]?.name ?? `Piece ${i + 1}`)
+			.join(', ')}`;
 
 	function print(picked: string[]) {
 		const comps = picked.map(Number);
 		if (comps.length >= left.length) onwhole();
-		else void ctx.startPieces(slug, comps, label(comps.length));
+		else if (hasPrinter && plate) {
+			whereComps = comps;
+			where = true;
+		} else void ctx.startPieces(slug, comps, label(comps.length));
 	}
 	function log(picked: string[]) {
 		logComps = picked.map(Number);
@@ -79,6 +95,17 @@
 		onprint={print}
 		onlog={log}
 	/>
+	{#if plate}
+		<StartOnPrinter
+			bind:open={where}
+			slugs={[slug]}
+			plateNumber={plate.number}
+			label={label(whereComps.length)}
+			comps={whereComps}
+			note={piecesNote(whereComps)}
+			confirm={false}
+		/>
+	{/if}
 	{#if logComps.length}
 		<LogRunSheet
 			bind:open={logging}

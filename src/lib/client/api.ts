@@ -804,7 +804,14 @@ export const buildPrinterJobs = (buildId: string) =>
 export const jobAction = (
 	jobId: string,
 	body:
-		| { action: 'link'; buildId: string; plateNumber: number; partSlugs?: string[] }
+		| {
+				action: 'link';
+				buildId: string;
+				plateNumber: number;
+				partSlugs?: string[];
+				/** With exactly one slug in `partSlugs`: only these pieces of that part are on the print. */
+				comps?: number[];
+		  }
 		| { action: 'unlink' | 'dismiss' }
 		| {
 				action: 'confirm';
@@ -983,12 +990,14 @@ export const expectOnPrinter = (
 	printerId: string,
 	buildId: string,
 	plateNumber: number,
-	partSlugs?: string[]
+	partSlugs?: string[],
+	/** "Print some pieces…": only these pieces of the single part in `partSlugs`. */
+	comps?: number[]
 ) =>
 	call<{ manual?: boolean; printer?: { id: string; name: string } }>(
 		'POST',
 		`/api/printers/${encodeURIComponent(printerId)}/expect`,
-		{ buildId, plateNumber, partSlugs }
+		{ buildId, plateNumber, partSlugs, comps }
 	);
 
 // ---- kit status (any signed-in user)
