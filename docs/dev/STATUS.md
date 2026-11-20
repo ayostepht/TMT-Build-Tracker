@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
-copy on r62 = `edge` 5290765, the 0.9.3 app code, since 2026-11-19)._
+copy on r63 = `edge` 230614a, the 0.9.3 app code plus #90, since 2026-11-20)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -18,7 +18,7 @@ done. Keep it under ~150 lines.
    `spoolman_cache`) and the frozen fixture `fixtures/v0.9.3/`. Contents since 0.9.2:
    Spoolman filaments (#71, #77, #81 fixes #79), dependency updates (#74), empty `ORIGIN`
    fix (#76), header detail lines and exact plate locators (#80), resource limits from the
-   public edition (#82, #84). The test copy runs r62 = `edge` 5290765 (the 0.9.3 app code;
+   public edition (#82, #84). The test copy runs r63 = `edge` 230614a (the 0.9.3 app code plus #90;
    see `docs/dev/CHANGELOG.md`); the maintainer confirmed the #79 Spare figures on real data,
    and #59 is closed. 0.9.2 (2026-11-16): `main` 48c9649, migrations 0001/0002.
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
@@ -237,8 +237,8 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
-- **Print some parts of a plate** (2026-11-20, pull request open into `edge`, not merged:
-  the public site agent reviews it first): a plate's control has "Print some parts…"
+- **Print some parts of a plate** (#90, merged into `edge` 2026-11-20 as 230614a, on the test
+  copy since r63): a plate's control has "Print some parts…"
   (`PartPickSheet`, all parts ticked by default) to mark or log only some of a plate's
   parts as one print; the rest stays To print. Now printing shows the subset with its
   share of grams and time; with an enabled printer "Where is it printing?" names the parts
