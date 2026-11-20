@@ -29,6 +29,13 @@
       "when": 1794790831261,
       "tag": "0003_spoolman_filaments",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795203217495,
+      "tag": "0004_piece_prints",
+      "breakpoints": true
     }
   ]
 }

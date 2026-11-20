@@ -8,7 +8,7 @@
  * that were logged without grams, split into kept (successful runs and those estimates) and
  * lost (failed runs, and older Partial rows). A running print still counts as to print.
  */
-import { runTargets } from './actions.ts';
+import { isPieceRun, printingPieces, runTargets } from './actions.ts';
 import { fmtH } from './format.ts';
 import { paceOf, type Pace } from './pace.ts';
 import { haveGramsOf, isDeductibleRun, isPreLinkRun, isSpoolmanLinked } from './spoolman.ts';
@@ -303,19 +303,63 @@ export function plateGrams(view: BuildView, plate: Plate): GramsInfo {
 }
 
 /**
+ * Share (0 to 1) of a part's pieces that `comps` make up. Pieces carry no weights, so it is the count
+ * ratio: 3 of 9 pieces is 1/3. 1 for no list, or a part without separate pieces.
+ */
+export function pieceShare(
+	view: BuildView,
+	slug: string,
+	comps: readonly number[] | null | undefined
+): number {
+	const n = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
+	if (!comps?.length || n < 2) return 1;
+	return Math.min(1, comps.length / n);
+}
+
+/**
+ * Per part, the share of it that is on the printer now when only some of its pieces are
+ * (`PartState.printingComps`); parts printing whole are left out (they count as 1).
+ */
+export function printingFractions(
+	view: BuildView,
+	slugs: readonly string[]
+): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const s of slugs) {
+		const st = view.state[s];
+		const on = printingPieces(view, s);
+		if (st?.status !== 'Printing' || !on) continue;
+		const f = pieceShare(view, s, on);
+		if (f < 1) out[s] = f;
+	}
+	return out;
+}
+
+/**
  * The share (0 to 1) of one print of a plate that `slugs` make up, by estimated grams
  * (`weightShare`). 1 for a perPartRuns plate (its parts print one by one), for the whole plate, and
  * for a selection with nothing on the plate. Used when only some parts of a plate are on the printer
  * (or logged) together, e.g. the straps picked off a plate that is printed in two goes.
+ * `fractions` (slug to 0..1, see `printingFractions`) takes only that share of a part, for a part of
+ * which only some pieces are on the printer.
  */
-export function subsetShare(view: BuildView, plate: Plate, slugs: readonly string[]): number {
+export function subsetShare(
+	view: BuildView,
+	plate: Plate,
+	slugs: readonly string[],
+	fractions: Readonly<Record<string, number>> = {}
+): number {
 	if (plate.perPartRuns) return 1;
 	const all = plate.parts.filter((s) => view.parts.some((p) => p.slug === s));
 	const mine = all.filter((s) => slugs.includes(s));
-	if (!mine.length || mine.length >= all.length) return 1;
-	const share = weightShare(view, all, mine);
+	const f = (s: string) => fractions[s] ?? 1;
+	const pieces = mine.some((s) => f(s) < 1);
+	if (!mine.length || (mine.length >= all.length && !pieces)) return 1;
+	const w = partWeights(view, all);
+	const total = all.reduce((a, s) => a + w[s], 0);
+	const share = total > 0 ? mine.reduce((a, s) => a + w[s] * f(s), 0) / total : 0;
 	// Nothing weighs anything: split by part count rather than give a real print no time.
-	return share > 0 ? share : mine.length / all.length;
+	return share > 0 ? share : mine.reduce((a, s) => a + f(s), 0) / all.length;
 }
 
 /**
@@ -324,10 +368,17 @@ export function subsetShare(view: BuildView, plate: Plate, slugs: readonly strin
  * 'none'), never a share invented from the other parts (and likewise when the plate has no weight);
  * when no part of the plate has a weight but the plate has a total, it is split by part count.
  */
-export function printGrams(view: BuildView, plate: Plate, slugs: readonly string[]): GramsInfo {
+export function printGrams(
+	view: BuildView,
+	plate: Plate,
+	slugs: readonly string[],
+	fractions: Readonly<Record<string, number>> = {}
+): GramsInfo {
 	const g = plateGrams(view, plate);
-	const share = subsetShare(view, plate, slugs);
+	const share = subsetShare(view, plate, slugs, fractions);
 	if (share === 1) return g;
+	// Pieces have no weights: a share by piece count is always approximate.
+	const byPieces = slugs.some((s) => (fractions[s] ?? 1) < 1);
 	const picked = plate.parts.filter(
 		(s) => slugs.includes(s) && view.parts.some((p) => p.slug === s)
 	);
@@ -346,7 +397,7 @@ export function printGrams(view: BuildView, plate: Plate, slugs: readonly string
 		...g,
 		perRun: g.perRun * share,
 		total: g.total * share,
-		approx: g.approx || unknown.length > 0,
+		approx: g.approx || unknown.length > 0 || byPieces,
 		unknown
 	};
 }
@@ -418,10 +469,22 @@ export function unitUse(view: BuildView, u: Unit): Use {
 		else lost += g;
 	}
 	if (unitDone(view, u)) {
-		const measured = log.filter((r) => r.result === 'Success' && Number(r.grams) > 0).length;
-		kept += estPerRun(view, u) * Math.max(0, u.runs - measured);
+		kept += estPerRun(view, u) * Math.max(0, u.runs - measuredRuns(view, log));
 	}
 	return { kept, lost };
+}
+
+/**
+ * How many runs of a unit its successful logs with grams stand for: one each, a piece run the share
+ * of the part's pieces it covered (three runs of 3 of 9 pieces are one run of the part).
+ */
+function measuredRuns(view: BuildView, log: PrintRun[]): number {
+	let n = 0;
+	for (const r of log) {
+		if (r.result !== 'Success' || !(Number(r.grams) > 0)) continue;
+		n += isPieceRun(r) && r.partSlug ? pieceShare(view, r.partSlug, r.comps) : 1;
+	}
+	return n;
 }
 
 /** Grams used: kept plus lost. */
@@ -465,27 +528,56 @@ export function unitUseByRole(view: BuildView, u: Unit): Record<string, Use> {
 		}
 	}
 	if (unitDone(view, u)) {
-		const measured = log.filter((r) => r.result === 'Success' && Number(r.grams) > 0).length;
-		const extra = estPerRun(view, u) * Math.max(0, u.runs - measured);
+		const extra = estPerRun(view, u) * Math.max(0, u.runs - measuredRuns(view, log));
 		if (extra > 0) for (const [role, w] of Object.entries(shares)) add(role, extra * w, 0);
 	}
 	return out;
 }
 
 /**
- * Share of a single-run plate that is still to print: after a Partial the printed parts are
- * done, so only the unprinted parts' weight counts. 1 for multi-run, per-part and untouched units.
+ * The share (0 to 1] of `slugs`' weight that is still to print: a Printed part is done, and a part
+ * with some (not all) of its pieces ticked counts only its unticked pieces (by count: pieces carry no
+ * weights). 1 when nothing is reduced or nothing is left (done units are handled by their callers).
+ */
+export function leftShare(view: BuildView, slugs: readonly string[]): number {
+	const all = [...slugs];
+	const w = partWeights(view, all);
+	const total = all.reduce((a, s) => a + w[s], 0);
+	let left = 0;
+	let reduced = false;
+	for (const s of all) {
+		let f = 1;
+		if (view.state[s]?.status === 'Printed') f = 0;
+		else {
+			const n = view.parts.find((p) => p.slug === s)?.components.length ?? 0;
+			const ticked = n < 2 ? 0 : piecesTicked(view, s);
+			if (ticked > 0 && ticked < n) f = (n - ticked) / n;
+		}
+		if (f < 1) reduced = true;
+		left += w[s] * f;
+	}
+	return reduced && total > 0 && left > 0 ? left / total : 1;
+}
+
+/** Number of a part's pieces that are ticked. */
+function piecesTicked(view: BuildView, slug: string): number {
+	const n = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
+	let k = 0;
+	for (let i = 0; i < n; i++) if (view.state[slug]?.comps?.[String(i)]) k++;
+	return k;
+}
+
+/**
+ * Share of a single-run unit that is still to print: after a Partial the printed parts are done, and
+ * pieces ticked on a part are done too (see `leftShare`). 1 for multi-run, per-part and untouched units.
  */
 function unprintedShare(view: BuildView, u: Unit): number {
-	if (u.runs !== 1 || u.parts.length < 2) return 1;
+	if (u.runs !== 1) return 1;
 	const pl = plateByNumber(view, u.plate);
-	if (!pl || pl.perPartRuns) return 1;
-	const left = u.parts.filter((p) => view.state[p.slug]?.status !== 'Printed').map((p) => p.slug);
-	if (left.length === 0 || left.length === u.parts.length) return 1;
-	return weightShare(
+	if (pl?.perPartRuns) return 1;
+	return leftShare(
 		view,
-		u.parts.map((p) => p.slug),
-		left
+		u.parts.map((p) => p.slug)
 	);
 }
 
@@ -640,13 +732,11 @@ function plateRunsLeft(view: BuildView, pl: Plate): number {
 		);
 	}
 	if (pl.parts.every((s) => state(s) === 'Printed')) return 0;
-	// After a Partial on a single-run plate only the unprinted parts' share is still to print.
-	if (pl.runs <= 1 && pl.parts.some((s) => state(s) === 'Printed')) {
-		return weightShare(
-			view,
-			pl.parts,
-			pl.parts.filter((s) => state(s) !== 'Printed')
-		);
+	// After a Partial on a single-run plate only the unprinted parts' share is still to print, and a
+	// part with some pieces ticked counts its unticked pieces.
+	if (pl.runs <= 1) {
+		const share = leftShare(view, pl.parts);
+		if (share < 1) return share;
 	}
 	return Math.max(1, pl.runs - wins((r) => !r.partSlug));
 }

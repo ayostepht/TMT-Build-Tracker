@@ -2,13 +2,14 @@
 	import { PART_STATUSES, type PartDef, type PrintRun } from '#lib/domain/types.ts';
 	import { fmt, partGrams, plateOf } from '#lib/domain/index.ts';
 	import { parseGrams, partRuns } from '#lib/domain/logrun.ts';
-	import { runTargets } from '#lib/domain/actions.ts';
+	import { betweenRuns, printingPieces, runTargets } from '#lib/domain/actions.ts';
 	import { updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
 	import RunTable from './RunTable.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
 	import PlateControl from './PlateControl.svelte';
+	import PartPiecesAction from './PartPiecesAction.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import StartOnPrinter from './StartOnPrinter.svelte';
 	import { focusIn } from '#lib/client/focus.ts';
@@ -38,10 +39,22 @@
 	const st = $derived(ctx.view.state[part.slug]);
 	const fil = $derived(ctx.filament(part.role));
 	const plate = $derived(plateOf(ctx.view, part.slug));
+	const onPrinter = $derived(printingPieces(ctx.view, part.slug));
 	const doneComps = $derived(part.components.filter((_, i) => st?.comps[i]).length);
 	const log = $derived(partRuns(ctx.view, part.slug));
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
+	// The plate heading above this row already offers "Print some pieces…" when this is the only part of
+	// its plate still to start (PlateControl): the row then leaves it out so there is one button.
+	const plateOffersPieces = $derived(
+		plateHeader &&
+			!!plate &&
+			plate.parts.filter(
+				(s) =>
+					ctx.view.state[s]?.status !== 'Printed' &&
+					!(ctx.view.state[s]?.status === 'Printing' && !betweenRuns(ctx.view, s))
+			).length === 1
+	);
 	let where = $state(false);
 	// Printing: with a printer connected (and the part on a plate) ask where; else mark it directly.
 	function pickStatus(s: string) {
@@ -83,7 +96,9 @@
 	}
 
 	function scopeOf(r: PrintRun): string {
-		if (r.plateNumber == null) return '';
+		const pieces = r.comps?.length ? `${r.comps.length} of ${part.components.length} pieces` : '';
+		if (r.plateNumber == null) return pieces;
+		if (pieces) return `Plate ${r.plateNumber} · ${pieces}`;
 		const n = runTargets(ctx.view, r).length;
 		const total = ctx.view.plates.find((p) => p.number === r.plateNumber)?.parts.length ?? n;
 		return `Plate ${r.plateNumber} · ${n >= total ? 'whole plate' : `${n} of ${total} parts`}`;
@@ -189,9 +204,14 @@
 				>{/if}
 			{#if part.brim}<span class="pset hot">{part.brim} brim</span>{/if}
 			{#if part.components.length}
-				<span class="pset" class:hot={doneComps < part.components.length}
-					>{doneComps}/{part.components.length} pieces</span
+				<span class="pset" class:hot={doneComps < part.components.length} data-testid="part-pieces"
+					>{doneComps}/{part.components.length} pieces{onPrinter
+						? ` · ${onPrinter.length} printing`
+						: ''}</span
 				>
+				{#if !plateOffersPieces}
+					<PartPiecesAction slug={part.slug} onwhole={() => pickStatus('Printing')} />
+				{/if}
 			{/if}
 		</div>
 		<div class="pr-actions">
@@ -287,7 +307,11 @@
 								/>
 								<span
 									>{c.name}
-									<small>{c.settings}{c.file ? ` · ${c.file}` : ''}</small></span
+									<small
+										>{c.settings}{c.file ? ` · ${c.file}` : ''}{onPrinter?.includes(i)
+											? ' · on the printer'
+											: ''}</small
+									></span
 								>
 							</label>
 						{/each}
@@ -312,7 +336,7 @@
 					<div class="meta" style="margin-bottom:var(--sp-3)">
 						{plate.parts.map((s) => ctx.view.parts.find((x) => x.slug === s)?.name ?? s).join(', ')}
 					</div>
-					<PlateControl {plate} only={plate.perPartRuns ? part.slug : null} />
+					<PlateControl {plate} only={plate.perPartRuns ? part.slug : null} pieces={false} />
 				{/if}
 				{#if ctx.canEdit && !weightOpen && gi.source !== 'none'}
 					<h3 style="margin-top:var(--sp-6)">Weight</h3>

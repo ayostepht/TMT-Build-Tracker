@@ -6,8 +6,11 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
+**Upgrading:** back up your `/data` folder first. This release adds database migration 0004 (additive: it records which pieces of a multi-piece part are on a print; existing data is not rewritten). It runs automatically when the container starts and cannot be undone, so to go back you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
+
 ### Added
 
+- **Print some pieces of a part.** A part made of several pieces (for example Harness and Straps, nine pieces on its own plate) now has a "Print some pieces…" button, on the part row and on its plate when it is the only part left to print. Pick the pieces that are on this print (all the ones not ticked yet are ticked to start with), and mark them as printing, or log them as a print without marking them first. Now printing shows the part with "3 of 9 pieces", their names, and their share of the grams and time (pieces have no weights of their own, so the share is by piece count and marked approximate). A successful print ticks exactly those pieces; when the last piece is ticked the part becomes Printed, until then it goes back to To print with its "3/9 pieces" count. A failed print ticks nothing and flags the part for reprint. Undo, editing or deleting such a log, ticking pieces by hand, and "Take off printer" all keep the ticks and the status in step, and the grams and time still to print count only the pieces left. The button is not offered on plates that print more than once or one part per run, nor while another print of the part is on the printer.
 - **Print some parts of a plate.** If you split a plate in your slicer (for example the straps on their own), a plate on the Print tab now has a "Print some parts…" button. Pick the parts that are on the printer (all are ticked to start with), and mark them as printing as one print, or log them as one print without marking them first. With a printer connected, "Where is it printing?" still asks, and that printer's job is linked to the picked parts only. The rest of the plate stays to do. Now printing shows only the parts you picked, with their share of the plate's grams and time.
 
 ### Changed

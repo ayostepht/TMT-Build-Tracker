@@ -177,7 +177,7 @@ export function plateTimes(view: BuildView): PlateTime[] {
 		} else {
 			for (const r of mine) {
 				const h = hoursOf(r);
-				if (r.result !== 'Success' || !(h > 0)) continue;
+				if (r.result !== 'Success' || !(h > 0) || r.comps?.length) continue;
 				if (!pl.perPartRuns && r.partSlugs && r.partSlugs.length < pl.parts.length) continue;
 				actual += h;
 				n++;

@@ -16,6 +16,7 @@
 		partGrams,
 		partialPrefill,
 		partialTicksOk,
+		pieceShare,
 		printGrams,
 		progressGrams,
 		recomputeParts,
@@ -45,7 +46,8 @@
 		title: titleIn = 'Log print',
 		editRun = null,
 		deleteFirst = false,
-		quick = false
+		quick = false,
+		comps: compsIn = null
 	}: {
 		open?: boolean;
 		/** Plate this run belongs to; null logs against a single part. */
@@ -64,12 +66,31 @@
 		 * slicer/learned time (or started to now), grams from the slicer/learned grams per run.
 		 */
 		quick?: boolean;
+		/**
+		 * "Print some pieces…": indexes of the pieces of the single part in `slugs` this print covered.
+		 * Figures are their share by piece count (approximate); only Success and Failed are offered.
+		 */
+		comps?: number[] | null;
 	} = $props();
 
 	const ctx = getBuildCtx();
 	const title = $derived(editRun ? 'Edit print log' : titleIn);
 	const plateNumber = $derived(editRun ? editRun.plateNumber : plateNumberIn);
 	const slugs = $derived(editRun ? runTargets(ctx.view, editRun) : slugsIn);
+	const comps = $derived(
+		(editRun ? editRun.comps : compsIn)?.length ? (editRun ? editRun.comps : compsIn) : null
+	);
+	const pieceSlug = $derived(comps ? (slugs[0] ?? null) : null);
+	/** "3 of 9 pieces" when the print covers only some pieces of its part. */
+	const pieceText = $derived(
+		comps && pieceSlug
+			? `${comps.length} of ${ctx.view.parts.find((p) => p.slug === pieceSlug)?.components.length ?? comps.length} pieces`
+			: ''
+	);
+	/** Fraction of the part per slug, for the figures (grams, time) of a piece print. */
+	const fractions = $derived(
+		comps && pieceSlug ? { [pieceSlug]: pieceShare(ctx.view, pieceSlug, comps) } : {}
+	);
 	const uid = $props.id();
 	const pstore = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	$effect(() => pstore.acquire());
@@ -166,14 +187,15 @@
 		if (plate) {
 			return plate.perPartRuns
 				? partGrams(ctx.view, pickedSlug ?? slugs[0])
-				: printGrams(ctx.view, plate, slugs);
+				: printGrams(ctx.view, plate, slugs, fractions);
 		}
 		const infos = slugs.map((s) => partGrams(ctx.view, s));
+		const k = pieceSlug ? (fractions[pieceSlug] ?? 1) : 1;
 		return {
-			perRun: infos.reduce((a, i) => a + i.total, 0),
-			total: infos.reduce((a, i) => a + i.total, 0),
+			perRun: infos.reduce((a, i) => a + i.total, 0) * k,
+			total: infos.reduce((a, i) => a + i.total, 0) * k,
 			source: weakestGramsSource(infos.map((i) => i.source)),
-			approx: infos.some((i) => i.approx),
+			approx: infos.some((i) => i.approx) || k < 1,
 			unknown: infos.flatMap((i) => i.unknown)
 		};
 	});
@@ -194,15 +216,19 @@
 	);
 	/** "3 of 5 parts" when the print is only some parts of the plate (figures are their share). */
 	const partShare = $derived(
-		plate && !editRun && subsetShare(ctx.view, plate, slugs) < 1
-			? `${slugs.length} of ${plate.parts.length} parts`
-			: ''
+		pieceText && !editRun
+			? pieceText
+			: plate && !editRun && subsetShare(ctx.view, plate, slugs, fractions) < 1
+				? `${slugs.length} of ${plate.parts.length} parts`
+				: ''
 	);
 	/** The plate's own time per run, used when the print has no start time. */
 	// Only some parts of the plate (picked on their own): their share of it, as for the grams.
 	const planned = $derived(
 		quick && !startedAt && plate?.estSeconds
-			? Math.round(plate.estSeconds * (editRun ? 1 : subsetShare(ctx.view, plate, slugs)))
+			? Math.round(
+					plate.estSeconds * (editRun ? 1 : subsetShare(ctx.view, plate, slugs, fractions))
+				)
 			: null
 	);
 	const plannedLabel = $derived(
@@ -284,11 +310,13 @@
 	function buildInput(
 		res: RunResult | null
 	): Omit<PrintRunInput, 'result'> & { result: RunResult | null } {
-		const subset = plate && !plate.perPartRuns && slugs.length < plate.parts.length ? slugs : null;
+		const subset =
+			!comps && plate && !plate.perPartRuns && slugs.length < plate.parts.length ? slugs : null;
 		return {
 			plateNumber: plate ? plate.number : null,
-			partSlug: plate ? pickedSlug : (slugs[0] ?? null),
+			partSlug: comps ? pieceSlug : plate ? pickedSlug : (slugs[0] ?? null),
 			partSlugs: subset,
+			...(comps ? { comps } : {}),
 			date: editRun ? editDate : toLocalInput(finDate).slice(0, 10) || today(),
 			result: res,
 			grams: splitMode ? null : gramsParsed,
@@ -572,6 +600,15 @@
 					/>
 				{/if}
 
+				{#if pieceText && pieceSlug}
+					<p class="lrs-pieces" data-testid="log-pieces">
+						<strong>{pieceText} of {partOf(pieceSlug)?.name ?? pieceSlug}.</strong>
+						{editRun
+							? 'This log covers only these pieces.'
+							: 'Success ticks just these pieces; grams and time are their share by piece count, so they are approximate.'}
+					</p>
+				{/if}
+
 				{#if pickable}
 					<label class="f" for="{uid}-part"
 						>Which color/part was this print
@@ -732,7 +769,11 @@
 								>Optional: grams actually used. Left empty it counts as 0 g.</small
 							>
 						{:else if slicerDefault != null && !gramsEdited && !editRun}<small
-								>{gramsSource}{partShare ? ` Share of the plate: ${partShare}.` : ''}</small
+								>{gramsSource}{partShare
+									? pieceText
+										? ` Share by piece count (${partShare}), approximate.`
+										: ` Share of the plate: ${partShare}.`
+									: ''}</small
 							>{/if}
 					</label>
 				{/if}
@@ -903,6 +944,14 @@
 	}
 	.del {
 		margin-right: auto;
+	}
+	.lrs-pieces {
+		margin: 0;
+		font-size: var(--fs-sm);
+		color: var(--muted);
+	}
+	.lrs-pieces strong {
+		color: var(--ink);
 	}
 	.confirm {
 		display: grid;

@@ -3,8 +3,13 @@ import { readCached } from '../spoolman/cache';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
 	applyRun,
+	MAX_PIECES,
+	pieceListError,
+	piecesLeft,
+	printingPieces,
 	recomputeParts,
 	runTargets,
+	setPieceTicks,
 	setPrintStart,
 	setRunEstimate,
 	setStatus,
@@ -93,6 +98,35 @@ function slugList(v: unknown, view: BuildView, field = 'slugs'): string[] {
 	for (const s of v)
 		if (typeof s !== 'string' || !hasPart(view, s)) bad(`Unknown part in ${field}`);
 	return [...new Set(v as string[])];
+}
+
+/**
+ * A request's list of piece indexes of one part: distinct whole numbers, each a piece of that part
+ * (and for `start`, not ticked yet), fewer than all of them, at most `MAX_PIECES`. Sorted.
+ */
+export function pieceList(
+	v: unknown,
+	view: BuildView,
+	slug: string,
+	mode: 'start' | 'log',
+	field = 'comps'
+): number[] {
+	if (!Array.isArray(v)) bad(`${field} must be a list of piece numbers`);
+	if (v.length > MAX_PIECES) bad(`${field} lists too many pieces`);
+	const err = pieceListError(view, slug, v, mode);
+	if (err) bad(err);
+	return [...(v as number[])].sort((a, b) => a - b);
+}
+
+/** A piece print needs a plate that prints once (or no plate): see `canPrintPieces`. */
+export function assertPiecePlate(view: BuildView, slug: string, plateNumber: number | null): void {
+	const plate =
+		plateNumber === null
+			? view.plates.find((p) => p.parts.includes(slug))
+			: view.plates.find((p) => p.number === plateNumber);
+	if (plateNumber !== null && !plate?.parts.includes(slug)) bad('Part is not on this plate');
+	if (plate && (plate.perPartRuns || plate.runs > 1))
+		bad('Pieces can only be printed on their own on a plate that prints once');
 }
 
 /**
@@ -261,17 +295,24 @@ export function updatePart(
 	body: unknown
 ): void {
 	if (!isObj(body)) bad('Invalid body');
-	mutateBuild(db, buildId, userId, (tx, view) => {
+	mutateBuild(db, buildId, userId, (tx, view, now) => {
 		if (!hasPart(view, slug)) throw new ApiError(404, 'Unknown part');
 		const patch: PartPatch = { slug };
+		// Ticking pieces by hand also settles a piece print under way (`setPieceTicks`).
+		let ticked: PartPatch | null = null;
 		if (body.comps !== undefined) {
 			if (!isObj(body.comps)) bad('comps must be an object');
+			const entries = Object.entries(body.comps);
+			if (entries.length > MAX_PIECES) bad('comps lists too many pieces');
+			const nPieces = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
 			const comps: Record<string, boolean> = {};
-			for (const [k, v] of Object.entries(body.comps)) {
+			for (const [k, v] of entries) {
 				if (typeof v !== 'boolean') bad('comps values must be booleans');
-				comps[k] = v;
+				// Only the part's own piece indexes are kept; other keys are dropped, not refused.
+				if (/^\d+$/.test(k) && Number(k) < nPieces) comps[k] = v;
 			}
 			patch.comps = comps;
+			ticked = setPieceTicks(view, slug, comps, now)[0] ?? null;
 		}
 		if (body.assigneeUserId !== undefined) {
 			const a = body.assigneeUserId;
@@ -303,7 +344,7 @@ export function updatePart(
 		const payload: Obj = { slug };
 		if (patch.comps) payload.comps = true;
 		if ('assigneeUserId' in patch) payload.assigneeUserId = patch.assigneeUserId;
-		return { kind: 'part.update', payload, patches: [patch] };
+		return { kind: 'part.update', payload, patches: [ticked ? { ...patch, ...ticked } : patch] };
 	});
 }
 
@@ -404,10 +445,23 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 				// Where it was started (a printer's name from "Where is it printing?"): remembered in the
 				// activity row so the log sheet can prefill it and the sentence can say it.
 				const printer = optStr(body.printer, 'printer', 100);
+				// "Print some pieces…": only some pieces of one part are on this print.
+				let comps: number[] | null = null;
+				if (body.comps !== undefined && body.comps !== null) {
+					if (slugs.length !== 1) bad('Pieces belong to a single part');
+					const slug = slugs[0];
+					const st = view.state[slug];
+					if (st.status === 'Printing') bad('That part is already on the printer');
+					if (st.status === 'Printed') bad('That part is already printed');
+					assertPiecePlate(view, slug, null);
+					comps = pieceList(body.comps, view, slug, 'start');
+					// Every piece still to print is the whole-part print.
+					if (comps.length === piecesLeft(view, slug).length) comps = null;
+				}
 				return {
 					kind: 'printing.start',
-					payload: { slugs, ...(printer ? { printer } : {}) },
-					patches: startPrinting(view, slugs, now, liveJobStart(tx, buildId, slugs))
+					payload: { slugs, ...(comps ? { comps } : {}), ...(printer ? { printer } : {}) },
+					patches: startPrinting(view, slugs, now, liveJobStart(tx, buildId, slugs), comps)
 				};
 			}
 			case 'stop': {
@@ -426,7 +480,7 @@ export function printingAction(db: Db, buildId: string, userId: string, body: un
 					.filter((j) => (j.partSlugs ?? []).some((s) => slugs.includes(s)));
 				for (const j of live) {
 					tx.update(printerJobs)
-						.set({ buildId: null, plateNumber: null, partSlugs: null })
+						.set({ buildId: null, plateNumber: null, partSlugs: null, comps: null })
 						.where(eq(printerJobs.id, j.id))
 						.run();
 					freed.push({ org: view.build.organizationId, printerId: j.printerId });
@@ -510,7 +564,7 @@ function runOutcome(
 		const plateNumber = optNum(body.plateNumber, 'plateNumber') ?? null;
 		if (plateNumber !== null && !view.plates.some((p) => p.number === plateNumber))
 			bad('Unknown plate');
-		const partSlug = optStr(body.partSlug, 'partSlug', PART_SLUG_MAX) ?? null;
+		let partSlug = optStr(body.partSlug, 'partSlug', PART_SLUG_MAX) ?? null;
 		if (partSlug && !hasPart(view, partSlug)) bad('Unknown part');
 		const partSlugs =
 			body.partSlugs === undefined || body.partSlugs === null
@@ -518,11 +572,54 @@ function runOutcome(
 				: slugList(body.partSlugs, view, 'partSlugs');
 		if (plateNumber === null && !partSlug && !partSlugs) bad('A run needs a plate or a part');
 		if (!(RUN_RESULTS as readonly unknown[]).includes(body.result)) bad('Unknown result');
+		// A run on some pieces of one part ("Print some pieces…"): a subset run of that part.
+		let comps: number[] | null = null;
+		// Safety net for callers that do not know about pieces (a printer job finishing): a Success or
+		// Failed run of a whole plate whose only active part has a piece print on the printer is a run
+		// of exactly those pieces, never a run of the whole part.
+		if (
+			(body.comps === undefined || body.comps === null) &&
+			plateNumber !== null &&
+			!partSlug &&
+			!partSlugs &&
+			(body.result === 'Success' || body.result === 'Failed') &&
+			(body.split === undefined || body.split === null)
+		) {
+			const only = view.plates.find((p) => p.number === plateNumber)?.parts;
+			const st = only?.length === 1 ? view.state[only[0]] : undefined;
+			// Read against the current components: a stale list (the kit changed) is no piece print.
+			const on = only?.length === 1 ? printingPieces(view, only[0]) : null;
+			if (only && st?.status === 'Printing' && on && !pieceListError(view, only[0], on, 'log')) {
+				partSlug = only[0];
+				body = { ...body, comps: on };
+			}
+		}
+		if (body.comps !== undefined && body.comps !== null) {
+			const piece = (): number[] => {
+				if (!partSlug) bad('Pieces need a part');
+				if (partSlugs) bad('Pieces belong to a single part');
+				if (body.split !== undefined && body.split !== null)
+					bad('Per-part results do not apply to pieces');
+				if (body.result === 'Partial') bad('Log Success or Failed for a piece print');
+				assertPiecePlate(view, partSlug, plateNumber);
+				return pieceList(body.comps, view, partSlug, 'log');
+			};
+			if (userId === null) {
+				// A printer's log must not fail on a piece list that no longer fits (kit changed): it is
+				// logged as a plain run of the part. Requests from people keep their 400.
+				try {
+					comps = piece();
+				} catch (e) {
+					if (!(e instanceof ApiError)) throw e;
+				}
+			} else comps = piece();
+		}
 		const split = splitRequest(view, body, plateNumber);
 		const input: PrintRunInput = {
 			plateNumber,
 			partSlug,
 			partSlugs,
+			...(comps ? { comps } : {}),
 			date: dateStr(body.date, 'date'),
 			result: body.result as PrintRunInput['result'],
 			grams: optGrams(body.grams, 'grams') ?? null,
@@ -543,6 +640,7 @@ function runOutcome(
 					plateNumber: r.plateNumber,
 					partSlug: r.partSlug,
 					partSlugs: r.partSlugs,
+					comps: r.comps?.length ? r.comps : null,
 					date: r.date,
 					result: r.result,
 					grams: r.grams,
@@ -608,6 +706,7 @@ function runOutcome(
 					plateNumber,
 					partSlug,
 					partSlugs,
+					...(comps ? { comps } : {}),
 					grams: input.grams,
 					result: input.result,
 					...auto
@@ -648,6 +747,7 @@ export function deleteRun(
 				runId,
 				plateNumber: r.plateNumber,
 				partSlug: r.partSlug,
+				...(r.comps?.length ? { comps: r.comps } : {}),
 				result: r.result,
 				recomputed: recomputedList(view, patches)
 			},
@@ -832,10 +932,28 @@ export function undoRun(
 			if (printedOn !== null) dateStr(printedOn, 'printedOn');
 			const runEstSeconds = optNum(raw.runEstSeconds, 'runEstSeconds') ?? null;
 			if (!isObj(raw.comps)) bad('comps must be an object');
+			const entries = Object.entries(raw.comps);
+			if (entries.length > MAX_PIECES) bad('comps lists too many pieces');
+			const nPieces = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
 			const comps: Record<string, boolean> = {};
-			for (const [k, v] of Object.entries(raw.comps)) {
+			for (const [k, v] of entries) {
 				if (typeof v !== 'boolean') bad('comps values must be booleans');
-				comps[k] = v;
+				// Only the part's own piece indexes are kept.
+				if (/^\d+$/.test(k) && Number(k) < nPieces) comps[k] = v;
+			}
+			// The piece list the part had (null/absent = a whole-part print or nothing on the printer).
+			let printingComps: number[] | null = null;
+			if (raw.printingComps !== undefined && raw.printingComps !== null) {
+				const pc = raw.printingComps;
+				const n = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
+				if (
+					!Array.isArray(pc) ||
+					pc.length > MAX_PIECES ||
+					pc.some((i) => typeof i !== 'number' || !Number.isInteger(i) || i < 0 || i >= n) ||
+					new Set(pc).size !== pc.length
+				)
+					bad('Invalid printingComps');
+				printingComps = pc.length ? [...(pc as number[])].sort((a, b) => a - b) : null;
 			}
 			if (keep) continue;
 			patches.push({
@@ -844,7 +962,8 @@ export function undoRun(
 				startedAt: startedAt as string | null,
 				printedOn: printedOn as string | null,
 				runEstSeconds,
-				comps
+				comps,
+				printingComps: raw.status === 'Printing' ? printingComps : null
 			});
 		}
 		removed = rows.map((x) => x.id);
@@ -867,6 +986,7 @@ export function undoRun(
 						plateNumber: r.plateNumber,
 						partSlug: r.partSlug,
 						partSlugs: r.partSlugs,
+						...(r.comps?.length ? { comps: r.comps } : {}),
 						result: r.result
 					},
 			patches
@@ -930,6 +1050,7 @@ function runFromRow(r: RunRow): PrintRun {
 		plateNumber: r.plateNumber,
 		partSlug: r.partSlug,
 		partSlugs: r.partSlugs ?? null,
+		comps: r.comps?.length ? r.comps : null,
 		date: r.date,
 		result: r.result as PrintRun['result'],
 		grams: r.grams,
@@ -998,6 +1119,8 @@ export function updateRun(
 		}
 		if (body.partSlug !== undefined) {
 			const s = optStr(body.partSlug, 'partSlug', PART_SLUG_MAX) ?? null;
+			if (old.comps?.length && s !== old.partSlug)
+				bad('A print of some pieces belongs to its part; delete the log and log it again');
 			if (s && !hasPart(view, s)) bad('Unknown part');
 			if (s === null && old.plateNumber === null) bad('A part log needs a part');
 			const pl =
@@ -1027,6 +1150,7 @@ export function updateRun(
 				plateNumber: next.plateNumber,
 				partSlug: next.partSlug,
 				partSlugs: next.partSlugs,
+				...(next.comps?.length ? { comps: next.comps } : {}),
 				...changed,
 				recomputed: recomputedList(view, patches)
 			},

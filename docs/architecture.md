@@ -167,6 +167,27 @@ Sections match the subagents in `.claude/agents/`:
   parts". On the build Overview `StartOnPrinter` does not render `ExpectedConfirm`
   (`PrinterJobs` is the one place that asks there); the Print and Files tabs still ask in
   the plate control. Two prints of one plate at once share a card (cards key by plate).
+- **Print some pieces of a part** (migration 0004; `PartPiecesAction.svelte`, the generic
+  `PartPickSheet` with `unit: 'piece'`): state is `build_parts.printing_comps`
+  (`PartState.printingComps`, piece indexes on the printer, null = whole part) and runs
+  carry `print_runs.comps` (`PrintRun.comps`, only with `partSlug`). Rules in
+  `domain/actions.ts`: `canPrintPieces` (2+ unticked pieces, part not Printing/Printed,
+  plate single-run and not perPartRuns), `pieceListError` (distinct integer indexes in
+  range, capped by `MAX_PIECES`, fewer than all, unticked for a start), `setPieceTicks`
+  (hand ticks: ticking an on-printer piece removes it from the print), `printingPieces(view,
+slug)` (the one reader of the stored list: ignores indexes that no longer fit the part,
+  null when none remain). `startPrinting(view, [slug], now, live, comps)`; picking every
+  unticked piece is a whole-part start. `applyRun` piece branch: Success ticks the pieces
+  (all ticked → Printed, else To print), Failed → Reprint with nothing ticked, Partial is
+  refused (400). `recomputeParts` replays piece ticks from the run history (hand ticks
+  survive; `keepPieces`). `accounting.ts`: `pieceShare`, `printingFractions`, `leftShare`
+  (share by piece count; `unitLeft` and time left count unticked pieces), `subsetShare(...,
+fractions)`. `NowCard.pieces`. Piece runs are subset runs for pace and stats. Server
+  (`builds/actions.ts`): `pieceList`, `assertPiecePlate`; `runOutcome` rewrites a
+  plate-level Success/Failed with no part scope to a piece run when the plate's only active
+  part has a fitting piece list (so a log that doesn't know about pieces can't tick all of
+  them); system runs (`addRunSystem`) with a list that no longer fits log as a plain part
+  run, user requests get 400; `undoRun` caps and filters snapshot ticks.
 - **Spool adds** (#46): `build_filaments.spool_adds` JSON (`SpoolAdd` in `app.schema.ts`);
   `addSpool`/`removeSpoolAdd` (POST `api/builds/[id]/filaments/[role]/stock`, DELETE
   `.../stock/[addId]`) go through `mutateBuild` (kg 0.01-99, note ≤ 200 chars with control
@@ -466,6 +487,18 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   Spoolman but not recorded is archived best-effort. FilamentTiles shows "Add spool in
   Spoolman" on linked colours and asks "Also archive it in Spoolman?" on remove.
 
+- **Piece jobs:** expect (`POST /api/printers/[id]/expect`) and link take optional `comps`
+  with exactly one part slug, validated by `checkPieces` (`printers/jobs.ts`, reusing
+  `pieceList` and `assertPiecePlate`); a list equal to every piece still to print counts as
+  a whole part. `attach` writes `printer_jobs.comps` and the part's `printingComps`
+  together and inherits a list already on the part; `unlinkJob` clears the job's `comps`
+  and leaves the part's list. `runBody` logs a piece run (`partSlug` + `comps`, Success or
+  Failed, never split); `fittingComps` guards `runBody`, `confirmJobRuns` and `attach`, so a
+  list that no longer fits the part degrades to a whole-part link and run. `plateRunGrams`
+  uses `printingFractions`; a piece job's time lands on the part, not the plate.
+  `StartOnPrinter` takes `comps`; `ExpectedConfirm` and `ConfirmPrintLog` say "N of M
+  pieces".
+
 ## Design studio (`design-studio-ui`)
 
 - **Applying a design to a started build** (#56): `domain/design-apply.ts` (`planRecolor`,
@@ -655,6 +688,11 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   temp uploads and scratch folders older than 1 h that no queued job needs). Schema:
   `site_admin`.
 
+- **Piece prints (migration `0004_piece_prints`, unreleased, additive):** nullable JSON
+  `number[]` columns `build_parts.printing_comps`, `print_runs.comps` and
+  `printer_jobs.comps`; old rows stay NULL. `baseline-upgrade.test.ts` hashes legacy content
+  minus post-baseline columns, so each new additive column goes into its
+  `POST_BASELINE_COLUMNS`.
 - **Spoolman schema (#59, migration `0003_spoolman_filaments`, unreleased):**
   `build_filaments.spoolman_filament_id` and `spoolman_linked_at` (null = unknown, e.g. a
   legacy spool-only link: no pre-link skipping); table `spoolman_cache` (PK

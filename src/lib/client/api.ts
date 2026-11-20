@@ -139,7 +139,10 @@ export interface PartialSplitBody {
 	keptGrams: number | null;
 	lostGrams: number | null;
 }
-/** Logs a run; with `split` (result Partial) two runs are made. `id` is the printed one, `ids` all of them. */
+/**
+ * Logs a run; with `split` (result Partial) two runs are made. `id` is the printed one, `ids` all of them.
+ * With `comps` (and `partSlug`, no `partSlugs`; Success or Failed) it is a print of those pieces of the part.
+ */
 export const logRun = (id: string, input: PrintRunInput & { split?: PartialSplitBody }) =>
 	call<{ id: string; ids?: string[]; spoolmanWarning?: string }>(
 		'POST',
@@ -189,6 +192,12 @@ export const printing = (
 		seconds?: number | null;
 		/** `start` only: the printer's name, kept in the activity row ("put Plate 3 on Garage printer"). */
 		printer?: string;
+		/**
+		 * `start` only, with exactly one slug: indexes of the pieces (`PartDef.components`) of that part that
+		 * are on this print ("Print some pieces…"). Distinct, unticked, fewer than all of them; every piece
+		 * still to print is the same as leaving it out.
+		 */
+		comps?: number[];
 	}
 ) => call('POST', `${b(id)}/printing`, body);
 
@@ -795,7 +804,14 @@ export const buildPrinterJobs = (buildId: string) =>
 export const jobAction = (
 	jobId: string,
 	body:
-		| { action: 'link'; buildId: string; plateNumber: number; partSlugs?: string[] }
+		| {
+				action: 'link';
+				buildId: string;
+				plateNumber: number;
+				partSlugs?: string[];
+				/** With exactly one slug in `partSlugs`: only these pieces of that part are on the print. */
+				comps?: number[];
+		  }
 		| { action: 'unlink' | 'dismiss' }
 		| {
 				action: 'confirm';
@@ -974,12 +990,14 @@ export const expectOnPrinter = (
 	printerId: string,
 	buildId: string,
 	plateNumber: number,
-	partSlugs?: string[]
+	partSlugs?: string[],
+	/** "Print some pieces…": only these pieces of the single part in `partSlugs`. */
+	comps?: number[]
 ) =>
 	call<{ manual?: boolean; printer?: { id: string; name: string } }>(
 		'POST',
 		`/api/printers/${encodeURIComponent(printerId)}/expect`,
-		{ buildId, plateNumber, partSlugs }
+		{ buildId, plateNumber, partSlugs, comps }
 	);
 
 // ---- kit status (any signed-in user)
