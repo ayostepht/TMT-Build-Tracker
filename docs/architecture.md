@@ -148,6 +148,25 @@ Sections match the subagents in `.claude/agents/`:
   `run.undo`. Offered only for ≥2 targets, not perPartRuns, runs ≤ 1. `PartialParts.svelte`
   is shared by `LogRunSheet` and `ConfirmPrintLog`. Run grams are capped at `MAX_RUN_GRAMS`
   (100000).
+- **Print some parts of a plate** (`PartPickSheet.svelte`, opened from `PlateControl`):
+  offered to editors on a single-run, non-perPartRuns plate with two or more parts still to
+  start. A proper subset is one `printing` `start` with those slugs (`ctx.startParts`); all
+  ticked is the plate's normal Printing action. "Log N parts instead…" opens `LogRunSheet`
+  with the slugs as a subset run (`plateNumber` + `partSlugs`): Success prints only those
+  parts, Failed flags only those. `accounting.ts` `subsetShare(view, plate, slugs)` (by
+  `weightShare`; part-count ratio when the share would be 0) and `printGrams` give the
+  subset's share of the plate: grams are unknown (never a guess) when the picked parts or
+  the plate have no weight, and a plate total with no part weights is split by part count.
+  `nowPrinting` sets `NowCard.subset` when only some parts of such a plate are on the
+  printer: grams from `printGrams`, `plate.estSeconds` scaled by the share (a typed
+  `runEstSeconds` still wins), the plate's typed slicer total hidden. `LogRunSheet` uses the
+  same share for its prefill. Printer path: `StartOnPrinter` takes `partial` and `note`
+  (`WherePrinting` shows "2 of 3 parts of plate 12: …"); the expectation's `partSlugs`
+  (checked by `checkPartSlugs`) is no longer perPartRuns-only, `plateRunGrams`
+  (`domain/printer-match.ts`) uses `printGrams` for a subset, `ExpectedConfirm` says "N of M
+  parts". On the build Overview `StartOnPrinter` does not render `ExpectedConfirm`
+  (`PrinterJobs` is the one place that asks there); the Print and Files tabs still ask in
+  the plate control. Two prints of one plate at once share a card (cards key by plate).
 - **Spool adds** (#46): `build_filaments.spool_adds` JSON (`SpoolAdd` in `app.schema.ts`);
   `addSpool`/`removeSpoolAdd` (POST `api/builds/[id]/filaments/[role]/stock`, DELETE
   `.../stock/[addId]`) go through `mutateBuild` (kg 0.01-99, note ≤ 200 chars with control

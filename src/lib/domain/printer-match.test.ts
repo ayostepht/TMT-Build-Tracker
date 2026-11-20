@@ -104,4 +104,20 @@ describe('plateRunGrams', () => {
 		expect(plateRunGrams(view, src.number, [c])).toBe(40);
 		expect(plateRunGrams(view, src.number, [a, b])).not.toBe(70);
 	});
+	it('scales a single-run plate to the picked parts, and the whole plate is unchanged', () => {
+		const v = makeView();
+		const src = v.plates.find((p) => !p.perPartRuns && p.parts.length >= 2)!;
+		const view = {
+			...v,
+			plates: v.plates.map((p) =>
+				p === src ? { ...p, runs: 1, slicerGrams: 100, gramsSource: 'user' as const } : p
+			)
+		};
+		const some = plateRunGrams(view, src.number, [src.parts[0]]);
+		expect(some).not.toBeNull();
+		expect(some!).toBeLessThan(100);
+		expect(some!).toBeGreaterThan(0);
+		expect(plateRunGrams(view, src.number, src.parts)).toBe(100);
+		expect(plateRunGrams(view, src.number)).toBe(100);
+	});
 });

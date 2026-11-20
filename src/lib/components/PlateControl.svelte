@@ -7,6 +7,7 @@
 	import LogRunSheet from './LogRunSheet.svelte';
 	import StartOnPrinter from './StartOnPrinter.svelte';
 	import StatusBadge from './StatusBadge.svelte';
+	import PartPickSheet from './PartPickSheet.svelte';
 
 	/**
 	 * THE status / start / finish / log control for a plate, used on the Print tab (plate headings and
@@ -43,6 +44,14 @@
 	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
 	let open = $state(false);
 	let where = $state(false);
+	let picking = $state(false);
+	// The parts picked in "Print some parts…" while the "Where is it printing?" dialog is open.
+	let someSlugs = $state<string[] | null>(null);
+	$effect(() => {
+		if (!where) someSlugs = null;
+	});
+	let logPicked = $state<string[] | null>(null);
+	let logSome = $state(false);
 
 	const status = (s: string) => ctx.view.state[s]?.status;
 	const scope = $derived(only ? [only] : plate.parts);
@@ -109,11 +118,39 @@
 			? `${name(startSlugs[0])} run, plate ${plate.number}`
 			: `plate ${plate.number}`
 	);
+	const partsLabel = (n: number) => `${n} ${n === 1 ? 'part' : 'parts'} of plate ${plate.number}`;
+	// "2 of 3 parts of plate 10: Headrest Bolt, Rear Caster Mount Left" for the printer dialog.
+	const partsNote = (slugs: string[]) =>
+		`${slugs.length} of ${plate.parts.length} parts of plate ${plate.number}: ${slugs
+			.map((s) => ctx.view.parts.find((x) => x.slug === s)?.name ?? s)
+			.join(', ')}`;
 	const choices = $derived(
 		plate.perPartRuns && !only && idle.length > 1
 			? idle.map((s) => ({ slug: s, name: name(s) }))
 			: []
 	);
+
+	// "Print some parts…": a single-run plate with two or more parts still to start. Not for a
+	// perPartRuns plate (it already prints one part per run) or a plate with one part left.
+	const canPickSome = $derived(
+		ctx.canEdit && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length >= 2
+	);
+	// Some parts: one start for exactly them. All of what is left is the plate's own Printing action,
+	// unless parts of the plate are already Printed or on the printer: then the job is still only for
+	// the parts being started, so it takes the same path as a pick.
+	function printSome(picked: string[]) {
+		const activeParts = plate.parts.filter((s) => ctx.view.state[s]).length;
+		if (picked.length >= activeParts || (picked.length >= idle.length && !hasPrinter)) {
+			pick('Printing');
+		} else if (hasPrinter) {
+			someSlugs = picked;
+			where = true;
+		} else void ctx.startParts(picked, partsLabel(picked.length));
+	}
+	function logSomeParts(picked: string[]) {
+		logPicked = picked;
+		logSome = true;
+	}
 
 	function pick(s: string) {
 		if (s === 'Printing') {
@@ -149,17 +186,44 @@
 				onclick={() => (open = true)}>Log a print…</button
 			>
 		{/if}
+		{#if canPickSome}
+			<button
+				class="{cls} ghost plc-text"
+				type="button"
+				data-testid="plate-print-some"
+				aria-label="Print some parts of plate {plate.number}"
+				onclick={() => (picking = true)}>Print some parts…</button
+			>
+		{/if}
 		<StartOnPrinter
 			bind:open={where}
-			slugs={startSlugs}
+			slugs={someSlugs ?? startSlugs}
 			plateNumber={plate.number}
-			label={startLabel}
-			parts={choices}
+			label={someSlugs ? partsLabel(someSlugs.length) : startLabel}
+			parts={someSlugs ? [] : choices}
+			partial={!!someSlugs}
+			note={someSlugs ? partsNote(someSlugs) : ''}
 			{confirm}
 		/>
 	{/if}
 </span>
 {#if ctx.canEdit}
+	<PartPickSheet
+		bind:open={picking}
+		plateNumber={plate.number}
+		slugs={idle}
+		onprint={printSome}
+		onlog={logSomeParts}
+	/>
+	{#if logPicked}
+		<LogRunSheet
+			bind:open={logSome}
+			quick
+			plateNumber={plate.number}
+			slugs={logPicked}
+			title="Log a print: {logPicked.length} of {plate.parts.length} parts, plate {plate.number}"
+		/>
+	{/if}
 	<LogRunSheet
 		bind:open
 		quick={logSlugs.length > 0}

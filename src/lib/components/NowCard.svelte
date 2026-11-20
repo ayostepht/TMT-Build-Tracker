@@ -115,7 +115,16 @@
 		</div>
 		<div class="now-meta">
 			{#each item.roles as r (r)}<RoleChip filament={ctx.filament(r)} role={r} />{/each}
-			{#if plate}<PlateGrams {plate} /><PlateTime plate={headPlate(plate)} />{/if}
+			{#if plate}
+				{#if item.subset}
+					<span class="meta num" data-testid="now-subset"
+						>{item.gramsPerRun
+							? `${item.gramsApprox || item.gramsUnknown.length ? '~' : ''}${fmt(item.gramsPerRun)} g · `
+							: ''}{item.parts.length}
+						of {plate.parts.length} parts</span
+					>
+				{:else}<PlateGrams {plate} />{/if}<PlateTime plate={headPlate(plate)} />
+			{/if}
 		</div>
 	</div>
 	<div class="now-parts">
@@ -152,22 +161,24 @@
 						onchange={(e) => setStart(e.currentTarget.value)}
 					/>
 				</label>
-				<label for="{fid}-sg"
-					>Slicer grams
-					<input
-						type="number"
-						id="{fid}-sg"
-						min="0"
-						step="1"
-						value={slicerShown ?? ''}
-						placeholder={gramsHint}
-						disabled={!ctx.canEdit}
-						onchange={(e) => {
-							const raw = e.currentTarget.value;
-							saveSlicer(raw === '' ? null : Math.max(0, Number(raw)));
-						}}
-					/>
-				</label>
+				{#if !item.subset}
+					<label for="{fid}-sg"
+						>Slicer grams
+						<input
+							type="number"
+							id="{fid}-sg"
+							min="0"
+							step="1"
+							value={slicerShown ?? ''}
+							placeholder={gramsHint}
+							disabled={!ctx.canEdit}
+							onchange={(e) => {
+								const raw = e.currentTarget.value;
+								saveSlicer(raw === '' ? null : Math.max(0, Number(raw)));
+							}}
+						/>
+					</label>
+				{/if}
 				<label for="{fid}-se"
 					>Slicer time
 					<input
@@ -213,8 +224,10 @@
 	<div class="now-foot">
 		{#if !compact}
 			<span
-				>A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure flags
-				them for reprint.</span
+				>{item.subset
+					? `Only these ${item.parts.length} parts of the plate are on the printer. `
+					: ''}A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure
+				flags them for reprint.</span
 			>
 		{/if}
 		{#if plate}

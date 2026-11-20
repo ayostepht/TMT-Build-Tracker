@@ -1,5 +1,11 @@
 /** Data for the "Now printing" cards. */
-import { partGrams, plateByNumber, plateGrams, weakestGramsSource } from './accounting.ts';
+import {
+	partGrams,
+	plateByNumber,
+	printGrams,
+	subsetShare,
+	weakestGramsSource
+} from './accounting.ts';
 import { betweenRuns, runInfo } from './actions.ts';
 import type { BuildView, GramsSource, PartDef, Plate } from './types.ts';
 
@@ -14,6 +20,7 @@ export interface NowCard {
 	gramsApprox: boolean; // an estimate (BOM based or missing parts)
 	gramsUnknown: string[]; // parts on the printer with no weight
 	slicerGrams: number | null; // what the slicer field shows, if set
+	subset: boolean; // only some parts of a single-run plate are on the printer: figures are their share
 	startedAt: string | null;
 	estSeconds: number | null;
 	estSource: 'manual' | 'slicer' | 'learned' | 'template' | 'estimate' | null;
@@ -46,11 +53,15 @@ export function nowPrinting(view: BuildView): NowCard[] {
 				.filter((p): p is PartDef => !!p);
 			const multiColor = new Set(onPlate.map((p) => p.role)).size > 1;
 			const raw = plate.perPartRuns ? plate.slicerByPart[slugs[0]] : plate.slicerGrams;
-			const slicerGrams = typeof raw === 'number' && raw > 0 ? raw : null;
+			// Some parts of a plate on the printer (picked on their own): their share of the plate, and the
+			// plate's typed total is not theirs to show or edit.
+			const share = subsetShare(view, plate, slugs);
+			const subset = share < 1;
+			const slicerGrams = !subset && typeof raw === 'number' && raw > 0 ? raw : null;
 			// A perPartRuns plate prints its parts one by one: add the ones on the printer.
 			const infos = plate.perPartRuns
 				? slugs.map((s) => partGrams(view, s))
-				: [plateGrams(view, plate)];
+				: [printGrams(view, plate, slugs)];
 			const estimate = infos.reduce((a, i) => a + i.perRun, 0);
 			const gramsPerRun = estimate > 0 ? estimate : null;
 			const runEst = view.state[slugs[0]].runEstSeconds;
@@ -59,7 +70,8 @@ export function nowPrinting(view: BuildView): NowCard[] {
 					.map((s) => view.state[s].startedAt)
 					.filter((s): s is string => !!s)
 					.sort()[0] ?? null;
-			const estSeconds = runEst || plate.estSeconds || null;
+			const plateEst = plate.estSeconds ? Math.round(plate.estSeconds * share) : 0;
+			const estSeconds = runEst || plateEst || null;
 			return {
 				plate: n,
 				name: plate.name || here[0].name,
@@ -71,6 +83,7 @@ export function nowPrinting(view: BuildView): NowCard[] {
 				gramsApprox: infos.some((i) => i.approx),
 				gramsUnknown: infos.flatMap((i) => i.unknown),
 				slicerGrams,
+				subset,
 				startedAt,
 				estSeconds,
 				estSource: runEst

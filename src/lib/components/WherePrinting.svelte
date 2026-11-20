@@ -12,6 +12,7 @@
 	let {
 		printers,
 		parts = [],
+		note = '',
 		onconfirm,
 		onclose
 	}: {
@@ -22,6 +23,8 @@
 			status?: { state: string; fileName?: string } | null;
 		}[];
 		parts?: { slug: string; name: string }[];
+		/** Which parts a partial start covers (shown under the title). */
+		note?: string;
 		onconfirm: (printerId: string | null, slug: string | null) => void;
 		onclose: () => void;
 	} = $props();
@@ -39,6 +42,7 @@
 </script>
 
 <Dialog title="Where is it printing?" {onclose} testid="where-printing">
+	{#if note}<p class="wp-parts" data-testid="where-parts" title={note}>{note}</p>{/if}
 	{#if parts.length > 1}
 		<fieldset class="wp-set">
 			<legend>Which part?</legend>
@@ -98,6 +102,18 @@
 </Dialog>
 
 <style>
+	/* Long part lists stay to two lines (a phone sheet is narrow); the full text is the title. */
+	.wp-parts {
+		margin: 0 0 var(--sp-4);
+		font-size: var(--fs-sm);
+		color: var(--muted);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+	}
 	.wp-set {
 		border: 0;
 		margin: 0;

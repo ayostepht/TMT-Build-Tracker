@@ -237,6 +237,19 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
+- **Print some parts of a plate** (2026-11-20, pull request open into `edge`, not merged:
+  the public site agent reviews it first): a plate's control has "Print some parts…"
+  (`PartPickSheet`, all parts ticked by default) to mark or log only some of a plate's
+  parts as one print; the rest stays To print. Now printing shows the subset with its
+  share of grams and time; with an enabled printer "Where is it printing?" names the parts
+  and the job is linked to them only. Offered on single-run plates that are not
+  `perPartRuns`, with two or more parts left. No schema or server change. Open: two
+  prints of one plate running at the same time share one card and one log (needs a
+  print-batch id on part state; the maintainer said no for now, 2026-11-20); starting "the
+  rest" from the status badge sends no part list, which is only wrong in that same
+  simultaneous case [printers]; the plate control can't log only some of the parts that are
+  Printing [build-state]; the e2e "hidden on a multi-run plate" case is skipped because the
+  test layout has no such plate [e2e-playwright].
 - **Grams and accounting** (#45 and #46 done 2026-11-15): one grams source order
   everywhere, "Add weight" for parts without one, plate headers show grams. #46: used grams
   and hours split into kept vs lost (older Partial rows count as lost); Partial logs (manual
