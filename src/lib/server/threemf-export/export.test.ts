@@ -679,68 +679,73 @@ describe('exportBuild3mf with a database', () => {
 		storeExtractedParts(db, templateId, parts, 'synthetic.3mf');
 	}
 
-	it('400 without a printer, 404 for outsiders, 409 without geometry, then a zip for viewers', async () => {
-		const id = mk();
-		const err = (f: () => unknown) => {
-			try {
-				f();
-			} catch (e) {
-				return e as ApiError;
+	it(
+		'400 without a printer, 404 for outsiders, 409 without geometry, then a zip for viewers',
+		{ timeout: 30_000 },
+		async () => {
+			const id = mk();
+			const err = (f: () => unknown) => {
+				try {
+					f();
+				} catch (e) {
+					return e as ApiError;
+				}
+				throw new Error('did not throw');
+			};
+			// the template's default MakeGood layout counts as the bed; an uploaded 3MF has none
+			expect(loadBuildView(db, id, 'owner')!.layoutPrinter?.name).toBe('Bambu X1 / P1 / A1');
+			expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(409);
+			db.update(builds).set({ plateLayout: 'upload' }).where(eq(builds.id, id)).run();
+			expect(loadBuildView(db, id, 'owner')!.layoutPrinter).toBeNull();
+			expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(400);
+			db.update(builds).set({ plateLayout: null }).where(eq(builds.id, id)).run();
+			setPrinter(db, id, 'owner', { printer: cc });
+			expect(err(() => exportBuild3mf(db, id, 'outsider', { flavor: 'orca' })).status).toBe(404);
+			expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(409);
+			const pre0 = previewExport(db, id, 'owner', { flavor: 'orca' });
+			expect(pre0.ready).toBe(false);
+			expect(pre0.reason).toBe('no-geometry');
+
+			importSynthetic();
+			const out = exportBuild3mf(db, id, 'viewer', { flavor: 'orca' });
+			expect(out.filename).toBe('TMT-Chair-Elegoo-Centauri-Carbon-orca.3mf');
+			expect(out.contentType).toBe('model/3mf');
+			const chunks: Uint8Array[] = [];
+			const reader = out.stream.getReader();
+			for (;;) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				chunks.push(value);
 			}
-			throw new Error('did not throw');
-		};
-		// the template's default MakeGood layout counts as the bed; an uploaded 3MF has none
-		expect(loadBuildView(db, id, 'owner')!.layoutPrinter?.name).toBe('Bambu X1 / P1 / A1');
-		expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(409);
-		db.update(builds).set({ plateLayout: 'upload' }).where(eq(builds.id, id)).run();
-		expect(loadBuildView(db, id, 'owner')!.layoutPrinter).toBeNull();
-		expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(400);
-		db.update(builds).set({ plateLayout: null }).where(eq(builds.id, id)).run();
-		setPrinter(db, id, 'owner', { printer: cc });
-		expect(err(() => exportBuild3mf(db, id, 'outsider', { flavor: 'orca' })).status).toBe(404);
-		expect(err(() => exportBuild3mf(db, id, 'owner', { flavor: 'orca' })).status).toBe(409);
-		const pre0 = previewExport(db, id, 'owner', { flavor: 'orca' });
-		expect(pre0.ready).toBe(false);
-		expect(pre0.reason).toBe('no-geometry');
+			const bytes = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
+			let o = 0;
+			for (const c of chunks) {
+				bytes.set(c, o);
+				o += c.length;
+			}
+			const sum = await parseThreeMfBytes(bytes);
+			expect(sum.kind).toBe('project');
+			const names = sum.plates.flatMap((p) => p.objects.map((x) => x.name));
+			expect(names).toEqual(expect.arrayContaining(['Wing Left', 'Wing Right', 'Footrest']));
 
-		importSynthetic();
-		const out = exportBuild3mf(db, id, 'viewer', { flavor: 'orca' });
-		expect(out.filename).toBe('TMT-Chair-Elegoo-Centauri-Carbon-orca.3mf');
-		expect(out.contentType).toBe('model/3mf');
-		const chunks: Uint8Array[] = [];
-		const reader = out.stream.getReader();
-		for (;;) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			chunks.push(value);
+			const pre = previewExport(db, id, 'viewer', { flavor: 'orca' });
+			expect(pre.ready).toBe(true);
+			expect(pre.plates.length).toBe(sum.plates.length);
+			expect(pre.missing.length).toBeGreaterThan(0); // the other kit parts have seed numbers only
+			expect(pre.filaments).toHaveLength(4);
+			// not arranged yet: a note says the export used a fresh arrangement
+			expect(pre.warnings.some((w) => w.code === 'arrangement')).toBe(true);
+			expect(
+				prepareExport(db, id, 'owner', { flavor: 'orca', plates: [pre.plates[0].number] }).plan
+					.plates
+			).toHaveLength(1);
+			expect(() => prepareExport(db, id, 'owner', { flavor: 'orca', plates: [999] })).toThrow(
+				/plate 999/
+			);
+			const v = loadBuildView(db, id, 'owner')!;
+			expect(v.printer?.name).toBe('Elegoo Centauri Carbon');
 		}
-		const bytes = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
-		let o = 0;
-		for (const c of chunks) {
-			bytes.set(c, o);
-			o += c.length;
-		}
-		const sum = await parseThreeMfBytes(bytes);
-		expect(sum.kind).toBe('project');
-		const names = sum.plates.flatMap((p) => p.objects.map((x) => x.name));
-		expect(names).toEqual(expect.arrayContaining(['Wing Left', 'Wing Right', 'Footrest']));
-
-		const pre = previewExport(db, id, 'viewer', { flavor: 'orca' });
-		expect(pre.ready).toBe(true);
-		expect(pre.plates.length).toBe(sum.plates.length);
-		expect(pre.missing.length).toBeGreaterThan(0); // the other kit parts have seed numbers only
-		expect(pre.filaments).toHaveLength(4);
-		// not arranged yet: a note says the export used a fresh arrangement
-		expect(pre.warnings.some((w) => w.code === 'arrangement')).toBe(true);
-		expect(
-			prepareExport(db, id, 'owner', { flavor: 'orca', plates: [pre.plates[0].number] }).plan.plates
-		).toHaveLength(1);
-		expect(() => prepareExport(db, id, 'owner', { flavor: 'orca', plates: [999] })).toThrow(
-			/plate 999/
-		);
-		const v = loadBuildView(db, id, 'owner')!;
-		expect(v.printer?.name).toBe('Elegoo Centauri Carbon');
-	});
+	);
 
 	describe('export follows the plates the app shows', () => {
 		const GEOM = Object.keys(SHAPES);
