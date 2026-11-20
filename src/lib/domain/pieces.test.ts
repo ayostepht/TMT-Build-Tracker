@@ -16,6 +16,7 @@ import {
 	paceOf,
 	pieceListError,
 	pieceShare,
+	printingPieces,
 	piecesLeft,
 	printGrams,
 	recomputeParts,
@@ -523,5 +524,44 @@ describe('activity sentences', () => {
 		expect(describeActivity(act('printing.start', { slugs: [H], comps: ['x', 1.5] }), view)).toBe(
 			'Sam put Harness and Straps on the printer'
 		);
+	});
+});
+
+describe('a stored piece list that no longer fits the part (the kit changed)', () => {
+	const stale = (list: number[]) => {
+		const { v } = setup();
+		return applyPatches(v, [{ slug: H, status: 'Printing', printingComps: list }]);
+	};
+	it('ignores indexes that are not a piece of the part', () => {
+		expect(printingPieces(stale([0, 2, 40, -1, 1.5]), H)).toEqual([0, 2]);
+		expect(printingPieces(stale([0, 0, 1]), H)).toEqual([0, 1]);
+	});
+	it('none valid, or every piece, is a whole-part print', () => {
+		expect(printingPieces(stale([40, 41]), H)).toBeNull();
+		expect(printingPieces(stale([0, 1, 2, 3, 4, 5, 6, 7, 8]), H)).toBeNull();
+		expect(printingPieces(stale([]), H)).toBeNull();
+		const { v } = setup();
+		expect(printingPieces(v, H)).toBeNull();
+	});
+	it('a part that now has fewer than two pieces is a whole-part print', () => {
+		const s = stale([0, 1]);
+		const one = {
+			...s,
+			parts: s.parts.map((p) => (p.slug === H ? { ...p, components: p.components.slice(0, 1) } : p))
+		};
+		expect(printingPieces(one, H)).toBeNull();
+	});
+	it('Now printing shows the valid pieces only, or the whole part', () => {
+		const [c] = nowPrinting(stale([0, 40]));
+		expect(c.pieces).toEqual([{ slug: H, picked: ['Harness Right'], of: 9 }]);
+		const [w] = nowPrinting(stale([40, 41]));
+		expect(w.pieces).toEqual([]);
+		expect(w.subset).toBe(false);
+	});
+	it('canPrintPieces ignores a stale list on a part that is not printing', () => {
+		const { v } = setup();
+		const s = applyPatches(v, [{ slug: H, status: 'To print', printingComps: [40] }]);
+		expect(canPrintPieces(s, H)).toBe(true);
+		expect(canPrintPieces(stale([0, 1]), H)).toBe(false);
 	});
 });

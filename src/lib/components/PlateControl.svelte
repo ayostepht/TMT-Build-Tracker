@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Plate } from '#lib/domain/types.ts';
-	import { betweenRuns } from '#lib/domain/index.ts';
+	import { betweenRuns, printingPieces } from '#lib/domain/index.ts';
 	import { defaultRunParts } from '#lib/domain/run-choice.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
@@ -81,7 +81,7 @@
 	// One part on the printer with only some of its pieces: the log covers just those pieces. (With
 	// other parts on the printer at once the log is for whole parts; pieces are logged from the part.)
 	const piecesOn = $derived(
-		on.length === 1 && logSlugs.length === 1 ? (ctx.view.state[on[0]]?.printingComps ?? null) : null
+		on.length === 1 && logSlugs.length === 1 ? printingPieces(ctx.view, on[0]) : null
 	);
 	const piecesTitle = $derived.by(() => {
 		if (!piecesOn?.length) return '';

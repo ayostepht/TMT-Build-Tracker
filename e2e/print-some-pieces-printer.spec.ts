@@ -1,7 +1,7 @@
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
-import { confirmWhere } from './status-helpers';
+import { confirmOnPrinter, confirmWhere } from './status-helpers';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -105,20 +105,6 @@ async function pickSome(page: Page, buildId: string): Promise<Locator> {
 	);
 	await dlg.getByTestId('piece-pick-confirm').click();
 	return h;
-}
-
-/**
- * "Where is it printing?" > the printer: waits until the start and the printer's expectation are both
- * saved and the page has reloaded the jobs. A job that already runs when the expectation lands is
- * linked at once (no confirm), so the mock printer must not start before this returns.
- */
-async function confirmOnPrinter(page: Page) {
-	const saved = page.waitForResponse(
-		(r) => /\/api\/printers\/[^/]+\/expect$/.test(r.url()) && r.request().method() === 'POST'
-	);
-	await confirmWhere(page, 'first');
-	expect((await saved).ok()).toBe(true);
-	await page.waitForLoadState('networkidle');
 }
 
 const sorted = (a: number[] | null | undefined) => [...(a ?? [])].sort((x, y) => x - y);

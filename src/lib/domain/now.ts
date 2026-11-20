@@ -7,7 +7,7 @@ import {
 	subsetShare,
 	weakestGramsSource
 } from './accounting.ts';
-import { betweenRuns, runInfo } from './actions.ts';
+import { betweenRuns, printingPieces, runInfo } from './actions.ts';
 import type { BuildView, GramsSource, PartDef, Plate } from './types.ts';
 
 export interface NowCard {
@@ -64,7 +64,7 @@ export function nowPrinting(view: BuildView): NowCard[] {
 				.filter((s) => s in frac)
 				.map((s) => {
 					const part = view.parts.find((p) => p.slug === s)!;
-					const on = view.state[s].printingComps ?? [];
+					const on = printingPieces(view, s) ?? [];
 					return {
 						slug: s,
 						picked: on.map((i) => part.components[i]?.name).filter((n): n is string => !!n),

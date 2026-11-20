@@ -10,6 +10,7 @@ import { openDb, runMigrations, type Db } from '../db';
 import {
 	activity,
 	buildPlates,
+	buildParts,
 	member,
 	organization,
 	printerJobs,
@@ -21,6 +22,7 @@ import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import {
 	addRun,
+	addRunSystem,
 	deleteRun,
 	printingAction,
 	setPartStatus,
@@ -493,5 +495,65 @@ describe('hand ticks and the piece list', () => {
 		);
 		const huge = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [String(i), true]));
 		expect(status(() => updatePart(db, id, 'owner', H, { comps: huge }))).toBe(400);
+	});
+});
+
+describe('a stale piece list (the kit changed under a stored list)', () => {
+	const setStale = (id: string, list: number[]) =>
+		db
+			.update(buildParts)
+			.set({ status: 'Printing', printingComps: list })
+			.where(and(eq(buildParts.buildId, id), eq(buildParts.partSlug, H)))
+			.run();
+	it('the plate-level safety net falls back to the plain plate run', () => {
+		const id = mk();
+		setStale(id, [0, 40]);
+		// 40 is no piece of the part, so the valid rest is used...
+		addRun(db, id, 'owner', { plateNumber: 18, date: '2026-01-02', result: 'Success' });
+		expect(view(id).runs[0].comps).toEqual([0]);
+		const id2 = mk();
+		setStale(id2, [40, 41]);
+		// ...and with none valid it is the ordinary whole-plate run, not a 400.
+		addRun(db, id2, 'owner', { plateNumber: 18, date: '2026-01-02', result: 'Success' });
+		const v = view(id2);
+		expect(v.runs[0].comps ?? null).toBeNull();
+		expect(v.state[H].status).toBe('Printed');
+	});
+	it('a system log with comps that do not fit is a plain part run; a user request still gets 400', () => {
+		const id = mk();
+		const body = {
+			plateNumber: 18,
+			partSlug: H,
+			comps: [40],
+			date: '2026-01-02',
+			result: 'Success'
+		};
+		expect(status(() => addRun(db, id, 'owner', body))).toBe(400);
+		expect(view(id).runs).toHaveLength(0);
+		addRunSystem(db, id, 'owner', 'Shop printer', body);
+		const r = view(id).runs[0];
+		expect(r.partSlug).toBe(H);
+		expect(r.comps ?? null).toBeNull();
+		// a system log that breaks another rule (Partial with comps) is also plain, not an error
+		addRunSystem(db, id, 'owner', 'Shop printer', { ...body, comps: [0, 1], result: 'Partial' });
+		expect(view(id).runs).toHaveLength(2);
+	});
+});
+
+describe('undo snapshot ticks', () => {
+	it("keeps only the part's own piece indexes and caps the entries", () => {
+		const id = mk();
+		const before = snapshotParts(view(id), [H]);
+		const { runId } = logPieces(id, [0, 1, 2]);
+		const comps = { '1': true, '2': false, x: true, '-1': true, '9': true, '99': true, '01': true };
+		undoRun(db, id, 'owner', runId, { parts: [{ ...before[0], comps }] });
+		expect(view(id).state[H].comps).toEqual({ '1': true, '2': false, '01': true });
+		const id2 = mk();
+		const r2 = logPieces(id2, [0]).runId;
+		const huge = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [String(i), true]));
+		expect(
+			status(() => undoRun(db, id2, 'owner', r2, { parts: [{ ...before[0], comps: huge }] }))
+		).toBe(400);
+		expect(view(id2).runs).toHaveLength(1);
 	});
 });

@@ -84,6 +84,21 @@ export function isPieceRun(r: { comps?: readonly number[] | null }): boolean {
 	return !!r.comps?.length;
 }
 
+/**
+ * The pieces of a part that are on the printer as a piece print, read against its CURRENT components
+ * (a kit update can change them under a stored `printingComps`): indexes that are not a piece of the
+ * part are ignored, and when none remain, or the list covers every piece, or the part has fewer than
+ * two pieces, the print counts as a whole-part print (null). Everything that reads `printingComps`
+ * (Now printing, the row tag, `canPrintPieces`, the run safety net, printer jobs) goes through this.
+ */
+export function printingPieces(view: BuildView, slug: string): number[] | null {
+	const raw = view.state[slug]?.printingComps;
+	const n = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
+	if (!raw?.length || n < 2) return null;
+	const ok = [...new Set(raw)].filter((i) => Number.isInteger(i) && i >= 0 && i < n);
+	return ok.length && ok.length < n ? ok.sort((a, b) => a - b) : null;
+}
+
 /** Indexes of a part's pieces that are not ticked yet, in order. */
 export function piecesLeft(view: BuildView, slug: string): number[] {
 	const part = view.parts.find((p) => p.slug === slug);
@@ -101,7 +116,7 @@ export function piecesLeft(view: BuildView, slug: string): number[] {
 export function canPrintPieces(view: BuildView, slug: string): boolean {
 	const st = view.state[slug];
 	if (!st || (st.status !== 'To print' && st.status !== 'Reprint')) return false;
-	if (st.printingComps?.length) return false;
+	if (printingPieces(view, slug)) return false;
 	if (piecesLeft(view, slug).length < 2) return false;
 	const plate = view.plates.find((p) => p.parts.includes(slug));
 	return !plate || (!plate.perPartRuns && plate.runs <= 1);

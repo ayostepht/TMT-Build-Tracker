@@ -2,7 +2,7 @@
 	import { PART_STATUSES, type PartDef, type PrintRun } from '#lib/domain/types.ts';
 	import { fmt, partGrams, plateOf } from '#lib/domain/index.ts';
 	import { parseGrams, partRuns } from '#lib/domain/logrun.ts';
-	import { betweenRuns, runTargets } from '#lib/domain/actions.ts';
+	import { betweenRuns, printingPieces, runTargets } from '#lib/domain/actions.ts';
 	import { updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
@@ -39,6 +39,7 @@
 	const st = $derived(ctx.view.state[part.slug]);
 	const fil = $derived(ctx.filament(part.role));
 	const plate = $derived(plateOf(ctx.view, part.slug));
+	const onPrinter = $derived(printingPieces(ctx.view, part.slug));
 	const doneComps = $derived(part.components.filter((_, i) => st?.comps[i]).length);
 	const log = $derived(partRuns(ctx.view, part.slug));
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
@@ -204,8 +205,8 @@
 			{#if part.brim}<span class="pset hot">{part.brim} brim</span>{/if}
 			{#if part.components.length}
 				<span class="pset" class:hot={doneComps < part.components.length} data-testid="part-pieces"
-					>{doneComps}/{part.components.length} pieces{st?.printingComps?.length
-						? ` · ${st.printingComps.length} printing`
+					>{doneComps}/{part.components.length} pieces{onPrinter
+						? ` · ${onPrinter.length} printing`
 						: ''}</span
 				>
 				{#if !plateOffersPieces}
@@ -307,7 +308,7 @@
 								<span
 									>{c.name}
 									<small
-										>{c.settings}{c.file ? ` · ${c.file}` : ''}{st?.printingComps?.includes(i)
+										>{c.settings}{c.file ? ` · ${c.file}` : ''}{onPrinter?.includes(i)
 											? ' · on the printer'
 											: ''}</small
 									></span

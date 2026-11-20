@@ -6,6 +6,7 @@ import {
 	MAX_PIECES,
 	pieceListError,
 	piecesLeft,
+	printingPieces,
 	recomputeParts,
 	runTargets,
 	setPieceTicks,
@@ -584,19 +585,32 @@ function runOutcome(
 		) {
 			const only = view.plates.find((p) => p.number === plateNumber)?.parts;
 			const st = only?.length === 1 ? view.state[only[0]] : undefined;
-			if (only && st?.status === 'Printing' && st.printingComps?.length) {
+			// Read against the current components: a stale list (the kit changed) is no piece print.
+			const on = only?.length === 1 ? printingPieces(view, only[0]) : null;
+			if (only && st?.status === 'Printing' && on && !pieceListError(view, only[0], on, 'log')) {
 				partSlug = only[0];
-				body = { ...body, comps: st.printingComps };
+				body = { ...body, comps: on };
 			}
 		}
 		if (body.comps !== undefined && body.comps !== null) {
-			if (!partSlug) bad('Pieces need a part');
-			if (partSlugs) bad('Pieces belong to a single part');
-			if (body.split !== undefined && body.split !== null)
-				bad('Per-part results do not apply to pieces');
-			if (body.result === 'Partial') bad('Log Success or Failed for a piece print');
-			assertPiecePlate(view, partSlug, plateNumber);
-			comps = pieceList(body.comps, view, partSlug, 'log');
+			const piece = (): number[] => {
+				if (!partSlug) bad('Pieces need a part');
+				if (partSlugs) bad('Pieces belong to a single part');
+				if (body.split !== undefined && body.split !== null)
+					bad('Per-part results do not apply to pieces');
+				if (body.result === 'Partial') bad('Log Success or Failed for a piece print');
+				assertPiecePlate(view, partSlug, plateNumber);
+				return pieceList(body.comps, view, partSlug, 'log');
+			};
+			if (userId === null) {
+				// A printer's log must not fail on a piece list that no longer fits (kit changed): it is
+				// logged as a plain run of the part. Requests from people keep their 400.
+				try {
+					comps = piece();
+				} catch (e) {
+					if (!(e instanceof ApiError)) throw e;
+				}
+			} else comps = piece();
 		}
 		const split = splitRequest(view, body, plateNumber);
 		const input: PrintRunInput = {
@@ -916,10 +930,14 @@ export function undoRun(
 			if (printedOn !== null) dateStr(printedOn, 'printedOn');
 			const runEstSeconds = optNum(raw.runEstSeconds, 'runEstSeconds') ?? null;
 			if (!isObj(raw.comps)) bad('comps must be an object');
+			const entries = Object.entries(raw.comps);
+			if (entries.length > MAX_PIECES) bad('comps lists too many pieces');
+			const nPieces = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
 			const comps: Record<string, boolean> = {};
-			for (const [k, v] of Object.entries(raw.comps)) {
+			for (const [k, v] of entries) {
 				if (typeof v !== 'boolean') bad('comps values must be booleans');
-				comps[k] = v;
+				// Only the part's own piece indexes are kept.
+				if (/^\d+$/.test(k) && Number(k) < nPieces) comps[k] = v;
 			}
 			// The piece list the part had (null/absent = a whole-part print or nothing on the printer).
 			let printingComps: number[] | null = null;

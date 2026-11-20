@@ -8,7 +8,7 @@
  * that were logged without grams, split into kept (successful runs and those estimates) and
  * lost (failed runs, and older Partial rows). A running print still counts as to print.
  */
-import { isPieceRun, runTargets } from './actions.ts';
+import { isPieceRun, printingPieces, runTargets } from './actions.ts';
 import { fmtH } from './format.ts';
 import { paceOf, type Pace } from './pace.ts';
 import { haveGramsOf, isDeductibleRun, isPreLinkRun, isSpoolmanLinked } from './spoolman.ts';
@@ -327,8 +327,9 @@ export function printingFractions(
 	const out: Record<string, number> = {};
 	for (const s of slugs) {
 		const st = view.state[s];
-		if (st?.status !== 'Printing' || !st.printingComps?.length) continue;
-		const f = pieceShare(view, s, st.printingComps);
+		const on = printingPieces(view, s);
+		if (st?.status !== 'Printing' || !on) continue;
+		const f = pieceShare(view, s, on);
 		if (f < 1) out[s] = f;
 	}
 	return out;
