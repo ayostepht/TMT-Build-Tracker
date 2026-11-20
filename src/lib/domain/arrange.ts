@@ -23,8 +23,16 @@
  * only rotates them flat about z (0/90 degrees or a free in-plane angle). A part that does
  * not fit flat is reported as oversize. There is no code that can tilt or stand a part up.
  */
-import { boxOrients, fitOutline, rotatePoints, turnedOutlineBox, type Pt } from './geom2d.ts';
-import { findFreePosition, optimizeLayout, type OptItem } from './plate-optimize.ts';
+import {
+	boxOrients,
+	fitOutline,
+	inflateOutline,
+	rotatePoints,
+	turnedOutlineBox,
+	type FitPiece,
+	type Pt
+} from './geom2d.ts';
+import { findFreePosition, nestOutlines, optimizeLayout, type OptItem } from './plate-optimize.ts';
 import {
 	GROUP_VERSION,
 	groupFit,
@@ -59,6 +67,13 @@ export interface ArrangePart {
 	rotate?: boolean;
 	/** Extra advice appended to an oversize warning, e.g. "Choose the two-piece footrest." */
 	hint?: string | null;
+	/**
+	 * Brim width in mm per footprint piece (index = piece index; missing = none). The brim counts as part of the
+	 * piece's footprint for the gap to neighbours, the bed edge and keep-outs (not for rigid source groups).
+	 */
+	brims?: number[];
+	/** The filament role the kit author gives this part: plates the kit printed in several colors stay that way. */
+	baseRole?: string;
 }
 
 export interface ArrangeUnsized {
@@ -90,7 +105,26 @@ export interface ArrangeOptions {
 	optimize?: boolean;
 	/** Override which roles may share a plate (still limited by mmSlots). */
 	compatible?: (a: ArrangeRole, b: ArrangeRole) => boolean;
+	/**
+	 * Part slugs that stand alone on their plate(s) in the kit's own layout: they never share a plate with
+	 * another part (not even when there is room) and may use the relaxed safe area (edge margin down to
+	 * `SOLO_MARGIN`) when the printer's margin leaves no room for them.
+	 */
+	solo?: readonly string[];
+	/**
+	 * When the greedy packer cannot fit a few items on one plate, also try their orders and turns
+	 * (at most `THOROUGH_MAX` items, a fixed work budget). For the kit's own multi-part plates.
+	 */
+	thorough?: boolean;
 }
+
+const THOROUGH_MAX = 6;
+const THOROUGH_BUDGET = 4000;
+/** Box placements all thorough searches of one `arrange()` call may try together. */
+const THOROUGH_TOTAL = 12000;
+
+/** Edge margin (mm) a solo part may fall back to: the kit author's own "almost the whole bed". */
+export const SOLO_MARGIN = 1;
 
 export interface ArrangeInput {
 	parts: ArrangePart[];
@@ -129,6 +163,8 @@ export interface ArrangedItem {
 }
 
 export interface ArrangedPlate {
+	/** Planner version that wrote the plate (`PLANNER_VERSION` in `builds/arrange-plan.ts`); absent on plates stored before the kit layout came first. */
+	v?: number;
 	number: number;
 	name: string;
 	items: ArrangedItem[];
@@ -137,6 +173,11 @@ export interface ArrangedPlate {
 	roles: string[];
 	/** Times the plate is printed (rims: 2). */
 	runs: number;
+	/**
+	 * Set on a plate whose parts are printed in runs of their own (the wheel rims: the same object in two
+	 * colors): one print has only ONE of the parts on the bed (`items`), every part is printed `runs` times.
+	 */
+	perPartRuns?: true;
 	/** Estimated grams per run by role key. */
 	estGrams: Record<string, number>;
 	/** Footprint area / usable bed area, 0..1. */
@@ -151,7 +192,7 @@ export interface ArrangedPlate {
 	};
 }
 
-export type ArrangeWarningCode = 'oversize' | 'split' | 'unsized' | 'unknown-role';
+export type ArrangeWarningCode = 'oversize' | 'split' | 'unsized' | 'unknown-role' | 'brim';
 export interface ArrangeWarning {
 	code: ArrangeWarningCode;
 	slug: string;
@@ -291,6 +332,10 @@ interface Item {
 	grp?: { g: SourceGroup; members: Item[] };
 	/** Source group this item came from (also when the group had to be broken up), for the split note. */
 	src?: string;
+	/** Brim width counted into `w`, `d` and the outline (mm). */
+	brim?: number;
+	/** A solo part that only fits with the relaxed edge margin: placed by its outline on its own plate. */
+	relaxed?: boolean;
 }
 
 interface PlateState {
@@ -319,7 +364,7 @@ function family(r: ArrangeRole): string {
 	if (r.tpu || /^\s*(tpu|tpe|flex)/i.test(r.material)) return 'tpu';
 	return (/^[A-Za-z]+/.exec(r.material.trim())?.[0] ?? r.material).toUpperCase();
 }
-const defaultCompatible = (a: ArrangeRole, b: ArrangeRole) => family(a) === family(b);
+export const defaultCompatible = (a: ArrangeRole, b: ArrangeRole) => family(a) === family(b);
 
 const SIDE = /\b(left|right)\b/i;
 function pluralize(s: string): string {
@@ -434,6 +479,18 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 		p.footprint.pieces.reduce((a, pc) => a + Math.max(1, pc.copies), 0) * unitsPerRun(p);
 
 	// 1. items per part (one run's worth)
+	const soloSet = new Set(input.options?.solo ?? []);
+	const relaxedMargin = Math.min(margin, SOLO_MARGIN);
+	const relaxedX = Math.max(0, printer.bedX - 2 * relaxedMargin);
+	const relaxedY = Math.max(0, printer.bedY - 2 * relaxedMargin);
+	const fitsBox = (os: { w: number; d: number }[], ux: number, uy: number) =>
+		os.some((o) => o.w <= ux + 1e-6 && o.d <= uy + 1e-6);
+	/** A piece grown by its brim, for the fitter. */
+	const brimmed = (pc: FitPiece, b: number): FitPiece => ({
+		w: pc.w + 2 * b,
+		d: pc.d + 2 * b,
+		hull: inflateOutline(fitOutline(pc), b)
+	});
 	const itemsOf = new Map<string, Item[]>();
 	for (const p of parts) {
 		if (!roleOf.has(p.role))
@@ -446,16 +503,42 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 		const up = unitsPerRun(p);
 		p.footprint.pieces.forEach((pc, pi) => {
 			const n = Math.max(1, pc.copies) * up;
+			let b = Math.max(0, p.brims?.[pi] ?? 0);
+			const rotate = p.rotate !== false;
+			let orients = boxOrients(b > 0 ? brimmed(pc, b) : pc, rotate, usableX, usableY);
+			if (b > 0 && !fitsBox(orients, usableX, usableY)) {
+				// the part fits the bed, its brim does not: place it without the brim and say so
+				const bare = boxOrients(pc, rotate, usableX, usableY);
+				if (fitsBox(bare, usableX, usableY)) {
+					warnings.push({
+						code: 'brim',
+						slug: p.slug,
+						message: `${p.name}'s ${Math.round(b * 10) / 10} mm brim does not fit around it on a ${printer.bedX}×${printer.bedY} mm bed, so it is placed without room for the brim. Check the brim in your slicer.`
+					});
+					b = 0;
+					orients = bare;
+				}
+			}
+			let relaxed = false;
+			if (soloSet.has(p.slug) && relaxedMargin < margin && !fitsBox(orients, usableX, usableY)) {
+				const alt = boxOrients(b > 0 ? brimmed(pc, b) : pc, rotate, relaxedX, relaxedY);
+				if (fitsBox(alt, relaxedX, relaxedY)) {
+					orients = alt;
+					relaxed = true;
+				}
+			}
 			for (let c = 0; c < n; c++)
 				list.push({
 					slug: p.slug,
 					piece: pi,
 					copy: c,
-					w: pc.w,
-					d: pc.d,
-					orients: boxOrients(pc, p.rotate !== false, usableX, usableY),
+					w: pc.w + 2 * b,
+					d: pc.d + 2 * b,
+					orients,
 					role: p.role,
-					order: partIndex.get(p.slug)!
+					order: partIndex.get(p.slug)!,
+					...(b > 0 ? { brim: b } : {}),
+					...(relaxed ? { relaxed: true } : {})
 				});
 		});
 		itemsOf.set(p.slug, list);
@@ -482,8 +565,81 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 		runs
 	});
 
-	/** Place items on a clone of `plate`; returns the new state or null when they do not all fit. */
+	/**
+	 * `tryPlaceGreedy`, then (option `thorough`, few items) every order and turn of the plate's items
+	 * together with the new ones on an empty plate, within a fixed work budget.
+	 */
+	let thoroughLeft = THOROUGH_TOTAL;
 	function tryPlace(plate: PlateState, items: Item[]): PlateState | null {
+		const r = tryPlaceGreedy(plate, items);
+		if (r || !input.options?.thorough) return r;
+		const all = [...plate.items, ...items].sort(itemOrder);
+		if (all.length < 2 || all.length > THOROUGH_MAX) return null;
+		// items that together take more than the usable bed cannot fit: no search (keeps a miss cheap)
+		if (all.reduce((a, i) => a + area(i), 0) > usableX * usableY) return null;
+		// one work budget per arrange() call, shared by every search in it
+		if (thoroughLeft <= 0) return null;
+		let budget = Math.min(THOROUGH_BUDGET, thoroughLeft);
+		const start = budget;
+		const used = all.map(() => false);
+		const dfs = (bin: MaxRects, placed: PlateState['items']): PlateState | null => {
+			if (placed.length === all.length)
+				return { bin, items: placed, roles: new Set(all.map((i) => i.role)), runs: plate.runs };
+			for (let k = 0; k < all.length; k++) {
+				if (used[k]) continue;
+				used[k] = true;
+				for (let oi = 0; oi < all[k].orients.length; oi++) {
+					if (budget-- <= 0) {
+						used[k] = false;
+						return null;
+					}
+					const o = all[k].orients[oi];
+					const b = bin.clone();
+					const at = b.insert([{ w: o.w + spacing, h: o.d + spacing }]);
+					if (!at) continue;
+					const res = dfs(b, [
+						...placed,
+						{ ...all[k], x: at.x, y: at.y, pw: o.w, pd: o.d, rot: o.rot, ox: o.ox, oy: o.oy }
+					]);
+					if (res) return res;
+				}
+				used[k] = false;
+			}
+			return null;
+		};
+		const boxed = dfs(emptyBin(), []);
+		thoroughLeft -= start - Math.max(0, budget);
+		if (boxed || all.some((i) => i.grp)) return boxed;
+		// no arrangement of boxes: nest the true outlines (flat angles), biggest first
+		const nest = nestOutlines(
+			all.map((i) => ({
+				outline: itemOutline(i),
+				angles: [0, 90, 180, 270, ...i.orients.map((o) => o.rot)]
+			})),
+			{ bedX: printer.bedX, bedY: printer.bedY, margin, spacing, keepOut: zones }
+		);
+		if (!nest) return null;
+		const bin = emptyBin();
+		const placed = all.map((it, k) => {
+			const n = nest[k];
+			const x = n.x - margin - n.w / 2;
+			const y = n.y - margin - n.d / 2;
+			bin.block({ x, y, w: n.w + spacing, h: n.d + spacing });
+			return {
+				...it,
+				x,
+				y,
+				pw: n.w,
+				pd: n.d,
+				rot: n.rot,
+				...(n.ox || n.oy ? { ox: n.ox, oy: n.oy } : {})
+			};
+		});
+		return { bin, items: placed, roles: new Set(all.map((i) => i.role)), runs: plate.runs };
+	}
+
+	/** Place items on a clone of `plate`; returns the new state or null when they do not all fit. */
+	function tryPlaceGreedy(plate: PlateState, items: Item[]): PlateState | null {
 		const next: PlateState = {
 			bin: plate.bin.clone(),
 			items: [...plate.items],
@@ -522,11 +678,16 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 	const itemOutline = (it: Item): Pt[] =>
 		it.grp
 			? fitOutline(groupFit(it.grp.g))
-			: fitOutline(partOf.get(it.slug)!.footprint.pieces[it.piece]);
+			: it.brim
+				? inflateOutline(fitOutline(partOf.get(it.slug)!.footprint.pieces[it.piece]), it.brim)
+				: fitOutline(partOf.get(it.slug)!.footprint.pieces[it.piece]);
 	/** Outline-based spot for an item whose box has none around the keep-out areas (diagonal wings). */
 	const soloSpot = (it: Item) => {
 		const outline = itemOutline(it);
-		const setup = { bedX: printer.bedX, bedY: printer.bedY, margin, spacing, keepOut: zones };
+		const m = it.relaxed ? relaxedMargin : margin;
+		const ux = it.relaxed ? relaxedX : usableX;
+		const uy = it.relaxed ? relaxedY : usableY;
+		const setup = { bedX: printer.bedX, bedY: printer.bedY, margin: m, spacing, keepOut: zones };
 		let best: { o: Orient; x: number; y: number; clearance: number } | null = null;
 		for (const o of it.orients) {
 			const pos = findFreePosition(
@@ -544,7 +705,7 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 		for (let k = 0; k < 1440; k++) {
 			const deg = k * 0.25;
 			const b = turnedOutlineBox(outline, deg);
-			const slack = Math.min(usableX - b.w, usableY - b.d);
+			const slack = Math.min(ux - b.w, uy - b.d);
 			if (slack >= -1e-6) cand.push({ deg, slack });
 		}
 		cand.sort((a, b) => b.slack - a.slack || a.deg - b.deg);
@@ -622,10 +783,10 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 
 	for (const p of parts) {
 		let items = itemsOf.get(p.slug)!;
-		if (zones.length) {
+		if (zones.length || items.some((i) => i.relaxed)) {
 			const keep: Item[] = [];
 			for (const it of items) {
-				const spot = fitsEmpty(it) ? null : soloSpot(it);
+				const spot = !it.relaxed && fitsEmpty(it) ? null : soloSpot(it);
 				if (!spot) {
 					keep.push(it);
 					continue;
@@ -687,7 +848,10 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 	// 3. pack each (runs, role) pool
 	const pools = new Map<string, ArrangePart[]>();
 	for (const p of normal) {
-		const k = `${runsOf(p)}|${p.role}`;
+		// a solo part keeps a pool (and plates) of its own: never merged with other parts
+		const k = soloSet.has(p.slug)
+			? `${runsOf(p)}|${p.role}|solo:${p.slug}`
+			: `${runsOf(p)}|${p.role}`;
 		if (!pools.has(k)) pools.set(k, []);
 		pools.get(k)!.push(p);
 	}
@@ -760,7 +924,8 @@ function arrangeCore(input: ArrangeInput): ArrangeResult {
 				else mine.push(tryPlace(newPlate(runs), [it])!);
 			}
 		}
-		list.push(...mine);
+		if (key.includes('|solo:')) plates.push(...mine);
+		else list.push(...mine);
 	}
 
 	// 4. merge underfilled plates (multi-material)

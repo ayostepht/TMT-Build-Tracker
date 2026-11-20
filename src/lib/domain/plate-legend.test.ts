@@ -66,4 +66,20 @@ describe('legendRows', () => {
 		const rows = legendRows({ parts: ['tires'], items: [item('tires')] }, nameOf);
 		expect(rows[0].approx).toBe(true);
 	});
+
+	it('a plate printed in runs of its own names the parts that are printed in the other runs', () => {
+		const rows = legendRows(
+			{
+				parts: ['rimA', 'rimB'],
+				perPartRuns: true,
+				items: [item('rimA', 0, { role: 'accent' })]
+			},
+			(s) => (s === 'rimA' ? 'Wheel Rims 1 and 4' : 'Wheel Rims 2 and 3')
+		);
+		expect(rows).toHaveLength(1);
+		expect(rows[0].label).toBe('Wheel Rims 1 and 4 (same shape: Wheel Rims 2 and 3)');
+		// an ordinary plate is unchanged
+		const plain = legendRows({ parts: ['rimA'], items: [item('rimA')] }, (s) => s);
+		expect(plain[0].label).toBe('rimA');
+	});
 });

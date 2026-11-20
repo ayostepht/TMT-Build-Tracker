@@ -61,6 +61,22 @@ describe('plateGramsBadge', () => {
 		});
 	});
 
+	it('a plate printed in runs of its own (the rims) shows one print, and the total of all prints', () => {
+		let v = makeView();
+		const [a, b2] = v.parts.slice(0, 2).map((p) => p.slug);
+		v = withPlate(v, 1, {
+			parts: [a, b2],
+			runs: 2,
+			perPartRuns: true,
+			slicerByPart: { [a]: 240, [b2]: 240 },
+			gramsSource: 'user',
+			slicerGrams: undefined
+		});
+		const b = plateGramsBadge(v, plate(v, 1))!;
+		expect(b.main).toBe('240 g per print');
+		expect(b.total).toBe('960 g total');
+	});
+
 	it('a file total reads "from file"', () => {
 		const v = withPlate(makeView(), 1, {
 			slicerGrams: 330,

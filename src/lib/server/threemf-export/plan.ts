@@ -237,17 +237,35 @@ export function buildExportPlan(input: PlanInput): ExportPlan {
 				plate: pl.number,
 				message: `Plate ${pl.number} (${pl.name}): an item lies outside the ${printer.bedX} × ${printer.bedY} mm bed. Re-arrange the plates.`
 			});
-		if (pl.roles.length > printer.mmSlots)
+		// filaments of ONE print: a plate printed in runs of its own (the rims) uses one filament per run
+		const bedRoles = new Set(pl.perPartRuns ? pl.items.map((i) => i.role) : pl.roles);
+		if (bedRoles.size > printer.mmSlots)
 			warnings.push({
 				code: 'slots',
 				severity: 'error',
 				plate: pl.number,
-				message: `Plate ${pl.number} (${pl.name}) needs ${pl.roles.length} filaments but ${printer.name} takes ${printer.mmSlots} at once. Re-arrange, or swap spools by hand.`
+				message: `Plate ${pl.number} (${pl.name}) needs ${bedRoles.size} filaments but ${printer.name} takes ${printer.mmSlots} at once. Re-arrange, or swap spools by hand.`
 			});
+		if (pl.perPartRuns && pl.parts.length > 1) {
+			// the file holds what one print of the plate holds: say what the other prints are
+			const names = pl.parts.map((s) => partOf.get(s)?.name ?? s);
+			const colors = pl.parts.map((s) => {
+				const f = slotOf.get(partOf.get(s)?.role ?? '');
+				return f ? f.label : (partOf.get(s)?.role ?? s);
+			});
+			warnings.push({
+				code: 'arrangement',
+				severity: 'info',
+				plate: pl.number,
+				message: `Plate ${pl.number} (${pl.name}) is one print of the same object, printed ${pl.runs} ${pl.runs === 1 ? 'time' : 'times'} for each of ${names.join(' and ')} (${colors.join(' and ')}): the file holds one print, so change the color in your slicer for the other ${pl.parts.length - 1 === 1 ? 'one' : 'ones'}.`
+			});
+		}
+		// every bed load of the plate: a plate printed in runs of its own (the rims) is `runs` per part
+		const prints = pl.runs * (pl.perPartRuns ? Math.max(1, pl.parts.length) : 1);
 		plates.push({
 			index: plates.length + 1,
 			number: pl.number,
-			name: pl.runs > 1 ? `${pl.name} (print x${pl.runs})` : pl.name,
+			name: prints > 1 ? `${pl.name} (print x${prints})` : pl.name,
 			runs: pl.runs,
 			roles: pl.roles,
 			items,
