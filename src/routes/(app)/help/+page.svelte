@@ -118,6 +118,17 @@
 				plates that print one part per print or more than once.
 			</li>
 			<li>
+				<b>A part made of several pieces</b> (Harness and Straps, for example) has
+				<b>Print some pieces…</b> on its row, or on the plate heading when it is the plate's only
+				part. Untick the pieces that are not on this print, then choose
+				<b>Mark N of M pieces printing</b>
+				or <b>Log N pieces instead…</b>. A successful print ticks exactly those pieces; the part
+				becomes
+				<b>Printed</b> when the last piece is ticked and goes back to <b>To print</b> until then. A
+				failed print ticks nothing and flags the part for <b>Reprint</b>. Grams and time are the
+				pieces' share by count, so treat them as approximate.
+			</li>
+			<li>
 				<b>Undo.</b> Logging a print, starting a plate, taking a plate off the printer (choose
 				<b>To print</b> on a printing plate; no log is made) and part status changes show a toast
 				with <b>Undo</b>. A saved log can be edited or deleted later; part statuses are recomputed
