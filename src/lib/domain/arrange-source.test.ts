@@ -521,15 +521,14 @@ describe('G. a plate printed in runs of its own is one plate, laid out for one p
 	];
 	const other = part('o1', 'primary', 50, 50);
 
-	it('is detected by the flag or by runs > 1 with identical geometry, never by chance', () => {
+	it('is detected by the flag with identical geometry, never by chance or by runs alone', () => {
 		const [a, b] = rims();
-		expect(isRunPlate({ perPartRuns: true, runs: 2 }, [a, b])).toBe(true);
-		expect(isRunPlate({ runs: 2 }, [a, b])).toBe(true); // an uploaded file's plate, no flag
-		expect(isRunPlate({ runs: 1 }, [a, b])).toBe(false); // printed once: the parts share the bed
-		expect(isRunPlate({ perPartRuns: true, runs: 2 }, [a])).toBe(false);
-		expect(isRunPlate({ perPartRuns: true, runs: 2 }, [a, part('x', 'primary', 150, 150)])).toBe(
-			false
-		); // different geometry
+		expect(isRunPlate({ perPartRuns: true }, [a, b])).toBe(true);
+		// no flag: the parts print together, however often the plate is printed
+		expect(isRunPlate({}, [a, b])).toBe(false);
+		expect(isRunPlate({ perPartRuns: false }, [a, b])).toBe(false);
+		expect(isRunPlate({ perPartRuns: true }, [a])).toBe(false);
+		expect(isRunPlate({ perPartRuns: true }, [a, part('x', 'primary', 150, 150)])).toBe(false); // different geometry
 		// same box, another outline: not the same object
 		const hulled = (hull: [number, number][]): ArrangePart => ({
 			...a,
@@ -548,8 +547,11 @@ describe('G. a plate printed in runs of its own is one plate, laid out for one p
 			[40, 75],
 			[-75, 75]
 		];
-		expect(isRunPlate({ perPartRuns: true, runs: 2 }, [hulled(sq), hulled(sq)])).toBe(true);
-		expect(isRunPlate({ perPartRuns: true, runs: 2 }, [hulled(sq), hulled(cut)])).toBe(false);
+		expect(isRunPlate({ perPartRuns: true }, [hulled(sq), hulled(sq)])).toBe(true);
+		expect(isRunPlate({ perPartRuns: true }, [hulled(sq), hulled(cut)])).toBe(false);
+		// an outline against a plain box is not the same object either
+		expect(isRunPlate({ perPartRuns: true }, [hulled(sq), a])).toBe(false);
+		expect(isRunPlate({ perPartRuns: true }, [a, { ...a }])).toBe(true); // both plain boxes
 	});
 
 	it('stays one plate, as the source says, with one print on the bed', () => {
@@ -582,10 +584,30 @@ describe('G. a plate printed in runs of its own is one plate, laid out for one p
 		expect(p.estGrams).toEqual({ accent: 400 });
 	});
 
-	it('detects a run plate with no flag when it is printed several times', () => {
+	it('a plate printed several times but not flagged is not a run plate: its parts share the bed', () => {
+		// two identical parts that print together, twice: not "print 4 times"; they do not fit one bed here, so one moves
 		const r = arrangeFromSource(input([...rims(), other]), rimSrc({ perPartRuns: undefined }));
-		expect(r.plates.map((p) => p.number)).toEqual([1, 2]);
-		expect(plateOf(r, 1)!.parts).toEqual(['rimA', 'rimB']);
+		expect(r.plates.length).toBeGreaterThan(2);
+		expect(r.plates.some((p) => p.perPartRuns)).toBe(false);
+		// two small identical parts that fit together keep one plate printed as often as the source says
+		const small = [part('sA', 'primary', 40, 40), part('sB', 'primary', 40, 40)];
+		const kept = arrangeFromSource(input(small), [
+			{ number: 1, name: 'Pair', runs: 2, parts: ['sA', 'sB'] }
+		]);
+		expect(kept.plates).toHaveLength(1);
+		expect(kept.plates[0].perPartRuns).toBeUndefined();
+		expect(kept.plates[0].items).toHaveLength(2); // both on the bed in one print
+	});
+
+	it('a run plate keeps the source count when it also lists a part that is not in the build', () => {
+		const r = arrangeFromSource(
+			input([...rims(), other]),
+			rimSrc({ runs: 3, parts: ['rimA', 'rimB', 'gone'] })
+		);
+		const p = plateOf(r, 1)! as (typeof r.plates)[number];
+		expect(p.parts).toEqual(['rimA', 'rimB']);
+		expect(p.runs).toBe(3); // the source's count, not the 2 the part's units imply
+		expect(p.perPartRuns).toBe(true);
 	});
 
 	it('is not split for roles that cannot share a printer (separate runs, separate colors)', () => {

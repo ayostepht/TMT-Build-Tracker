@@ -60,6 +60,7 @@ import {
 	loadFootprints,
 	PLANNER_VERSION,
 	planArrangement,
+	type Plan,
 	planForBuild,
 	signature,
 	carryManuals,
@@ -828,6 +829,20 @@ const validItem = (i: unknown): boolean =>
 	typeof (i as { piece?: unknown }).piece === 'number';
 
 export function buildArrangement(db: Db, buildId: string, userId: string): ArrangementInfo {
+	return arrangementWithPlan(db, buildId, userId).info;
+}
+
+/**
+ * `buildArrangement` and the fresh plan it compared with, planned at most once per request (`plan()` is
+ * lazy and remembered). The export reads the info without the "fresh" summary (`summary: false`) and takes
+ * `plan()` only when it needs a fresh arrangement, so it never plans twice.
+ */
+export function arrangementWithPlan(
+	db: Db,
+	buildId: string,
+	userId: string,
+	opts: { summary?: boolean } = {}
+): { info: ArrangementInfo; plan: () => Plan | null } {
 	const view = loadBuildView(db, buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
 	const row = db.select().from(builds).where(eq(builds.id, buildId)).get();
@@ -864,7 +879,9 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 	ensureSilhouettes(db, view.build.templateId, onPlates);
 	const footprints = loadFootprints(db, view.build.templateId);
 	const hint = layoutHintFor(db, view.build.templateId);
-	const plan = planForBuild(db, view, footprints, hint);
+	let current: Plan | null | undefined;
+	const plan = () =>
+		current !== undefined ? current : (current = planForBuild(db, view, footprints, hint));
 	// Plates stored before the kit layout came first were planned by the plain arranger: they are
 	// "stale" only when that planner would now plan something else (a color or variant change), never
 	// just because the planner changed. Their numbers and plates stay as they are.
@@ -873,10 +890,11 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 		stored.length && stored.every((pl) => pl.v === stored[0].v) ? stored[0].v : undefined;
 	const compare =
 		stored.length === 0 || storedV === PLANNER_VERSION
-			? plan
+			? plan()
 			: storedV === 2
 				? planForBuild(db, view, footprints, hint, 2)
 				: planArrangement(view, footprints, hint, undefined, 'legacy');
+	const fresh = opts.summary === false ? null : plan();
 	const used: Record<string, PrintFootprint> = {};
 	for (const pl of stored)
 		for (const s of pl.parts) {
@@ -900,16 +918,16 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 			return { ...it, sil: key };
 		})
 	}));
-	return {
+	const info: ArrangementInfo = {
 		printer: view.printer,
 		layout: row?.plateLayout ?? null,
 		plates,
 		silhouettes,
-		fresh: plan
+		fresh: fresh
 			? {
-					plates: plan.result.plates.length,
-					warnings: plan.result.warnings,
-					unsized: plan.unsized
+					plates: fresh.result.plates.length,
+					warnings: fresh.result.warnings,
+					unsized: fresh.unsized
 				}
 			: null,
 		stale:
@@ -921,11 +939,12 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 			(row?.plateLayout === ARRANGED_LAYOUT &&
 				!!compare &&
 				signature(compare.result.plates) !== signature(stored)) ||
-			(row?.plateLayout !== ARRANGED_LAYOUT && !!plan && templateColorsChanged(view)),
+			(row?.plateLayout !== ARRANGED_LAYOUT && !!view.printer && templateColorsChanged(view)),
 		template: view.printTemplate
 			? { fileName: view.printTemplate.fileName, printer: view.printTemplate.printer }
 			: null,
 		hasPlateRuns: hasPlateRuns(view),
 		footprints: used
 	};
+	return { info, plan };
 }

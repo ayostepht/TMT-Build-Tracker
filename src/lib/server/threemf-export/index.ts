@@ -11,7 +11,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ApiError } from '../access';
-import { buildArrangement, buildLayouts } from '../builds/plates';
+import { arrangementWithPlan, buildLayouts } from '../builds/plates';
 import { loadFootprints, placeOnPlates, planForBuild } from '../builds/arrange-plan';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
@@ -182,7 +182,8 @@ export function prepareExport(
 	if (!view.printer)
 		throw new ApiError(400, 'Choose a printer first (Print tab) so the export knows your bed.');
 	const footprints = loadFootprints(db, view.build.templateId);
-	const info = buildArrangement(db, buildId, userId);
+	// the "fresh" summary is not needed here; the fresh plan is planned (once) only when the file needs it
+	const { info, plan: freshPlan } = arrangementWithPlan(db, buildId, userId, { summary: false });
 	const notes: ExportWarning[] = [];
 	let plates: ArrangedPlate[] = info.plates;
 	// Arrangements stored before the 3D re-orientation code was removed may still carry a
@@ -200,7 +201,8 @@ export function prepareExport(
 			plates = placed.plates;
 			notes.push(...moveNotes(placed.moves, view, placed.plates));
 		} else {
-			const plan = planForBuild(db, view, footprints, null);
+			// (a build without a printer of its own is planned for the layout's bed: `view` carries it)
+			const plan = loaded.printer ? freshPlan() : planForBuild(db, view, footprints, null);
 			if (!plan) throw new ApiError(400, 'Choose a printer first.');
 			plates = plan.result.plates;
 			const how = `On the Files tab choose "Arrange for my bed" (or "Re-arrange plates") to match`;

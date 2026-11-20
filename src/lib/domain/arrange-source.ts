@@ -103,16 +103,16 @@ const THOROUGH_ITEMS = 6;
 
 /**
  * A source plate that is printed in runs of its own (rule G): it lists 2+ parts that share ONE geometry
- * (the same object repeated) and either says so (`perPartRuns`) or is printed several times. One print
- * of it holds one of the parts; the parts follow each other in successive runs. A plate of the same
- * parts printed once (`runs` 1, not flagged) is a plate whose parts share the bed.
+ * (the same object repeated) and says so with `perPartRuns` (the kit's own plates and the twin plates of an
+ * uploaded file carry it). One print of it holds one of the parts; the parts follow each other in successive
+ * runs. A plate without the flag is a plate whose parts share the bed, however often it is printed: two
+ * identical parts that print together, twice, are two prints of both, not "print 4 times".
  */
 export function isRunPlate(
-	pl: Pick<SourcePlate, 'perPartRuns' | 'runs'>,
+	pl: Pick<SourcePlate, 'perPartRuns'>,
 	parts: readonly ArrangePart[]
 ): boolean {
-	if (parts.length < 2) return false;
-	if (!pl.perPartRuns && !((pl.runs ?? 1) > 1)) return false;
+	if (parts.length < 2 || !pl.perPartRuns) return false;
 	return parts.every((p) => sameGeometry(p.footprint, parts[0].footprint));
 }
 
@@ -348,7 +348,9 @@ export function arrangeFromSource(
 			items = base.map((it) => ({ ...it, role: partOf.get(it.slug)?.role ?? it.role }));
 		const name = whole ? pl.name : kept.name;
 		// a plate that stays whole is printed as often as the source says (tires: 8 segments per print, twice)
-		const runs = rules.perRun && whole && (pl.runs ?? 0) >= 1 ? Math.round(pl.runs!) : kept.runs;
+		// (a run plate keeps the source's count even when it also lists a part that is not in this build)
+		const runs =
+			rules.perRun && (whole || runPlate) && (pl.runs ?? 0) >= 1 ? Math.round(pl.runs!) : kept.runs;
 		// `estGrams` is per run: when the source says the plate is printed more often than the part's own
 		// count implies (tires: the part is one unit of 901 g, printed twice), one run is that share
 		const estGrams =

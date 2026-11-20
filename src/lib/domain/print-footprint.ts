@@ -171,7 +171,9 @@ export function pieceBrimMm(
 /**
  * True when two parts are the same printed geometry (the wheel rim halves: one object, two colors): the
  * same number of pieces with the same sizes, copies per unit and outline, and the same units per plate.
- * Names and meshes are not compared (the parts are named for what they are, not for their shape).
+ * Names and meshes are not compared (the parts are named for what they are, not for their shape). A
+ * piece with an outline and one without are not the same; two pieces that both have only a box (the
+ * seed's footprints) are compared by their boxes.
  */
 export function sameGeometry(a: PrintFootprint, b: PrintFootprint): boolean {
 	if (a.pieces.length !== b.pieces.length) return false;
@@ -184,7 +186,7 @@ export function sameGeometry(a: PrintFootprint, b: PrintFootprint): boolean {
 			Math.max(1, pc.copies) !== Math.max(1, o.copies)
 		)
 			return false;
-		if (!pc.hull || !o.hull) return true;
+		if (!pc.hull || !o.hull) return !pc.hull && !o.hull;
 		return (
 			pc.hull.length === o.hull.length &&
 			pc.hull.every(

@@ -12,7 +12,11 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Changed
 
-- **The plate arranger follows the kit's layout.** Plates follow the kit's layout first (or your uploaded file's): a plate stays as the kit has it while its parts share a filament, a part that is alone on its plate stays alone, only parts whose filament no longer matches move, and brims count toward a part's space. A part that moves joins a kit plate of the same filament that already holds several parts when it fits without crowding it (at most 60% of the bed, the parts already there stay put); otherwise it gets a new plate at the end. A plate the kit prints several times with the same shape (the wheel rims) stays one plate and says how many times to print it, in which colors. Plates keep the kit's numbers, so a standard-palette build on a 256 mm bed has the kit's 24 plates. The 3MF export holds one copy of a repeat-printed plate with a note. Builds you already have keep their plates exactly as they are until you re-arrange them.
+- **The plate arranger follows the kit's layout.** Plates follow the kit's layout first (or your uploaded file's): a plate stays as the kit has it while its parts share a filament, a part that is alone on its plate stays alone, only parts whose filament no longer matches move, and brims count toward a part's space (for plates that are laid out new: the parts that move, a part that joins a plate and the plates added at the end; a kit plate that stays is placed as the kit authors it). A part that moves joins a kit plate of the same filament that already holds several parts when it fits without crowding it (at most 60% of the bed, the parts already there stay put); otherwise it gets a new plate at the end. A plate the kit prints several times with the same shape (the wheel rims) stays one plate and says how many times to print it, in which colors. Plates keep the kit's numbers, so a standard-palette build on a 256 mm bed has the kit's 24 plates. The 3MF export holds one copy of a repeat-printed plate with a note. Builds you already have keep their plates until they are re-arranged. An arranged build that has not started printing is re-arranged by itself, as before, when its colors, variant or printer change, and now gets the kit's layout and numbers; a plate that keeps the same parts keeps the time and grams you typed for it, also when its number changes. A build that has started printing keeps its plates until you choose Re-arrange.
+
+### Fixed
+
+- On a plate the kit prints several times per part, such as the wheel rims, the grams and time are now per print, the counter counts prints ("0/4 printed"), the fields read "per print", the exported plate name says "(print x4)", and the tires diagram no longer quotes both runs' grams as one run. Tires keep "per run".
 
 ## [0.9.3] - 2026-11-19
 
@@ -40,7 +44,6 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Fixed
 
-- On a plate the kit prints several times per part, such as the wheel rims, the grams and time are now per print, the counter counts prints ("0/4 printed"), the fields read "per print", the exported plate name says "(print x4)", and the tires diagram no longer quotes both runs' grams as one run. Tires keep "per run".
 - A blank `ORIGIN=` (an empty `ORIGIN` environment variable, as some templates and compose files leave) no longer stops the server from starting. The app now keeps `ORIGIN` and `PUBLIC_URL` in step, so the two cannot disagree.
 
 ## [0.9.2] - 2026-11-16
