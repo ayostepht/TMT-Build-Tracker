@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-20, 19:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-20, 18:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -14,8 +14,6 @@ _Updated 2026-11-20, 19:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   the CI fast path (~35 s).
 - Ask questions in-session with a recommended option first; show screenshots before a UI
   pull request.
-- **Do not merge #90** (maintainer, 2026-11-20): the public site agent reviews it first,
-  because the public site needs the same logic. Merge only on the maintainer's go-ahead.
 
 ## State
 
@@ -25,17 +23,13 @@ _Updated 2026-11-20, 19:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **Test copy:** r62 = `edge` 5290765 (the 0.9.3 app code) deployed 2026-11-19; see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
-- **In flight: #90 "Print some parts of a plate"** (branch `claude/sleepy-allen-bofhv9`, head
-  04d65d2, into `edge`). A plate's control gets "Print some parts…" (pick parts, mark or log
-  them as one print; printer step linked to those parts only; partial Now printing card;
-  help text). No schema or server change. Agents' checks, `security-reviewer` (no high or
-  medium findings) and `verifier` (gate pass, 52 e2e) are done. The STATUS and architecture
-  notes for it are on the branch, not on `edge` yet. Left: the maintainer's review of the
-  screens, the public site agent's review, CI green, then the go-ahead to merge. No agents
-  running.
-- **Next step:** wait for the reviews on #90; fix what they raise through the owning agents
-  (`build-state`, `printers`, `e2e-playwright`). After the merge: deploy the `edge` image to
-  the test copy with the maintainer's OK.
+- **#90 "Print some parts of a plate" merged** into `edge` 2026-11-20 as 230614a (the
+  maintainer and the public site developer cleared it; CI green). A plate's control gets
+  "Print some parts…"; no schema or server change. Not on the test copy yet (still r62). No
+  pull requests in flight, no agents running.
+- **Next step:** with the maintainer's OK, deploy the `edge` image of 230614a to the test
+  copy (backup and rehearsal as usual; no migration) and add the `docs/dev/CHANGELOG.md`
+  entry. Then pick from the follow-ups below or STATUS "Next steps".
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 

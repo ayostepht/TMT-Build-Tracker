@@ -237,8 +237,8 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
-- **Print some parts of a plate** (2026-11-20, pull request open into `edge`, not merged:
-  the public site agent reviews it first): a plate's control has "Print some parts…"
+- **Print some parts of a plate** (#90, merged into `edge` 2026-11-20 as 230614a, not on the test
+  copy yet): a plate's control has "Print some parts…"
   (`PartPickSheet`, all parts ticked by default) to mark or log only some of a plate's
   parts as one print; the rest stays To print. Now printing shows the subset with its
   share of grams and time; with an enabled printer "Where is it printing?" names the parts
