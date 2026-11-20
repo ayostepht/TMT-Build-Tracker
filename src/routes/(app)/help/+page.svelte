@@ -109,6 +109,15 @@
 				can leave the grams empty (counted as 0 g).
 			</li>
 			<li>
+				<b>Split a plate in your slicer?</b> Use <b>Print some parts…</b> on the plate: untick the
+				parts that are not on this print, then choose <b>Mark N of M parts printing</b> or
+				<b>Log N parts instead…</b>. With a connected printer you are asked
+				<b>Where is it printing?</b> and the job follows those parts only. The rest of the plate
+				stays
+				<b>To print</b>, and you can do the same later for the remaining parts. It is not offered on
+				plates that print one part per print or more than once.
+			</li>
+			<li>
 				<b>Undo.</b> Logging a print, starting a plate, taking a plate off the printer (choose
 				<b>To print</b> on a printing plate; no log is made) and part status changes show a toast
 				with <b>Undo</b>. A saved log can be edited or deleted later; part statuses are recomputed
