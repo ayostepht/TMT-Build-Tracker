@@ -7,6 +7,32 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r62** (published `sha-5290765` = `edge` 5290765 = #85 "Release 0.9.3", digest
+  `sha256:bfae9a580a7d…2967bc`, same as `edge`, 2026-11-19; `edge` 74e0155 adds docs only):
+  same app code as `v0.9.3` (`main` a64fa26), version 0.9.3. Adds the resource limits (#82, #84),
+  the Spoolman Spare fix (#81, fixes #79) and the header detail lines (#80). No migration
+  (journal stays at 4), no new environment variables, so no rehearsal. Live after the swap: health
+  ok, login page loads, a sign-in with unknown credentials gets 401, integrity ok, no restarts.
+  Not checked signed in. Rollback: stop, restore `tmt-backup-pre-r62.db`, re-tag `r61` as `test`.
+- **r61** (published `sha-5c17a88` = `edge` 5c17a88, digest `sha256:0b130c914552…88cb1c`, same
+  as `edge`, 2026-11-19; `edge` 2f89904 adds docs only): Spoolman create filaments and vendors,
+  add and archive spools (#77), dependency updates (#74), empty `ORIGIN` ignored (#76; the test
+  copy sets neither `ORIGIN` nor `PUBLIC_URL`). No migration, no rehearsal. Live: health ok,
+  login page loads, unknown sign-in gets 401 (no origin rejection), no restarts. Not checked
+  signed in. Rollback: stop, restore `tmt-backup-pre-r61.db`, re-tag `r60` as `test`.
+- **r60** (published `sha-a501e5e` = `edge` a501e5e, digest `sha256:1c8cde54692b…2a7fd0`, same
+  as `edge`, 2026-11-18; `edge` 2797e2d adds docs only): Spoolman filament links (#71) on top
+  of 0.9.2 (#69). Migration `0003_spoolman_filaments` (new `spoolman_cache`, two
+  `build_filaments` columns, `print_runs.created_at` back-filled). Rehearsal clean on a copy of
+  the backup: health ok, no startup errors, 37 → 38 tables, all old row counts equal, 33/33 print
+  runs back-filled (30 from `run.add` activity, 3 from the run date), integrity and foreign keys
+  ok; the live database matched the rehearsal after the swap. Not checked signed in. Rollback:
+  stop, restore `tmt-backup-pre-r60.db` (move aside `-wal`/`-shm`), re-tag `r59` as `test`.
+- **r59** (published `sha-ce8afce` = `edge` ce8afce, digest `sha256:cfcccc683768…8fc6ac`, same
+  as `edge`, 2026-11-15; `edge` 7e32917 adds docs only): build header with Stats cards on every
+  build tab (#67), pinned build dates in the Stats tests (#66). No migration, no rehearsal.
+  Live: health ok, login page loads, no restarts. Not checked signed in. Rollback: stop,
+  restore `tmt-backup-pre-r59.db`, re-tag `r58` as `test`.
 - **r58** (published `sha-a71f3ac` = `edge` a71f3ac, digest `sha256:aef697626a13…018ca5`, same
   as `edge`; CI push run green, 2026-11-15; `edge` 39b20ba adds docs only): asks before
   changing the design of a started build, with a "Colors only" option; plates no longer
