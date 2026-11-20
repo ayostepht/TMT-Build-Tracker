@@ -8,7 +8,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Added
 
-- **Print some parts of a plate.** If you split a plate in your slicer (for example the straps on their own), a plate on the Print tab now has a "Print some parts…" button. Pick the parts that are on the printer (all are ticked to start with), and mark them as printing as one print, or log them as one print without marking them first. The rest of the plate stays to do. Now printing shows only the parts you picked, with their share of the plate's grams and time.
+- **Print some parts of a plate.** If you split a plate in your slicer (for example the straps on their own), a plate on the Print tab now has a "Print some parts…" button. Pick the parts that are on the printer (all are ticked to start with), and mark them as printing as one print, or log them as one print without marking them first. With a printer connected, "Where is it printing?" still asks, and that printer's job is linked to the picked parts only. The rest of the plate stays to do. Now printing shows only the parts you picked, with their share of the plate's grams and time.
 
 ## [0.9.3] - 2026-11-19
 

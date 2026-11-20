@@ -29,8 +29,10 @@ import { getExpected, setExpected, setOrgSettings } from '../org-settings';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { subscribePrinterEvents } from './bus';
+import { plateRunGrams } from '#lib/domain/printer-match.ts';
 import {
 	buildJobs,
+	checkPartSlugs,
 	confirmJob,
 	confirmJobRuns,
 	dismissJob,
@@ -1115,5 +1117,177 @@ describe('Partial confirm with per-part results (issue 46)', () => {
 		bad({ result: 'Partial', split: 'x' });
 		expect(db.select().from(printRuns).all()).toHaveLength(0);
 		expect(jobs().find((j) => j.id === id)!.runId).toBeNull();
+	});
+});
+
+describe('some parts of a plate on a printer ("Print some parts…" + "Where is it printing?")', () => {
+	const view = () => loadBuildView(db, buildId, 'owner')!;
+	const plate = () =>
+		view().plates.find((p) => !p.perPartRuns && p.runs <= 1 && p.parts.length >= 3)!;
+	const FILE = 'split-in-slicer.gcode';
+	const run = (n = 5, extra: Partial<PrinterStatus> = {}) => {
+		const s = printing(FILE, n, 300, extra);
+		processStatus(db, printerId, s, at(5));
+		db.update(printers)
+			.set({ lastStatus: s as never })
+			.run();
+	};
+	const grams = () => db.select().from(printRuns).all();
+
+	it('the route-level check accepts a proper subset of a normal plate and rejects strangers', () => {
+		const p = plate();
+		const [a, b] = p.parts;
+		expect(checkPartSlugs(view(), p.number, [a, b])).toEqual([a, b]);
+		expect(checkPartSlugs(view(), p.number, [a, a])).toEqual([a]);
+		expect(checkPartSlugs(view(), p.number, undefined)).toBeUndefined();
+		for (const bad of [[], ['rims-1-4'], [a, 'nope'], a, [3]])
+			expect(() => checkPartSlugs(view(), p.number, bad)).toThrow(/partSlugs/);
+	});
+
+	it('an expectation with a subset binds to the next job; confirming links only those parts', () => {
+		const p = plate();
+		const [a, b, c] = p.parts;
+		printingAction(db, buildId, 'owner', {
+			action: 'start',
+			slugs: [a, b],
+			printer: 'Shop Centauri'
+		});
+		expectOnPrinterJob(db, printerId, { buildId, plate: p.number, partSlugs: [a, b] });
+		run();
+		expect(jobs()[0].buildId).toBeNull();
+		const [exp] = pendingExpected(db, 'org1', buildId);
+		expect(exp).toMatchObject({ plateNumber: p.number, partSlugs: [a, b], jobId: jobs()[0].id });
+		linkJob(
+			db,
+			jobs()[0].id,
+			'org1',
+			'owner',
+			buildId,
+			exp.plateNumber,
+			exp.partSlugs ?? undefined
+		);
+		expect(jobs()[0]).toMatchObject({ buildId, plateNumber: p.number, partSlugs: [a, b] });
+		expect([a, b, c].map(partStatus)).toEqual(['Printing', 'Printing', 'To print']);
+		const v = view();
+		// live start time and estimate land on the picked parts only
+		expect(v.state[a].startedAt).toBe(at(0).toISOString());
+		expect(v.state[b].startedAt).toBe(at(0).toISOString());
+		expect(v.state[c].startedAt ?? null).toBeNull();
+		expect(v.state[a].runEstSeconds).toBeTruthy();
+		expect(getExpected(db, 'org1', printerId)).toBeNull();
+	});
+
+	it('a subset sent while the print already runs is bound to that job at once', () => {
+		const p = plate();
+		const [a, b] = p.parts;
+		run();
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: [a, b] });
+		expectOnPrinterJob(db, printerId, { buildId, plate: p.number, partSlugs: [a, b] });
+		expect(pendingExpected(db, 'org1', buildId)[0]).toMatchObject({
+			jobId: jobs()[0].id,
+			partSlugs: [a, b]
+		});
+	});
+
+	it('a whole-plate expectation sends no subset and still links by the parts that are Printing', () => {
+		const p = plate();
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: p.parts });
+		expectOnPrinterJob(db, printerId, { buildId, plate: p.number });
+		run();
+		const [exp] = pendingExpected(db, 'org1', buildId);
+		expect(exp.partSlugs).toBeNull();
+		linkJob(db, jobs()[0].id, 'org1', 'owner', buildId, exp.plateNumber, undefined);
+		expect(jobs()[0].partSlugs).toEqual(p.parts);
+	});
+
+	it('the rest of the plate is a second subset job that never re-marks Printed parts', () => {
+		const p = plate();
+		const [a, b, c] = p.parts;
+		setOrgSettings(db, 'org1', { autoLogPrints: true });
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: [a] });
+		run();
+		linkJob(db, jobs()[0].id, 'org1', 'owner', buildId, p.number, [a]);
+		processStatus(
+			db,
+			printerId,
+			{ state: 'done', progress: 100, fileName: FILE, elapsedSec: 7200 },
+			at(130)
+		);
+		expect(partStatus(a)).toBe('Printed');
+		// now the rest: b and c, a already Printed
+		db.update(printers)
+			.set({ lastStatus: { state: 'idle', progress: null } as never })
+			.run();
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: [b, c] });
+		expectOnPrinterJob(db, printerId, { buildId, plate: p.number, partSlugs: [b, c] });
+		processStatus(db, printerId, printing('rest.gcode', 5, 300), at(200));
+		db.update(printers)
+			.set({ lastStatus: printing('rest.gcode', 5, 300) as never })
+			.run();
+		const second = jobs().find((j) => j.fileName === 'rest.gcode')!;
+		linkJob(db, second.id, 'org1', 'owner', buildId, p.number, [b, c]);
+		expect(partStatus(a)).toBe('Printed');
+		expect([b, c].map(partStatus)).toEqual(['Printing', 'Printing']);
+		expect(jobs().find((j) => j.id === second.id)!.partSlugs).toEqual([b, c]);
+	});
+
+	it('finishing logs one run for the subset only, with its share of the grams', () => {
+		const p = plate();
+		const [a, b, c] = p.parts;
+		setOrgSettings(db, 'org1', { autoLogPrints: true });
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: [a, b] });
+		run();
+		linkJob(db, jobs()[0].id, 'org1', 'owner', buildId, p.number, [a, b]);
+		processStatus(
+			db,
+			printerId,
+			{ state: 'done', progress: 100, fileName: FILE, elapsedSec: 7200 },
+			at(130)
+		);
+		const runs = grams();
+		expect(runs).toHaveLength(1);
+		expect(runs[0]).toMatchObject({
+			plateNumber: p.number,
+			partSlug: null,
+			partSlugs: [a, b],
+			result: 'Success'
+		});
+		const whole = plateRunGrams(view(), p.number);
+		if (whole) expect(runs[0].grams!).toBeLessThan(whole);
+		expect([a, b, c].map(partStatus)).toEqual(['Printed', 'Printed', 'To print']);
+	});
+
+	it('cancelled before anything printed releases only its own parts', () => {
+		const p = plate();
+		const [a, b, c] = p.parts;
+		// c is Printing for something else (another job's, or a manual start)
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: [c] });
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: [a, b] });
+		run(0, { layer: 1 });
+		linkJob(db, jobs()[0].id, 'org1', 'owner', buildId, p.number, [a, b]);
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 0, fileName: FILE, layer: 1 },
+			at(8)
+		);
+		expect([a, b, c].map(partStatus)).toEqual(['To print', 'To print', 'Printing']);
+	});
+
+	it('failed mid-print: confirming Failed logs only the subset and leaves the rest alone', () => {
+		const p = plate();
+		const [a, b, c] = p.parts;
+		printingAction(db, buildId, 'owner', { action: 'start', slugs: [a, b] });
+		run(40, { layer: 40 });
+		linkJob(db, jobs()[0].id, 'org1', 'owner', buildId, p.number, [a, b]);
+		processStatus(
+			db,
+			printerId,
+			{ state: 'failed', cancelled: true, progress: 40, fileName: FILE, layer: 40 },
+			at(30)
+		);
+		confirmJob(db, jobs()[0].id, 'org1', 'owner', { result: 'Failed' });
+		expect(grams()[0]).toMatchObject({ partSlugs: [a, b], result: 'Failed' });
+		expect(partStatus(c)).toBe('To print');
 	});
 });

@@ -37,6 +37,11 @@
 		const slug = exp.partSlugs?.[0];
 		const c = slug ? runChoices(ctx.view, exp.plateNumber).find((x) => x.slug === slug) : null;
 		if (c) t += ` · ${runOptionLabel(ctx, c)}`;
+		else if (plate && !plate.perPartRuns && exp.partSlugs?.length) {
+			// some parts of a single-run plate ("Print some parts…")
+			const all = plate.parts.filter((s) => ctx.view.state[s]).length;
+			if (exp.partSlugs.length < all) t += ` · ${exp.partSlugs.length} of ${all} parts`;
+		}
 		return t;
 	});
 

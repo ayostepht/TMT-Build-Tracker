@@ -45,6 +45,11 @@
 	let open = $state(false);
 	let where = $state(false);
 	let picking = $state(false);
+	// The parts picked in "Print some parts…" while the "Where is it printing?" dialog is open.
+	let someSlugs = $state<string[] | null>(null);
+	$effect(() => {
+		if (!where) someSlugs = null;
+	});
 	let logPicked = $state<string[] | null>(null);
 	let logSome = $state(false);
 
@@ -113,6 +118,7 @@
 			? `${name(startSlugs[0])} run, plate ${plate.number}`
 			: `plate ${plate.number}`
 	);
+	const partsLabel = (n: number) => `${n} ${n === 1 ? 'part' : 'parts'} of plate ${plate.number}`;
 	const choices = $derived(
 		plate.perPartRuns && !only && idle.length > 1
 			? idle.map((s) => ({ slug: s, name: name(s) }))
@@ -124,14 +130,17 @@
 	const canPickSome = $derived(
 		ctx.canEdit && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length >= 2
 	);
-	// Some parts: one start for exactly them. All of what is left is the plate's own Printing action.
+	// Some parts: one start for exactly them. All of what is left is the plate's own Printing action,
+	// unless parts of the plate are already Printed or on the printer: then the job is still only for
+	// the parts being started, so it takes the same path as a pick.
 	function printSome(picked: string[]) {
-		if (picked.length >= idle.length) pick('Printing');
-		else
-			void ctx.startParts(
-				picked,
-				`${picked.length} of ${plate.parts.length} parts, plate ${plate.number}`
-			);
+		const activeParts = plate.parts.filter((s) => ctx.view.state[s]).length;
+		if (picked.length >= activeParts || (picked.length >= idle.length && !hasPrinter)) {
+			pick('Printing');
+		} else if (hasPrinter) {
+			someSlugs = picked;
+			where = true;
+		} else void ctx.startParts(picked, partsLabel(picked.length));
 	}
 	function logSomeParts(picked: string[]) {
 		logPicked = picked;
@@ -183,10 +192,11 @@
 		{/if}
 		<StartOnPrinter
 			bind:open={where}
-			slugs={startSlugs}
+			slugs={someSlugs ?? startSlugs}
 			plateNumber={plate.number}
-			label={startLabel}
-			parts={choices}
+			label={someSlugs ? partsLabel(someSlugs.length) : startLabel}
+			parts={someSlugs ? [] : choices}
+			partial={!!someSlugs}
 			{confirm}
 		/>
 	{/if}

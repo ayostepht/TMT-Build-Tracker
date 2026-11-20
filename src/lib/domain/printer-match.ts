@@ -5,7 +5,7 @@
  * `plate-NN-<plate name>.3mf`; users also save "Plate 3 - Wings (Accent)" style names from the
  * slicer. We look for a plate number after the word "plate", or a plate name in the file name.
  */
-import { partGrams, plateGrams } from './accounting.ts';
+import { partGrams, plateGrams, printGrams } from './accounting.ts';
 import type { BuildView } from './types.ts';
 
 export function normalizeFileName(name: string): string {
@@ -56,7 +56,8 @@ export function fileMentionsBuild(fileName: string, buildName: string): boolean 
 /**
  * Grams a finished plate print should be logged with (one run), from the same calculation as the
  * rest of the app (`plateGrams`: typed > sliced file > your slice > BOM). `partSlugs` narrows a
- * per-part plate to the parts that were printed. null when nothing is known (never 0 g).
+ * per-part plate to the parts that were printed, and scales a
+ * single-run plate to those parts' share (some parts of the plate printed together). null when nothing is known (never 0 g).
  */
 export function plateRunGrams(
 	view: BuildView,
@@ -68,6 +69,8 @@ export function plateRunGrams(
 	const grams =
 		plate.perPartRuns && partSlugs?.length
 			? partSlugs.reduce((a, s) => a + partGrams(view, s).perRun, 0)
-			: plateGrams(view, plate).perRun;
+			: partSlugs?.length
+				? printGrams(view, plate, partSlugs).perRun
+				: plateGrams(view, plate).perRun;
 	return grams > 0 ? grams : null;
 }

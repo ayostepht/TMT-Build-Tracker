@@ -23,7 +23,8 @@
 		plateNumber,
 		label,
 		parts = [],
-		confirm = true
+		confirm = true,
+		partial = false
 	}: {
 		open?: boolean;
 		slugs: string[];
@@ -34,20 +35,27 @@
 		parts?: { slug: string; name: string }[];
 		/** Show the printer-already-running confirmation here (false where another control does). */
 		confirm?: boolean;
+		/**
+		 * `slugs` are some of a single-run plate's parts ("Print some parts…", or what is left of a
+		 * plate with parts already printed): the expectation then names exactly them, so the printer's
+		 * job is linked to those parts only. Whole-plate starts leave it off and send nothing extra.
+		 */
+		partial?: boolean;
 	} = $props();
 	const ctx = getBuildCtx();
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	$effect(() => store.acquire());
 	const list = $derived(store.printers.filter((p) => p.enabled));
 
-	async function go(printerId: string, printerName: string, which: string[]) {
+	async function go(printerId: string, printerName: string, which: string[], some: boolean) {
 		await ctx.act(async () => {
 			// The printer's name goes in the start activity: the log sheet prefills it from there.
 			await printing(ctx.id, { action: 'start', slugs: which, printer: printerName });
-			// perPartRuns plates print one part (color) per job: tell the server which.
+			// perPartRuns plates print one part (color) per job, and "some parts" of a plate print
+			// together: tell the server which parts the job is.
 			const perPart = ctx.view.plates.find((p) => p.number === plateNumber)?.perPartRuns;
 			// A not-connected printer answers { manual: true } and queues nothing: no confirmation follows.
-			await expectOnPrinter(printerId, ctx.id, plateNumber!, perPart ? which : undefined);
+			await expectOnPrinter(printerId, ctx.id, plateNumber!, perPart || some ? which : undefined);
 		});
 		dismissed = false;
 		await store.load();
@@ -77,7 +85,7 @@
 		open = false;
 		const which = slug ? [slug] : slugs;
 		const chosen = printerId ? list.find((p) => p.id === printerId) : undefined;
-		if (chosen && plateNumber != null) void go(chosen.id, chosen.name, which);
+		if (chosen && plateNumber != null) void go(chosen.id, chosen.name, which, partial);
 		else void ctx.startParts(which, label, chosen?.name);
 	}
 
