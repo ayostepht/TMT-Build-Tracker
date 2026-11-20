@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
-copy on r59 = `edge` ce8afce, the published image)._
+copy on r62 = `edge` 5290765, the 0.9.3 app code, since 2026-11-19)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -16,8 +16,8 @@ done. Keep it under ~150 lines.
    tag pushes). Image run 43801476939 succeeded; `latest`, `0.9.2`, `0.9` and `sha-48c9649`
    share one digest (checked anonymously 2026-11-16). 0.9.2 adds migrations 0001/0002
    (additive) and the frozen fixture `fixtures/v0.9.2/`. Contents since 0.9.1: #32, #33,
-   #35, #36, #38, #41, #43, #48–#51, #53, #54, #58, #66, #67. The test copy runs r59 =
-   `edge` ce8afce (same app code as 0.9.2 minus the version bump; maintainer signed off).
+   #35, #36, #38, #41, #43, #48–#51, #53, #54, #58, #66, #67. The test copy runs r62 =
+   `edge` 5290765 (the 0.9.3 app code, migration 0003 live since r60; see `docs/dev/CHANGELOG.md`).
    Spoolman (#59, #71) was held until 0.9.2 was on `main` and may merge now.
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
    `fixtures/v<next>/`) → Actions "Promote edge to main" from `edge` → it pushes

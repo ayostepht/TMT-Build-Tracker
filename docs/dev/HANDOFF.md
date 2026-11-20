@@ -28,9 +28,9 @@ _Updated 2026-11-19, 22:55 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   resource limits from the public edition (#82) and their follow-up (#84: entry caps before
   reading, self-host light-read bucket 600/min, `handleError` + `safeErrorText` everywhere,
   public-mode 2 MB XML cap, form `maxlength`).
-- **Test copy:** r60 (`edge` a501e5e) deployed 2026-11-19; r62 (`edge` 1716662) ready but not
-  deployed yet. The 0.9.3 image (after the tag) supersedes it: check the #79 colours and the
-  Spoolman create/add/archive flows there.
+- **Test copy:** r62 = `edge` 5290765 (the 0.9.3 app code, version 0.9.3) deployed
+  2026-11-19 (r60 = a501e5e with migration 0003, r61 = 5c17a88; see `docs/dev/CHANGELOG.md`).
+  Not yet checked signed in: the #79 colours and the Spoolman create/add/archive flows.
 - **Spoolman (#59)** is complete; close #59 once 0.9.3 is checked on the test copy.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
