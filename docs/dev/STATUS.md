@@ -237,7 +237,7 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
-- **Print some pieces of a part** (2026-11-20, pull request open into `edge`; migration
+- **Print some pieces of a part** (#93, merged into `edge` 2026-11-20 as 3c6ea33; migration
   `0004_piece_prints`, additive): a part made of several pieces (Harness and Straps, 9
   pieces) has "Print some pieces…" (on the plate heading when it is the plate's only
   startable part, else on its row): pick pieces (all ticked by default), mark them printing
