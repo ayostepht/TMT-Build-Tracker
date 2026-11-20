@@ -1,7 +1,7 @@
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
-import { confirmWhere } from './status-helpers';
+import { chooseStatus, confirmWhere } from './status-helpers';
 import type { Page } from '@playwright/test';
 
 /**
@@ -84,6 +84,12 @@ test('Some parts with a printer: Where is it printing, then the job is linked to
 	test.setTimeout(150_000);
 	const { buildId, plate } = await setup(page, 'subprinter');
 	const picked = await pickSome(page, buildId, plate);
+	// The dialog names the parts of a partial start.
+	const where = page.getByTestId('where-printing');
+	await expect(where).toBeVisible();
+	await expect(where.getByTestId('where-parts')).toContainText(
+		`${picked.length} of ${plate.parts.length} parts of plate ${plate.number}`
+	);
 	await confirmWhere(page, 'first');
 	for (const s of picked) await expect(row(page, s)).toHaveAttribute('data-s', 'Printing');
 	await expect(row(page, plate.parts[0])).toHaveAttribute('data-s', 'To print');
@@ -97,9 +103,9 @@ test('Some parts with a printer: Where is it printing, then the job is linked to
 		.toEqual(sorted(picked));
 
 	await page.goto(`/builds/${buildId}`);
-	// The same question can show twice (above the cards and in the plate's card): answer the first.
-	const ask = page.getByTestId('expected-confirm').first();
-	await expect(ask).toBeVisible({ timeout: 20_000 });
+	const ask = page.getByTestId('expected-confirm');
+	await expect(ask).toHaveCount(1, { timeout: 20_000 });
+	await expect(ask).toBeVisible();
 	await expect(ask).toContainText(`${picked.length} of ${plate.parts.length} parts`);
 	await ask.getByTestId('expected-confirm-go').click();
 	await expect(page.getByTestId('expected-confirm')).toHaveCount(0);
@@ -122,6 +128,22 @@ test('Some parts with a printer: Where is it printing, then the job is linked to
 		})
 		.toEqual([...picked.map(() => 'Printed'), 'To print']);
 	idle();
+});
+
+test('A whole-plate start names no parts in the Where dialog', async ({ page }) => {
+	const { buildId, plate } = await setup(page, 'subwhole');
+	await keepPrintedVisible(page, buildId);
+	await page.goto(`/builds/${buildId}/print`);
+	await page.waitForLoadState('networkidle');
+	await page.getByLabel('Group by').selectOption('plate');
+	const badge = page.locator(
+		`.group-head [data-testid="plate-status"][aria-label^="Plate ${plate.number} status"]`
+	);
+	await chooseStatus(badge, 'Printing');
+	const where = page.getByTestId('where-printing');
+	await expect(where).toBeVisible();
+	await expect(where.getByTestId('where-parts')).toHaveCount(0);
+	await confirmWhere(page, 'none');
 });
 
 test('"Not on a connected printer" keeps the direct start for the picked parts', async ({
