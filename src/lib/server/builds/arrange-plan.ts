@@ -482,12 +482,15 @@ export interface PlateManuals {
  * number and the same set of parts. A plate that was renumbered (the kit numbers its plates its own way,
  * an arrangement made before that numbered them 1, 2, 3...) still keeps them when it holds exactly the
  * same parts, is printed as often and is of the same kind (`shape`: runs, per-part runs); that match is
- * used once and only when it is unambiguous. Grams that came from a file or a printer job are not carried:
+ * used once and only when it is unambiguous
+ * (an exact number + parts match elsewhere in `planned` always has priority). Grams that came from a file or a printer job are not carried:
  * the new plates have their own source.
  */
 export function manualTimes(
 	tx: Db,
-	buildId: string
+	buildId: string,
+	/** The plates about to be written: each exact match is reserved before any renumbered match, so call order cannot matter. */
+	planned: { number: number; parts: string[] }[]
 ): (
 	number: number,
 	parts: string[],
@@ -521,15 +524,18 @@ export function manualTimes(
 		const sk = shapeKey(o.parts, o.runs, o.perPartRuns);
 		bySet.set(sk, [...(bySet.get(sk) ?? []), { k, h }]);
 	}
-	const taken = new Set<string>();
+	// an exact match belongs to its plate whatever order the plates are asked in: a renumbered match never takes it
+	const reserved = new Set(planned.map((p) => key(p.number, p.parts)).filter((k) => m.has(k)));
+	const taken = new Set<string>(); // each stored value goes to one new plate only
 	return (number, parts, shape) => {
-		const exact = m.get(key(number, parts));
-		if (exact) {
-			taken.add(key(number, parts));
+		const k = key(number, parts);
+		const exact = m.get(k);
+		if (exact && !taken.has(k)) {
+			taken.add(k);
 			return exact;
 		}
 		const same = shape ? (bySet.get(shapeKey(parts, shape.runs, shape.perPartRuns)) ?? []) : [];
-		if (same.length === 1 && !taken.has(same[0].k)) {
+		if (same.length === 1 && !reserved.has(same[0].k) && !taken.has(same[0].k)) {
 			taken.add(same[0].k);
 			return same[0].h;
 		}
@@ -568,7 +574,11 @@ export function writePlan(
 				}))
 			)
 		: null;
-	const manualFor = manualTimes(tx, buildId);
+	const manualFor = manualTimes(
+		tx,
+		buildId,
+		plan.result.plates.map((pl) => ({ number: pl.number, parts: pl.parts }))
+	);
 	tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 	for (const pl of plan.result.plates)
 		tx.insert(buildPlates)

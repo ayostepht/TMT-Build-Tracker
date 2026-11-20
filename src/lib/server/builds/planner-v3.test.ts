@@ -294,18 +294,21 @@ describe('typed values follow a renumbered plate only when it is the same plate'
 		const id = mk(cc);
 		const pl = view(id).plates.find((p) => p.parts.length >= 1 && !p.perPartRuns)!;
 		updatePlate(db, id, 'owner', pl.number, { slicerGrams: 41, manualEstSeconds: 600 });
-		const carry = manualTimes(db, id);
+		const carry = manualTimes(db, id, [{ number: pl.number, parts: pl.parts }]);
 		const shape = { runs: pl.runs, perPartRuns: false };
 		// the same number and parts always win, shape or not
 		expect(carry(pl.number, pl.parts).manualEstSeconds).toBe(600);
-		const renumbered = manualTimes(db, id);
+		const renumbered = manualTimes(db, id, [
+			{ number: pl.number + 100, parts: pl.parts },
+			{ number: pl.number + 101, parts: pl.parts }
+		]);
 		expect(renumbered(pl.number + 100, pl.parts, shape)).toMatchObject({
 			manualEstSeconds: 600,
 			typedGrams: { slicerGrams: 41, slicerGramsSource: 'user' }
 		});
 		// used once: a second plate with the same parts does not get a copy
 		expect(renumbered(pl.number + 101, pl.parts, shape).manualEstSeconds).toBeNull();
-		const other = manualTimes(db, id);
+		const other = manualTimes(db, id, [{ number: pl.number + 100, parts: pl.parts }]);
 		expect(
 			other(pl.number + 100, pl.parts, { ...shape, runs: pl.runs + 1 }).manualEstSeconds
 		).toBeNull();
@@ -314,6 +317,26 @@ describe('typed values follow a renumbered plate only when it is the same plate'
 		).toBeNull();
 		expect(other(pl.number + 100, [...pl.parts, 'extra'], shape).manualEstSeconds).toBeNull();
 		expect(other(pl.number + 100, pl.parts).manualEstSeconds).toBeNull(); // no shape given: exact only
+	});
+
+	it('a typed value goes to one new plate only, and the exact number + parts match wins in either order', async () => {
+		const id = await mk(cc);
+		const pl = (await view(id)).plates.find((p) => p.parts.length >= 1 && !p.perPartRuns)!;
+		await updatePlate(db, id, 'owner', pl.number, { slicerGrams: 41, manualEstSeconds: 600 });
+		const shape = { runs: pl.runs, perPartRuns: false };
+		const exact = { number: pl.number, parts: pl.parts };
+		const renumbered = { number: pl.number + 100, parts: pl.parts };
+		for (const order of [
+			[exact, renumbered],
+			[renumbered, exact]
+		]) {
+			const carry = manualTimes(db, id, [exact, renumbered]);
+			const got = new Map(order.map((o) => [o.number, carry(o.number, o.parts, shape)]));
+			expect(got.get(exact.number)!.manualEstSeconds).toBe(600);
+			expect(got.get(exact.number)!.typedGrams?.slicerGrams).toBe(41);
+			expect(got.get(renumbered.number)!.manualEstSeconds).toBeNull();
+			expect(got.get(renumbered.number)!.typedGrams).toBeUndefined();
+		}
 	});
 });
 
