@@ -7,6 +7,13 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r63** (published `sha-230614a` = `edge` 230614a = #90 "Print some parts of a plate", digest
+  `sha256:777bf040ee77…9a3389`, same as `edge`, 2026-11-20; `edge` 0019dd9 adds docs only): a
+  plate's control gets "Print some parts…" to mark or log only some of a plate's parts as one
+  print, with the printer job linked to just those parts. No migration (journal stays at 4), no
+  schema, server or startup change, so no rehearsal. Live after the swap: health ok, login page
+  loads, a sign-in with unknown credentials gets 401, integrity ok, no restarts. Not checked
+  signed in. Rollback: stop, restore `tmt-backup-pre-r63.db`, re-tag `r62` as `test`.
 - **r62** (published `sha-5290765` = `edge` 5290765 = #85 "Release 0.9.3", digest
   `sha256:bfae9a580a7d…2967bc`, same as `edge`, 2026-11-19; `edge` 74e0155 adds docs only):
   same app code as `v0.9.3` (`main` a64fa26), version 0.9.3. Adds the resource limits (#82, #84),
