@@ -1,7 +1,7 @@
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
-import { chooseStatus, confirmOnPrinter, confirmWhere } from './status-helpers';
+import { chooseExtra, chooseStatus, confirmOnPrinter, confirmWhere } from './status-helpers';
 import type { Page } from '@playwright/test';
 
 /**
@@ -68,7 +68,7 @@ async function pickSome(page: Page, buildId: string, plate: { number: number; pa
 	const head = page.locator('.group-head').filter({
 		has: page.locator(`[data-testid="plate-status"][aria-label^="Plate ${plate.number} status"]`)
 	});
-	await head.getByTestId('plate-print-some').click();
+	await chooseExtra(head.getByTestId('plate-status'), 'plate-print-some');
 	const dlg = head.getByTestId('part-pick');
 	await expect(dlg).toBeVisible();
 	await dlg.getByTestId('part-pick-item').first().getByRole('checkbox').uncheck();

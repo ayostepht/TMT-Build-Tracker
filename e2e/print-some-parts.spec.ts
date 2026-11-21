@@ -7,7 +7,7 @@ import {
 	row,
 	uniqueEmail
 } from './helpers';
-import { chooseStatus } from './status-helpers';
+import { chooseExtra, chooseStatus, offers } from './status-helpers';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -55,7 +55,7 @@ async function openPrint(page: Page, buildId: string, plate: number) {
 }
 
 async function openPicker(h: Locator) {
-	await h.getByTestId('plate-print-some').click();
+	await chooseExtra(h.getByTestId('plate-status'), 'plate-print-some');
 	const dlg = h.getByTestId('part-pick');
 	await expect(dlg).toBeVisible();
 	return dlg;
@@ -194,7 +194,7 @@ test('All ticked is the whole-plate Printing action', async ({ page }) => {
 	await expect(page.locator('.toasts')).toContainText(`Started plate ${plate.number}`);
 	await expectStatuses(page, plate.parts, 'Printing');
 	// Everything is on the printer, so there is nothing left to pick.
-	await expect(h.getByTestId('plate-print-some')).toHaveCount(0);
+	await expect.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some')).toBe(false);
 
 	await page.getByRole('link', { name: 'Overview', exact: true }).click();
 	await expect(page.getByTestId('now-card')).toHaveCount(1);
@@ -254,7 +254,7 @@ test('Sequential: log the picked parts, then start and log the rest of the plate
 	await expect(row(page, last)).toHaveAttribute('data-s', 'To print');
 
 	// One part left: nothing to pick any more (the plate's own Printing action covers it).
-	await expect(h.getByTestId('plate-print-some')).toHaveCount(0);
+	await expect.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some')).toBe(false);
 	await chooseStatus(h.getByTestId('plate-status'), 'Printing');
 	await expect(row(page, last)).toHaveAttribute('data-s', 'Printing');
 	for (const s of first) expect(await statusOf(page, buildId, s)).toBe('Printed');
@@ -334,16 +334,21 @@ test('The button is absent on a one-part-per-run plate, on a multi-run plate and
 
 	await openPrint(page, buildId, plate.number);
 	// The control shows on a normal plate (guards against a vacuous "absent" below).
-	await expect(head(page, plate.number).getByTestId('plate-print-some')).toHaveCount(1);
+	await expect
+		.poll(() => offers(head(page, plate.number).getByTestId('plate-status'), 'plate-print-some'))
+		.toBe(true);
 	await expect(head(page, perPart!.number)).toBeVisible();
-	await expect(head(page, perPart!.number).getByTestId('plate-print-some')).toHaveCount(0);
-	await expect(page.getByTestId('plate-print-some')).not.toHaveCount(0);
+	await expect
+		.poll(() => offers(head(page, perPart!.number).getByTestId('plate-status'), 'plate-print-some'))
+		.toBe(false);
 
 	// A plate that prints more than once (when the layout has one).
 	const multi = v.plates.find((p) => !p.perPartRuns && p.runs > 1 && p.parts.length >= 2);
 	if (multi) {
 		await expect(head(page, multi.number)).toBeVisible();
-		await expect(head(page, multi.number).getByTestId('plate-print-some')).toHaveCount(0);
+		await expect
+			.poll(() => offers(head(page, multi.number).getByTestId('plate-status'), 'plate-print-some'))
+			.toBe(false);
 	}
 
 	// A viewer sees the plates but not the button.
@@ -359,7 +364,10 @@ test('The button is absent on a one-part-per-run plate, on a multi-run plate and
 		await expect(
 			joiner.page.locator('.group-head').filter({ hasText: `Plate ${plate.number} ·` })
 		).toBeVisible();
-		await expect(joiner.page.getByTestId('plate-print-some')).toHaveCount(0);
+		await expect(
+			joiner.page.locator('[data-testid="plate-status"][aria-haspopup="menu"]')
+		).toHaveCount(0);
+		expect(await joiner.page.getByTestId('status-menu').count()).toBe(0);
 	} finally {
 		await joiner.context.close();
 	}

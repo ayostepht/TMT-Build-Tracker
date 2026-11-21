@@ -1,7 +1,7 @@
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
-import { confirmOnPrinter, confirmWhere } from './status-helpers';
+import { chooseExtra, confirmOnPrinter, confirmWhere, offers } from './status-helpers';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -95,7 +95,7 @@ async function openPrint(page: Page, buildId: string) {
 /** Picks the first three pieces in the picker and confirms. */
 async function pickSome(page: Page, buildId: string): Promise<Locator> {
 	const h = await openPrint(page, buildId);
-	await h.getByTestId('plate-print-some-pieces').click();
+	await chooseExtra(h.getByTestId('plate-status'), 'plate-print-some-pieces');
 	const dlg = h.getByTestId('piece-pick');
 	await expect(dlg).toBeVisible();
 	const items = dlg.getByTestId('piece-pick-item');
@@ -132,7 +132,9 @@ test('Some pieces with a printer: Where, then the job is linked to exactly them,
 		`0/${N} pieces · 3 printing`
 	);
 	expect((await view(page, buildId)).state[HARNESS].printingComps).toEqual(PICKED);
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveCount(0);
+	await expect
+		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(false);
 
 	// The printer starts a job: it is expected for exactly those pieces.
 	mock.printing('benchy.gcode', 10);
