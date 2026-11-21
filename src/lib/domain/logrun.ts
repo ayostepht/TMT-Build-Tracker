@@ -14,7 +14,7 @@ import type {
 /** The fields of a part's state an undo must put back. */
 export type PartSnapshot = Pick<
 	PartState,
-	'slug' | 'status' | 'startedAt' | 'printedOn' | 'runEstSeconds' | 'comps'
+	'slug' | 'status' | 'startedAt' | 'printedOn' | 'runEstSeconds' | 'comps' | 'printingComps'
 >;
 
 export function snapshotParts(view: BuildView, slugs: string[]): PartSnapshot[] {
@@ -28,7 +28,8 @@ export function snapshotParts(view: BuildView, slugs: string[]): PartSnapshot[] 
 			startedAt: st.startedAt,
 			printedOn: st.printedOn,
 			runEstSeconds: st.runEstSeconds,
-			comps: { ...st.comps }
+			comps: { ...st.comps },
+			printingComps: st.printingComps ? [...st.printingComps] : null
 		});
 	}
 	return out;
@@ -196,6 +197,25 @@ export function runOutcomeSummary(
 	}
 	const patches = applyRun(view, full, new Date());
 	const names = (ps: PartPatch[]) => list(ps.map((p) => name(p.slug)));
+
+	if (full.comps?.length && full.partSlug) {
+		// Some pieces of one part: say what gets ticked and where the part ends up.
+		const n = full.comps.length;
+		const of = view.parts.find((p) => p.slug === full.partSlug)?.components.length ?? n;
+		const pieces = `${n} of ${of} pieces`;
+		const p = patches[0];
+		if (full.result === 'Success') {
+			if (p?.status === 'Printed')
+				return `Ticks ${pieces}; that was the last: marks ${name(full.partSlug)} printed.`;
+			return p
+				? `Ticks ${pieces} of ${name(full.partSlug)}; it stays To print for the rest.`
+				: `Adds this run to the print log; ${name(full.partSlug)} stays as it is.`;
+		}
+		if (full.result === 'Failed')
+			return p?.status === 'Reprint'
+				? `Flags ${name(full.partSlug)} for reprint; no pieces are ticked.`
+				: 'Adds this run to the print log; part status stays as it is.';
+	}
 
 	const printed = patches.filter((p) => p.status === 'Printed');
 	const reprint = patches.filter((p) => p.status === 'Reprint');

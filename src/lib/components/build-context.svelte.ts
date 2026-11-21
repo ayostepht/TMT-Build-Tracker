@@ -113,17 +113,26 @@ export class BuildCtx {
 			status: s.status,
 			startedAt: s.startedAt,
 			printedOn: s.printedOn,
-			runEstSeconds: s.runEstSeconds
+			runEstSeconds: s.runEstSeconds,
+			printingComps: s.printingComps ?? null
 		}));
+		// Taken before the optimistic patches below change it.
+		const current = this.view.state;
 		return this.act(
 			async () => {
 				for (const s of before) {
-					await apiSetPartStatus(
-						this.id,
-						s.slug,
-						s.status,
-						s.status === 'Printed' && s.printedOn ? s.printedOn : undefined
-					);
+					const pieces =
+						s.status === 'Printing' && s.printingComps?.length ? s.printingComps : null;
+					// A piece print goes back on the printer as one (the part is not Printing now).
+					if (pieces && current[s.slug]?.status !== 'Printing')
+						await printing(this.id, { action: 'start', slugs: [s.slug], comps: pieces });
+					else
+						await apiSetPartStatus(
+							this.id,
+							s.slug,
+							s.status,
+							s.status === 'Printed' && s.printedOn ? s.printedOn : undefined
+						);
 					if (s.status === 'Printing') {
 						if (s.startedAt)
 							await printing(this.id, { action: 'setStart', slugs: [s.slug], when: s.startedAt });
@@ -148,6 +157,27 @@ export class BuildCtx {
 		const name = this.#nameOf([slug]);
 		const ok = await this.act(() => apiSetPartStatus(this.id, slug, status), { patches });
 		if (ok) this.#offerUndo(`${name} · ${status}`, before);
+		return ok;
+	}
+
+	/**
+	 * "Print some pieces…": mark `comps` (indexes of the part's pieces) of one part Printing (optimistic,
+	 * Undo toast). The server starts the whole part when `comps` is every piece still to print.
+	 */
+	async startPieces(
+		slug: string,
+		comps: number[],
+		label = this.#nameOf([slug]),
+		printer?: string
+	): Promise<boolean> {
+		const patches = startPrinting(this.view, [slug], new SvelteDate(), null, comps);
+		if (!patches.length) return true;
+		const before = snapshotParts(this.view, [slug]);
+		const ok = await this.act(
+			() => printing(this.id, { action: 'start', slugs: [slug], comps, printer }),
+			{ patches }
+		);
+		if (ok) this.#offerUndo(`Started ${label}`, before);
 		return ok;
 	}
 

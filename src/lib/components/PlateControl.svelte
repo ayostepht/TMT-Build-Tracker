@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { Plate } from '#lib/domain/types.ts';
-	import { betweenRuns } from '#lib/domain/index.ts';
+	import { betweenRuns, printingPieces } from '#lib/domain/index.ts';
 	import { defaultRunParts } from '#lib/domain/run-choice.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import LogRunSheet from './LogRunSheet.svelte';
 	import StartOnPrinter from './StartOnPrinter.svelte';
 	import StatusBadge from './StatusBadge.svelte';
-	import PartPickSheet from './PartPickSheet.svelte';
+	import PartPickSheet, { type PickItem } from './PartPickSheet.svelte';
+	import PartPiecesAction, { piecesOffered } from './PartPiecesAction.svelte';
 
 	/**
 	 * THE status / start / finish / log control for a plate, used on the Print tab (plate headings and
@@ -20,24 +21,29 @@
 	 *  - **Printed**: the finish-and-log sheet (Success preselected)
 	 *  - **To print**: take the parts off the printer without a log
 	 *
-	 * plus a small "Log a print…" action while nothing is on the printer. Start and Take off are
+	 * plus, below the statuses, "Print some parts…" or "Print some pieces…" where they apply (menu
+	 * entries, not statuses), and a small "Log a print…" action while nothing is on the printer. Start and Take off are
 	 * optimistic and offer Undo (see `BuildCtx.startParts` / `takeOffParts`). Editors get the menu;
 	 * viewers see the plain badge.
 	 *
 	 * Props: `plate` (required); `only` narrows Start and the log to one part (a rim run on a
 	 * perPartRuns plate); `size` 'sm' (default, plate headings) or 'md' (card footers);
-	 * `alwaysLog` keeps "Log a print…" when every part is already printed (Files tab).
+	 * `alwaysLog` keeps "Log a print…" when every part is already printed (Files tab); `pieces` (default
+	 * true) adds "Print some pieces…" when the plate's only startable part has several pieces.
 	 */
 	let {
 		plate,
 		only = null,
 		size = 'sm',
-		alwaysLog = false
+		alwaysLog = false,
+		pieces = true
 	}: {
 		plate: Plate;
 		only?: string | null;
 		size?: 'sm' | 'md';
 		alwaysLog?: boolean;
+		/** Offer "Print some pieces…" when the plate's only startable part has several pieces (a part row that has its own button turns it off). */
+		pieces?: boolean;
 	} = $props();
 	const ctx = getBuildCtx();
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
@@ -73,6 +79,16 @@
 		return printing.length ? printing : unprinted;
 	});
 	const sheetSlugs = $derived(logSlugs.length ? logSlugs : plate.parts);
+	// One part on the printer with only some of its pieces: the log covers just those pieces. (With
+	// other parts on the printer at once the log is for whole parts; pieces are logged from the part.)
+	const piecesOn = $derived(
+		on.length === 1 && logSlugs.length === 1 ? printingPieces(ctx.view, on[0]) : null
+	);
+	const piecesTitle = $derived.by(() => {
+		if (!piecesOn?.length) return '';
+		const p = ctx.view.parts.find((x) => x.slug === on[0]);
+		return `${piecesOn.length} of ${p?.components.length ?? piecesOn.length} pieces of ${p?.name ?? on[0]}`;
+	});
 	const startedAt = $derived(
 		plate.parts
 			.map((s) => (status(s) === 'Printing' ? ctx.view.state[s].startedAt : null))
@@ -135,6 +151,34 @@
 	const canPickSome = $derived(
 		ctx.canEdit && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length >= 2
 	);
+	// "Print some pieces…" sits here when the plate's only startable part is one with several pieces
+	// (Plate 18: Harness and Straps, alone on its plate); `PartPiecesAction` checks the rest.
+	const pieceSlug = $derived(
+		pieces && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length === 1 ? idle[0] : null
+	);
+	// The status menu's extra actions (below the statuses): "Print some parts…" or "Print some pieces…".
+	let piecesPicking = $state(false);
+	const offerPieces = $derived(!!pieceSlug && piecesOffered(ctx, pieceSlug));
+	const extras = $derived.by(() => {
+		const out: { label: string; testid: string; ariaLabel: string; run: () => void }[] = [];
+		if (canPickSome)
+			out.push({
+				label: 'Print some parts…',
+				testid: 'plate-print-some',
+				ariaLabel: `Print some parts of plate ${plate.number}`,
+				run: () => (picking = true)
+			});
+		if (offerPieces && pieceSlug) {
+			const pn = ctx.view.parts.find((x) => x.slug === pieceSlug)?.name ?? pieceSlug;
+			out.push({
+				label: 'Print some pieces…',
+				testid: 'plate-print-some-pieces',
+				ariaLabel: `Print some pieces of ${pn}`,
+				run: () => (piecesPicking = true)
+			});
+		}
+		return out;
+	});
 	// Some parts: one start for exactly them. All of what is left is the plate's own Printing action,
 	// unless parts of the plate are already Printed or on the printer: then the job is still only for
 	// the parts being started, so it takes the same path as a pick.
@@ -147,6 +191,12 @@
 			where = true;
 		} else void ctx.startParts(picked, partsLabel(picked.length));
 	}
+	const pickItems = $derived<PickItem[]>(
+		idle.map((s) => {
+			const p = ctx.view.parts.find((x) => x.slug === s);
+			return { id: s, name: p?.name ?? s, hint: filLabel(ctx.filament(p?.role ?? ''), p?.role) };
+		})
+	);
 	function logSomeParts(picked: string[]) {
 		logPicked = picked;
 		logSome = true;
@@ -175,6 +225,7 @@
 		{options}
 		interactive={ctx.canEdit}
 		onpick={pick}
+		{extras}
 		testid="plate-status"
 	/>
 	{#if ctx.canEdit}
@@ -186,14 +237,12 @@
 				onclick={() => (open = true)}>Log a print…</button
 			>
 		{/if}
-		{#if canPickSome}
-			<button
-				class="{cls} ghost plc-text"
-				type="button"
-				data-testid="plate-print-some"
-				aria-label="Print some parts of plate {plate.number}"
-				onclick={() => (picking = true)}>Print some parts…</button
-			>
+		{#if pieceSlug}
+			<PartPiecesAction
+				slug={pieceSlug}
+				bind:picking={piecesPicking}
+				onwhole={() => pick('Printing')}
+			/>
 		{/if}
 		<StartOnPrinter
 			bind:open={where}
@@ -210,8 +259,8 @@
 {#if ctx.canEdit}
 	<PartPickSheet
 		bind:open={picking}
-		plateNumber={plate.number}
-		slugs={idle}
+		title="Print some parts of plate {plate.number}"
+		items={pickItems}
 		onprint={printSome}
 		onlog={logSomeParts}
 	/>
@@ -229,8 +278,13 @@
 		quick={logSlugs.length > 0}
 		plateNumber={plate.number}
 		slugs={sheetSlugs}
+		comps={piecesOn}
 		{startedAt}
-		title={on.length ? `Finish & log plate ${plate.number}` : `Log a print: plate ${plate.number}`}
+		title={piecesOn?.length
+			? `Finish & log: ${piecesTitle}`
+			: on.length
+				? `Finish & log plate ${plate.number}`
+				: `Log a print: plate ${plate.number}`}
 	/>
 {/if}
 

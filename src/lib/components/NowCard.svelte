@@ -120,8 +120,9 @@
 					<span class="meta num" data-testid="now-subset"
 						>{item.gramsPerRun
 							? `${item.gramsApprox || item.gramsUnknown.length ? '~' : ''}${fmt(item.gramsPerRun)} g · `
-							: ''}{item.parts.length}
-						of {plate.parts.length} parts</span
+							: ''}{item.pieces.length
+							? item.pieces.map((x) => `${x.picked.length} of ${x.of} pieces`).join(' · ')
+							: `${item.parts.length} of ${plate.parts.length} parts`}</span
 					>
 				{:else}<PlateGrams {plate} />{/if}<PlateTime plate={headPlate(plate)} />
 			{/if}
@@ -138,6 +139,12 @@
 			>
 		{/each}
 	</div>
+	{#each item.pieces as x (x.slug)}
+		<p class="nc-pieces" data-testid="now-pieces">
+			<strong>{x.picked.length} of {x.of} pieces:</strong>
+			{x.picked.join(', ')}
+		</p>
+	{/each}
 
 	{#each liveJobs as j (j.id)}<PrinterLive job={j} store={pstore} />{/each}
 	{#if pstore.error}
@@ -223,12 +230,20 @@
 
 	<div class="now-foot">
 		{#if !compact}
-			<span
-				>{item.subset
-					? `Only these ${item.parts.length} parts of the plate are on the printer. `
-					: ''}A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure
-				flags them for reprint.</span
-			>
+			{#if item.pieces.length}
+				<span
+					>Only these pieces are on the printer; grams and time are their share by piece count, so
+					they are approximate. A success ticks just these pieces and the rest of the part stays to
+					print; a failure flags the part for reprint.</span
+				>
+			{:else}
+				<span
+					>{item.subset
+						? `Only these ${item.parts.length} parts of the plate are on the printer. `
+						: ''}A success marks these printed{item.run ? ' once all runs are in' : ''}; a failure
+					flags them for reprint.</span
+				>
+			{/if}
 		{/if}
 		{#if plate}
 			<div class="now-actions">
@@ -272,6 +287,14 @@
 		border-radius: var(--r-pill);
 		letter-spacing: 0.02em;
 		text-transform: none;
+	}
+	.nc-pieces {
+		margin: 0;
+		font-size: var(--fs-sm);
+		color: var(--muted);
+	}
+	.nc-pieces strong {
+		color: var(--ink);
 	}
 	.now-actions {
 		display: flex;

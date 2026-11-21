@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-20, 19:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-21, 02:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -23,10 +23,25 @@ _Updated 2026-11-20, 19:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **Test copy:** r63 = `edge` 230614a (0.9.3 plus #90) deployed 2026-11-20; see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
-- **#90 "Print some parts of a plate" merged** into `edge` 2026-11-20 as 230614a (the
-  maintainer and the public site developer cleared it; CI green). A plate's control gets
-  "Print some parts…"; no schema or server change. On the test copy since r63. No agents running.
-- **Next step:** pick from the follow-ups below or STATUS "Next steps".
+- **Merged into `edge` 2026-11-20, not on the test copy yet (it is on r63 = 230614a):**
+  #92 "Plates follow the kit's layout first" (6ba6bf7, with its follow-up #94 7efeb4d; kit-first arranger, planner version
+  3, plan cache; no schema change) and #93 "Print some pieces of a part" (3c6ea33;
+  **migration `0004_piece_prints`**, additive). #90 "Print some parts of a plate" is on the
+  test copy since r63.
+- **Merged into `edge` 2026-11-21:** #95 "Logged pieces are ticked and locked; Print some…
+  moves into the status menu" (005f5ad; no schema change). Not on the test copy yet.
+  Decided by the maintainer: only piece logs lock pieces (a whole-part Success ticks all
+  pieces but leaves them free).
+- **In flight:** nothing in this repository. The report behind #95 is explained: the
+  logged pieces had been unticked by hand, which the lock now prevents.
+- **Hosted edition:** the port of #95 is ayostepht/TMT-build-tracker-public#36 (branch
+  `fix/piece-ticks-status-menu`), gate passed; it is merged by that repository's developer,
+  not from here.
+- **Next step:** deploy the `edge` image of 005f5ad (or later) to the test copy: back up
+  `/data`, **rehearse migration 0004 on a copy of the real database first** (it was only
+  run against the frozen release databases and an empty one; no Docker in the cloud
+  session), then add the `docs/dev/CHANGELOG.md` entry. The maintainer wants this image
+  soon and may pull it themselves.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 
@@ -40,6 +55,12 @@ _Updated 2026-11-20, 19:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 
 ## Follow-ups
 
+- From #93: one piece print per part at a time; a "×5" piece counts as one piece for the
+  share; no e2e for drafts or multi-piece parts on multi-run plates. One test of
+  `print-some-pieces-printer.spec.ts` failed twice while two agents ran builds and e2e in
+  the same checkout and passed in every clean run and in CI; no cause captured.
+- From #92: export of a never-arranged kit-layout build still plans twice (cost only; noted
+  on the pull request); the real-kit tests don't run in CI.
 - From #90: two prints of one plate at the same time share one card and one log (a
   print-batch id would fix it; the maintainer said no for now). `printers.spec.ts:245` and
   `design-started-shots.spec.ts:70` timed out in runs made while other e2e runs or builds

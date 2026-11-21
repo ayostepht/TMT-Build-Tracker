@@ -237,6 +237,25 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
+- **Print some pieces of a part** (#93, merged into `edge` 2026-11-20 as 3c6ea33, and #95, 2026-11-21 as 005f5ad; migration
+  `0004_piece_prints`, additive): a part made of several pieces (Harness and Straps, 9
+  pieces) has "Print some pieces…" (on the plate heading when it is the plate's only
+  startable part, else on its row): pick pieces (all ticked by default), mark them printing
+  or log them. A Success ticks exactly those pieces; the part is Printed when the last one
+  is ticked, else back to To print; Failed ticks nothing and flags Reprint; no Partial.
+  Now printing shows "3 of 9 pieces" with grams and time by piece count (approximate).
+  With a printer the job is linked to those pieces (`printer_jobs.comps`). Pieces a Success
+  piece run covers are ticked and locked (the view overlays them; a hand untick is refused;
+  deleting or undoing the run frees them; only piece logs lock, maintainer 2026-11-21). The report behind it (2026-11-21): the pieces of a logged "3 of 9 pieces" Success
+  had been unticked by hand afterwards, so the badge read "0/9 pieces"; the lock now
+  prevents that, and no server path loses ticks. "Print some pieces…" and "Print some parts…" are entries in the status
+  menu, not separate buttons. Not offered on
+  plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: the
+  migration needs the usual rehearsal on a copy of the real database before the test copy
+  gets it (no Docker in the cloud session); one piece print per part at a time; "×5"
+  pieces count as one piece for the share; no e2e for drafts or multi-run plates (the test
+  layout has no multi-piece part there) [e2e-playwright]; every future additive column
+  must be added to `POST_BASELINE_COLUMNS` in `baseline-upgrade.test.ts` [kit-and-startup].
 - **Print some parts of a plate** (#90, merged into `edge` 2026-11-20 as 230614a, on the test
   copy since r63): a plate's control has "Print some parts…"
   (`PartPickSheet`, all parts ticked by default) to mark or log only some of a plate's

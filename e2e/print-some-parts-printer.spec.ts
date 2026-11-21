@@ -1,7 +1,7 @@
 import { MockSdcp } from '../src/lib/server/printers/mock-sdcp';
 import { expect, test } from './fixtures';
 import { keepPrintedVisible, ownerWithBuild, row } from './helpers';
-import { chooseStatus, confirmWhere } from './status-helpers';
+import { chooseExtra, chooseStatus, confirmOnPrinter, confirmWhere } from './status-helpers';
 import type { Page } from '@playwright/test';
 
 /**
@@ -68,7 +68,7 @@ async function pickSome(page: Page, buildId: string, plate: { number: number; pa
 	const head = page.locator('.group-head').filter({
 		has: page.locator(`[data-testid="plate-status"][aria-label^="Plate ${plate.number} status"]`)
 	});
-	await head.getByTestId('plate-print-some').click();
+	await chooseExtra(head.getByTestId('plate-status'), 'plate-print-some');
 	const dlg = head.getByTestId('part-pick');
 	await expect(dlg).toBeVisible();
 	await dlg.getByTestId('part-pick-item').first().getByRole('checkbox').uncheck();
@@ -90,7 +90,7 @@ test('Some parts with a printer: Where is it printing, then the job is linked to
 	await expect(where.getByTestId('where-parts')).toContainText(
 		`${picked.length} of ${plate.parts.length} parts of plate ${plate.number}`
 	);
-	await confirmWhere(page, 'first');
+	await confirmOnPrinter(page);
 	for (const s of picked) await expect(row(page, s)).toHaveAttribute('data-s', 'Printing');
 	await expect(row(page, plate.parts[0])).toHaveAttribute('data-s', 'To print');
 
@@ -171,7 +171,7 @@ test('A print already running is linked to the picked parts at once, without a c
 	await expect(page.getByTestId('link-plate')).toBeVisible({ timeout: 20_000 });
 
 	const picked = await pickSome(page, buildId, plate);
-	await confirmWhere(page, 'first');
+	await confirmOnPrinter(page);
 	await expect(page.locator('.toasts').filter({ hasText: `to plate ${plate.number}` })).toBeVisible(
 		{ timeout: 15_000 }
 	);

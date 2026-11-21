@@ -147,6 +147,12 @@ export interface PartState {
 	printedOn: string | null; // YYYY-MM-DD
 	runEstSeconds: number | null; // slicer time for the current run, while Printing
 	comps: Record<string, boolean>; // component index → checked
+	/**
+	 * Piece indexes (into `PartDef.components`) that are on the printer right now ("Print some
+	 * pieces…"); the part is Printing. Null/absent = not a piece-level print (a whole-part print, or
+	 * nothing on the printer).
+	 */
+	printingComps?: number[] | null;
 	assigneeUserId: string | null;
 	/** Grams the maker typed for the whole part, all copies (the top of the part's grams order). Null/absent = none entered. */
 	manualGrams?: number | null;
@@ -209,6 +215,12 @@ export interface PrintRun {
 	plateNumber: number | null;
 	partSlug: string | null;
 	partSlugs: string[] | null;
+	/**
+	 * Piece indexes (into the part's `components`) a piece-level run covered ("Print some pieces…").
+	 * Only with `partSlug`; the run is a subset run (Success ticks exactly these pieces, Failed ticks
+	 * none) and never counts as one of a plate's runs. Null/absent = a whole part or plate run.
+	 */
+	comps?: number[] | null;
 	date: string; // YYYY-MM-DD
 	result: RunResult;
 	grams: number | null;

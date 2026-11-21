@@ -5,7 +5,7 @@
  * `plate-NN-<plate name>.3mf`; users also save "Plate 3 - Wings (Accent)" style names from the
  * slicer. We look for a plate number after the word "plate", or a plate name in the file name.
  */
-import { partGrams, plateGrams, printGrams } from './accounting.ts';
+import { partGrams, plateGrams, printGrams, printingFractions } from './accounting.ts';
 import type { BuildView } from './types.ts';
 
 export function normalizeFileName(name: string): string {
@@ -70,7 +70,8 @@ export function plateRunGrams(
 		plate.perPartRuns && partSlugs?.length
 			? partSlugs.reduce((a, s) => a + partGrams(view, s).perRun, 0)
 			: partSlugs?.length
-				? printGrams(view, plate, partSlugs).perRun
+				? // a part with only some pieces on the print takes its share by piece count
+					printGrams(view, plate, partSlugs, printingFractions(view, partSlugs)).perRun
 				: plateGrams(view, plate).perRun;
 	return grams > 0 ? grams : null;
 }
