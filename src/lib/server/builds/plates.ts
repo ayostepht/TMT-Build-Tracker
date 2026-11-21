@@ -139,11 +139,33 @@ function convertPlateRuns(tx: Db, buildId: string, view: BuildView): number {
 	assertRunTotal(view.runs.length - attached.length + created);
 	for (const r of attached) {
 		const targets = runTargets(view, r);
-		tx.delete(printRuns).where(eq(printRuns.id, r.id)).run();
-		if (!targets.length) continue; // log of a plate whose parts are all inactive: nothing to keep it on
+		if (!targets.length) {
+			// log of a plate whose parts are all inactive: nothing to keep it on
+			tx.delete(printRuns).where(eq(printRuns.id, r.id)).run();
+			continue;
+		}
 		const share = (v: number | null) =>
 			v == null ? null : Math.round((v / targets.length) * 100) / 100;
-		for (const slug of targets)
+		const estShare = r.estSeconds == null ? null : Math.round(r.estSeconds / targets.length);
+		// A piece run has exactly one target (its part) and keeps its pieces.
+		const comps = targets.length === 1 && r.comps?.length ? r.comps : null;
+		// The first target reuses the original row (same id, creation time and every other column), so
+		// a printer job's `run_id` and the run's activity rows still point at it. Only the plate link
+		// goes. Further targets (a whole-plate or subset log) get their own rows with the same
+		// creation time, date, result, printer, user and note, and a share of grams, hours and planned time.
+		tx.update(printRuns)
+			.set({
+				plateNumber: null,
+				partSlug: targets[0],
+				partSlugs: null,
+				comps,
+				grams: share(r.grams),
+				hours: share(r.hours),
+				estSeconds: estShare
+			})
+			.where(eq(printRuns.id, r.id))
+			.run();
+		for (const slug of targets.slice(1))
 			tx.insert(printRuns)
 				.values({
 					buildId,
@@ -154,9 +176,11 @@ function convertPlateRuns(tx: Db, buildId: string, view: BuildView): number {
 					result: r.result,
 					grams: share(r.grams),
 					hours: share(r.hours),
+					estSeconds: estShare,
 					printer: r.printer,
 					userId: r.userId,
-					note: r.note
+					note: r.note,
+					createdAt: r.createdAt == null ? undefined : new Date(r.createdAt)
 				})
 				.run();
 	}
