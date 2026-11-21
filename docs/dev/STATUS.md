@@ -246,11 +246,9 @@ Route each to the agent named in brackets.
   Now printing shows "3 of 9 pieces" with grams and time by piece count (approximate).
   With a printer the job is linked to those pieces (`printer_jobs.comps`). Pieces a Success
   piece run covers are ticked and locked (the view overlays them; a hand untick is refused;
-  deleting or undoing the run frees them; only piece logs lock, maintainer 2026-11-21). This repairs a report from real data
-  (2026-11-21): a logged "3 of 9 pieces" Success showed "0/9 pieces" with nothing ticked.
-  No server path that loses the ticks was found (job runs, run edits, deletes, status
-  changes are all tested); if it shows again, capture the part's `run.add` / `run.update`
-  activity rows. "Print some pieces…" and "Print some parts…" are entries in the status
+  deleting or undoing the run frees them; only piece logs lock, maintainer 2026-11-21). The report behind it (2026-11-21): the pieces of a logged "3 of 9 pieces" Success
+  had been unticked by hand afterwards, so the badge read "0/9 pieces"; the lock now
+  prevents that, and no server path loses ticks. "Print some pieces…" and "Print some parts…" are entries in the status
   menu, not separate buttons. Not offered on
   plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: the
   migration needs the usual rehearsal on a copy of the real database before the test copy

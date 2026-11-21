@@ -32,10 +32,8 @@ _Updated 2026-11-21, 02:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   moves into the status menu" (005f5ad; no schema change). Not on the test copy yet.
   Decided by the maintainer: only piece logs lock pieces (a whole-part Success ticks all
   pieces but leaves them free).
-- **In flight:** a search for what left a logged piece print unticked on real data (the
-  maintainer used "Log a print…" with a connected printer in the build); #95 repairs the
-  symptom at read time. If a source fix comes out of it, it goes on a pull request into
-  `edge`.
+- **In flight:** nothing in this repository. The report behind #95 is explained: the
+  logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 is ayostepht/TMT-build-tracker-public#36 (branch
   `fix/piece-ticks-status-menu`), gate passed; it is merged by that repository's developer,
   not from here.
