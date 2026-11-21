@@ -237,7 +237,7 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 Route each to the agent named in brackets.
 
-- **Print some pieces of a part** (#93, merged into `edge` 2026-11-20 as 3c6ea33; migration
+- **Print some pieces of a part** (#93, merged into `edge` 2026-11-20 as 3c6ea33, and #95, 2026-11-21 as 005f5ad; migration
   `0004_piece_prints`, additive): a part made of several pieces (Harness and Straps, 9
   pieces) has "Print some pieces…" (on the plate heading when it is the plate's only
   startable part, else on its row): pick pieces (all ticked by default), mark them printing
@@ -246,7 +246,7 @@ Route each to the agent named in brackets.
   Now printing shows "3 of 9 pieces" with grams and time by piece count (approximate).
   With a printer the job is linked to those pieces (`printer_jobs.comps`). Pieces a Success
   piece run covers are ticked and locked (the view overlays them; a hand untick is refused;
-  deleting or undoing the run frees them). This repairs a report from real data
+  deleting or undoing the run frees them; only piece logs lock, maintainer 2026-11-21). This repairs a report from real data
   (2026-11-21): a logged "3 of 9 pieces" Success showed "0/9 pieces" with nothing ticked.
   No server path that loses the ticks was found (job runs, run edits, deletes, status
   changes are all tested); if it shows again, capture the part's `run.add` / `run.update`

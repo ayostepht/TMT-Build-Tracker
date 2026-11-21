@@ -28,19 +28,18 @@ _Updated 2026-11-21, 02:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   3, plan cache; no schema change) and #93 "Print some pieces of a part" (3c6ea33;
   **migration `0004_piece_prints`**, additive). #90 "Print some parts of a plate" is on the
   test copy since r63.
-- **In flight:** #95 "Logged pieces are ticked and locked; Print some… moves into the status
-  menu" (branch `claude/sharp-meitner-du0qe5`, head e154f19, into `edge`): verifier gate
-  passed, no schema change; merge when CI is green on the head, then it is part of the
-  next test-copy deploy. From a report on real data (a logged "3 of 9 pieces" Success
-  showed "0/9 pieces"); no path that loses the ticks was found, the view now overlays them
-  (STATUS has the detail). Open question for the maintainer: how that print was logged
-  (printer job, "Finish & log", or "Log a print…"), and whether whole-part Success logs
-  should lock pieces too (today only piece logs do).
-- **Hosted edition:** its #33 (piece prints) is merged there. The port of #95 is
-  ayostepht/TMT-build-tracker-public#36 (branch `fix/piece-ticks-status-menu`, head
-  d5f0803 plus a handoff note), gate passed; it is merged by that repository's developer,
+- **Merged into `edge` 2026-11-21:** #95 "Logged pieces are ticked and locked; Print some…
+  moves into the status menu" (005f5ad; no schema change). Not on the test copy yet.
+  Decided by the maintainer: only piece logs lock pieces (a whole-part Success ticks all
+  pieces but leaves them free).
+- **In flight:** a search for what left a logged piece print unticked on real data (the
+  maintainer used "Log a print…" with a connected printer in the build); #95 repairs the
+  symptom at read time. If a source fix comes out of it, it goes on a pull request into
+  `edge`.
+- **Hosted edition:** the port of #95 is ayostepht/TMT-build-tracker-public#36 (branch
+  `fix/piece-ticks-status-menu`), gate passed; it is merged by that repository's developer,
   not from here.
-- **Next step:** deploy the `edge` image of 7efeb4d (or later) to the test copy: back up
+- **Next step:** deploy the `edge` image of 005f5ad (or later) to the test copy: back up
   `/data`, **rehearse migration 0004 on a copy of the real database first** (it was only
   run against the frozen release databases and an empty one; no Docker in the cloud
   session), then add the `docs/dev/CHANGELOG.md` entry. The maintainer wants this image
