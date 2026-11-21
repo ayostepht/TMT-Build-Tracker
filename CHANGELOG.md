@@ -19,6 +19,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Fixed
 
+- Replacing the plates of a build that has started no longer turns a "some pieces" print log into a log of the whole part; converted print logs keep their place in the history.
 - On a plate the kit prints several times per part, such as the wheel rims, the grams and time are now per print, the counter counts prints ("0/4 printed"), the fields read "per print", the exported plate name says "(print x4)", and the tires diagram no longer quotes both runs' grams as one run. Tires keep "per run".
 
 ## [0.9.3] - 2026-11-19
