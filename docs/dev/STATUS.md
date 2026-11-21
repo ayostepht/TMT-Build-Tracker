@@ -248,7 +248,9 @@ Route each to the agent named in brackets.
   piece run covers are ticked and locked (the view overlays them; a hand untick is refused;
   deleting or undoing the run frees them; only piece logs lock, maintainer 2026-11-21). The report behind it (2026-11-21): the pieces of a logged "3 of 9 pieces" Success
   had been unticked by hand afterwards, so the badge read "0/9 pieces"; the lock now
-  prevents that, and no server path loses ticks. "Print some pieces…" and "Print some parts…" are entries in the status
+  prevents that, and no server path loses ticks. A confirmed plate replacement keeps a piece log's pieces and every converted
+  log's id (#96, 9f32307: `convertPlateRuns` updates the original row for the first
+  target part and inserts rows only for further parts). "Print some pieces…" and "Print some parts…" are entries in the status
   menu, not separate buttons. Not offered on
   plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: the
   migration needs the usual rehearsal on a copy of the real database before the test copy

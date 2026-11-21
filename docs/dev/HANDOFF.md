@@ -32,12 +32,14 @@ _Updated 2026-11-21, 02:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   moves into the status menu" (005f5ad; no schema change). Not on the test copy yet.
   Decided by the maintainer: only piece logs lock pieces (a whole-part Success ticks all
   pieces but leaves them free).
+- **Also merged into `edge` 2026-11-21:** #96 "Converted plate logs keep their pieces and
+  their row" (9f32307; opened from the hosted edition's session, its counterpart there is
+  #37; no schema change): a confirmed plate replacement keeps a piece log's pieces and the
+  log's id.
 - **In flight:** nothing in this repository. The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
-- **Hosted edition:** the port of #95 is ayostepht/TMT-build-tracker-public#36 (branch
-  `fix/piece-ticks-status-menu`), gate passed; it is merged by that repository's developer,
-  not from here.
-- **Next step:** deploy the `edge` image of 005f5ad (or later) to the test copy: back up
+- **Hosted edition:** the port of #95 (its #36) is merged there.
+- **Next step:** deploy the `edge` image of 9f32307 (or later) to the test copy: back up
   `/data`, **rehearse migration 0004 on a copy of the real database first** (it was only
   run against the frozen release databases and an empty one; no Docker in the cloud
   session), then add the `docs/dev/CHANGELOG.md` entry. The maintainer wants this image
