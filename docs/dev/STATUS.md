@@ -244,7 +244,14 @@ Route each to the agent named in brackets.
   or log them. A Success ticks exactly those pieces; the part is Printed when the last one
   is ticked, else back to To print; Failed ticks nothing and flags Reprint; no Partial.
   Now printing shows "3 of 9 pieces" with grams and time by piece count (approximate).
-  With a printer the job is linked to those pieces (`printer_jobs.comps`). Not offered on
+  With a printer the job is linked to those pieces (`printer_jobs.comps`). Pieces a Success
+  piece run covers are ticked and locked (the view overlays them; a hand untick is refused;
+  deleting or undoing the run frees them). This repairs a report from real data
+  (2026-11-21): a logged "3 of 9 pieces" Success showed "0/9 pieces" with nothing ticked.
+  No server path that loses the ticks was found (job runs, run edits, deletes, status
+  changes are all tested); if it shows again, capture the part's `run.add` / `run.update`
+  activity rows. "Print some pieces…" and "Print some parts…" are entries in the status
+  menu, not separate buttons. Not offered on
   plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: the
   migration needs the usual rehearsal on a copy of the real database before the test copy
   gets it (no Docker in the cloud session); one piece print per part at a time; "×5"

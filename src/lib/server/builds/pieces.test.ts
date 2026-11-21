@@ -35,6 +35,7 @@ import { createPrinter } from '../printers/store';
 import { loadBuildView } from './view';
 import { describeActivity } from '../../domain/activity';
 import { snapshotParts } from '../../domain/logrun';
+import { loggedPieces, piecesLeft } from '../../domain/actions';
 import { filamentStats, timeStats } from '../../domain/accounting';
 import { nowPrinting } from '../../domain/now';
 
@@ -565,5 +566,114 @@ describe('undo snapshot ticks', () => {
 			status(() => undoRun(db, id2, 'owner', r2, { parts: [{ ...before[0], comps: huge }] }))
 		).toBe(400);
 		expect(view(id2).runs).toHaveLength(1);
+	});
+});
+
+describe('pieces a Success log covers are ticked and locked', () => {
+	/** A stored part whose ticks lack the logged pieces (what the maintainer saw: a run, no ticks). */
+	const wipeTicks = (id: string) =>
+		db
+			.update(buildParts)
+			.set({ comps: {} })
+			.where(and(eq(buildParts.buildId, id), eq(buildParts.partSlug, H)))
+			.run();
+
+	it('a Success piece run with no stored ticks still shows its pieces ticked, and they count', () => {
+		const id = mk();
+		logPieces(id, [0, 1, 2], 'Success', { printer: 'CC1', grams: 60.43, hours: 4 });
+		wipeTicks(id);
+		expect(ticked(id)).toEqual([0, 1, 2]);
+		expect(loggedPieces(view(id), H)).toEqual([0, 1, 2]);
+		expect(piecesLeft(view(id), H)).toEqual([3, 4, 5, 6, 7, 8]);
+	});
+	it('a Failed run or a run of other pieces covers nothing', () => {
+		const id = mk();
+		logPieces(id, [0, 1, 2], 'Failed');
+		expect(loggedPieces(view(id), H)).toEqual([]);
+		expect(ticked(id)).toEqual([]);
+	});
+	it('editing the log (grams, hours, printer, date, even all at once) keeps the ticks', () => {
+		const id = mk();
+		start(id, [0, 1, 2]);
+		const a = logPieces(id, [0, 1, 2]).runId;
+		updateRun(db, id, 'owner', a, { grams: 60.43, hours: 4, printer: 'CC1', note: 'x' });
+		expect(ticked(id)).toEqual([0, 1, 2]);
+		updateRun(db, id, 'owner', a, {
+			date: '2026-01-05',
+			result: 'Success',
+			partSlug: H,
+			grams: 61
+		});
+		expect(ticked(id)).toEqual([0, 1, 2]);
+	});
+	it('a hand untick of a logged piece is refused with 400 and a sentence', () => {
+		const id = mk();
+		logPieces(id, [0, 1, 2]);
+		let err: ApiError | null = null;
+		try {
+			updatePart(db, id, 'owner', H, { comps: { '0': false, '1': true, '2': true } });
+		} catch (e) {
+			err = e as ApiError;
+		}
+		expect(err?.status).toBe(400);
+		expect(err?.message).toBe(
+			'Piece 1 is logged in the print log and cannot be unticked; delete or undo that log first'
+		);
+		expect(ticked(id)).toEqual([0, 1, 2]);
+	});
+	it('other pieces stay free to tick and untick, and a map that leaves out logged pieces keeps them', () => {
+		const id = mk();
+		logPieces(id, [0, 1, 2]);
+		updatePart(db, id, 'owner', H, { comps: { '0': true, '1': true, '2': true, '5': true } });
+		expect(ticked(id)).toEqual([0, 1, 2, 5]);
+		updatePart(db, id, 'owner', H, { comps: { '0': true, '1': true, '2': true, '5': false } });
+		expect(ticked(id)).toEqual([0, 1, 2]);
+		updatePart(db, id, 'owner', H, { comps: { '7': true } });
+		expect(ticked(id)).toEqual([0, 1, 2, 7]);
+		const stored = db
+			.select({ comps: buildParts.comps })
+			.from(buildParts)
+			.where(and(eq(buildParts.buildId, id), eq(buildParts.partSlug, H)))
+			.get()!.comps;
+		expect(Object.keys(stored).filter((k) => stored[k])).toEqual(['0', '1', '2', '7']);
+	});
+	it('deleting the log frees its pieces (and only those)', () => {
+		const id = mk();
+		const a = logPieces(id, [0, 1, 2]).runId;
+		updatePart(db, id, 'owner', H, { comps: { '0': true, '1': true, '2': true, '6': true } });
+		wipeTicks(id);
+		deleteRun(db, id, 'owner', a);
+		expect(ticked(id)).toEqual([]);
+		expect(loggedPieces(view(id), H)).toEqual([]);
+		updatePart(db, id, 'owner', H, { comps: { '0': false, '1': true } });
+		expect(ticked(id)).toEqual([1]);
+	});
+	it('undoing the log frees its pieces', () => {
+		const id = mk();
+		start(id, [0, 1, 2]);
+		const before = snapshotParts(view(id), [H]);
+		const { runId } = logPieces(id, [0, 1, 2]);
+		expect(status(() => updatePart(db, id, 'owner', H, { comps: { '1': false } }))).toBe(400);
+		undoRun(db, id, 'owner', runId, { parts: before });
+		expect(ticked(id)).toEqual([]);
+		expect(loggedPieces(view(id), H)).toEqual([]);
+		updatePart(db, id, 'owner', H, { comps: { '1': true } });
+		updatePart(db, id, 'owner', H, { comps: { '1': false } });
+		expect(ticked(id)).toEqual([]);
+	});
+	it('editing the log from Success to Failed frees its pieces', () => {
+		const id = mk();
+		const a = logPieces(id, [3, 4]).runId;
+		updateRun(db, id, 'owner', a, { result: 'Failed' });
+		updatePart(db, id, 'owner', H, { comps: { '3': true } });
+		updatePart(db, id, 'owner', H, { comps: { '3': false } });
+		expect(ticked(id)).toEqual([]);
+	});
+	it('two Success logs lock the union; viewers still cannot tick at all', () => {
+		const id = mk();
+		logPieces(id, [0, 1]);
+		logPieces(id, [1, 2], 'Success', { date: '2026-01-03' });
+		expect(loggedPieces(view(id), H)).toEqual([0, 1, 2]);
+		expect(status(() => updatePart(db, id, 'viewer', H, { comps: { '4': true } }))).toBe(403);
 	});
 });

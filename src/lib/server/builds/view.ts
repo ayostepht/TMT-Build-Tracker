@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
+import { tickLoggedPieces } from '#lib/domain/actions.ts';
 import { filterSteps } from '#lib/domain/assembly.ts';
 import { linkedRunGrams } from '#lib/domain/accounting.ts';
 import { isPreLinkRun, readSpoolmanStock, type SpoolmanCacheData } from '#lib/domain/spoolman.ts';
@@ -653,7 +654,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		canEdit: access.canEdit,
 		filaments,
 		parts,
-		state,
+		state: tickLoggedPieces({ runs, parts }, state),
 		variantGroups,
 		variantChoices,
 		allParts,

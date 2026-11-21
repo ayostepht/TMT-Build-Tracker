@@ -1,5 +1,20 @@
+<script lang="ts" module>
+	import { canPrintPieces } from '#lib/domain/index.ts';
+	import type { BuildCtx } from './build-context.svelte.ts';
+
+	/**
+	 * Is "Print some pieces…" offered for this part right now? The viewer can edit, the build is a
+	 * build (not a draft) and `canPrintPieces` says the part qualifies (two or more pieces to go, not on
+	 * the printer, on a plate that prints once or on none). The menu entry of the status badge shows
+	 * exactly when this is true.
+	 */
+	export function piecesOffered(ctx: BuildCtx, slug: string): boolean {
+		return ctx.canEdit && ctx.view.build.kind === 'build' && canPrintPieces(ctx.view, slug);
+	}
+</script>
+
 <script lang="ts">
-	import { canPrintPieces, piecesLeft } from '#lib/domain/index.ts';
+	import { piecesLeft } from '#lib/domain/index.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
 	import StartOnPrinter from './StartOnPrinter.svelte';
@@ -7,33 +22,31 @@
 	import LogRunSheet from './LogRunSheet.svelte';
 
 	/**
-	 * "Print some pieces…" for one part that has several pieces (`PartDef.components`): a button that
-	 * opens the pick sheet (the part's unticked pieces, all ticked), then either marks those pieces
+	 * "Print some pieces…" for one part that has several pieces (`PartDef.components`): the sheets behind
+	 * the status badge's "Print some pieces…" menu entry (the parent shows the entry when `piecesOffered`
+	 * says so and sets `picking`). The pick sheet opens (the part's unticked pieces, all ticked), then either marks those pieces
 	 * printing (`ctx.startPieces`: the part is Printing with `printingComps`) or logs them as a run of
 	 * pieces. With an enabled printer, "Mark as printing" first asks "Where is it printing?"
 	 * (`StartOnPrinter` with `comps`: the printer's job is linked to this part and those pieces only);
 	 * "Not on a connected printer" is the direct start. Ticking every piece still to print is the part's normal Printing action, which the
 	 * parent knows how to run (`onwhole`: it may ask "Where is it printing?").
 	 *
-	 * Renders nothing unless the viewer can edit and `canPrintPieces` says the part qualifies (two or
-	 * more pieces to go, not on the printer, on a plate that prints once or on none).
+	 * Renders no button of its own, only the sheets (mounted for editors, they stay open while saving
+	 * makes the part ineligible).
 	 */
 	let {
 		slug,
 		onwhole,
-		cls = 'pill-link',
-		testid = 'part-print-some'
+		picking = $bindable(false)
 	}: {
 		slug: string;
 		/** Every piece still to print was picked: run the part's normal Printing action. */
 		onwhole: () => void;
-		/** Classes of the button (`pill-link` in a part row, `btn sm ghost plc-text` in a plate control). */
-		cls?: string;
-		testid?: string;
+		/** Open the pick sheet (set by the parent's menu entry). */
+		picking?: boolean;
 	} = $props();
 
 	const ctx = getBuildCtx();
-	let picking = $state(false);
 	let logging = $state(false);
 	let logComps = $state<number[]>([]);
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
@@ -42,9 +55,6 @@
 	let whereComps = $state<number[]>([]);
 
 	const part = $derived(ctx.view.parts.find((p) => p.slug === slug));
-	const eligible = $derived(
-		ctx.canEdit && ctx.view.build.kind === 'build' && canPrintPieces(ctx.view, slug)
-	);
 	const left = $derived(piecesLeft(ctx.view, slug));
 	const items = $derived<PickItem[]>(
 		left.map((i) => ({
@@ -76,15 +86,6 @@
 	}
 </script>
 
-{#if eligible && part}
-	<button
-		class={cls}
-		type="button"
-		data-testid={testid}
-		aria-label="Print some pieces of {part.name}"
-		onclick={() => (picking = true)}>Print some pieces…</button
-	>
-{/if}
 <!-- The sheets stay mounted while open even if saving makes the part ineligible. -->
 {#if ctx.canEdit && part}
 	<PartPickSheet

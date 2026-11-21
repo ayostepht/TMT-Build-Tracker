@@ -148,7 +148,9 @@ Sections match the subagents in `.claude/agents/`:
   `run.undo`. Offered only for ≥2 targets, not perPartRuns, runs ≤ 1. `PartialParts.svelte`
   is shared by `LogRunSheet` and `ConfirmPrintLog`. Run grams are capped at `MAX_RUN_GRAMS`
   (100000).
-- **Print some parts of a plate** (`PartPickSheet.svelte`, opened from `PlateControl`):
+- **Print some parts of a plate** (`PartPickSheet.svelte`, opened from `PlateControl`
+  through a "Print some parts…" entry in the status menu: `StatusBadge` takes optional
+  `extras`, action entries below a separator with `role="menuitem"` and no check mark):
   offered to editors on a single-run, non-perPartRuns plate with two or more parts still to
   start. A proper subset is one `printing` `start` with those slugs (`ctx.startParts`); all
   ticked is the plate's normal Printing action. "Log N parts instead…" opens `LogRunSheet`
@@ -167,8 +169,10 @@ Sections match the subagents in `.claude/agents/`:
   parts". On the build Overview `StartOnPrinter` does not render `ExpectedConfirm`
   (`PrinterJobs` is the one place that asks there); the Print and Files tabs still ask in
   the plate control. Two prints of one plate at once share a card (cards key by plate).
-- **Print some pieces of a part** (migration 0004; `PartPiecesAction.svelte`, the generic
-  `PartPickSheet` with `unit: 'piece'`): state is `build_parts.printing_comps`
+- **Print some pieces of a part** (migration 0004; `PartPiecesAction.svelte` holds the
+  sheets only, with `bind:picking` and the helper `piecesOffered(ctx, slug)`; the "Print
+  some pieces…" entry is a `StatusBadge` `extras` item on the plate control or the part row;
+  the generic `PartPickSheet` with `unit: 'piece'`): state is `build_parts.printing_comps`
   (`PartState.printingComps`, piece indexes on the printer, null = whole part) and runs
   carry `print_runs.comps` (`PrintRun.comps`, only with `partSlug`). Rules in
   `domain/actions.ts`: `canPrintPieces` (2+ unticked pieces, part not Printing/Printed,
@@ -188,6 +192,15 @@ fractions)`. `NowCard.pieces`. Piece runs are subset runs for pace and stats. Se
   part has a fitting piece list (so a log that doesn't know about pieces can't tick all of
   them); system runs (`addRunSystem`) with a list that no longer fits log as a plain part
   run, user requests get 400; `undoRun` caps and filters snapshot ticks.
+  **Logged pieces are ticked and locked:** `loggedPieces(view, slug)` is the union of
+  `comps` over the part's Success piece runs; `loadBuildView` overlays them onto
+  `state.comps` (`tickLoggedPieces`), so the badge, the checkboxes, `piecesLeft` and the
+  accounting read one state even if the stored ticks are behind (they catch up on the next
+  write to the part). `updatePart` refuses an explicit untick of such a piece
+  (`pieceTickError`, 400) and re-ticks covered keys a hand map leaves out
+  (`keepLoggedTicks`). Deleting or undoing the run, or editing it away from Success, frees
+  them. Whole-part runs don't lock. `PartRow` shows them checked, disabled, with a "logged"
+  tag.
 - **Spool adds** (#46): `build_filaments.spool_adds` JSON (`SpoolAdd` in `app.schema.ts`);
   `addSpool`/`removeSpoolAdd` (POST `api/builds/[id]/filaments/[role]/stock`, DELETE
   `.../stock/[addId]`) go through `mutateBuild` (kg 0.01-99, note ≤ 200 chars with control
