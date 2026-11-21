@@ -7,7 +7,7 @@ import {
 	row,
 	uniqueEmail
 } from './helpers';
-import { chooseStatus } from './status-helpers';
+import { chooseExtra, chooseStatus, offers } from './status-helpers';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -84,7 +84,7 @@ async function start(page: Page, label: string) {
 }
 
 async function openPicker(h: Locator) {
-	await h.getByTestId('plate-print-some-pieces').click();
+	await chooseExtra(h.getByTestId('plate-status'), 'plate-print-some-pieces');
 	const dlg = h.getByTestId('piece-pick');
 	await expect(dlg).toBeVisible();
 	return dlg;
@@ -153,27 +153,41 @@ test('Placement: one action, on the plate heading when the part is alone on its 
 	expect(v.plates.find((p) => p.number === PLATE)?.parts).toEqual([HARNESS]);
 	expect(v.parts.find((p) => p.slug === HARNESS)?.components).toHaveLength(N);
 
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveCount(1);
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveText('Print some pieces…');
+	await expect
+		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(true);
+	await h.getByTestId('plate-status').click();
+	const entry = h.getByTestId('plate-print-some-pieces');
+	await expect(entry).toHaveText('Print some pieces…');
+	await expect(entry).toHaveRole('menuitem');
+	await page.keyboard.press('Escape');
 	// Never both: the part row leaves its own button out.
 	await expect(row(page, HARNESS)).toBeVisible();
-	await expect(row(page, HARNESS).getByTestId('part-print-some')).toHaveCount(0);
+	await expect
+		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
+		.toBe(false);
 	// All ticked: the part is the plate's only startable part, so it is not a "parts" pick either.
-	await expect(h.getByTestId('plate-print-some')).toHaveCount(0);
+	await expect.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some')).toBe(false);
 
 	// Connectors (5 pieces) shares plate 12 with other parts: the button sits on its row, not the heading.
 	const plate12 = v.plates.find((p) => p.parts.includes('connectors'))!;
 	expect(plate12.parts.length).toBeGreaterThan(1);
 	const h12 = head(page, plate12.number);
 	await expect(h12).toBeVisible();
-	await expect(h12.getByTestId('plate-print-some-pieces')).toHaveCount(0);
-	await expect(row(page, 'connectors').getByTestId('part-print-some')).toHaveCount(1);
+	await expect
+		.poll(() => offers(h12.getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(false);
+	await expect
+		.poll(() => offers(row(page, 'connectors').getByTestId('part-status'), 'part-print-some'))
+		.toBe(true);
+	await row(page, 'connectors').getByTestId('part-status').click();
 	await expect(row(page, 'connectors').getByTestId('part-print-some')).toHaveText(
 		'Print some pieces…'
 	);
+	await page.keyboard.press('Escape');
 	await expect(row(page, 'connectors').getByTestId('plate-print-some-pieces')).toHaveCount(0);
 	// The plate's own "Print some parts…" is still there for the parts of plate 12.
-	await expect(h12.getByTestId('plate-print-some')).toHaveCount(1);
+	await expect.poll(() => offers(h12.getByTestId('plate-status'), 'plate-print-some')).toBe(true);
 });
 
 test('The picker: label, count, All and None follow the ticks', async ({ page }) => {
@@ -248,8 +262,12 @@ test('Marking 3 of 9 pieces printing: row tag, Overview card, one activity row',
 	expect(v.state[HARNESS].printingComps).toEqual([0, 1, 2]);
 	expect(ticks(v)).toEqual([]);
 	// Printing: nothing more to pick, on the heading or the row.
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveCount(0);
-	await expect(row(page, HARNESS).getByTestId('part-print-some')).toHaveCount(0);
+	await expect
+		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(false);
+	await expect
+		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
+		.toBe(false);
 
 	// Overview: the card names the pieces and shows their share of the grams.
 	await page.getByRole('link', { name: 'Overview', exact: true }).click();
@@ -283,7 +301,9 @@ test('Undo restores Printing with its piece list', async ({ page }) => {
 	await expect
 		.poll(async () => (await view(page, buildId)).state[HARNESS].printingComps ?? [])
 		.toEqual([]);
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveCount(1);
+	await expect
+		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(true);
 
 	// Mark again, take it off the printer, then undo that: the list comes back.
 	await markFirst(page, h, 3);
@@ -338,8 +358,12 @@ test('Logging 3 pieces: the part goes to To print with 3 of 9 ticked; the rest f
 			[3, 4, 5, 6, 7, 8]
 		])
 	);
-	// Printed: nothing left to pick.
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveCount(0);
+	// Printed: nothing left to pick, and the plate's badge is a plain label without a menu (so the
+	// heading is found by its text; `h` matches the interactive badge only).
+	const printed = page.locator('.group-head').filter({ hasText: `Plate ${PLATE} ·` });
+	await expect(printed.getByTestId('plate-status')).toHaveText('Printed');
+	await expect(printed.getByTestId('plate-status')).not.toHaveAttribute('aria-haspopup', 'menu');
+	await expect(printed.getByTestId('plate-print-some-pieces')).toHaveCount(0);
 });
 
 test('Mark 3 pieces printing, then log them: Success ticks exactly those pieces', async ({
@@ -412,6 +436,81 @@ test('Deleting a piece run unticks its pieces', async ({ page }) => {
 	expect(v.state[HARNESS].status).toBe('To print');
 });
 
+test('Pieces covered by a Success log are ticked and locked until the log is deleted', async ({
+	page
+}) => {
+	const { buildId, h } = await start(page, 'pclocked');
+	await logFirst(page, h, 3, 'Success');
+	await expect(tag(page)).toHaveText(`3/${N} pieces`);
+	await openDetails(page);
+	const boxes = row(page, HARNESS).locator('.comps input[type="checkbox"]');
+	await expect(boxes).toHaveCount(N);
+	const tags = row(page, HARNESS).getByTestId('piece-logged');
+	await expect(tags).toHaveCount(3);
+	for (let i = 0; i < 3; i++) {
+		await expect(boxes.nth(i)).toBeChecked();
+		await expect(boxes.nth(i)).toBeDisabled();
+		await expect(boxes.nth(i)).toHaveAccessibleDescription('logged');
+	}
+	// The other pieces are still the maker's to tick, and counting them adds to the badge.
+	for (let i = 3; i < N; i++) {
+		await expect(boxes.nth(i)).toBeEnabled();
+		await expect(boxes.nth(i)).not.toBeChecked();
+	}
+	await boxes.nth(3).check();
+	await expect(tag(page)).toHaveText(`4/${N} pieces`);
+	await boxes.nth(3).uncheck();
+	await expect(tag(page)).toHaveText(`3/${N} pieces`);
+
+	// The API refuses a hand untick of a logged piece and says what to do.
+	const res = await write(page, 'patch', `/api/builds/${buildId}/parts/${HARNESS}`, {
+		comps: { 0: false }
+	});
+	expect(res.status()).toBe(400);
+	expect(await res.text()).toContain('print log');
+	await expect(boxes.nth(0)).toBeChecked();
+
+	// Deleting the log frees them.
+	const editSheet = page.getByRole('dialog', { name: 'Edit print log' });
+	await row(page, HARNESS).getByRole('button', { name: 'Edit entry' }).first().click();
+	await expect(editSheet).toBeVisible();
+	await editSheet.getByRole('button', { name: 'Delete', exact: true }).click();
+	await editSheet.getByRole('button', { name: 'Delete log' }).click();
+	await expect(editSheet).toBeHidden();
+	await expect(tags).toHaveCount(0);
+	for (let i = 0; i < N; i++) {
+		await expect(boxes.nth(i)).toBeEnabled();
+		await expect(boxes.nth(i)).not.toBeChecked();
+	}
+	await expect(tag(page)).toHaveText(`0/${N} pieces`);
+});
+
+test('The menu entry has no check mark and is reachable by keyboard', async ({ page }) => {
+	const { h } = await start(page, 'pckeys');
+	const badge = h.getByTestId('plate-status');
+	await badge.click();
+	const menu = page.getByTestId('status-menu');
+	await expect(menu).toBeVisible();
+	const entry = menu.getByTestId('plate-print-some-pieces');
+	await expect(entry).toHaveRole('menuitem');
+	await expect(entry).not.toHaveAttribute('aria-checked');
+	await expect(entry).toHaveAccessibleName('Print some pieces of Harness and Straps');
+	await expect(entry.locator('.sb-mark')).toHaveText('');
+	await expect(menu.getByRole('menuitemradio', { checked: true })).toHaveCount(1);
+	await page.keyboard.press('Escape');
+	await expect(menu).toBeHidden();
+
+	// Keyboard only: arrow down to the entry (it is the last item), Enter opens the pick sheet.
+	await badge.focus();
+	await page.keyboard.press('Enter');
+	await expect(menu).toBeVisible();
+	await page.keyboard.press('End');
+	await expect(entry).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(menu).toBeHidden();
+	await expect(h.getByTestId('piece-pick')).toBeVisible();
+});
+
 test('Take off printer clears the piece list', async ({ page }) => {
 	const { buildId, h } = await start(page, 'pctakeoff');
 	await markFirst(page, h, 3);
@@ -423,7 +522,9 @@ test('Take off printer clears the piece list', async ({ page }) => {
 	expect(v.state[HARNESS].printingComps ?? []).toEqual([]);
 	expect(ticks(v)).toEqual([]);
 	expect(v.runs).toHaveLength(0);
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveCount(1);
+	await expect
+		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(true);
 });
 
 test('Ticking an on-printer piece by hand takes it off the print', async ({ page }) => {
@@ -487,7 +588,9 @@ test('Picking every piece still to print is the whole-part start', async ({ page
 test('Hidden for a viewer, and when fewer than two pieces are left', async ({ page, browser }) => {
 	const { buildId, chapterUrl, h } = await start(page, 'pcabsent');
 	// The control shows (guards against a vacuous "absent" below).
-	await expect(h.getByTestId('plate-print-some-pieces')).toHaveCount(1);
+	await expect
+		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(true);
 
 	// One piece left: nothing to pick (a single piece is just the part).
 	const ticked = Object.fromEntries(Array.from({ length: N - 1 }, (_, i) => [String(i), true]));
@@ -499,8 +602,12 @@ test('Hidden for a viewer, and when fewer than two pieces are left', async ({ pa
 	await page.waitForLoadState('networkidle');
 	await groupByPlate(page);
 	await expect(tag(page)).toHaveText(`${N - 1}/${N} pieces`);
-	await expect(head(page, PLATE).getByTestId('plate-print-some-pieces')).toHaveCount(0);
-	await expect(row(page, HARNESS).getByTestId('part-print-some')).toHaveCount(0);
+	await expect
+		.poll(() => offers(head(page, PLATE).getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(false);
+	await expect
+		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
+		.toBe(false);
 	// A ticked piece cannot start again.
 	const refused = await write(page, 'post', `/api/builds/${buildId}/printing`, {
 		action: 'start',
@@ -517,7 +624,9 @@ test('Hidden for a viewer, and when fewer than two pieces are left', async ({ pa
 	await page.reload();
 	await page.waitForLoadState('networkidle');
 	await groupByPlate(page);
-	await expect(head(page, PLATE).getByTestId('plate-print-some-pieces')).toHaveCount(1);
+	await expect
+		.poll(() => offers(head(page, PLATE).getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.toBe(true);
 
 	// A viewer sees the plate and the part but not the action.
 	await page.goto(chapterUrl);
@@ -624,6 +733,20 @@ for (const width of [390, 360]) {
 		const { buildId } = await ownerWithBuild(page, `pcphone${width}`);
 		await page.setViewportSize({ width, height: 800 });
 		const h = await openPrint(page, buildId);
+		// The plate heading with its status menu open does not overflow the phone.
+		await h.getByTestId('plate-status').click();
+		const menu = page.getByTestId('status-menu');
+		await expect(menu.getByTestId('plate-print-some-pieces')).toBeVisible();
+		const mb = await menu.boundingBox();
+		expect(mb!.x).toBeGreaterThanOrEqual(0);
+		expect(mb!.x + mb!.width).toBeLessThanOrEqual(width);
+		expect(
+			await page.evaluate(
+				() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+			)
+		).toBeLessThanOrEqual(0);
+		await page.keyboard.press('Escape');
+		await expect(menu).toBeHidden();
 		const dlg = await openPicker(h);
 		await expect(dlg.getByTestId('piece-pick-item')).toHaveCount(N);
 		const confirm = dlg.getByTestId('piece-pick-confirm');

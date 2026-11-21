@@ -4,7 +4,7 @@
  */
 import { today } from './format.ts';
 import { plateByNumber } from './accounting.ts';
-import type { BuildView, PartPatch, PartStatus, PrintRunInput } from './types.ts';
+import type { BuildView, PartPatch, PartState, PartStatus, PrintRunInput } from './types.ts';
 
 /** The most pieces a part's piece list may name (a sanity cap for request validation). */
 export const MAX_PIECES = 200;
@@ -97,6 +97,74 @@ export function printingPieces(view: BuildView, slug: string): number[] | null {
 	if (!raw?.length || n < 2) return null;
 	const ok = [...new Set(raw)].filter((i) => Number.isInteger(i) && i >= 0 && i < n);
 	return ok.length && ok.length < n ? ok.sort((a, b) => a - b) : null;
+}
+
+/**
+ * Pieces of `slug` that a Success piece run in the print log covers, sorted, read against the part's
+ * CURRENT components (indexes that no longer fit are ignored). The run history is the source of truth:
+ * these pieces are ticked and locked (no hand untick) until the run is deleted, undone or edited away
+ * from Success.
+ */
+export function loggedPieces(view: Pick<BuildView, 'runs' | 'parts'>, slug: string): number[] {
+	const n = view.parts.find((p) => p.slug === slug)?.components.length ?? 0;
+	const out = new Set<number>();
+	for (const r of view.runs) {
+		if (r.result !== 'Success' || r.partSlug !== slug || !r.comps?.length) continue;
+		for (const i of r.comps) if (Number.isInteger(i) && i >= 0 && i < n) out.add(i);
+	}
+	return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * `state` with every piece a Success piece run covers ticked (see `loggedPieces`). The view builder
+ * applies it, so a build whose stored ticks lack a logged piece (a run edited, an old write) shows and
+ * counts it ticked; the stored ticks catch up on the next write to the part. Returns `state` itself
+ * when nothing is missing.
+ */
+export function tickLoggedPieces(
+	view: Pick<BuildView, 'runs' | 'parts'>,
+	state: Record<string, PartState>
+): Record<string, PartState> {
+	if (!view.runs.some((r) => r.result === 'Success' && r.comps?.length)) return state;
+	let out = state;
+	for (const slug of Object.keys(state)) {
+		const logged = loggedPieces(view, slug);
+		const cur = state[slug].comps ?? {};
+		if (logged.every((i) => cur[String(i)])) continue;
+		if (out === state) out = { ...state };
+		out[slug] = {
+			...state[slug],
+			comps: { ...cur, ...Object.fromEntries(logged.map((i) => [String(i), true])) }
+		};
+	}
+	return out;
+}
+
+/**
+ * Why a hand write of `comps` for `slug` is refused, or null: a piece a Success run covers cannot be
+ * unticked (delete or undo the run instead). Only an explicit `false` counts; a key left out is ticked
+ * again by `keepLoggedTicks`.
+ */
+export function pieceTickError(
+	view: Pick<BuildView, 'runs' | 'parts'>,
+	slug: string,
+	comps: Record<string, boolean>
+): string | null {
+	const bad = loggedPieces(view, slug).filter((i) => comps[String(i)] === false);
+	if (!bad.length) return null;
+	return `${bad.length === 1 ? 'Piece' : 'Pieces'} ${bad.map((i) => i + 1).join(', ')} ${bad.length === 1 ? 'is' : 'are'} logged in the print log and cannot be unticked; delete or undo that log first`;
+}
+
+/** `comps` with the pieces a Success run covers ticked (a hand write never drops them). */
+export function keepLoggedTicks(
+	view: Pick<BuildView, 'runs' | 'parts'>,
+	slug: string,
+	comps: Record<string, boolean>
+): Record<string, boolean> {
+	const logged = loggedPieces(view, slug);
+	return logged.length
+		? { ...comps, ...Object.fromEntries(logged.map((i) => [String(i), true])) }
+		: comps;
 }
 
 /** Indexes of a part's pieces that are not ticked yet, in order. */

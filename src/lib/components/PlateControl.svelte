@@ -8,7 +8,7 @@
 	import StartOnPrinter from './StartOnPrinter.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import PartPickSheet, { type PickItem } from './PartPickSheet.svelte';
-	import PartPiecesAction from './PartPiecesAction.svelte';
+	import PartPiecesAction, { piecesOffered } from './PartPiecesAction.svelte';
 
 	/**
 	 * THE status / start / finish / log control for a plate, used on the Print tab (plate headings and
@@ -21,7 +21,8 @@
 	 *  - **Printed**: the finish-and-log sheet (Success preselected)
 	 *  - **To print**: take the parts off the printer without a log
 	 *
-	 * plus a small "Log a print…" action while nothing is on the printer. Start and Take off are
+	 * plus, below the statuses, "Print some parts…" or "Print some pieces…" where they apply (menu
+	 * entries, not statuses), and a small "Log a print…" action while nothing is on the printer. Start and Take off are
 	 * optimistic and offer Undo (see `BuildCtx.startParts` / `takeOffParts`). Editors get the menu;
 	 * viewers see the plain badge.
 	 *
@@ -155,6 +156,29 @@
 	const pieceSlug = $derived(
 		pieces && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length === 1 ? idle[0] : null
 	);
+	// The status menu's extra actions (below the statuses): "Print some parts…" or "Print some pieces…".
+	let piecesPicking = $state(false);
+	const offerPieces = $derived(!!pieceSlug && piecesOffered(ctx, pieceSlug));
+	const extras = $derived.by(() => {
+		const out: { label: string; testid: string; ariaLabel: string; run: () => void }[] = [];
+		if (canPickSome)
+			out.push({
+				label: 'Print some parts…',
+				testid: 'plate-print-some',
+				ariaLabel: `Print some parts of plate ${plate.number}`,
+				run: () => (picking = true)
+			});
+		if (offerPieces && pieceSlug) {
+			const pn = ctx.view.parts.find((x) => x.slug === pieceSlug)?.name ?? pieceSlug;
+			out.push({
+				label: 'Print some pieces…',
+				testid: 'plate-print-some-pieces',
+				ariaLabel: `Print some pieces of ${pn}`,
+				run: () => (piecesPicking = true)
+			});
+		}
+		return out;
+	});
 	// Some parts: one start for exactly them. All of what is left is the plate's own Printing action,
 	// unless parts of the plate are already Printed or on the printer: then the job is still only for
 	// the parts being started, so it takes the same path as a pick.
@@ -201,6 +225,7 @@
 		{options}
 		interactive={ctx.canEdit}
 		onpick={pick}
+		{extras}
 		testid="plate-status"
 	/>
 	{#if ctx.canEdit}
@@ -212,20 +237,10 @@
 				onclick={() => (open = true)}>Log a print…</button
 			>
 		{/if}
-		{#if canPickSome}
-			<button
-				class="{cls} ghost plc-text"
-				type="button"
-				data-testid="plate-print-some"
-				aria-label="Print some parts of plate {plate.number}"
-				onclick={() => (picking = true)}>Print some parts…</button
-			>
-		{/if}
 		{#if pieceSlug}
 			<PartPiecesAction
 				slug={pieceSlug}
-				cls="{cls} ghost plc-text"
-				testid="plate-print-some-pieces"
+				bind:picking={piecesPicking}
 				onwhole={() => pick('Printing')}
 			/>
 		{/if}

@@ -2,14 +2,14 @@
 	import { PART_STATUSES, type PartDef, type PrintRun } from '#lib/domain/types.ts';
 	import { fmt, partGrams, plateOf } from '#lib/domain/index.ts';
 	import { parseGrams, partRuns } from '#lib/domain/logrun.ts';
-	import { betweenRuns, printingPieces, runTargets } from '#lib/domain/actions.ts';
+	import { betweenRuns, loggedPieces, printingPieces, runTargets } from '#lib/domain/actions.ts';
 	import { updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
 	import RunTable from './RunTable.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
 	import PlateControl from './PlateControl.svelte';
-	import PartPiecesAction from './PartPiecesAction.svelte';
+	import PartPiecesAction, { piecesOffered } from './PartPiecesAction.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import StartOnPrinter from './StartOnPrinter.svelte';
 	import { focusIn } from '#lib/client/focus.ts';
@@ -29,6 +29,7 @@
 	} = $props();
 
 	const ctx = getBuildCtx();
+	const uid = $props.id();
 	let open = $state(false);
 	let copied = $state('Copy');
 	// Set by the Print tab when a #part-slug link points here: expand the detail and flash the row.
@@ -40,7 +41,11 @@
 	const fil = $derived(ctx.filament(part.role));
 	const plate = $derived(plateOf(ctx.view, part.slug));
 	const onPrinter = $derived(printingPieces(ctx.view, part.slug));
-	const doneComps = $derived(part.components.filter((_, i) => st?.comps[i]).length);
+	// Pieces a Success print log covers: ticked and locked until that log is deleted or undone.
+	const locked = $derived(new Set(loggedPieces(ctx.view, part.slug)));
+	const doneComps = $derived(
+		part.components.filter((_, i) => st?.comps[i] || locked.has(i)).length
+	);
 	const log = $derived(partRuns(ctx.view, part.slug));
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
@@ -56,6 +61,7 @@
 			).length === 1
 	);
 	let where = $state(false);
+	let piecesPicking = $state(false);
 	// Printing: with a printer connected (and the part on a plate) ask where; else mark it directly.
 	function pickStatus(s: string) {
 		if (s === 'Printing' && hasPrinter && plate) where = true;
@@ -209,18 +215,32 @@
 						? ` · ${onPrinter.length} printing`
 						: ''}</span
 				>
-				{#if !plateOffersPieces}
-					<PartPiecesAction slug={part.slug} onwhole={() => pickStatus('Printing')} />
-				{/if}
 			{/if}
 		</div>
 		<div class="pr-actions">
+			{#if part.components.length && !plateOffersPieces}
+				<PartPiecesAction
+					slug={part.slug}
+					bind:picking={piecesPicking}
+					onwhole={() => pickStatus('Printing')}
+				/>
+			{/if}
 			<StatusBadge
 				label={part.name}
 				status={st?.status ?? 'To print'}
 				options={[...PART_STATUSES]}
 				interactive={ctx.canEdit}
 				onpick={pickStatus}
+				extras={part.components.length && !plateOffersPieces && piecesOffered(ctx, part.slug)
+					? [
+							{
+								label: 'Print some pieces…',
+								testid: 'part-print-some',
+								ariaLabel: `Print some pieces of ${part.name}`,
+								run: () => (piecesPicking = true)
+							}
+						]
+					: []}
 				testid="part-status"
 				small
 			/>
@@ -296,8 +316,10 @@
 							<label>
 								<input
 									type="checkbox"
-									checked={!!st?.comps[i]}
-									disabled={!ctx.canEdit}
+									checked={!!st?.comps[i] || locked.has(i)}
+									disabled={!ctx.canEdit || locked.has(i)}
+									title={locked.has(i) ? 'Logged in the print log' : undefined}
+									aria-describedby={locked.has(i) ? `${uid}-lock-${i}` : undefined}
 									onchange={(e) => {
 										const on = e.currentTarget.checked;
 										ctx.act(() =>
@@ -311,7 +333,11 @@
 										>{c.settings}{c.file ? ` · ${c.file}` : ''}{onPrinter?.includes(i)
 											? ' · on the printer'
 											: ''}</small
-									></span
+									>{#if locked.has(i)}<span
+											class="pr-logged"
+											id="{uid}-lock-{i}"
+											data-testid="piece-logged">logged</span
+										>{/if}</span
 								>
 							</label>
 						{/each}
@@ -398,6 +424,17 @@
 </div>
 
 <style>
+	.pr-logged {
+		display: inline-block;
+		margin-inline-start: var(--sp-3);
+		padding: 0 var(--sp-3);
+		border: 1px solid var(--line);
+		border-radius: var(--r-md);
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		color: var(--muted, inherit);
+		white-space: nowrap;
+	}
 	/* Touch sizes on phones (coarse pointer only, so desktop rows stay as tall as before). The part
 	   name keeps its font; its button grows to 44px and the negative margin cancels the extra height. */
 	@media (pointer: coarse) {
