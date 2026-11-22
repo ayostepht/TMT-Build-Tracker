@@ -464,7 +464,15 @@ Route each to the agent named in brackets.
   (edits autosave); undo stays palette-only; the generator is collapsed by default.
 - Existing builds keep their own role names (no migration for the TPU rename).
 - Filament catalog: PETG/PCTG/TPU only from vendor supplements, no PLA. Schoolhouse Spools
-  stays (approx. hexes, marked "Approx. color") and is a popular brand.
+  stays (approx. hexes, marked "Approx. color") and is a popular brand. Space Coast 3D
+  (PETG 7, TPU 95A 4; hexes estimated from photos) and Dancyn 3D Prints (PETG 24, store
+  hexes; no TPU sold) were added 2026-11-22 as official MakeGood suppliers and follow
+  Schoolhouse Spools in `POPULAR_BRANDS`. Left out: Space Coast's TPU Aero Foam (60–90A)
+  and the Ziro PLA Dancyn resells. The catalog was merged without a SpoolmanDB refresh
+  (snapshot 2026-11-16; a refresh would rename many unrelated colors, a separate decision).
+  Space Coast's TPU 95A Crystal Clear (`#968b7a`), PETG Gloss Hot Pink and TPU Bubblegum
+  Pink each have one dim photo; correct them in `scripts/vendor-hex-overrides.json` if a
+  maker reports the swatch is off.
 - Action links are buttons or clickable badges; plain text links only inside sentences.
 - Printers are read-only. Sole exception: Elegoo SDCP Cmd 386 `{"Enable":1}` to turn the
   camera on when someone views it. Never move, heat, pause, stop or start a print.

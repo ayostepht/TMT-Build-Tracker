@@ -232,9 +232,11 @@ export function wantedBrands(opts: { brand?: string; brands?: string[] }): strin
 	return out;
 }
 
-/** Brands that most makers can actually buy (Schoolhouse Spools sells TMT kits); a small nudge when no brand is chosen. */
+/** Brands that most makers can actually buy (Schoolhouse Spools, Space Coast 3D and Dancyn 3D Prints are official MakeGood suppliers); a small nudge when no brand is chosen. */
 export const POPULAR_BRANDS = [
 	'Schoolhouse Spools',
+	'Space Coast 3D',
+	'Dancyn 3D Prints',
 	'Overture',
 	'Bambu Lab',
 	'Elegoo',

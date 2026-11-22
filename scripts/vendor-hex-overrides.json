@@ -1,0 +1,46 @@
+{
+	"petg-transparent-amethyst-purple|Transparent Amethyst Purple": {
+		"hex": "#a971d2",
+		"hexSource": "image"
+	},
+	"petg-transparent-ruby-red|Transparent Ruby Red": {
+		"hex": "#c4292a",
+		"hexSource": "image"
+	},
+	"petg-gloss-klein-blue|Gloss Klein Blue": {
+		"hex": "#143c80",
+		"hexSource": "image"
+	},
+	"petg-transparent-turquoise-blue|Transparent Turquoise Blue": {
+		"hex": "#0e86c9",
+		"hexSource": "image"
+	},
+	"petg-gloss-hot-pink|Gloss Hot Pink": {
+		"hex": "#a6465b",
+		"hexSource": "image"
+	},
+	"tpu-95a-crystal-clear|Crystal Clear": {
+		"hex": "#968b7a",
+		"hexSource": "image"
+	},
+	"tpu-95a-eclipse-black|Eclipse Black": {
+		"hex": "#2b2a2a",
+		"hexSource": "image"
+	},
+	"tpu-95a-bubblegum-pink|Bubblegum Pink": {
+		"hex": "#b16b62",
+		"hexSource": "image"
+	},
+	"tpu-95a-royal-blue|Royal Blue": {
+		"hex": "#043866",
+		"hexSource": "image"
+	},
+	"petg-transparent-hot-pink|Transparent Hot Pink": {
+		"hex": "#da446a",
+		"hexSource": "image"
+	},
+	"petg-transparent-light-pink|Transparent Light Pink": {
+		"hex": "#c38c8e",
+		"hexSource": "image"
+	}
+}

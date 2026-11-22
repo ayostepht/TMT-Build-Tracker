@@ -624,12 +624,20 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   `scripts/fetch-vendor-filaments.mjs` regenerates the supplement (`--fetch-pages`,
   `--pages-dir`, `--sample-images` needs sharp, `--hex-overrides`).
 - Supplement: Overture (28 TPU + Matte Digital Blue, store hexes), Schoolhouse Spools (34,
-  hexes estimated from photos, `hexSource: 'image'`). Filascope hexes are category buckets,
-  not used.
+  hexes estimated from photos, `hexSource: 'image'`), Space Coast 3D (7 PETG + 4 TPU 95A; one
+  product per color, the color comes from the product title, `titleColor`; only 95A TPU,
+  `onlyHardness`; hexes sampled from product photos and kept in
+  `scripts/vendor-hex-overrides.json`, which the script reads by default) and Dancyn 3D
+  Prints (24 PETG; store hexes parsed from the home page's swatch markup, `swatchPage`).
+  `--from-dir DIR` (`<key>.json`, `<key>.swatches.html`) regenerates a vendor offline.
+  `update-filaments.mjs` has no merge-only mode: the 2026-11-22 catalog is the 2026-11-16
+  SpoolmanDB snapshot run through `mergeSupplement` with a new `fetchedAt`. Filascope hexes
+  are category buckets, not used.
 - `/api/filaments*`: `private, no-cache` + ETag from the catalog `fetchedAt` (304 when
   unchanged); client URL has `v=2`. `loadSwatches` has a 20 s timeout + retry + "Try again".
 - Custom filaments per workspace (`custom.ts`). Browser helpers `src/lib/filament-catalog.ts`;
-  UI `FilamentPicker.svelte`. `POPULAR_BRANDS` starts with Schoolhouse Spools.
+  UI `FilamentPicker.svelte`. `POPULAR_BRANDS` (`src/lib/domain/palettes.ts`) starts with the MakeGood suppliers:
+  Schoolhouse Spools, Space Coast 3D, Dancyn 3D Prints.
 
 ## Kit and startup (`kit-and-startup`)
 

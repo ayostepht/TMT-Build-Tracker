@@ -7,6 +7,9 @@ import {
 	classifyProduct,
 	convertPages,
 	parseProductPage,
+	parseSwatchPage,
+	swatchOverrides,
+	VENDORS,
 	sampleImageHex,
 	fetchProducts,
 	mergeBrands
@@ -404,5 +407,102 @@ describe('bundled catalog', () => {
 				.find((b) => b.name === 'Schoolhouse Spools')!
 				.materials[0].colors.every((c) => c.hexSource === 'image')
 		).toBe(true);
+	});
+});
+
+describe('Space Coast 3D and Dancyn 3D Prints', () => {
+	it('reads the color from a one-color-per-product title and keeps only 95A TPU', () => {
+		const tc = VENDORS.spacecoast.titleColor;
+		const one = (title: string, extra = {}) => ({
+			title,
+			handle: title.toLowerCase().replace(/\W+/g, '-'),
+			product_type: title.startsWith('TPU') ? 'TPU 95A UHF' : 'PETG',
+			options: [{ name: 'Pack' }],
+			variants: [{ option1: 'Single' }, { option1: 'Case of 10' }],
+			images: [{ src: 'https://cdn.example/x.jpg' }],
+			...extra
+		});
+		const skipped: { product: string; reason: string }[] = [];
+		const products = [
+			one('PETG — Transparent Ruby Red'),
+			one('TPU 95A UHF — Royal Blue'),
+			one('TPU Aero Foam 60-90A', { product_type: 'TPU Aero Foam' }),
+			one('Make Good TMT Full Build Kit')
+		];
+		const overrides: Record<string, { hex: string; hexSource: 'image' }> = {
+			'petg-transparent-ruby-red|Transparent Ruby Red': { hex: '#c4292a', hexSource: 'image' },
+			'tpu-95a-uhf-royal-blue|Royal Blue': { hex: '#043866', hexSource: 'image' }
+		};
+		const b = buildSupplementBrand('spacecoast', products, {
+			hexOverrides: overrides,
+			skipped,
+			fetchedAt
+		});
+		expect(b.name).toBe('Space Coast 3D');
+		expect(b.materials.map((m) => [m.material, m.colors.map((c) => c.name)])).toEqual([
+			['PETG', ['Transparent Ruby Red']],
+			['TPU', ['95A Royal Blue']]
+		]);
+		expect(b.materials[0].colors[0]).toMatchObject({ translucent: true, hexSource: 'image' });
+		expect(skipped.map((x) => x.product)).toEqual([
+			'TPU Aero Foam 60-90A',
+			'Make Good TMT Full Build Kit'
+		]);
+		expect(tc).toBeInstanceOf(RegExp);
+		expect(
+			classifyProduct(product('TPU 85A Soft', []), 'X', { onlyHardness: '95A' })
+		).toHaveProperty('skip');
+		expect(classifyProduct(product('TPU 85A Soft', []), 'X')).toHaveProperty('material', 'TPU');
+	});
+	it('takes the merchant hex from the swatch markup (Dancyn) and drops the translucent dash', () => {
+		const html = `<a
+ href="/products/petg-translucent?variant=1" class="swatch-color block relative"
+ title="PETG Translucent - Translucent - Rose Crystal"
+ style="--swatch-background: #F4B3B5;"></a><a href="/products/petg-hf?variant=2"
+ class="swatch-color block" title="PETG HF - Stessy&#39;s Hot Pink" style="--swatch-background: #ff6db3;"></a>`;
+		const sw = parseSwatchPage(html);
+		expect(sw).toHaveLength(2);
+		const products = [
+			{
+				title: 'PETG Translucent',
+				handle: 'petg-translucent',
+				options: [{ name: 'Color' }],
+				variants: [{ option1: 'Translucent - Rose Crystal' }],
+				images: []
+			},
+			{
+				title: 'PETG HF',
+				handle: 'petg-hf',
+				options: [{ name: 'Color' }, { name: 'Style' }],
+				variants: [
+					{ option1: "Stessy's Hot Pink", option2: 'With Spool' },
+					{ option1: "Stessy's Hot Pink", option2: 'Refill (No Spool)' }
+				],
+				images: []
+			}
+		];
+		const b = buildSupplementBrand('dancyn', products, {
+			hexOverrides: swatchOverrides(sw, products),
+			fetchedAt
+		});
+		expect(b.materials).toHaveLength(1);
+		expect(b.materials[0].colors).toEqual([
+			{ name: "Stessy's Hot Pink", hex: '#ff6db3', hexSource: 'store' },
+			{ name: 'Translucent Rose Crystal', hex: '#f4b3b5', hexSource: 'store', translucent: true }
+		]);
+	});
+	it('the bundled catalog lists both vendors and PETG / TPU only', () => {
+		const sc = swatches('petg').filter((t) => t[0] === 'Space Coast 3D');
+		const dc = swatches('petg').filter((t) => t[0] === 'Dancyn 3D Prints');
+		expect(sc.length).toBe(7);
+		expect(dc.length).toBeGreaterThanOrEqual(20);
+		expect(swatches('tpu').filter((t) => t[0] === 'Space Coast 3D').length).toBeGreaterThanOrEqual(
+			4
+		);
+		for (const name of ['Space Coast 3D', 'Dancyn 3D Prints']) {
+			const brand = (supplementFile as FilamentSupplement).brands.find((x) => x.name === name)!;
+			expect(brand.sourceUrl).toMatch(/^https:\/\//);
+			expect(brand.materials.every((m) => ['PETG', 'TPU'].includes(m.material))).toBe(true);
+		}
 	});
 });
