@@ -55,7 +55,7 @@ _Updated 2026-11-22, 20:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **Follow-up to #101 merged 2026-11-22:** #102 (b21d269): section text keeps typed line
   breaks, "Try again" when drawing fails, "Download started." note. Not on the test copy.
 - **In flight:** nothing in this repository.
-- **In flight too: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
+- **Open pull request from another session: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
   (branch `claude/cool-davinci-qce08y` into `edge`; no schema change). It holds the catalog
   data and picker order, and the hosted edition's compact color picker ported into
   `SwatchPicker.svelte` in this edition's colors (maintainer, 2026-11-22, after comparing
