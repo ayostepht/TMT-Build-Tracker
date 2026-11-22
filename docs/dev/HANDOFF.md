@@ -43,8 +43,13 @@ _Updated 2026-11-22. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
   on any key press, and the follow-up commit (refusal line pinned in view on a phone and
   limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
 - **In flight: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
-  (branch `claude/cool-davinci-qce08y` into `edge`; data and picker order only, no schema
-  change; agent checks and `verifier` passed). This session merges it when CI is green (check its state
+  (branch `claude/cool-davinci-qce08y` into `edge`; the catalog data and picker order, plus a color picker
+  fix the new swatches exposed: a hovered swatch with a note made the detail row taller
+  and moved the grid from under the pointer, so `design.spec.ts:159` failed in CI; the row
+  now reserves its height, with an e2e check in `swatch-picker.spec.ts`. No schema change).
+  **Question open for the maintainer before the merge:** keep this fix (full note text,
+  detail row about 12 px taller on a phone) or use the hosted edition's compact version
+  (fixed height, one clipped note line with a tooltip) so both editions match. Merge it when CI is green and the question is answered (check its state
   first; if it is merged, nothing is in flight here); it reaches the test copy with the
   next `edge` deploy. The same change is open in the hosted edition as its #40 (branch
   `feat/filaments-space-coast-dancyn` into `main`, checks passed there); that project's

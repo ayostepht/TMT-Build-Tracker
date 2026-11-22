@@ -482,6 +482,12 @@ Route each to the agent named in brackets.
   Space Coast's TPU 95A Crystal Clear (`#968b7a`), PETG Gloss Hot Pink and TPU Bubblegum
   Pink each have one dim photo; correct them in `scripts/vendor-hex-overrides.json` if a
   maker reports the swatch is off.
+- Color picker detail row (2026-11-22, #100): the row keeps one height while swatches are
+  hovered or focused. A hidden ghost row reserves the longest note among the swatches in
+  view and an `.otherslot` row is reserved when merged swatches are in view. The notes
+  class is `dnotes` because the global `.notes` and `.detail` rules in `app.css` leak into
+  components (the picker's `.detail` still inherits their padding and dashed top border).
+  The hosted edition solves the same thing with a fixed-height row and one clipped line.
 - Action links are buttons or clickable badges; plain text links only inside sentences.
 - Printers are read-only. Sole exception: Elegoo SDCP Cmd 386 `{"Enable":1}` to turn the
   camera on when someone views it. Never move, heat, pause, stop or start a print.

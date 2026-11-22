@@ -563,7 +563,11 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   (newest pick only; cleared on the next pick and when the picker opens or closes,
   `pickEpoch`), shown as `p.pickerr`: sticky under the pinned stage on phones, static above
   the card from 900 px, `aria-hidden` because the build layout's `role="alert"` banner
-  announces it. `SwatchPicker.onpick` may return a promise of success; on `false` the detail
+  announces it. The picker's detail row is a ghost-sized stack: a hidden ghost row reserves
+  the longest Approx. / Palettes-skip note among the swatches shown, and the "Other brands"
+  disclosure and `swatch-also` text live in `.otherslot`, reserved whenever merged swatches
+  are in view, so hover and focus never move the grid (e2e: `swatch-picker.spec.ts`).
+  `SwatchPicker.onpick` may return a promise of success; on `false` the detail
   row drops the refused swatch. Swatches ignore touch for the hover preview (`touching`,
   reset by any key press) and `.sw:hover` applies only under `@media (hover: hover)`.
 - **Swatch picker** (`domain/swatch-picker.ts`): `exclusionReason` (TPU 95A only, no
