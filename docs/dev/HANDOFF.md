@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-22, 18:30 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-22, 20:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -42,12 +42,27 @@ _Updated 2026-11-22, 18:30 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   pull request, to bring back there: the `finally` around the save, clearing the touch flag
   on any key press, and the follow-up commit (refusal line pinned in view on a phone and
   limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
-- **In flight:** nothing in this repository. The report behind #95 is explained: the
+- **Also merged into `edge` 2026-11-22:** #101 "Share a picture of a build's colors"
+  (76a65c0; closes #99; browser only, no schema, server or dependency change). The
+  maintainer approved the renderings in the session (family card; social square, portrait
+  and tall with text sections; default texts say "Toddler Mobility Trainer", not "TMT").
+  **Not on the test copy yet.** Unchecked: the system share sheet on a real iPhone and
+  Android phone (headless Chromium has no file sharing).
+- **Hosted edition port of #101:** its #41 (branch `feat/share-picture`, head 21e6117) is
+  open and **not to be merged yet** (maintainer, 2026-11-22): wait for its `e2e`, the
+  maintainer's phone check of the share sheet on the `edge` image, and the port of the
+  follow-up below. Open question there: the button also shows in the demo (recommended:
+  keep it).
+- **In flight:** a small follow-up to #101 on branch `claude/sweet-johnson-59ma1x`: line
+  breaks in a section's text are flattened into one paragraph; no "Try again" when drawing
+  or encoding fails (only when the 3D shot fails); "Saved to your downloads" shows even if
+  the browser blocked the download. Then port it into the hosted edition's #41.
+- The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** deploy `edge` 41513e7 to the test copy (with the maintainer's OK; needs a
+- **Next step:** finish the #101 follow-up (above); deploy `edge` (76a65c0 or later) to the test copy (with the maintainer's OK; needs a
   machine with `CLAUDE.local.md`), then the maintainer tests swatch taps on an iPhone (the
-  touch change is unconfirmed on iOS Safari); then pick from the follow-ups below or STATUS
+  touch change is unconfirmed on iOS Safari) and Share a picture's share sheet; then pick from the follow-ups below or STATUS
   "Next steps".
 - CI: an `image` job once hung in build-push for 25+ min (normal is ~4 min); cancel and re-run it.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
