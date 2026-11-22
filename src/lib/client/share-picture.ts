@@ -129,7 +129,18 @@ function layoutText(
 	lh: number,
 	maxLines = 2
 ): TextBlock {
-	const f = fitText(text, measurer(c, weight, family), { sizes, maxWidth, maxLines });
+	const measure = measurer(c, weight, family);
+	// A headline reads best on one line: take it when it fits at 80% of the largest size or more.
+	const oneLine =
+		maxLines > 1
+			? fitText(text, measure, {
+					sizes: sizes.filter((s) => s >= sizes[0] * 0.8),
+					maxWidth,
+					maxLines: 1
+				})
+			: null;
+	const f =
+		oneLine && !oneLine.truncated ? oneLine : fitText(text, measure, { sizes, maxWidth, maxLines });
 	const lineHeight = Math.round(f.size * lh);
 	return { lines: f.lines, size: f.size, lineHeight, height: f.lines.length * lineHeight };
 }
@@ -149,7 +160,9 @@ function drawText(
 	c.textAlign = align;
 	c.textBaseline = 'alphabetic';
 	// Baseline of the first line: centered in its line box (ascent ~ 0.8 em).
-	b.lines.forEach((l, i) => c.fillText(l, x, top + i * b.lineHeight + b.size * 0.86 + (b.lineHeight - b.size) / 2));
+	b.lines.forEach((l, i) =>
+		c.fillText(l, x, top + i * b.lineHeight + b.size * 0.86 + (b.lineHeight - b.size) / 2)
+	);
 }
 
 function drawChair(
@@ -295,7 +308,7 @@ function drawSocial(c: CanvasRenderingContext2D, chair: Cropped, i: PictureInput
 	c.fillRect(0, 0, W, H);
 
 	let y = m;
-	const tb = layoutText(c, title, 700, DISPLAY, [120, 104, 90, 76], inner, 0.98);
+	const tb = layoutText(c, title, 700, DISPLAY, [120, 108, 96, 84, 72], inner, 0.98);
 	if (tb.lines.length) {
 		c.fillStyle = pal.accent;
 		rrect(c, m, y, 96, 10, 5);
@@ -329,7 +342,17 @@ function drawSocial(c: CanvasRenderingContext2D, chair: Cropped, i: PictureInput
 		{ x: panel.x + 36, y: panel.y + 28, w: panel.w - 72, h: panel.h - 56 - swatchBand },
 		true
 	);
-	if (n) drawSwatches(c, i.swatches, panel.x + panel.w / 2, panel.y + panel.h - 24 - d / 2, d, 16, '#ffffff', '#d9dce4');
+	if (n)
+		drawSwatches(
+			c,
+			i.swatches,
+			panel.x + panel.w / 2,
+			panel.y + panel.h - 24 - d / 2,
+			d,
+			16,
+			'#ffffff',
+			'#d9dce4'
+		);
 
 	// Credit, one line, shrunk to fit.
 	const cb = layoutText(c, spec.credit, 500, BODY, [22, 20, 18], inner, 1, 1);
@@ -376,7 +399,9 @@ export function canShareImages(): boolean {
 	try {
 		if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
 		if (typeof navigator.canShare !== 'function') return false;
-		return navigator.canShare({ files: [new File([new Blob(['x'])], 'x.png', { type: 'image/png' })] });
+		return navigator.canShare({
+			files: [new File([new Blob(['x'])], 'x.png', { type: 'image/png' })]
+		});
 	} catch {
 		return false;
 	}

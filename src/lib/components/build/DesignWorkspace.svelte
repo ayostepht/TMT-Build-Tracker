@@ -9,6 +9,7 @@
 		paletteReset,
 		roleBlockedReason
 	} from '#lib/domain/design.ts';
+	import { swatchColors } from '#lib/domain/share-picture.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import { getArrangement, setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
 	import { createCoalescer } from '#lib/client/coalesce.ts';
@@ -152,6 +153,8 @@
 		return out;
 	});
 	const hidden = $derived(hiddenSlugs(live));
+	/** Distinct colors of the visible parts, most used first: the swatches of "Share a picture". */
+	const pictureSwatches = $derived(swatchColors(live, colors));
 	const stats = $derived(filamentStats(live));
 	const part = $derived(live.allParts.find((p) => p.slug === selected) ?? null);
 
@@ -428,6 +431,13 @@
 		<DesignActions
 			{embedded}
 			snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
+			picture={ctx.view.model
+				? {
+						// Transparent, no selection highlight; the picture trims and places the chair itself.
+						shot: () => stage!.snapshot({ width: 2200, height: 1650, clean: true }),
+						swatches: pictureSwatches
+					}
+				: undefined}
 		/>
 		<div
 			class="ds-seg ds-seg--fill dw-tabs"

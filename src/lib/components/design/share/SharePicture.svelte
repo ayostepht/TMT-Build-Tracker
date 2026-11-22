@@ -139,7 +139,7 @@
 </script>
 
 <div class="sp" data-testid="share-picture">
-	<div class="ds-seg ds-seg--fill" role="group" aria-label="Layout">
+	<div class="ds-seg ds-seg--fill sp-seg" role="group" aria-label="Layout">
 		{#each VARIANT_IDS as v (v)}
 			<button
 				type="button"
@@ -211,9 +211,9 @@
 	</div>
 
 	<p class="muted sp-privacy" id="{uid}-privacy">
-		The picture only contains what you type here, the chair, its colors and a credit to MakeGood.
-		No build, team, recipient or filament names. It uses the angle shown in the 3D view and is made
-		on this device; nothing is uploaded.
+		The picture only contains what you type here, the chair, its colors and a credit to MakeGood. No
+		build, team, recipient or filament names. It uses the angle shown in the 3D view and is made on
+		this device; nothing is uploaded.
 	</p>
 
 	<div class="sp-actions">
@@ -256,7 +256,7 @@
 		justify-self: center;
 		width: 100%;
 		/* The frame keeps the picture's shape and never grows past the screen height. */
-		max-height: 52dvh;
+		max-height: 46dvh;
 		border-radius: var(--r-lg);
 		overflow: hidden;
 		background: var(--accent-soft);
@@ -320,10 +320,20 @@
 		margin: 0;
 		font-size: var(--fs-sm);
 	}
-	/* Wide dialog: picture beside the controls. */
-	@media (min-width: 900px) {
-		.sp-frame {
-			max-height: 62dvh;
+	/* Roomy dialog: the picture beside its controls. */
+	@media (min-width: 761px) {
+		.sp {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+			column-gap: var(--sp-8);
+			align-items: start;
+		}
+		.sp > * {
+			grid-column: 2;
+		}
+		.sp > .sp-frame {
+			grid-column: 1;
+			grid-row: 1 / span 8;
+			max-height: calc(100dvh - 190px);
 		}
 	}
 </style>
