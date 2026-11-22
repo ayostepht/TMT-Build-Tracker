@@ -3,7 +3,11 @@ import {
 	VARIANTS,
 	cleanText,
 	contrastRatio,
+	SOCIAL_SIZES,
+	drawnSections,
+	fitSections,
 	fitText,
+	pictureDims,
 	mimeOf,
 	pictureFileName,
 	readableOn,
@@ -25,7 +29,9 @@ describe('variants and files', () => {
 	});
 	it('names files and mime types', () => {
 		expect(pictureFileName('family', 'png')).toBe('tmt-chair-family.png');
-		expect(pictureFileName('social', 'jpeg')).toBe('tmt-chair-social.jpg');
+		expect(pictureFileName('social', 'jpeg')).toBe('tmt-chair-social-square.jpg');
+		expect(pictureFileName('social', 'png', 'story')).toBe('tmt-chair-social-story.png');
+		expect(pictureFileName('social', 'png', 'portrait')).toBe('tmt-chair-social-portrait.png');
 		expect(mimeOf('jpeg')).toBe('image/jpeg');
 		expect(mimeOf('png')).toBe('image/png');
 	});
@@ -123,6 +129,79 @@ describe('fitText', () => {
 			const r = fitText(t, mono, o);
 			expect(r.lines.length).toBeLessThanOrEqual(2);
 			for (const l of r.lines) expect(mono(l, r.size)).toBeLessThanOrEqual(400);
+		}
+	});
+});
+
+describe('social sizes and sections', () => {
+	it('has the three sizes with their limits and story safe areas', () => {
+		expect([SOCIAL_SIZES.square.width, SOCIAL_SIZES.square.height]).toEqual([1080, 1080]);
+		expect([SOCIAL_SIZES.portrait.width, SOCIAL_SIZES.portrait.height]).toEqual([1080, 1350]);
+		expect([SOCIAL_SIZES.story.width, SOCIAL_SIZES.story.height]).toEqual([1080, 1920]);
+		expect(SOCIAL_SIZES.square.maxSections).toBe(0);
+		expect(SOCIAL_SIZES.portrait.maxSections).toBe(1);
+		expect(SOCIAL_SIZES.story.maxSections).toBe(3);
+		expect(SOCIAL_SIZES.story.safeTop).toBeGreaterThanOrEqual(250);
+		expect(SOCIAL_SIZES.story.safeBottom).toBeGreaterThanOrEqual(340);
+		expect(pictureDims('family', 'story')).toMatchObject({ width: 1600, height: 2000 });
+		expect(pictureDims('social', 'story').height).toBe(1920);
+	});
+	it('draws only the sections the size allows, with something typed', () => {
+		const s = [
+			{ heading: 'A', body: '' },
+			{ heading: '', body: '  ' },
+			{ heading: 'C', body: 'c' },
+			{ heading: 'D', body: 'd' }
+		];
+		expect(drawnSections(s, 'square')).toEqual([]);
+		expect(drawnSections(s, 'portrait')).toEqual([{ heading: 'A', body: '' }]);
+		expect(drawnSections(s, 'story').map((x) => x.heading)).toEqual(['A', 'C']);
+	});
+});
+
+describe('fitSections', () => {
+	// 10 px per char at size 20: width = chars * size / 2
+	const m = (t: string, size: number) => Array.from(t).length * (size / 2);
+	const base = { maxWidth: 600, sizes: [30, 26, 22], gap: 20 };
+	const sec = (n: number) => ({ heading: 'About the recipient', body: 'word '.repeat(n).trim() });
+
+	it('returns nothing for no sections', () => {
+		expect(fitSections([], m, { ...base, maxHeight: 500 }).height).toBe(0);
+	});
+	it('keeps the largest size when everything fits', () => {
+		const r = fitSections([sec(8)], m, { ...base, maxHeight: 500 });
+		expect(r.size).toBe(30);
+		expect(r.truncated).toBe(false);
+		expect(r.height).toBeLessThanOrEqual(500);
+	});
+	it('shrinks a step before cutting', () => {
+		const r = fitSections([sec(70), sec(70)], m, { ...base, maxHeight: 520 });
+		expect(r.size).toBeLessThan(30);
+		expect(r.truncated).toBe(false);
+		expect(r.height).toBeLessThanOrEqual(520);
+	});
+	it('cuts with an ellipsis at the smallest size and never exceeds the height', () => {
+		const long = [sec(44), sec(44), sec(44)];
+		const r = fitSections(long, m, { ...base, maxHeight: 300 });
+		expect(r.truncated).toBe(true);
+		expect(r.size).toBe(22);
+		expect(r.height).toBeLessThanOrEqual(300);
+		expect(r.blocks.every((b) => b.headingLines.length === 1)).toBe(true);
+		expect(r.blocks.some((b) => b.bodyLines.at(-1)?.endsWith('…'))).toBe(true);
+		for (const b of r.blocks)
+			for (const l of b.bodyLines) expect(m(l, r.size)).toBeLessThanOrEqual(600);
+	});
+	it('handles emoji and CJK without overflow', () => {
+		const odd = [
+			{ heading: '你好世界'.repeat(20), body: '😀'.repeat(220) },
+			{ heading: 'x', body: '你好世界'.repeat(55) }
+		];
+		const r = fitSections(odd, m, { ...base, maxHeight: 400 });
+		expect(r.height).toBeLessThanOrEqual(400);
+		for (const b of r.blocks) {
+			for (const l of b.headingLines)
+				expect(m(l, Math.round(r.size * 1.15))).toBeLessThanOrEqual(600);
+			for (const l of b.bodyLines) expect(m(l, r.size)).toBeLessThanOrEqual(600);
 		}
 	});
 });

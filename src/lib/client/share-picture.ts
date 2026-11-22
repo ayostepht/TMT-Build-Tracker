@@ -7,7 +7,12 @@
  */
 import {
 	JPEG_QUALITY,
+	SOCIAL_SIZES,
 	VARIANTS,
+	drawnSections,
+	fitSections,
+	headingSize,
+	pictureDims,
 	cleanText,
 	contrastRatio,
 	fitText,
@@ -15,11 +20,18 @@ import {
 	pictureFileName,
 	socialPalette,
 	type PictureFormat,
-	type PictureVariant
+	type FittedSections,
+	type PictureVariant,
+	type SocialSize,
+	type TextSection
 } from '#lib/domain/share-picture.ts';
 
 export interface PictureInput {
 	variant: PictureVariant;
+	/** Social layout only. */
+	size: SocialSize;
+	/** Social layout, Portrait and Story only (`drawnSections` picks what is drawn). */
+	sections: TextSection[];
 	title: string;
 	line: string;
 	/** Distinct chair colors, most used first (`swatchColors`). */
@@ -296,18 +308,21 @@ function drawFamily(c: CanvasRenderingContext2D, chair: Cropped, i: PictureInput
 
 function drawSocial(c: CanvasRenderingContext2D, chair: Cropped, i: PictureInput) {
 	const spec = VARIANTS.social;
-	const W = spec.width;
-	const H = spec.height;
+	const size = SOCIAL_SIZES[i.size];
+	const W = size.width;
+	const H = size.height;
 	const m = 64;
 	const inner = W - m * 2;
 	const pal = socialPalette(i.swatches);
 	const title = cleanText(i.title, spec.titleMax);
 	const line = cleanText(i.line, spec.lineMax);
+	const sections = drawnSections(i.sections, i.size);
 
+	// The background fills the whole frame; text and swatches stay inside the safe bands.
 	c.fillStyle = pal.bg;
 	c.fillRect(0, 0, W, H);
 
-	let y = m;
+	let y = size.safeTop;
 	const tb = layoutText(c, title, 700, DISPLAY, [120, 108, 96, 84, 72], inner, 0.98);
 	if (tb.lines.length) {
 		c.fillStyle = pal.accent;
@@ -325,9 +340,27 @@ function drawSocial(c: CanvasRenderingContext2D, chair: Cropped, i: PictureInput
 	}
 
 	const creditSize = 22;
-	const creditBase = H - 36;
+	const creditBase = H - size.safeBottom;
 	const panelTop = y + 28;
-	const panelBottom = creditBase - creditSize - 22;
+	const bottomEdge = creditBase - creditSize - 22;
+	let panelBottom = bottomEdge;
+	let fit: FittedSections | null = null;
+	const gap = 34;
+	if (sections.length) {
+		const measure = (t: string, sz: number, kind: 'heading' | 'body') => {
+			c.font = `${kind === 'heading' ? 600 : 400} ${sz}px ${BODY}`;
+			return c.measureText(t).width;
+		};
+		// The chair panel keeps its minimum; the text takes the rest and shrinks or is cut to fit.
+		const room = bottomEdge - panelTop - size.minPanel - gap;
+		fit = fitSections(sections, measure, {
+			maxWidth: inner,
+			maxHeight: Math.max(0, room),
+			sizes: [34, 31, 28, 26, 24],
+			gap: 28
+		});
+		panelBottom = Math.max(panelTop + 240, bottomEdge - fit.height - gap);
+	}
 	const panel = { x: m, y: panelTop, w: inner, h: panelBottom - panelTop };
 	c.fillStyle = pal.panel;
 	rrect(c, panel.x, panel.y, panel.w, panel.h, 44);
@@ -354,6 +387,30 @@ function drawSocial(c: CanvasRenderingContext2D, chair: Cropped, i: PictureInput
 			'#d9dce4'
 		);
 
+	if (fit) {
+		const hs = headingSize(fit.size);
+		const hLh = Math.round(hs * fit.lineHeight);
+		const bLh = Math.round(fit.size * fit.lineHeight);
+		let ty = panelBottom + gap;
+		c.textAlign = 'left';
+		c.textBaseline = 'alphabetic';
+		fit.blocks.forEach((b, k) => {
+			if (k) ty += 28;
+			for (const l of b.headingLines) {
+				c.font = `600 ${hs}px ${BODY}`;
+				c.fillStyle = pal.text;
+				c.fillText(l, m, ty + hs * 0.86 + (hLh - hs) / 2);
+				ty += hLh;
+			}
+			for (const l of b.bodyLines) {
+				c.font = `400 ${fit!.size}px ${BODY}`;
+				c.fillStyle = pal.muted;
+				c.fillText(l, m, ty + fit!.size * 0.86 + (bLh - fit!.size) / 2);
+				ty += bLh;
+			}
+		});
+	}
+
 	// Credit, one line, shrunk to fit.
 	const cb = layoutText(c, spec.credit, 500, BODY, [22, 20, 18], inner, 1, 1);
 	c.font = `500 ${cb.size}px ${BODY}`;
@@ -367,7 +424,7 @@ function drawSocial(c: CanvasRenderingContext2D, chair: Cropped, i: PictureInput
 
 /** Draw the picture on a new canvas of the layout's size. */
 export async function composePicture(input: PictureInput): Promise<HTMLCanvasElement> {
-	const spec = VARIANTS[input.variant];
+	const spec = pictureDims(input.variant, input.size);
 	const [chair] = await Promise.all([trimmedChair(input.chair), loadFonts()]);
 	const canvas = document.createElement('canvas');
 	canvas.width = spec.width;
@@ -390,8 +447,13 @@ export function encodePicture(canvas: HTMLCanvasElement, format: PictureFormat):
 	);
 }
 
-export function pictureFile(blob: Blob, variant: PictureVariant, format: PictureFormat): File {
-	return new File([blob], pictureFileName(variant, format), { type: mimeOf(format) });
+export function pictureFile(
+	blob: Blob,
+	variant: PictureVariant,
+	format: PictureFormat,
+	size: SocialSize = 'square'
+): File {
+	return new File([blob], pictureFileName(variant, format, size), { type: mimeOf(format) });
 }
 
 /** True when the system share sheet accepts an image file here (hide the Share button otherwise). */

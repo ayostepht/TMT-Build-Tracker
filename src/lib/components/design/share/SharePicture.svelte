@@ -1,11 +1,18 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		VARIANTS,
 		VARIANT_IDS,
+		SOCIAL_SIZES,
+		SOCIAL_SIZE_IDS,
+		SECTION_BODY_MAX,
+		SECTION_HEADING_MAX,
+		pictureDims,
 		pictureFileName,
 		type PictureFormat,
-		type PictureVariant
+		type PictureVariant,
+		type SocialSize,
+		type TextSection
 	} from '#lib/domain/share-picture.ts';
 	import {
 		canShareImages,
@@ -35,6 +42,9 @@
 
 	let variant = $state<PictureVariant>('family');
 	let format = $state<PictureFormat>('png');
+	let size = $state<SocialSize>('square');
+	// Sections are kept while the size changes; the size decides how many are drawn.
+	let sections = $state<TextSection[]>([]);
 	// Each layout keeps its own texts while the dialog is open.
 	let titles = $state<Record<PictureVariant, string>>({
 		family: VARIANTS.family.defaultTitle,
@@ -54,7 +64,32 @@
 	let note = $state<string | null>(null);
 
 	const spec = $derived(VARIANTS[variant]);
-	const fileName = $derived(pictureFileName(variant, format));
+	const dims = $derived(pictureDims(variant, size));
+	const limit = $derived(variant === 'social' ? SOCIAL_SIZES[size].maxSections : 0);
+	const fileName = $derived(pictureFileName(variant, format, size));
+
+	function addSection() {
+		if (sections.length >= limit) return;
+		sections.push({ heading: '', body: '' });
+		note = 'Section added.';
+		const n = sections.length - 1;
+		void tick().then(() =>
+			document
+				.querySelector<HTMLInputElement>(`[data-testid="share-picture-section-${n}-heading"]`)
+				?.focus()
+		);
+	}
+	function removeSection(n: number) {
+		sections.splice(n, 1);
+		note = 'Section removed.';
+		void tick().then(() =>
+			(
+				document.querySelector<HTMLElement>(
+					'[data-testid="share-picture-add-section"]:not([disabled])'
+				) ?? document.querySelector<HTMLElement>('[data-testid="share-picture-size-' + size + '"]')
+			)?.focus()
+		);
+	}
 
 	function revoke() {
 		if (url) URL.revokeObjectURL(url);
@@ -87,6 +122,8 @@
 	$effect(() => {
 		const input = {
 			variant,
+			size,
+			sections: sections.map((x) => ({ ...x })),
 			title: titles[variant],
 			line: lines[variant],
 			swatches: [...swatches],
@@ -125,7 +162,7 @@
 		if (!blob) return;
 		note = null;
 		try {
-			if (await sharePicture(pictureFile(blob, variant, format))) note = 'Shared.';
+			if (await sharePicture(pictureFile(blob, variant, format, size))) note = 'Shared.';
 		} catch {
 			error = 'Sharing did not work here. Use Download instead.';
 		}
@@ -153,14 +190,36 @@
 		{/each}
 	</div>
 	<p class="muted sp-hint">{spec.hint}</p>
+	{#if variant === 'social'}
+		<div class="ds-seg ds-seg--fill ds-seg--sm sp-size" role="group" aria-label="Size">
+			{#each SOCIAL_SIZE_IDS as z (z)}
+				<button
+					type="button"
+					data-testid="share-picture-size-{z}"
+					aria-pressed={size === z}
+					onclick={() => (size = z)}
+					><span class="sp-size-label"
+						><span class="sp-size-name">{SOCIAL_SIZES[z].label}</span><span class="sp-size-hint"
+							>{SOCIAL_SIZES[z].hint}</span
+						></span
+					></button
+				>
+			{/each}
+		</div>
+		<p class="muted sp-hint" data-testid="share-picture-size-info">
+			{SOCIAL_SIZES[size].width} × {SOCIAL_SIZES[size].height} px.
+			{#if size === 'story'}Text and colors stay clear of the top and bottom, where the app covers a
+				story.{/if}
+		</p>
+	{/if}
 
-	<figure class="sp-frame" style:aspect-ratio="{spec.width} / {spec.height}" data-variant={variant}>
+	<figure class="sp-frame" style:aspect-ratio="{dims.width} / {dims.height}" data-variant={variant}>
 		{#if url}
 			<img
 				src={url}
 				alt={altText}
-				width={spec.width}
-				height={spec.height}
+				width={dims.width}
+				height={dims.height}
 				data-testid="share-picture-preview"
 				class:sp-stale={busy}
 			/>
@@ -201,6 +260,69 @@
 				placeholder={spec.linePlaceholder}
 			/>
 		</label>
+		{#if variant === 'social'}
+			<div class="sp-sections" role="group" aria-labelledby="{uid}-sections">
+				<h3 id="{uid}-sections" class="sp-sections-h">Text sections</h3>
+				{#if limit === 0}
+					<p class="muted sp-hint">
+						Choose Portrait or Tall to add text sections.{#if sections.length}
+							Your {sections.length === 1 ? 'section is' : 'sections are'} kept.{/if}
+					</p>
+				{:else}
+					<p class="muted sp-hint">
+						Optional: a bold heading and a short paragraph. Up to {limit}
+						{limit === 1 ? 'section' : 'sections'} in this size.
+					</p>
+				{/if}
+				{#each sections as sec, n (n)}
+					<fieldset class="sp-sec" class:sp-sec-off={n >= limit}>
+						<legend>Section {n + 1}</legend>
+						{#if n >= limit}
+							<p class="muted sp-hint" data-testid="share-picture-section-{n}-off">
+								Not in the picture at this size. It is kept if you switch back.
+							</p>
+						{/if}
+						<label class="field">
+							Heading
+							<input
+								data-testid="share-picture-section-{n}-heading"
+								bind:value={sec.heading}
+								maxlength={SECTION_HEADING_MAX}
+								autocomplete="off"
+								placeholder="About the recipient"
+							/>
+						</label>
+						<label class="field">
+							<span class="sp-label-row"
+								>Text <span class="sp-count" aria-hidden="true"
+									>{sec.body.length}/{SECTION_BODY_MAX}</span
+								></span
+							>
+							<textarea
+								data-testid="share-picture-section-{n}-body"
+								bind:value={sec.body}
+								maxlength={SECTION_BODY_MAX}
+								rows="3"
+								placeholder="A short note about the child or how people can help"></textarea>
+						</label>
+						<button
+							type="button"
+							class="btn sm ghost"
+							data-testid="share-picture-section-{n}-remove"
+							onclick={() => removeSection(n)}>Remove section {n + 1}</button
+						>
+					</fieldset>
+				{/each}
+				<button
+					type="button"
+					class="btn sm"
+					data-testid="share-picture-add-section"
+					disabled={sections.length >= limit}
+					onclick={addSection}>Add a section</button
+				>
+				<p class="muted sp-hint">Only share details about a child with the family's OK.</p>
+			</div>
+		{/if}
 		<label class="field sp-format">
 			File type
 			<select data-testid="share-picture-format" bind:value={format}>
@@ -284,7 +406,8 @@
 		gap: var(--sp-4);
 	}
 	.sp-fields input,
-	.sp-fields select {
+	.sp-fields select,
+	.sp-fields textarea {
 		min-width: 0;
 		width: 100%;
 		box-sizing: border-box;
@@ -299,9 +422,71 @@
 	}
 	@media (pointer: coarse) {
 		.sp-fields input,
-		.sp-fields select {
+		.sp-fields select,
+		.sp-fields textarea {
 			font-size: 16px;
 		}
+	}
+	.sp-fields textarea {
+		resize: vertical;
+		min-height: 88px;
+	}
+	.sp-size-label {
+		display: grid;
+		justify-items: center;
+		line-height: 1.2;
+	}
+	.sp-size-name,
+	.sp-size-hint {
+		display: block;
+		white-space: nowrap;
+	}
+	.sp-label-row {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--sp-3);
+	}
+	.sp-size-hint {
+		font-size: var(--fs-sm);
+		font-weight: 400;
+		color: var(--muted);
+	}
+	.sp-sections {
+		display: grid;
+		gap: var(--sp-4);
+		min-width: 0;
+	}
+	.sp-sections-h {
+		margin: 0;
+		font-size: var(--fs-md);
+	}
+	.sp-sec {
+		display: grid;
+		gap: var(--sp-3);
+		margin: 0;
+		min-width: 0;
+		padding: var(--sp-4);
+		border: 1px solid var(--line);
+		border-radius: var(--r-md);
+	}
+	.sp-sec legend {
+		font-size: var(--fs-sm);
+		color: var(--muted);
+		padding: 0 var(--sp-2);
+	}
+	.sp-sec-off {
+		opacity: 0.7;
+	}
+	.sp-count {
+		font-variant-numeric: tabular-nums;
+	}
+	.sp-sections > .btn {
+		justify-self: start;
+		min-height: 44px;
+	}
+	.sp-sec > .btn {
+		justify-self: start;
+		min-height: 44px;
 	}
 	.sp-privacy {
 		margin: 0;
@@ -333,6 +518,8 @@
 		.sp > .sp-frame {
 			grid-column: 1;
 			grid-row: 1 / span 8;
+			position: sticky;
+			top: 84px;
 			max-height: calc(100dvh - 190px);
 		}
 	}

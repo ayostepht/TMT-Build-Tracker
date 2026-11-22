@@ -480,7 +480,8 @@ export function fitSections(
 		});
 		return h;
 	};
-	if (!sections.length) return { blocks: [], size: sizes[0], lineHeight: lh, height: 0, truncated: false };
+	if (!sections.length)
+		return { blocks: [], size: sizes[0], lineHeight: lh, height: 0, truncated: false };
 	for (const size of sizes) {
 		const blocks = build(size, () => 999);
 		const height = heightOf(blocks, size);
@@ -501,27 +502,18 @@ export function fitSections(
 	const allow = full.map((b) => b.bodyLines.length);
 	// Every section gets one line first, then the rest goes in order.
 	const give = allow.map(() => 0);
-	for (let i = 0; i < give.length && lines > 0; i++) if (allow[i]) (give[i] = 1), lines--;
+	for (let i = 0; i < give.length && lines > 0; i++)
+		if (allow[i]) {
+			give[i] = 1;
+			lines--;
+		}
 	for (let i = 0; i < give.length && lines > 0; i++) {
 		const more = Math.min(lines, allow[i] - give[i]);
 		give[i] += more;
 		lines -= more;
 	}
-	const blocks = build(size, (i) => give[i] || 1).map((b, i) => (give[i] ? b : { ...b, bodyLines: [] }));
-	// A body cut short must end in an ellipsis (fitText only adds one on its own at the very end).
-	blocks.forEach((b, i) => {
-		if (give[i] && give[i] < allow[i] && b.bodyLines.length) {
-			const last = b.bodyLines.length - 1;
-			if (!b.bodyLines[last].endsWith(ELLIPSIS)) {
-				const rest = sections[i].body.replace(/\s+/g, ' ').trim();
-				const m = (t: string) => measure(t, size, 'body');
-				b.bodyLines[last] = ellipsize(
-					b.bodyLines[last] + ' ' + rest.slice(b.bodyLines.join(' ').length),
-					m,
-					opts.maxWidth
-				);
-			}
-		}
-	});
+	const blocks = build(size, (i) => give[i] || 1).map((b, i) =>
+		give[i] ? b : { ...b, bodyLines: [] }
+	);
 	return { blocks, size, lineHeight: lh, height: heightOf(blocks, size), truncated: true };
 }
