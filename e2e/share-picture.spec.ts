@@ -378,4 +378,43 @@ test.describe('phone', () => {
 			expect(over.wide, `children at ${width}`).toEqual([]);
 		}
 	});
+
+	// iPhone Safari once showed only the top of the Portrait and Tall pictures: the preview must
+	// always be scaled to fit its frame, whatever the picture's shape.
+	test('the whole picture fits the preview frame in every layout and size', async ({ page }) => {
+		const { buildId } = await ownerBuild(page, 'sp-fit');
+		const dialog = await openDialog(page, buildId);
+		const shapes: { pick: string[]; ratio: number }[] = [
+			{ pick: ['share-picture-variant-family'], ratio: 1600 / 2000 },
+			{ pick: ['share-picture-variant-social', 'share-picture-size-square'], ratio: 1 },
+			{ pick: ['share-picture-size-portrait'], ratio: 1080 / 1350 },
+			{ pick: ['share-picture-size-story'], ratio: 1080 / 1920 }
+		];
+		for (const { pick, ratio } of shapes) {
+			for (const id of pick) await dialog.getByTestId(id).click();
+			const name = pick[pick.length - 1];
+			const img = dialog.locator('img[data-testid="share-picture-preview"]');
+			await expect
+				.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth / el.naturalHeight))
+				.toBeCloseTo(ratio, 2);
+			const box = await page.evaluate(() => {
+				const f = document.querySelector('[data-testid="share-picture-frame"]')!;
+				const i = f.querySelector('img')!;
+				const [fr, ir] = [f.getBoundingClientRect(), i.getBoundingClientRect()];
+				return {
+					fr: { b: fr.bottom, r: fr.right, t: fr.top, l: fr.left, h: fr.height },
+					ir: { b: ir.bottom, r: ir.right, t: ir.top, l: ir.left, w: ir.width, h: ir.height },
+					vh: window.innerHeight
+				};
+			});
+			expect(box.ir.b, `${name}: bottom inside the frame`).toBeLessThanOrEqual(box.fr.b + 1);
+			expect(box.ir.r, `${name}: right inside the frame`).toBeLessThanOrEqual(box.fr.r + 1);
+			expect(box.ir.t, `${name}: top inside the frame`).toBeGreaterThanOrEqual(box.fr.t - 1);
+			expect(box.ir.l, `${name}: left inside the frame`).toBeGreaterThanOrEqual(box.fr.l - 1);
+			const drawn = box.ir.w / box.ir.h;
+			expect(Math.abs(drawn / ratio - 1), `${name}: shape ${drawn}`).toBeLessThan(0.02);
+			// The frame itself never outgrows the screen.
+			expect(box.fr.h, `${name}: frame height`).toBeLessThanOrEqual(box.vh * 0.62);
+		}
+	});
 });

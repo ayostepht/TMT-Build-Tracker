@@ -240,7 +240,13 @@
 		</p>
 	{/if}
 
-	<figure class="sp-frame" style:aspect-ratio="{dims.width} / {dims.height}" data-variant={variant}>
+	<figure
+		class="sp-frame"
+		style:aspect-ratio="{dims.width} / {dims.height}"
+		style:--sp-ratio={dims.width / dims.height}
+		data-variant={variant}
+		data-testid="share-picture-frame"
+	>
 		{#if url}
 			<img
 				src={url}
@@ -409,20 +415,32 @@
 		margin: 0;
 		font-size: var(--fs-sm);
 	}
+	/* The preview frame has a definite size: as wide as the column, but never taller than --sp-maxh
+	   (the width is capped at max height x the picture's ratio; aspect-ratio gives the height). The
+	   picture fills it absolutely, so nothing depends on a percentage height resolving (WebKit and
+	   Chromium both clipped tall pictures when the frame was only capped with max-height). */
 	.sp-frame {
+		--sp-maxh: 60vh;
+		position: relative;
+		display: block;
+		box-sizing: border-box;
 		margin: 0;
 		min-width: 0;
 		justify-self: center;
-		width: 100%;
-		/* The frame keeps the picture's shape and never grows past the screen height. */
-		max-height: 46dvh;
+		width: min(100%, calc(var(--sp-maxh) * var(--sp-ratio, 1)));
 		border-radius: var(--r-lg);
 		overflow: hidden;
 		background: var(--accent-soft);
 		border: 1px solid var(--line);
-		display: grid;
+	}
+	@supports (height: 1dvh) {
+		.sp-frame {
+			--sp-maxh: 60dvh;
+		}
 	}
 	.sp-frame img {
+		position: absolute;
+		inset: 0;
 		display: block;
 		width: 100%;
 		height: 100%;
@@ -433,9 +451,12 @@
 		opacity: 0.55;
 	}
 	.sp-wait {
+		position: absolute;
+		inset: 0;
 		display: grid;
 		place-items: center;
-		min-height: 160px;
+		text-align: center;
+		padding: var(--sp-4);
 	}
 	.sp-fields {
 		display: grid;
@@ -557,7 +578,7 @@
 			grid-row: 1 / span 8;
 			position: sticky;
 			top: 84px;
-			max-height: calc(100dvh - 190px);
+			--sp-maxh: calc(100vh - 190px);
 		}
 	}
 </style>
