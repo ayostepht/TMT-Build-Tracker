@@ -6,7 +6,9 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
-**Upgrading:** back up your `/data` folder first. This release adds database migration 0004 (additive: it records which pieces of a multi-piece part are on a print; existing data is not rewritten). It runs automatically when the container starts and cannot be undone, so to go back you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
+## [0.9.4] - 2026-11-22
+
+**Upgrading:** back up your `/data` folder first. This release adds database migration 0004 (additive: it records which pieces of a multi-piece part are on a print; existing data is not rewritten). It runs automatically when the container starts and cannot be undone, so to go back to 0.9.3 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).
 
 ### Added
 
