@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-22, 20:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-22, 20:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -48,14 +48,13 @@ _Updated 2026-11-22, 20:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   and tall with text sections; default texts say "Toddler Mobility Trainer", not "TMT").
   **Not on the test copy yet.** Unchecked: the system share sheet on a real iPhone and
   Android phone (headless Chromium has no file sharing).
-- **Hosted edition port of #101:** its #41 (branch `feat/share-picture`, head 21e6117) is
-  open and **not to be merged yet** (maintainer, 2026-11-22): wait for its `e2e`, the
-  maintainer's phone check of the share sheet on the `edge` image, and the port of the
-  follow-up below. Open question there: the button also shows in the demo (recommended:
-  keep it).
-- **In flight:** the follow-up to #101 on branch `claude/sweet-johnson-59ma1x` (section
-  text keeps line breaks, "Try again" when drawing fails, "Download started." note), with
-  this handoff; merge when green, then port it into the hosted edition's #41.
+- **Hosted edition port of #101 and #102:** its #41 (branch `feat/share-picture`, head
+  fee5c43, `public-ci` green) is open and **not to be merged yet** (maintainer,
+  2026-11-22): first the maintainer checks the share sheet on a phone on the `edge` image.
+  Open question there: the button also shows in the demo (recommended: keep it).
+- **Follow-up to #101 merged 2026-11-22:** #102 (b21d269): section text keeps typed line
+  breaks, "Try again" when drawing fails, "Download started." note. Not on the test copy.
+- **In flight:** nothing in this repository.
 - **In flight too: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
   (branch `claude/cool-davinci-qce08y` into `edge`; no schema change). It holds the catalog
   data and picker order, and the hosted edition's compact color picker ported into
@@ -74,7 +73,7 @@ _Updated 2026-11-22, 20:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** finish the #101 follow-up (above); deploy `edge` (76a65c0 or later) to the test copy (with the maintainer's OK; needs a
+- **Next step:** deploy `edge` b21d269 to the test copy (with the maintainer's OK; needs a
   machine with `CLAUDE.local.md`), then the maintainer tests swatch taps on an iPhone (the
   touch change is unconfirmed on iOS Safari) and Share a picture's share sheet; then pick from the follow-ups below or STATUS
   "Next steps".
