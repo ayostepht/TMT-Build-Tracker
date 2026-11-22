@@ -155,7 +155,7 @@
 
 	/** PNG of the current view. */
 	export function snapshot(
-		opts: { width?: number; height?: number; background?: string } = {}
+		opts: { width?: number; height?: number; background?: string; clean?: boolean } = {}
 	): Promise<Blob> {
 		if (!scene) return Promise.reject(new Error('The 3D view is not ready'));
 		return scene.snapshot(opts);
