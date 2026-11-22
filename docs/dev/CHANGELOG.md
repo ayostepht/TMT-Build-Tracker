@@ -7,6 +7,22 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r65** (published `sha-9f32307` = `edge` 9f32307 = #96 "Converted plate logs keep their pieces
+  and their row", digest `sha256:d4bbd2d4e12d…aa5bf`, same as `edge`, 2026-11-21; `edge` ba3dd7d
+  adds docs only): also brings #95 (logged pieces ticked and locked; "Print some…" entries move
+  into the status menu). The first image job for 9f32307 hung in build-push for 25+ min and was
+  cancelled; the re-run built it in 4 min. No migration (journal stays at 5), no rehearsal. Live:
+  health ok, login page loads, unknown sign-in gets 401, integrity ok, no restarts. Not checked
+  signed in. Rollback: stop, restore `tmt-backup-pre-r65.db`, re-tag `r64` as `test`.
+- **r64** (published `sha-7efeb4d` = `edge` 7efeb4d = #94, digest `sha256:bd09e43bb8ff…e2d2d1`, same
+  as `edge`, 2026-11-20): kit-first plate arranger (#92, #94) and "Print some pieces of a part"
+  (#93). **Migration `0004_piece_prints`** (nullable `build_parts.printing_comps`,
+  `print_runs.comps`, `printer_jobs.comps`). Backups `tmt-backup-pre-r64.db` and a tarball of
+  `/data` without `migrate-rehearsal/`. Rehearsal on a copy of the backup clean: journal 4 → 5,
+  38 tables, every old row count equal, integrity and foreign keys ok, no startup errors; the
+  live database matched after the swap. Live: health ok, login page loads, an unknown sign-in
+  gets 401. Not checked signed in. Rollback: stop, restore `tmt-backup-pre-r64.db` (move aside
+  `-wal`/`-shm`), re-tag `r63` as `test`.
 - **r63** (published `sha-230614a` = `edge` 230614a = #90 "Print some parts of a plate", digest
   `sha256:777bf040ee77…9a3389`, same as `edge`, 2026-11-20; `edge` 0019dd9 adds docs only): a
   plate's control gets "Print some parts…" to mark or log only some of a plate's parts as one

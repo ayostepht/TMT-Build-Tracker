@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-21, 02:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-21, 06:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -20,16 +20,16 @@ _Updated 2026-11-21, 02:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
-- **Test copy:** r63 = `edge` 230614a (0.9.3 plus #90) deployed 2026-11-20; see
+- **Test copy:** r65 = `edge` 9f32307 (0.9.3 plus #90 and #92–#96) deployed 2026-11-21 (r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
-- **Merged into `edge` 2026-11-20, not on the test copy yet (it is on r63 = 230614a):**
+- **Merged into `edge` 2026-11-20, on the test copy since r64:**
   #92 "Plates follow the kit's layout first" (6ba6bf7, with its follow-up #94 7efeb4d; kit-first arranger, planner version
   3, plan cache; no schema change) and #93 "Print some pieces of a part" (3c6ea33;
   **migration `0004_piece_prints`**, additive). #90 "Print some parts of a plate" is on the
   test copy since r63.
 - **Merged into `edge` 2026-11-21:** #95 "Logged pieces are ticked and locked; Print some…
-  moves into the status menu" (005f5ad; no schema change). Not on the test copy yet.
+  moves into the status menu" (005f5ad; no schema change). On the test copy since r65.
   Decided by the maintainer: only piece logs lock pieces (a whole-part Success ticks all
   pieces but leaves them free).
 - **Also merged into `edge` 2026-11-21:** #96 "Converted plate logs keep their pieces and
@@ -39,11 +39,8 @@ _Updated 2026-11-21, 02:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **In flight:** nothing in this repository. The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** deploy the `edge` image of 9f32307 (or later) to the test copy: back up
-  `/data`, **rehearse migration 0004 on a copy of the real database first** (it was only
-  run against the frozen release databases and an empty one; no Docker in the cloud
-  session), then add the `docs/dev/CHANGELOG.md` entry. The maintainer wants this image
-  soon and may pull it themselves.
+- **Next step:** the maintainer tests r65; then pick from the follow-ups below or STATUS "Next steps".
+- CI: an `image` job once hung in build-push for 25+ min (normal is ~4 min); cancel and re-run it.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 
