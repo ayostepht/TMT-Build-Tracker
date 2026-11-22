@@ -3,7 +3,7 @@ import { expect, test } from './fixtures';
 import { ownerWithBuild } from './helpers';
 
 // Regression: on a phone a tap on a swatch must recolor the slot at once and save it, every time
-// (twice in a row, from "Recently used", after a palette), and a failed save must show the truth.
+// (twice in a row, also from "Recently used"), and a failed save must show the truth.
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
 async function openPrimary(page: Page, label: string) {
@@ -73,27 +73,52 @@ test('phone: a failed save puts the slot back and says so', async ({ page }) => 
 			body: '{"message":"Slow down."}'
 		})
 	);
+	const detail = picker.getByTestId('swatch-detail');
+	const savedDetail = await detail.innerText();
+	// A swatch far down the list, so a phone has scrolled well past the top of the picker.
 	const label = await picker
 		.locator('button.sw[aria-pressed="false"]')
-		.nth(5)
+		.last()
 		.getAttribute('aria-label');
 	const target = picker
 		.locator('button.sw')
 		.and(page.getByLabel(label!, { exact: true }))
 		.first();
 	await target.scrollIntoViewIfNeeded();
+	expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
 	await target.tap();
-	await expect(page.getByRole('alert').filter({ hasText: /\S/ }).first()).toBeVisible();
-	// Also next to the picker, where a phone is looking.
-	await expect(picker.locator('xpath=..').getByTestId('picker-error')).toBeVisible();
+	await expect(page.getByRole('alert').filter({ hasText: /\S/ }).first()).toBeAttached();
+	// Also next to the picker, in view without scrolling, and not covering the swatch just tapped.
+	const err = page.getByTestId('picker-error');
+	await expect(err).toBeInViewport({ ratio: 1 });
+	await expect(err).toContainText('429');
+	const eb = (await err.boundingBox())!;
+	const tb = (await target.boundingBox())!;
+	expect(eb.y + eb.height <= tb.y || tb.y + tb.height <= eb.y).toBe(true);
+	expect(eb.x + eb.width).toBeLessThanOrEqual(390);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 	await expect.poll(() => savedHex(page, buildId)).toBe(before);
-	// The failed pick is no longer shown as current.
+	// The failed pick is no longer shown as current, and the detail row names the saved color again.
 	await expect(target).toHaveAttribute('aria-pressed', 'false');
+	await expect(detail).toHaveText(savedDetail);
+	// Closing and reopening the picker does not carry the sentence over.
+	await picker.getByRole('button', { name: 'Done' }).tap();
+	await expect(picker).toHaveCount(0);
+	await page
+		.locator('li.slot[data-role="primary"]')
+		.getByRole('button', { name: /^Change filament for/ })
+		.first()
+		.tap();
+	await expect(picker).toBeVisible();
+	await expect(err).toHaveCount(0);
 	// And the slot can be changed again once saving works.
 	await page.unroute(`**/api/builds/${buildId}/filaments/primary`);
+	await target.scrollIntoViewIfNeeded();
 	await target.tap();
 	await expect(target).toHaveAttribute('aria-pressed', 'true');
 	await expect.poll(() => savedHex(page, buildId)).not.toBe(before);
+	// A successful pick clears the sentence.
+	await expect(err).toHaveCount(0);
 });
 
 // Screenshots for review: SHOTS_DIR=/some/dir npx playwright test e2e/swatch-picker-pick.spec.ts -g shots
@@ -119,5 +144,39 @@ for (const [name, w, h, scheme] of [
 		await expect(target).toHaveAttribute('aria-pressed', 'true');
 		await page.waitForTimeout(800);
 		await page.screenshot({ path: `${process.env.SHOTS_DIR}/picker-${name}.png` });
+	});
+}
+
+// The refused-save state, scrolled far down the list.
+for (const [name, w, h, scheme] of [
+	['phone-light', 390, 844, 'light'],
+	['phone-dark', 390, 844, 'dark'],
+	['desktop-light', 1440, 900, 'light']
+] as const) {
+	test(`shots: picker after a refused save, ${name}`, async ({ page }) => {
+		test.skip(!process.env.SHOTS_DIR, 'set SHOTS_DIR to write screenshots');
+		await page.setViewportSize({ width: w, height: h });
+		await page.emulateMedia({ colorScheme: scheme });
+		const { buildId, picker } = await openPrimary(page, `pickrefused${name}`);
+		await page.route(`**/api/builds/${buildId}/filaments/primary`, (route) =>
+			route.fulfill({
+				status: 429,
+				contentType: 'application/json',
+				body: '{"message":"Slow down."}'
+			})
+		);
+		const label = await picker
+			.locator('button.sw[aria-pressed="false"]')
+			.last()
+			.getAttribute('aria-label');
+		const target = picker
+			.locator('button.sw')
+			.and(page.getByLabel(label!, { exact: true }))
+			.first();
+		await target.scrollIntoViewIfNeeded();
+		await target.tap();
+		await expect(page.getByTestId('picker-error')).toBeVisible();
+		await page.waitForTimeout(800);
+		await page.screenshot({ path: `${process.env.SHOTS_DIR}/picker-refused-${name}.png` });
 	});
 }

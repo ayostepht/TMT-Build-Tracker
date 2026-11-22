@@ -52,7 +52,8 @@
 		slotMaterial?: string;
 		/** The build's workspace: its custom filaments show first and "Add a filament" saves into it. */
 		organizationId?: string;
-		onpick: (v: PickedFilament, family: Family) => void;
+		/** May return a promise of whether the save worked: on false the detail row stops naming the refused swatch. */
+		onpick: (v: PickedFilament, family: Family) => void | boolean | Promise<boolean | void>;
 		onclose: () => void;
 	} = $props();
 
@@ -245,7 +246,6 @@
 
 	/** Arrow keys move through the swatches (rows by position), Home/End jump to the ends. */
 	function gridKey(e: KeyboardEvent) {
-		touching = false;
 		const el = e.target as HTMLElement;
 		if (!el.classList?.contains('sw') || !bodyEl) return;
 		if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
@@ -295,10 +295,12 @@
 	const detailWhy = $derived(detail ? pickerReason(detail) : '');
 	const detailApprox = $derived(detail ? isApproxHex(detail) : false);
 
-	function pick(t: SwatchTuple) {
+	async function pick(t: SwatchTuple) {
 		hover = t;
 		recent = rememberRecent(t);
-		onpick({ name: nameOf(t), material: t[3], hex: t[2] }, family);
+		const ok = await onpick({ name: nameOf(t), material: t[3], hex: t[2] }, family);
+		// A refused save: the slot keeps its saved color, so the row must not keep naming this one.
+		if (ok === false && hover === t) hover = null;
 	}
 
 	const myFit = $derived(mine.filter((f) => customFamily(f) === family));
