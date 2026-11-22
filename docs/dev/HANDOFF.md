@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-22, 18:30 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-22. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -42,7 +42,14 @@ _Updated 2026-11-22, 18:30 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   pull request, to bring back there: the `finally` around the save, clearing the touch flag
   on any key press, and the follow-up commit (refusal line pinned in view on a phone and
   limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
-- **In flight:** nothing in this repository. The report behind #95 is explained: the
+- **In flight: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
+  (branch `claude/cool-davinci-qce08y` into `edge`; data and picker order only, no schema
+  change; agent checks and `verifier` passed). Merge when CI is green; it reaches the test
+  copy with the next `edge` deploy. The same change is being opened in the hosted edition
+  from branch `feat/filaments-space-coast-dancyn` into its `main`; that project's session
+  merges there (merging is deploying). To regenerate these vendors a cloud environment
+  needs `spacecoast3d.org`, `www.dancyn3dprints.com` and `cdn.shopify.com` on its allowed
+  hosts; without them use `fetch-vendor-filaments.mjs --from-dir` with saved pages. The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
 - **Next step:** deploy `edge` 41513e7 to the test copy (with the maintainer's OK; needs a
