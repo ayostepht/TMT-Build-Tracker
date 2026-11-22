@@ -1,7 +1,8 @@
 # Project status
 
 _Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
-copy on r65 = `edge` 9f32307, the 0.9.3 app code plus #90 and #92–#96, since 2026-11-21)._
+copy on r65 = `edge` 9f32307, the 0.9.3 app code plus #90 and #92–#96, since 2026-11-21;
+#98 merged into `edge` 2026-11-22 as 41513e7, not on the test copy yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -224,6 +225,9 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
   "A new version is available" after a later deploy; favicon in a dark-mode desktop
   browser; MakeGood credit vs "Reset view" on the 3D stage at 360 px.
 
+- (2026-11-22, #98) On a real iPhone, once `edge` 41513e7 or later is deployed: does every
+  tap on a swatch recolor the chair and save? The touch change could not be reproduced or
+  confirmed in Chromium touch emulation.
 - (asked 2026-11-10) On a real iPhone: does focusing the picker search still zoom or pan
   sideways; do orbit and tap-to-select feel right; after backgrounding the home-screen app,
   does the 3D view come back lit (or offer "Reload 3D view") and do colors load (or offer
@@ -319,6 +323,11 @@ Route each to the agent named in brackets.
   the palette Undo activity doesn't mention the auto-added lock slots it removes; the
   designs gallery pages (`/designs`, `/designs/[slug]`) call `roleLabel` without the
   filament list, so a saved design with a clashing added slot still shows two equal labels.
+- **Color picker, refused pick** (#98, 41513e7) [design-studio-ui]: the sentence of a
+  refused pick is pinned under the stage on phones (in flow above the card from 900 px);
+  if the refused swatch sat directly under the stage when tapped, the pinned line can
+  cover it until the list is scrolled. A refused pick from "My filaments" (`pickMine`)
+  does not put the detail row back.
 - a11y pass done (44 px on coarse pointers, `--field-line` 3:1 field
   borders, `design-announce` live region, swatch focus ring, picker fields styled); left
   over: class-only field styles in components were not audited for `--line` borders;

@@ -52,7 +52,8 @@
 		slotMaterial?: string;
 		/** The build's workspace: its custom filaments show first and "Add a filament" saves into it. */
 		organizationId?: string;
-		onpick: (v: PickedFilament, family: Family) => void;
+		/** May return a promise of whether the save worked: on false the detail row stops naming the refused swatch. */
+		onpick: (v: PickedFilament, family: Family) => void | boolean | Promise<boolean | void>;
 		onclose: () => void;
 	} = $props();
 
@@ -72,6 +73,8 @@
 	let typeSeeded = false;
 	let recent = $state<SwatchTuple[]>([]);
 	let hover = $state<SwatchTuple | null>(null);
+	/** The last pointer press on a swatch was a finger (until the next key press). */
+	let touching = false;
 	let cap = $state(480);
 	let mine = $state<CustomFilament[]>([]);
 	let showAllMine = $state(false);
@@ -292,10 +295,12 @@
 	const detailWhy = $derived(detail ? pickerReason(detail) : '');
 	const detailApprox = $derived(detail ? isApproxHex(detail) : false);
 
-	function pick(t: SwatchTuple) {
+	async function pick(t: SwatchTuple) {
 		hover = t;
 		recent = rememberRecent(t);
-		onpick({ name: nameOf(t), material: t[3], hex: t[2] }, family);
+		const ok = await onpick({ name: nameOf(t), material: t[3], hex: t[2] }, family);
+		// A refused save: the slot keeps its saved color, so the row must not keep naming this one.
+		if (ok === false && hover === t) hover = null;
 	}
 
 	const myFit = $derived(mine.filter((f) => customFamily(f) === family));
@@ -381,6 +386,8 @@
 
 <svelte:window
 	onkeydown={(e) => {
+		// Any key press ends "the last press was a finger": tabbing back into the grid previews again.
+		touching = false;
 		if (e.key === 'Escape') {
 			if (screen === 'form') screen = 'pick';
 			else onclose();
@@ -764,13 +771,19 @@
 			activeId = id;
 			pick(t);
 		}}
-		onpointerenter={() => (hover = t)}
+		onpointerdown={(e) => (touching = e.pointerType === 'touch')}
+		onpointerenter={(e) => {
+			// A finger is not hovering: changing the detail row on touch makes iOS treat the tap as
+			// "hover only" and swallow the click, so the pick is lost. The tap itself sets `hover`.
+			if (e.pointerType !== 'touch') hover = t;
+		}}
 		onfocus={() => {
 			activeId = id;
-			hover = t;
+			// Focus previews the swatch, but the focus a tap leaves behind must not move the row.
+			if (!touching) hover = t;
 		}}
-		onpointerleave={() => {
-			if (!others.length) hover = null;
+		onpointerleave={(e) => {
+			if (e.pointerType !== 'touch' && !others.length) hover = null;
 		}}
 	></button>
 {/snippet}
@@ -930,7 +943,13 @@
 		cursor: pointer;
 		box-shadow: var(--ring-swatch);
 	}
-	.sw:hover,
+	/* Hover only where a pointer can hover: iOS keeps :hover on the last tapped swatch. */
+	@media (hover: hover) {
+		.sw:hover {
+			transform: scale(1.12);
+			border-color: var(--ink);
+		}
+	}
 	.sw:focus-visible {
 		transform: scale(1.12);
 		border-color: var(--ink);
