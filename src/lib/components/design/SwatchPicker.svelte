@@ -87,6 +87,35 @@
 	let searchEl = $state<HTMLInputElement>();
 	let sheetEl = $state<HTMLDivElement>();
 
+	/**
+	 * Marks a sideways scroller with data-fade-start / data-fade-end while content is hidden on that
+	 * side, so the CSS can fade that edge (a hint that the row scrolls). Only when it really scrolls.
+	 */
+	function edgeFade(node: HTMLElement) {
+		const measure = () => {
+			const scrolls =
+				getComputedStyle(node).overflowX === 'auto' && node.scrollWidth > node.clientWidth + 2;
+			node.toggleAttribute('data-fade-start', scrolls && node.scrollLeft > 2);
+			node.toggleAttribute(
+				'data-fade-end',
+				scrolls && node.scrollLeft + node.clientWidth < node.scrollWidth - 2
+			);
+		};
+		measure();
+		node.addEventListener('scroll', measure, { passive: true });
+		const ro = new ResizeObserver(measure);
+		ro.observe(node);
+		const mo = new MutationObserver(measure);
+		mo.observe(node, { childList: true, subtree: true });
+		return {
+			destroy() {
+				node.removeEventListener('scroll', measure);
+				ro.disconnect();
+				mo.disconnect();
+			}
+		};
+	}
+
 	onMount(() => {
 		// Non-modal panel: on close, focus goes back to the control that opened it (the panel it
 		// hid reappears in the same update, so wait for it).
@@ -246,6 +275,8 @@
 
 	/** Arrow keys move through the swatches (rows by position), Home/End jump to the ends. */
 	function gridKey(e: KeyboardEvent) {
+		// Any key press ends "the last press was a finger": tabbing back into the grid previews again.
+		touching = false;
 		const el = e.target as HTMLElement;
 		if (!el.classList?.contains('sw') || !bodyEl) return;
 		if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
@@ -294,32 +325,14 @@
 	}
 	const detailWhy = $derived(detail ? pickerReason(detail) : '');
 	const detailApprox = $derived(detail ? isApproxHex(detail) : false);
-	const APPROX_NOTE = 'Approx. color: estimated from product photos';
-	/**
-	 * The detail row must never change height with the hovered swatch: it sits above the grid, so a
-	 * taller row slides the swatch out from under the pointer and the click is lost. A hidden ghost
-	 * row reserves the room for the longest note set among the swatches in view.
-	 */
-	const noteSizer = $derived.by(() => {
-		const cands: { t: SwatchTuple }[] = [...sections.flatMap((s) => s.entries), ...neutralShown];
-		const cur = items.find(isCurrent);
-		if (cur) cands.push({ t: cur });
-		let best = '';
-		for (const { t } of cands) {
-			const text = [
-				isApproxHex(t) ? APPROX_NOTE : '',
-				pickerReason(t) ? `Palettes skip it: ${pickerReason(t)}` : ''
-			]
-				.filter(Boolean)
-				.join(' · ');
-			if (text.length > best.length) best = text;
-		}
-		return best;
-	});
-	/** The "Other brands" line is reserved the same way, whenever a merged swatch is in view. */
-	const anyOthers = $derived(
-		sections.some((s) => s.entries.some((e) => e.others?.length)) ||
-			neutralShown.some((e) => e.others?.length)
+	const extrasTitle = $derived(
+		[
+			detailApprox ? 'Approx. color: estimated from product photos' : '',
+			detailWhy ? `Palettes skip it: ${detailWhy}` : '',
+			detail && detailOthers.length ? alsoText(detail, detailOthers) : ''
+		]
+			.filter(Boolean)
+			.join(' · ')
 	);
 
 	async function pick(t: SwatchTuple) {
@@ -413,7 +426,6 @@
 
 <svelte:window
 	onkeydown={(e) => {
-		// Any key press ends "the last press was a finger": tabbing back into the grid previews again.
 		touching = false;
 		if (e.key === 'Escape') {
 			if (screen === 'form') screen = 'pick';
@@ -490,7 +502,7 @@
 			{/if}
 		</div>
 
-		<div class="filters" role="group" aria-label="Filters">
+		<div class="filters" role="group" aria-label="Filters" use:edgeFade>
 			{#if typeOpts.length > 2}
 				<select
 					class="typesel"
@@ -562,7 +574,7 @@
 					{/if}
 				</select>
 			{/if}
-			<div class="chips brandchips" role="group" aria-label="Brands">
+			<div class="chips brandchips" role="group" aria-label="Brands" use:edgeFade>
 				<button
 					type="button"
 					class="ds-badge sp-chip"
@@ -599,72 +611,60 @@
 		</div>
 
 		<div class="detail" aria-live="polite" data-testid="swatch-detail">
-			<span class="drow ghost" aria-hidden="true">
-				<span class="sp-dot"></span>
+			{#if detail}
+				<span class="sp-dot" style="background-color:{detail[2]}" aria-hidden="true"></span>
 				<span class="dtxt">
-					<b>&nbsp;</b>
-					<span>&nbsp;</span>
-					{#if noteSizer}<span class="dnotes sizer" data-sizer={noteSizer}></span>{/if}
+					<b>{nameOf(detail)}</b>
+					<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
+					<!-- One fixed-height line, so hovering never changes the height of what is above the grid. -->
+					<span class="extras why" class:hasothers={detailOthers.length > 0} title={extrasTitle}>
+						{#if detailApprox}<span data-testid="swatch-approx"
+								>Approx. color: estimated from product photos</span
+							>{/if}
+						{#if detailWhy}<span>Palettes skip it: {detailWhy}</span>{/if}
+						{#if detailOthers.length}<span class="muted" data-testid="swatch-also"
+								>{alsoText(detail, detailOthers)}</span
+							>{/if}
+					</span>
 				</span>
-			</span>
-			<span class="drow">
-				{#if detail}
-					<span class="sp-dot" style="background-color:{detail[2]}" aria-hidden="true"></span>
-					<span class="dtxt">
-						<b>{nameOf(detail)}</b>
-						<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
-						{#if detailApprox || detailWhy}
-							<span class="dnotes">
-								{#if detailApprox}<span class="why" data-testid="swatch-approx">{APPROX_NOTE}</span
-									>{/if}
-								{#if detailWhy}<span class="why">Palettes skip it: {detailWhy}</span>{/if}
-							</span>
-						{/if}
-					</span>
-				{:else if current}
-					<span class="sp-dot" style="background-color:{current.hex}" aria-hidden="true"></span>
-					<span class="dtxt">
-						<b>{current.name}</b>
-						<span class="muted">{current.material} · {current.hex}</span>
-					</span>
-				{:else}
-					<span class="muted">Pick a swatch. Hover or focus one to see its name.</span>
-				{/if}
-			</span>
+			{:else if current}
+				<span class="sp-dot" style="background-color:{current.hex}" aria-hidden="true"></span>
+				<span class="dtxt">
+					<b>{current.name}</b>
+					<span class="muted">{current.material} · {current.hex}</span>
+				</span>
+			{:else}
+				<span class="muted">Pick a swatch. Hover or focus one to see its name.</span>
+			{/if}
 		</div>
 
-		{#if anyOthers || detailOthers.length}
-			<div class="otherslot">
-				{#if detail && detailOthers.length}
-					<details class="others" data-testid="other-brands">
-						<summary>Other brands ({detailOthers.length})</summary>
-						<ul>
-							{#each detailOthers as o (o.t[0] + o.t[1] + o.t[2] + o.t[3])}
-								<li>
-									<button
-										type="button"
-										class="opick"
-										data-testid="other-brand"
-										aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
-										onclick={() => pick(o.t)}
+		<!-- The row is always reserved and the list opens over the grid, so hovering never shifts the swatches. -->
+		<div class="otherswrap">
+			{#if detailOthers.length}
+				<details class="others" data-testid="other-brands">
+					<summary>Other brands ({detailOthers.length})</summary>
+					<ul>
+						{#each detailOthers as o (o.t[0] + o.t[1] + o.t[2] + o.t[3])}
+							<li>
+								<button
+									type="button"
+									class="opick"
+									data-testid="other-brand"
+									aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
+									onclick={() => pick(o.t)}
+								>
+									<span class="sp-dot sm" style="background-color:{o.t[2]}" aria-hidden="true"
+									></span>
+									<span class="mtxt"
+										><b>{o.t[0]} · {o.t[1]}</b> <span class="muted">{o.t[3]} · {o.t[2]}</span></span
 									>
-										<span class="sp-dot sm" style="background-color:{o.t[2]}" aria-hidden="true"
-										></span>
-										<span class="mtxt"
-											><b>{o.t[0]} · {o.t[1]}</b>
-											<span class="muted">{o.t[3]} · {o.t[2]}</span></span
-										>
-									</button>
-								</li>
-							{/each}
-						</ul>
-					</details>
-					<span class="muted alsotxt" data-testid="swatch-also"
-						>{alsoText(detail, detailOthers)}</span
-					>
-				{/if}
-			</div>
-		{/if}
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</details>
+			{/if}
+		</div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="body" bind:this={bodyEl} onkeydown={gridKey}>
@@ -842,7 +842,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-4);
-		padding: var(--sp-5) var(--sp-6) 0;
+		padding: 0 var(--sp-6) 0;
+		/* The whole panel is the one scroll container (no nested grid scroller on short screens). */
+		overflow-y: auto;
+		overflow-x: hidden;
+		overscroll-behavior: contain;
+		overflow-anchor: none;
+		scroll-padding-top: 64px;
 		background: var(--card);
 		border: 1px solid var(--line);
 		border-radius: var(--r-xl);
@@ -855,6 +861,11 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--sp-4);
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		background: var(--card);
+		padding: var(--sp-5) 0 var(--sp-3);
 	}
 	h2 {
 		margin: 0;
@@ -916,6 +927,35 @@
 	.brandchips {
 		flex-wrap: nowrap;
 	}
+	/* A faded edge says "more this way" on a row that scrolls sideways. It is dropped while a
+	   control inside has focus so the focus ring is never faded. Colors come from the mask only. */
+	.filters:global([data-fade-end]):not(:focus-within),
+	.brandchips:global([data-fade-end]):not(:focus-within) {
+		-webkit-mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+		mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+	}
+	.filters:global([data-fade-start]):not(:focus-within),
+	.brandchips:global([data-fade-start]):not(:focus-within) {
+		-webkit-mask-image: linear-gradient(to right, transparent, black 32px);
+		mask-image: linear-gradient(to right, transparent, black 32px);
+	}
+	.filters:global([data-fade-start]):global([data-fade-end]):not(:focus-within),
+	.brandchips:global([data-fade-start]):global([data-fade-end]):not(:focus-within) {
+		-webkit-mask-image: linear-gradient(
+			to right,
+			transparent,
+			black 32px,
+			black calc(100% - 32px),
+			transparent
+		);
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			black 32px,
+			black calc(100% - 32px),
+			transparent
+		);
+	}
 	.sp-chip {
 		white-space: nowrap;
 		cursor: pointer;
@@ -931,52 +971,27 @@
 	.typesel {
 		max-width: 190px;
 	}
-	/* A stack: the live row and a hidden ghost share one cell, so the row is as tall as the tallest. */
 	.detail {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 0;
-		min-height: 40px;
-	}
-	.drow {
-		grid-area: 1 / 1;
 		display: flex;
 		align-items: center;
 		gap: var(--sp-5);
-		min-width: 0;
+		/* Fixed: name, type line and one line of notes, whatever is hovered. */
+		height: 3.6rem;
+		overflow: hidden;
 	}
-	.drow.ghost {
-		visibility: hidden;
-		pointer-events: none;
-	}
-	.dtxt .dnotes {
-		font-size: var(--fs-xs);
-		overflow: visible;
-		white-space: normal;
-		text-overflow: clip;
+	.extras {
 		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-height: 1.25em;
 	}
-	.dtxt .dnotes span {
-		overflow: visible;
-		white-space: normal;
-		text-overflow: clip;
-	}
-	.dnotes > span + span::before {
+	.extras > span + span::before {
 		content: ' · ';
 	}
-	.sizer::after {
-		content: attr(data-sizer);
-	}
-	.otherslot {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0 var(--sp-5);
-		min-height: 1.5em;
-		font-size: var(--fs-sm);
-	}
-	.alsotxt {
-		font-size: var(--fs-xs);
+	.otherswrap {
+		position: relative;
+		min-height: 1.4rem;
 	}
 	.sp-dot {
 		width: 36px;
@@ -987,7 +1002,6 @@
 	}
 	.dtxt {
 		display: grid;
-		flex: 1 1 0;
 		min-width: 0;
 		line-height: 1.25;
 	}
@@ -1005,14 +1019,11 @@
 		flex-wrap: wrap;
 	}
 	.body {
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
+		flex: none;
 		display: grid;
 		gap: var(--sp-7);
 		align-content: start;
 		padding-bottom: var(--sp-8);
-		overscroll-behavior: contain;
 	}
 	.grid {
 		display: grid;
@@ -1101,6 +1112,15 @@
 		overflow-y: auto;
 		display: grid;
 		gap: var(--sp-1);
+		position: absolute;
+		left: 0;
+		right: 0;
+		z-index: 1;
+		padding: var(--sp-2);
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: var(--r-lg);
+		box-shadow: var(--shadow-2);
 	}
 	.opick {
 		display: flex;
@@ -1246,11 +1266,17 @@
 		/* The card grows with its content and the page scrolls; nothing is clipped or overflows it. */
 		.sheet {
 			flex: none;
+			overflow: visible;
+			/* The page is the scroller here: let it keep the grid in place when a banner appears above. */
+			overflow-anchor: auto;
+			padding-top: var(--sp-5);
 			padding-bottom: var(--sp-5);
 		}
+		header {
+			position: static;
+			padding: 0;
+		}
 		.body {
-			flex: none;
-			overflow: visible;
 			padding-bottom: 0;
 		}
 		.sw {
@@ -1282,14 +1308,72 @@
 	}
 	@media (min-width: 900px) {
 		.sheet {
-			padding: var(--sp-7) var(--sp-8) 0;
+			padding: 0 var(--sp-8) 0;
 		}
+		.sheet {
+			gap: var(--sp-3);
+		}
+		header {
+			padding-top: var(--sp-4);
+			padding-bottom: var(--sp-2);
+		}
+		/* Compact: the two selects share one row, the brand chips are one swipeable row below. */
 		.filters {
 			flex-wrap: wrap;
 			overflow: visible;
+			padding-bottom: 0;
+			row-gap: var(--sp-3);
 		}
-		.brandchips {
-			display: contents;
+		.filters > select {
+			flex: 1 1 0;
+			min-width: 0;
+			max-width: none;
+			text-overflow: ellipsis;
+		}
+		.filters > .brandchips {
+			flex: 0 0 100%;
+			min-width: 0;
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			overscroll-behavior-x: contain;
+			scrollbar-width: thin;
+			padding-bottom: var(--sp-2);
+		}
+		.brandchips > select {
+			flex: none;
+		}
+		.searchrow input,
+		select {
+			padding-block: var(--sp-3);
+		}
+		.detail {
+			height: 3rem;
+			gap: var(--sp-4);
+		}
+		/* "Other brands" sits on the detail row's last line instead of taking a row of its own. */
+		.otherswrap {
+			min-height: 0;
+			height: 0;
+		}
+		.others summary {
+			position: absolute;
+			right: 0;
+			top: -1.5rem;
+			background: var(--card);
+			padding-left: var(--sp-3);
+		}
+		.extras.hasothers {
+			padding-right: 8rem;
+		}
+		.body {
+			gap: var(--sp-4);
+		}
+		h3 {
+			margin-bottom: var(--sp-2);
+		}
+		.grid {
+			gap: var(--sp-3);
+			padding: var(--sp-2) var(--sp-3);
 		}
 	}
 	@media (prefers-reduced-motion: no-preference) {

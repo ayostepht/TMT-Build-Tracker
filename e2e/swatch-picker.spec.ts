@@ -178,6 +178,8 @@ for (const [w, scheme] of [
 			for (const d of el.querySelectorAll('*')) {
 				const r = d.getBoundingClientRect();
 				if (!r.width && !r.height) continue;
+				// The notes line is one clipped line (ellipsis, full text in its title): its spans may run on.
+				if (d.parentElement?.closest('.extras')) continue;
 				if (r.bottom > c.bottom + 1 || r.top < c.top - 1 || r.right > c.right + 1) bad++;
 			}
 			const foot = document.querySelector('footer');
@@ -285,15 +287,15 @@ for (const width of [1440, 390]) {
 			test.skip(true, 'bundled catalog has no merged "other brands" TPU swatch');
 			return;
 		}
-		// (The reserved note height depends on the swatches in view, so only the grid position and
-		// the detail height within this view are compared.)
+		// The detail row has one fixed height in every view, so it also equals the first view's.
 		await preview(normal);
 		const before = await top();
-		const viewHeight = (await detail.boundingBox())!.height;
+		expect((await detail.boundingBox())!.height).toBe(baseHeight);
 		await preview(merged);
-		await expect(picker.getByTestId('other-brands')).toBeVisible();
+		// The disclosure is an overlay over the grid's top (zero-height host), so its summary is what shows.
+		await expect(picker.getByTestId('other-brands').locator('summary')).toBeVisible();
 		expect(await top()).toBe(before);
-		expect((await detail.boundingBox())!.height).toBe(viewHeight);
+		expect((await detail.boundingBox())!.height).toBe(baseHeight);
 
 		// A real mouse click on the approximate swatch lands and closes the picker.
 		await search.fill('black');
