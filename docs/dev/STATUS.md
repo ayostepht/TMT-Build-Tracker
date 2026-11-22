@@ -333,8 +333,8 @@ Route each to the agent named in brackets.
   unchecked on a real iPhone and Android phone; no e2e assertion for the compose retry
   (`share-picture-retry`); the tall size leaves plain bands top and bottom (maintainer saw
   it, no change asked); the preview-fit fix #104 (fbd401d; frame sized from the picture's ratio, 60dvh cap
-  on phones; reported clipped on iPhone Safari for portrait and tall) awaits the maintainer's
-  iPhone re-check. Follow-up #102 (b21d269): section text keeps typed line breaks (`cleanBody`), a
+  on phones; reported clipped on iPhone Safari for portrait and tall) was confirmed by the
+  maintainer on a phone (2026-11-22). Follow-up #102 (b21d269): section text keeps typed line breaks (`cleanBody`), a
   failed draw or encode offers "Try again" and disables Share and Download meanwhile.
 - **Color picker, refused pick** (#98, 41513e7) [design-studio-ui]: the sentence of a
   refused pick is pinned under the stage on phones (in flow above the card from 900 px);
