@@ -157,7 +157,13 @@
 	export function snapshot(
 		opts: { width?: number; height?: number; background?: string; clean?: boolean } = {}
 	): Promise<Blob> {
-		if (!scene) return Promise.reject(new Error('The 3D view is not ready'));
+		// Not before the model is in: a shot of the empty scene is a blank picture.
+		if (status === 'nowebgl' || status === 'error') {
+			return Promise.reject(
+				Object.assign(new Error('The 3D view is not available'), { name: 'ViewUnavailable' })
+			);
+		}
+		if (!scene || status !== 'ready') return Promise.reject(new Error('The 3D view is not ready'));
 		return scene.snapshot(opts);
 	}
 	/** Re-frame the whole chair. */

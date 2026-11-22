@@ -96,25 +96,49 @@
 		url = null;
 	}
 
+	let waiting = $state(false);
+	let stopped = false;
+	/**
+	 * Take the chair shot. While the 3D view is still loading the viewer refuses, so ask again every
+	 * 300 ms for up to 15 s ("Getting the 3D view ready…"); only then, or when the view can never
+	 * work (no WebGL, model error), show the error with "Try again".
+	 */
 	async function takeShot() {
 		busy = true;
 		error = null;
-		try {
-			chair = await shot();
-		} catch (e) {
-			chair = null;
-			error =
-				e instanceof Error && e.message
-					? `${e.message}. Wait for the 3D view to finish loading, then try again.`
-					: 'The 3D view is not ready. Wait for it to finish loading, then try again.';
-			busy = false;
+		const deadline = Date.now() + 15_000;
+		for (;;) {
+			try {
+				waiting = false;
+				chair = await shot();
+				return;
+			} catch (e) {
+				chair = null;
+				const gone = e instanceof Error && e.name === 'ViewUnavailable';
+				if (stopped) return;
+				if (!gone && Date.now() < deadline) {
+					waiting = true;
+					await new Promise((r) => setTimeout(r, 300));
+					if (stopped) return;
+					continue;
+				}
+				waiting = false;
+				error = gone
+					? 'The 3D view is not available here, so a picture cannot be made.'
+					: 'The 3D view did not get ready. Wait for it to finish loading, then try again.';
+				busy = false;
+				return;
+			}
 		}
 	}
 
 	onMount(() => {
 		canShare = canShareImages();
 		void takeShot();
-		return revoke;
+		return () => {
+			stopped = true;
+			revoke();
+		};
 	});
 
 	// Redraw whenever something that shows on the picture changes (typing is debounced).
@@ -225,7 +249,7 @@
 			/>
 		{:else}
 			<div class="sp-wait muted" data-testid="share-picture-preview" role="status">
-				{error ? 'No preview' : 'Making the picture…'}
+				{error ? 'No preview' : waiting ? 'Getting the 3D view ready…' : 'Making the picture…'}
 			</div>
 		{/if}
 	</figure>
