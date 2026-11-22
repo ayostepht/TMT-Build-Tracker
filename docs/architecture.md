@@ -563,10 +563,13 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   (newest pick only; cleared on the next pick and when the picker opens or closes,
   `pickEpoch`), shown as `p.pickerr`: sticky under the pinned stage on phones, static above
   the card from 900 px, `aria-hidden` because the build layout's `role="alert"` banner
-  announces it. The picker's detail row is a ghost-sized stack: a hidden ghost row reserves
-  the longest Approx. / Palettes-skip note among the swatches shown, and the "Other brands"
-  disclosure and `swatch-also` text live in `.otherslot`, reserved whenever merged swatches
-  are in view, so hover and focus never move the grid (e2e: `swatch-picker.spec.ts`).
+  announces it. The picker has the hosted edition's compact layout: a fixed-height `.detail`
+  row whose notes are one `.extras` line (ellipsis, full text in `title`), the "Other
+  brands" list as an overlay in the always-reserved `.otherswrap` (host height 0 on
+  desktop, summary absolutely positioned, so e2e targets its `summary`), the `edgeFade`
+  action (`data-fade-start` / `data-fade-end` on `.filters` and `.brandchips`), a sticky
+  header with the sheet as the desktop scroller, and `overflow-anchor: auto` on phones.
+  Hover and focus never move the grid (e2e: `swatch-picker.spec.ts`).
   `SwatchPicker.onpick` may return a promise of success; on `false` the detail
   row drops the refused swatch. Swatches ignore touch for the hover preview (`touching`,
   reset by any key press) and `.sw:hover` applies only under `@media (hover: hover)`.
@@ -591,7 +594,8 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   the model and WebGL; hidden in the embedded wizard; viewers may use it). The chair comes
   from `ModelStage.snapshot({ clean: true })` (no selection highlight or dimming, transparent,
   trimmed). Browser only: nothing is uploaded and no names are pre-filled. `Dialog` has a
-  `wide` prop for it.
+  `wide` prop for it. Section bodies keep typed line breaks (`cleanBody`; `fitSections` wraps
+  per paragraph); a failed compose offers a retry (`share-picture-retry`).
 - **Parts:** `PartSheet` (part chip + slot strip over the stage), `PartList` (role filter
   chips, sticky groups). `share/DesignActions` above the tabs ("Saved automatically",
   Saved designs, Share / Save as design).

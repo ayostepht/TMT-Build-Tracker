@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-22. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-22, 20:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -42,25 +42,41 @@ _Updated 2026-11-22. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
   pull request, to bring back there: the `finally` around the save, clearing the touch flag
   on any key press, and the follow-up commit (refusal line pinned in view on a phone and
   limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
-- **In flight: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
-  (branch `claude/cool-davinci-qce08y` into `edge`; the catalog data and picker order, plus a color picker
-  fix the new swatches exposed: a hovered swatch with a note made the detail row taller
-  and moved the grid from under the pointer, so `design.spec.ts:159` failed in CI; the row
-  now reserves its height, with an e2e check in `swatch-picker.spec.ts`. No schema change).
-  **Question open for the maintainer before the merge:** keep this fix (full note text,
-  detail row about 12 px taller on a phone) or use the hosted edition's compact version
-  (fixed height, one clipped note line with a tooltip) so both editions match. Merge it when CI is green and the question is answered (check its state
-  first; if it is merged, nothing is in flight here); it reaches the test copy with the
-  next `edge` deploy. The same change is open in the hosted edition as its #40 (branch
-  `feat/filaments-space-coast-dancyn` into `main`, checks passed there); that project's
-  session merges it (merging is deploying). To regenerate these vendors a cloud environment
-  needs `spacecoast3d.org`, `www.dancyn3dprints.com` and `cdn.shopify.com` on its allowed
-  hosts; without them use `fetch-vendor-filaments.mjs --from-dir` with saved pages. The report behind #95 is explained: the
+- **Also merged into `edge` 2026-11-22:** #101 "Share a picture of a build's colors"
+  (76a65c0; closes #99; browser only, no schema, server or dependency change). The
+  maintainer approved the renderings in the session (family card; social square, portrait
+  and tall with text sections; default texts say "Toddler Mobility Trainer", not "TMT").
+  **Not on the test copy yet.** Unchecked: the system share sheet on a real iPhone and
+  Android phone (headless Chromium has no file sharing).
+- **Hosted edition port of #101:** its #41 (branch `feat/share-picture`, head 21e6117) is
+  open and **not to be merged yet** (maintainer, 2026-11-22): wait for its `e2e`, the
+  maintainer's phone check of the share sheet on the `edge` image, and the port of the
+  follow-up below. Open question there: the button also shows in the demo (recommended:
+  keep it).
+- **In flight:** the follow-up to #101 on branch `claude/sweet-johnson-59ma1x` (section
+  text keeps line breaks, "Try again" when drawing fails, "Download started." note), with
+  this handoff; merge when green, then port it into the hosted edition's #41.
+- **In flight too: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
+  (branch `claude/cool-davinci-qce08y` into `edge`; no schema change). It holds the catalog
+  data and picker order, and the hosted edition's compact color picker ported into
+  `SwatchPicker.svelte` in this edition's colors (maintainer, 2026-11-22, after comparing
+  screenshots): the new approximate swatches exposed a bug where a hovered swatch with a
+  note made the detail row taller and moved the grid from under the pointer
+  (`design.spec.ts:159` failed in CI); the row is now a fixed height. #98's behaviour is
+  kept. Merge it when CI is green (check its state first; if it is merged, it is not in
+  flight); it reaches the test copy with the next `edge` deploy. The catalog change is
+  open in the hosted edition as its #40 (branch `feat/filaments-space-coast-dancyn` into
+  `main`, CI green); that project's session merges it (merging is deploying). Offer the
+  hosted edition #98's picker behaviour, which its picker lacks. To regenerate these
+  vendors a cloud environment needs `spacecoast3d.org`, `www.dancyn3dprints.com` and
+  `cdn.shopify.com` on its allowed hosts; without them use
+  `fetch-vendor-filaments.mjs --from-dir` with saved pages.
+- The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** deploy `edge` 41513e7 to the test copy (with the maintainer's OK; needs a
+- **Next step:** finish the #101 follow-up (above); deploy `edge` (76a65c0 or later) to the test copy (with the maintainer's OK; needs a
   machine with `CLAUDE.local.md`), then the maintainer tests swatch taps on an iPhone (the
-  touch change is unconfirmed on iOS Safari); then pick from the follow-ups below or STATUS
+  touch change is unconfirmed on iOS Safari) and Share a picture's share sheet; then pick from the follow-ups below or STATUS
   "Next steps".
 - CI: an `image` job once hung in build-push for 25+ min (normal is ~4 min); cancel and re-run it.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use

@@ -21,7 +21,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Fixed
 
-- **Color picker: every swatch can be clicked with a mouse.** Hovering a swatch that has a note ("Approx. color", "Palettes skip it") or other brands made the line above the swatches taller, so the swatches moved away from the pointer and the click did not land. The line now keeps one height while you move over the swatches, and the notes show in full.
+- **Color picker: every swatch can be clicked with a mouse, and the picker is more compact.** Hovering a swatch that has a note ("Approx. color", "Palettes skip it") or other brands made the line above the swatches taller, so the swatches moved away from the pointer and the click did not land. That line now has a fixed height: a long note is cut to one line (hover it for the full text), "Other brands" opens over the swatches, and the brand buttons are one row you scroll sideways.
 - Color picker: picking a color always shows the saved color afterwards (a pick could keep showing after its save was refused, and hide later changes to that color), a refused save now says so next to the picker, and a tap on a swatch on a phone is no longer treated as a hover.
 - Replacing the plates of a build that has started no longer turns a "some pieces" print log into a log of the whole part; converted print logs keep their place in the history.
 - On a plate the kit prints several times per part, such as the wheel rims, the grams and time are now per print, the counter counts prints ("0/4 printed"), the fields read "per print", the exported plate name says "(print x4)", and the tires diagram no longer quotes both runs' grams as one run. Tires keep "per run".

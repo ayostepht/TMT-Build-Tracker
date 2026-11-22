@@ -2,7 +2,8 @@
 
 _Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
 copy on r65 = `edge` 9f32307, the 0.9.3 app code plus #90 and #92–#96, since 2026-11-21;
-#98 merged into `edge` 2026-11-22 as 41513e7, not on the test copy yet)._
+#98 merged into `edge` 2026-11-22 as 41513e7 and #101 "Share a picture" as 76a65c0, neither on
+the test copy yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -323,6 +324,16 @@ Route each to the agent named in brackets.
   the palette Undo activity doesn't mention the auto-added lock slots it removes; the
   designs gallery pages (`/designs`, `/designs/[slug]`) call `roleLabel` without the
   filament list, so a saved design with a clashing added slot still shows two equal labels.
+- **Share a picture** (#101, 76a65c0, closes #99) [design-studio-ui]: Design tab button;
+  in-browser PNG/JPEG for the family (1600×2000) or social media (square 1080×1080,
+  portrait 1080×1350 with 1 text section, tall 1080×1920 with up to 3; text kept out of
+  the top 250 px and bottom 340 px on tall). Only the typed text, the chair, swatches and
+  the MakeGood credit are drawn; nothing is uploaded. `e2e/share-picture.spec.ts` seeds a
+  synthetic model row and restores it in `afterAll`. Open: the system share sheet is
+  unchecked on a real iPhone and Android phone; no e2e assertion for the compose retry
+  (`share-picture-retry`); the tall size leaves plain bands top and bottom (maintainer saw
+  it, no change asked). Follow-up: section text keeps typed line breaks (`cleanBody`), a
+  failed draw or encode offers "Try again" and disables Share and Download meanwhile.
 - **Color picker, refused pick** (#98, 41513e7) [design-studio-ui]: the sentence of a
   refused pick is pinned under the stage on phones (in flow above the card from 900 px);
   if the refused swatch sat directly under the stage when tapped, the pinned line can
@@ -482,12 +493,15 @@ Route each to the agent named in brackets.
   Space Coast's TPU 95A Crystal Clear (`#968b7a`), PETG Gloss Hot Pink and TPU Bubblegum
   Pink each have one dim photo; correct them in `scripts/vendor-hex-overrides.json` if a
   maker reports the swatch is off.
-- Color picker detail row (2026-11-22, #100): the row keeps one height while swatches are
-  hovered or focused. A hidden ghost row reserves the longest note among the swatches in
-  view and an `.otherslot` row is reserved when merged swatches are in view. The notes
-  class is `dnotes` because the global `.notes` and `.detail` rules in `app.css` leak into
-  components (the picker's `.detail` still inherits their padding and dashed top border).
-  The hosted edition solves the same thing with a fixed-height row and one clipped line.
+- Color picker (maintainer, 2026-11-22, #100): the picker follows the hosted edition's
+  compact layout in this edition's colors. Fixed-height detail row (`3.6rem` phone, `3rem`
+  desktop) with the notes on one clipped line and the full text in `title`; "Other brands"
+  is an overlay in an always-reserved row; brand chips are one sideways-scrolling row with
+  edge fades; sticky header with the sheet as the only scroll container on desktop.
+  Invariant, asserted by `swatch-picker.spec.ts` at 1440 and 390 px: hovering or focusing
+  a swatch never changes the height of anything above the grid. #98's behaviour is kept;
+  on phones `.sheet` keeps `overflow-anchor: auto`, because with `none` the refusal banner
+  shifts the grid under a finger. The hosted picker lacks #98's refusal handling.
 - Action links are buttons or clickable badges; plain text links only inside sentences.
 - Printers are read-only. Sole exception: Elegoo SDCP Cmd 386 `{"Enable":1}` to turn the
   camera on when someone views it. Never move, heat, pause, stop or start a print.
