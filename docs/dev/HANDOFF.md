@@ -20,7 +20,7 @@ _Updated 2026-11-22, 21:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
-- **Test copy:** r65 = `edge` 9f32307 (0.9.3 plus #90 and #92–#96) deployed 2026-11-21 (r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
+- **Test copy:** r67 = `edge` fbd401d (0.9.3 plus #90, #92–#96, #98, #100–#102 and #104) deployed 2026-11-22 (r66 = 76a65c0 earlier the same day; r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
 - **Merged into `edge` 2026-11-20, on the test copy since r64:**
@@ -38,7 +38,7 @@ _Updated 2026-11-22, 21:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   log's id.
 - **Merged into `edge` 2026-11-22:** #98 "Color picker: a pick no longer hides the saved
   color; taps on touch are not treated as hover" (41513e7; no schema change; port of the
-  hosted edition's #38). **Not on the test copy yet** (r65 is 9f32307). Beyond the hosted
+  hosted edition's #38). On the test copy since r66. Beyond the hosted
   pull request, to bring back there: the `finally` around the save, clearing the touch flag
   on any key press, and the follow-up commit (refusal line pinned in view on a phone and
   limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
@@ -46,25 +46,24 @@ _Updated 2026-11-22, 21:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   (76a65c0; closes #99; browser only, no schema, server or dependency change). The
   maintainer approved the renderings in the session (family card; social square, portrait
   and tall with text sections; default texts say "Toddler Mobility Trainer", not "TMT").
-  **Not on the test copy yet.** Unchecked: the system share sheet on a real iPhone and
+  On the test copy since r66. Unchecked: the system share sheet on a real iPhone and
   Android phone (headless Chromium has no file sharing).
 - **Hosted edition port of #101 and #102:** its #41 (branch `feat/share-picture`, head
   dd10228 with the ports of #102 and #104, `public-ci` green) is open and **not to be merged yet** (maintainer,
   2026-11-22): first the maintainer checks the share sheet on a phone on the `edge` image.
   Open question there: the button also shows in the demo (recommended: keep it).
 - **Follow-up to #101 merged 2026-11-22:** #102 (b21d269): section text keeps typed line
-  breaks, "Try again" when drawing fails, "Download started." note. Not on the test copy.
+  breaks, "Try again" when drawing fails, "Download started." note. On the test copy since r67.
 - **Preview fix merged 2026-11-22:** #104 (fbd401d): the whole picture fits the preview
   (the maintainer saw portrait and tall clipped on an iPhone). Verified in Chromium and by
-  an e2e check only; **the maintainer re-checks on the iPhone** once the `edge` image is
-  pulled. Decided: the button stays in the hosted edition's demo.
+  an e2e check only; on the test copy since r67; **the maintainer re-checks on the iPhone**. Decided: the button stays in the hosted edition's demo.
 - **In flight:** nothing in this repository.
 - **Also merged into `edge` 2026-11-22:** #100 "Add Space Coast 3D and Dancyn 3D Prints to
   the filament catalog; compact color picker" (5541c2c; no schema change). Both brands are
   official MakeGood suppliers and follow Schoolhouse Spools in the picker. The picker has
   the hosted edition's compact layout in this edition's colors (maintainer's choice after
   comparing screenshots), which also fixes swatches with a note that could not be clicked
-  with a mouse; #98's behaviour is kept. **Not on the test copy yet.** The catalog change
+  with a mouse; #98's behaviour is kept. On the test copy since r67. The catalog change
   is open in the hosted edition as its #40 (branch `feat/filaments-space-coast-dancyn`,
   CI green); that project's session merges it (merging is deploying). To offer there:
   #98's refused-save handling, which the hosted picker lacks. To regenerate the two
@@ -74,11 +73,13 @@ _Updated 2026-11-22, 21:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** deploy `edge` fbd401d to the test copy (with the maintainer's OK; needs a
-  machine with `CLAUDE.local.md`), then the maintainer tests swatch taps on an iPhone (the
-  touch change is unconfirmed on iOS Safari) and Share a picture's share sheet; then pick from the follow-ups below or STATUS
-  "Next steps".
-- CI: an `image` job once hung in build-push for 25+ min (normal is ~4 min); cancel and re-run it.
+- **Next step:** the maintainer tests on the test copy (r67 = fbd401d): swatch taps on an
+  iPhone (the touch change is unconfirmed on iOS Safari), Share a picture's share sheet on
+  iPhone and Android, and the portrait and tall previews on the iPhone; then pick from the
+  follow-ups below or STATUS "Next steps".
+- CI: the `image` job's build-push step takes ~3–4 min; it has hung twice (25+ min for
+  9f32307, 23 min for fbd401d). Cancel the run and use "Re-run failed jobs": the passed test
+  jobs are kept and only the image is built again.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 

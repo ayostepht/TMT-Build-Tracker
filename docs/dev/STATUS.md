@@ -1,9 +1,8 @@
 # Project status
 
 _Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
-copy on r65 = `edge` 9f32307, the 0.9.3 app code plus #90 and #92–#96, since 2026-11-21;
-#98 merged into `edge` 2026-11-22 as 41513e7 and #101 "Share a picture" as 76a65c0 with its follow-ups #102 (b21d269) and #104 (fbd401d), none on
-the test copy yet)._
+copy on r67 = `edge` fbd401d, the 0.9.3 app code plus #90, #92–#96, #98, #100–#102 and
+#104, since 2026-11-22)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -20,7 +19,7 @@ done. Keep it under ~150 lines.
    `spoolman_cache`) and the frozen fixture `fixtures/v0.9.3/`. Contents since 0.9.2:
    Spoolman filaments (#71, #77, #81 fixes #79), dependency updates (#74), empty `ORIGIN`
    fix (#76), header detail lines and exact plate locators (#80), resource limits from the
-   public edition (#82, #84). The test copy runs r65 = `edge` 9f32307 (the 0.9.3 app code plus #90 and #92–#96;
+   public edition (#82, #84). The test copy runs r67 = `edge` fbd401d (the 0.9.3 app code plus #90, #92–#96, #98, #100–#102 and #104;
    see `docs/dev/CHANGELOG.md`); the maintainer confirmed the #79 Spare figures on real data,
    and #59 is closed. 0.9.2 (2026-11-16): `main` 48c9649, migrations 0001/0002.
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
