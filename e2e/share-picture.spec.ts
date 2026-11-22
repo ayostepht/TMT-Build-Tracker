@@ -2,7 +2,15 @@ import { readFile } from 'node:fs/promises';
 import Database from 'better-sqlite3';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { createBuild, createChapter, invite, joinViaInvite, signUp, uniqueEmail } from './helpers';
+import {
+	createBuild,
+	createChapter,
+	invite,
+	joinViaInvite,
+	signUp,
+	toSetupStep,
+	uniqueEmail
+} from './helpers';
 
 // "Share a picture" (issue #99). The e2e server has no MakeGood kit, so the build has no 3D model and
 // the button is hidden. This spec gives the build's template a synthetic one (three boxes, no MakeGood
@@ -144,6 +152,9 @@ async function ownerBuild(page: Page, label: string) {
 
 async function openDialog(page: Page, buildId: string) {
 	await page.goto(`/builds/${buildId}/design`);
+	// The picture takes one snapshot of the 3D view when it opens: let the model finish loading.
+	await expect(page.locator('canvas').first()).toBeVisible();
+	await expect(page.getByText(/Loading the 3D model/)).toHaveCount(0);
 	await page.getByTestId('open-share-picture').click();
 	const dialog = page.getByTestId('share-picture-dialog');
 	await expect(dialog).toBeVisible();
@@ -189,8 +200,12 @@ test('the setup wizard does not offer the button', async ({ page }) => {
 	await page.getByRole('button', { name: 'Create build' }).click();
 	await expect(page).toHaveURL(/\/builds\/[^/]+\/setup/);
 	seedModel(new URL(page.url()).pathname.split('/')[2]);
-	await page.reload();
-	await expect(page.getByTestId('design-actions').first()).toBeVisible();
+	await toSetupStep(page, 3);
+	await expect(page.getByTestId('design-workspace')).toBeVisible();
+	// The 3D view is up (the same model that shows the button on the Design tab)...
+	await expect(page.locator('canvas').first()).toBeVisible();
+	await expect(page.getByTestId('design-actions')).toBeVisible();
+	// ...but the wizard has its own picker and no "Share a picture".
 	await expect(page.getByTestId('open-share-picture')).toHaveCount(0);
 });
 
@@ -301,7 +316,10 @@ test('nothing from the build is pre-filled and nothing is sent when downloading'
 		}
 	}
 	for (const s of secrets) {
-		await expect(dialog.getByTestId('share-picture-preview')).not.toHaveAttribute('alt', new RegExp(s));
+		await expect(dialog.getByTestId('share-picture-preview')).not.toHaveAttribute(
+			'alt',
+			new RegExp(s)
+		);
 	}
 	requests.length = 0; // from here on only the download itself is observed
 	await dialog.getByTestId('share-picture-variant-family').click();
