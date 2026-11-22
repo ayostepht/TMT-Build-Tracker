@@ -298,6 +298,40 @@ describe('mutations', () => {
 	});
 });
 
+describe('some parts of a plate', () => {
+	it('start as one print (one activity row), log as one run marking exactly those parts', () => {
+		const id = mk();
+		const v0 = loadBuildView(db, id, 'owner')!;
+		const plate = v0.plates.find((p) => !p.perPartRuns && p.runs <= 1 && p.parts.length >= 3)!;
+		const [a, b, c] = plate.parts;
+		const rows = (v: typeof v0) => v.activity.filter((r) => r.kind === 'printing.start');
+		printingAction(db, id, 'owner', { action: 'start', slugs: [a, b] });
+		const v1 = loadBuildView(db, id, 'owner')!;
+		expect(rows(v1)).toHaveLength(1);
+		expect(rows(v1)[0].payload.slugs).toEqual([a, b]);
+		expect([a, b, c].map((s) => v1.state[s].status)).toEqual(['Printing', 'Printing', 'To print']);
+		// both share one start time: they went on the printer together
+		expect(v1.state[a].startedAt).toBe(v1.state[b].startedAt);
+		const { runId } = addRun(db, id, 'owner', {
+			plateNumber: plate.number,
+			partSlugs: [a, b],
+			date: '2026-01-02',
+			result: 'Success',
+			grams: 30,
+			hours: 2,
+			note: ''
+		});
+		const v2 = loadBuildView(db, id, 'owner')!;
+		expect([a, b, c].map((s) => v2.state[s].status)).toEqual(['Printed', 'Printed', 'To print']);
+		expect(v2.runs.find((r) => r.id === runId)!.partSlugs).toEqual([a, b]);
+		// the rest of the plate is still trackable on its own
+		printingAction(db, id, 'owner', { action: 'start', slugs: [c] });
+		const v3 = loadBuildView(db, id, 'owner')!;
+		expect(v3.state[c].status).toBe('Printing');
+		expect(v3.state[a].status).toBe('Printed');
+	});
+});
+
 describe('undoRun', () => {
 	it('deletes the run and restores the snapshot, only for parts the run touches', () => {
 		const id = mk();

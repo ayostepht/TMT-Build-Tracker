@@ -7,7 +7,7 @@
  */
 import { and, desc, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { fileMentionsBuild, matchPlate, plateRunGrams } from '#lib/domain/printer-match.ts';
-import { jobNeverStarted, stopPrinting } from '#lib/domain/actions.ts';
+import { jobNeverStarted, pieceListError, piecesLeft, stopPrinting } from '#lib/domain/actions.ts';
 import { releaseUnstarted } from '#lib/domain/recompute.ts';
 import { progressGrams } from '#lib/domain/logrun.ts';
 import { defaultRunParts } from '#lib/domain/run-choice.ts';
@@ -18,8 +18,10 @@ import { ApiError } from '../access';
 import {
 	addRun,
 	addRunSystem,
+	assertPiecePlate,
 	mutateBuild,
 	mutateBuildSystem,
+	pieceList,
 	syncPlateTime
 } from '../builds/actions';
 import { MAX_RUN_GRAMS, runGramsMessage } from '../builds/actions';
@@ -69,6 +71,44 @@ interface Candidate {
 	plate: number;
 	/** Parts the user chose (an expectation or a manual link); otherwise the default rule applies. */
 	partSlugs?: string[];
+	/** Pieces of the single chosen part that are on this print ("Print some pieces…"); see `checkPieces`. */
+	comps?: number[];
+}
+
+/**
+ * Validate a client-sent piece list for one part of a plate ("Print some pieces…"), with the rules of
+ * a piece start (`pieceList`, `assertPiecePlate`: distinct indexes in range, unticked, fewer than all,
+ * a plate that prints once). Needs exactly one chosen part. Returns undefined when none was sent, and
+ * also when the list is every piece still to print (that is a whole-part print, as in the start action).
+ */
+export function checkPieces(
+	view: BuildView,
+	plateNumber: number,
+	slugs: string[] | undefined,
+	raw: unknown
+): number[] | undefined {
+	if (raw === undefined || raw === null) return undefined;
+	if (!slugs || slugs.length !== 1) throw new ApiError(400, 'Pieces belong to a single part');
+	const slug = slugs[0];
+	if (view.state[slug]?.status === 'Printed')
+		throw new ApiError(400, 'That part is already printed');
+	assertPiecePlate(view, slug, plateNumber);
+	const comps = pieceList(raw, view, slug, 'start');
+	return comps.length === piecesLeft(view, slug).length ? undefined : comps;
+}
+
+/**
+ * The piece list of a job (or expectation) when it still fits its single part: distinct indexes within
+ * the part's current pieces (a kit or template update may have changed them), fewer than all. Otherwise
+ * null: the job is then handled as a plain whole-part one, never failing on a stale list.
+ */
+export function fittingComps(
+	view: BuildView,
+	slugs: readonly string[] | null | undefined,
+	comps: readonly number[] | null | undefined
+): number[] | null {
+	if (!comps?.length || slugs?.length !== 1) return null;
+	return pieceListError(view, slugs[0], comps, 'log') ? null : [...comps];
 }
 
 /**
@@ -151,24 +191,30 @@ function linkPatches(
 	slugs: string[],
 	startedAt: Date,
 	estSeconds: number | null,
-	heldByOther: ReadonlySet<string> = new Set()
+	heldByOther: ReadonlySet<string> = new Set(),
+	comps: readonly number[] | null = null
 ): PartPatch[] {
 	const iso = startedAt.toISOString();
 	const out: PartPatch[] = [];
+	// The piece list follows the job: only a single part carries one.
+	const want = slugs.length === 1 && comps?.length ? [...comps] : null;
 	for (const slug of slugs) {
 		const st = view.state[slug];
 		if (!st) continue;
 		const p: PartPatch = { slug };
+		const have = st.printingComps?.length ? st.printingComps : null;
 		if (st.status !== 'Printing') {
 			p.status = 'Printing';
 			p.startedAt = iso;
 			if (estSeconds) p.runEstSeconds = estSeconds;
+			if (want) p.printingComps = want;
 		} else if (heldByOther.has(slug)) {
 			if (!st.startedAt) p.startedAt = iso;
 			if (estSeconds && !st.runEstSeconds) p.runEstSeconds = estSeconds;
 		} else {
 			if (st.startedAt !== iso) p.startedAt = iso;
 			if (estSeconds && st.runEstSeconds !== estSeconds) p.runEstSeconds = estSeconds;
+			if (JSON.stringify(have) !== JSON.stringify(want)) p.printingComps = want;
 		}
 		if (Object.keys(p).length > 1) out.push(p);
 	}
@@ -209,6 +255,18 @@ function attach(
 		: (defaultRunParts(c.view, c.plate) ??
 			(printingNow.length ? printingNow : plate.parts.filter((s) => c.view.state[s])));
 	// Changing the parts of a job that is already linked: the dropped ones stop printing.
+	// Pieces: the chosen ones, or the list a single Printing part already carries (a piece print
+	// marked first, then linked by hand without saying so).
+	const only = slugs.length === 1 ? c.view.state[slugs[0]] : undefined;
+	const comps = fittingComps(
+		c.view,
+		slugs,
+		c.comps?.length
+			? c.comps
+			: only?.status === 'Printing' && only.printingComps?.length
+				? only.printingComps
+				: null
+	);
 	const dropped =
 		job.buildId === c.view.build.id && job.plateNumber === c.plate
 			? (job.partSlugs ?? []).filter((s) => !slugs.includes(s))
@@ -225,15 +283,16 @@ function attach(
 	};
 	const body = (tx: Db, view: BuildView) => {
 		tx.update(printerJobs)
-			.set({ buildId: c.view.build.id, plateNumber: c.plate, partSlugs: slugs })
+			.set({ buildId: c.view.build.id, plateNumber: c.plate, partSlugs: slugs, comps })
 			.where(eq(printerJobs.id, job.id))
 			.run();
 		const live = job.status === 'printing' || job.status === 'paused';
 		const patches = live
-			? linkPatches(view, slugs, started, est, heldByOtherJobs(tx, c.view.build.id, job.id))
+			? linkPatches(view, slugs, started, est, heldByOtherJobs(tx, c.view.build.id, job.id), comps)
 			: [];
 		// the run time the printer reported is the plate's time too (never over a typed one)
-		if (live && est && patches.some((p) => p.runEstSeconds === est))
+		// (a piece print's time is that of some pieces, never the plate's)
+		if (live && est && !comps && patches.some((p) => p.runEstSeconds === est))
 			syncPlateTime(tx, c.view.build.id, view, slugs, est, 'printer');
 		return {
 			kind: auto ? 'printer.job.start' : 'printer.job.link',
@@ -270,7 +329,7 @@ function bindExpected(db: Db, printer: PrinterRow, job: JobRow) {
 export function expectOnPrinterJob(
 	db: Db,
 	printerId: string,
-	e: { buildId: string; plate: number; partSlugs?: string[] }
+	e: { buildId: string; plate: number; partSlugs?: string[]; comps?: number[] }
 ): void {
 	const printer = db.select().from(printers).where(eq(printers.id, printerId)).get();
 	if (!printer) throw new ApiError(404, 'Not found');
@@ -279,6 +338,7 @@ export function expectOnPrinterJob(
 		buildId: e.buildId,
 		plate: e.plate,
 		...(e.partSlugs ? { partSlugs: e.partSlugs } : {}),
+		...(e.comps?.length ? { comps: e.comps } : {}),
 		...(j && !j.buildId ? { jobId: j.id } : {}),
 		at: Date.now()
 	});
@@ -300,6 +360,7 @@ export function pendingExpected(db: Db, orgId: string, buildId?: string): Printe
 			buildId: exp.buildId,
 			plateNumber: exp.plate,
 			partSlugs: exp.partSlugs ?? null,
+			comps: exp.comps ?? null,
 			jobId: j.id,
 			at: exp.at
 		});
@@ -395,7 +456,7 @@ function finishJob(
 
 function runBody(
 	view: BuildView,
-	job: Pick<JobRow, 'plateNumber' | 'partSlugs'>,
+	job: Pick<JobRow, 'plateNumber' | 'partSlugs' | 'comps'>,
 	result: 'Success' | 'Failed' | 'Partial',
 	grams: number | null,
 	elapsedSec: number | null,
@@ -404,8 +465,11 @@ function runBody(
 	note?: string
 ) {
 	const plate = view.plates.find((p) => p.number === job.plateNumber);
+	// Some pieces of one part: a run of that part with `comps` (never split, never Partial).
+	const pieces = fittingComps(view, job.partSlugs, job.comps);
 	// A perPartRuns plate counts runs per part: one part is logged as `partSlug`.
-	const single = plate?.perPartRuns && job.partSlugs?.length === 1 ? job.partSlugs[0] : null;
+	const single =
+		pieces || (plate?.perPartRuns && job.partSlugs?.length === 1) ? job.partSlugs![0] : null;
 	const subset =
 		!single && job.partSlugs && plate && job.partSlugs.length < plate.parts.length
 			? job.partSlugs
@@ -414,6 +478,7 @@ function runBody(
 		plateNumber: job.plateNumber,
 		partSlug: single,
 		partSlugs: subset,
+		...(pieces ? { comps: pieces } : {}),
 		date: today(now),
 		result,
 		grams,
@@ -529,6 +594,7 @@ export function toJobView(j: JobRow, printerName: string): PrinterJobView {
 		buildId: j.buildId,
 		plateNumber: j.plateNumber,
 		partSlugs: j.partSlugs ?? null,
+		comps: j.comps?.length ? j.comps : null,
 		fileName: j.fileName,
 		status: j.status as PrinterJobView['status'],
 		progress: j.progress,
@@ -616,7 +682,8 @@ export function linkJob(
 	userId: string,
 	buildId: string,
 	plateNumber: number,
-	partSlugs?: unknown
+	partSlugs?: unknown,
+	comps?: unknown
 ): void {
 	const { job, printer } = getJobForOrg(db, jobId, orgId);
 	const b = db
@@ -631,18 +698,34 @@ export function linkJob(
 		throw new ApiError(400, 'Drafts cannot be linked to print jobs.');
 	if (!view.plates.some((p) => p.number === plateNumber)) throw new ApiError(400, 'Unknown plate');
 	const chosen = checkPartSlugs(view, plateNumber, partSlugs);
+	// An expectation made before a kit or template update may carry a list that no longer fits the part:
+	// confirming it links the part without pieces. A list the client typed is still validated strictly.
+	const exp = getExpected(db, printer.organizationId, printer.id);
+	const stale =
+		Array.isArray(comps) &&
+		JSON.stringify(comps) === JSON.stringify(exp?.comps) &&
+		!fittingComps(view, chosen, comps);
+	const pieces = stale ? undefined : checkPieces(view, plateNumber, chosen, comps);
 	const status = (printer.lastStatus ?? {
 		state: 'printing',
 		progress: job.progress
 	}) as unknown as PrinterStatus;
-	attach(db, printer, job, { view, plate: plateNumber, partSlugs: chosen }, status, false, userId);
+	attach(
+		db,
+		printer,
+		job,
+		{ view, plate: plateNumber, partSlugs: chosen, comps: pieces },
+		status,
+		false,
+		userId
+	);
 	emitPrinterEvent(orgId, { type: 'job', printerId: printer.id });
 }
 
 export function unlinkJob(db: Db, jobId: string, orgId: string): void {
 	const { job, printer } = getJobForOrg(db, jobId, orgId);
 	db.update(printerJobs)
-		.set({ buildId: null, plateNumber: null, partSlugs: null })
+		.set({ buildId: null, plateNumber: null, partSlugs: null, comps: null })
 		.where(eq(printerJobs.id, jobId))
 		.run();
 	if (job.buildId)
@@ -739,6 +822,12 @@ export function confirmJobRuns(
 				: 'Failed';
 	const view = loadBuildView(db, job.buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
+	// A print of some pieces logs Success or Failed, never a split (the run is of exactly those pieces).
+	if (
+		fittingComps(view, job.partSlugs, job.comps) &&
+		(result === 'Partial' || (o.split !== undefined && o.split !== null))
+	)
+		throw new ApiError(400, 'Log Success or Failed for a print of some pieces');
 	let split: { keptSlugs: string[]; keptGrams: number | null; lostGrams: number | null } | null =
 		null;
 	if (o.split !== undefined && o.split !== null) {

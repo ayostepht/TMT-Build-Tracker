@@ -58,7 +58,10 @@ import {
 	hasPlateRuns,
 	layoutHintFor,
 	loadFootprints,
+	PLANNER_VERSION,
 	planArrangement,
+	type Plan,
+	planForBuild,
 	signature,
 	carryManuals,
 	manualTimes,
@@ -136,11 +139,33 @@ function convertPlateRuns(tx: Db, buildId: string, view: BuildView): number {
 	assertRunTotal(view.runs.length - attached.length + created);
 	for (const r of attached) {
 		const targets = runTargets(view, r);
-		tx.delete(printRuns).where(eq(printRuns.id, r.id)).run();
-		if (!targets.length) continue; // log of a plate whose parts are all inactive: nothing to keep it on
+		if (!targets.length) {
+			// log of a plate whose parts are all inactive: nothing to keep it on
+			tx.delete(printRuns).where(eq(printRuns.id, r.id)).run();
+			continue;
+		}
 		const share = (v: number | null) =>
 			v == null ? null : Math.round((v / targets.length) * 100) / 100;
-		for (const slug of targets)
+		const estShare = r.estSeconds == null ? null : Math.round(r.estSeconds / targets.length);
+		// A piece run has exactly one target (its part) and keeps its pieces.
+		const comps = targets.length === 1 && r.comps?.length ? r.comps : null;
+		// The first target reuses the original row (same id, creation time and every other column), so
+		// a printer job's `run_id` and the run's activity rows still point at it. Only the plate link
+		// goes. Further targets (a whole-plate or subset log) get their own rows with the same
+		// creation time, date, result, printer, user and note, and a share of grams, hours and planned time.
+		tx.update(printRuns)
+			.set({
+				plateNumber: null,
+				partSlug: targets[0],
+				partSlugs: null,
+				comps,
+				grams: share(r.grams),
+				hours: share(r.hours),
+				estSeconds: estShare
+			})
+			.where(eq(printRuns.id, r.id))
+			.run();
+		for (const slug of targets.slice(1))
 			tx.insert(printRuns)
 				.values({
 					buildId,
@@ -151,9 +176,11 @@ function convertPlateRuns(tx: Db, buildId: string, view: BuildView): number {
 					result: r.result,
 					grams: share(r.grams),
 					hours: share(r.hours),
+					estSeconds: estShare,
 					printer: r.printer,
 					userId: r.userId,
-					note: r.note
+					note: r.note,
+					createdAt: r.createdAt == null ? undefined : new Date(r.createdAt)
 				})
 				.run();
 	}
@@ -603,7 +630,8 @@ export function applyUpload(
 			if (b.arrange === true) {
 				// re-read the view so the arrangement sees the new data
 				const fresh = loadBuildView(tx, buildId, userId)!;
-				const plan = planArrangement(
+				const plan = planForBuild(
+					tx,
 					fresh,
 					loadFootprints(tx, fresh.build.templateId),
 					layoutHintFor(tx, fresh.build.templateId)
@@ -642,7 +670,11 @@ export function applyUpload(
 		requireConversion(view, convertRuns);
 
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
-		const manualFor = manualTimes(tx, buildId);
+		const manualFor = manualTimes(
+			tx,
+			buildId,
+			rows.map(({ pl, slugs }) => ({ number: pl.index, parts: slugs }))
+		);
 		tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 		clearBuildThumbs(buildId);
 		const twinPlates: ApplyResult['twinPlates'] = [];
@@ -768,7 +800,8 @@ export function arrangeForPrinter(
 	let result = { plates: 0, convertedRuns: 0, warnings: [] as ArrangeWarning[] };
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		if (!view.printer) bad('Choose a printer first');
-		const plan = planArrangement(
+		const plan = planForBuild(
+			tx,
 			view,
 			loadFootprints(tx, view.build.templateId),
 			layoutHintFor(tx, view.build.templateId)
@@ -824,6 +857,20 @@ const validItem = (i: unknown): boolean =>
 	typeof (i as { piece?: unknown }).piece === 'number';
 
 export function buildArrangement(db: Db, buildId: string, userId: string): ArrangementInfo {
+	return arrangementWithPlan(db, buildId, userId).info;
+}
+
+/**
+ * `buildArrangement` and the fresh plan it compared with, planned at most once per request (`plan()` is
+ * lazy and remembered). The export reads the info without the "fresh" summary (`summary: false`) and takes
+ * `plan()` only when it needs a fresh arrangement, so it never plans twice.
+ */
+export function arrangementWithPlan(
+	db: Db,
+	buildId: string,
+	userId: string,
+	opts: { summary?: boolean } = {}
+): { info: ArrangementInfo; plan: () => Plan | null } {
 	const view = loadBuildView(db, buildId, userId);
 	if (!view) throw new ApiError(404, 'Not found');
 	const row = db.select().from(builds).where(eq(builds.id, buildId)).get();
@@ -859,7 +906,23 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 	const onPlates = new Set(stored.flatMap((pl) => pl.parts));
 	ensureSilhouettes(db, view.build.templateId, onPlates);
 	const footprints = loadFootprints(db, view.build.templateId);
-	const plan = planArrangement(view, footprints, layoutHintFor(db, view.build.templateId));
+	const hint = layoutHintFor(db, view.build.templateId);
+	let current: Plan | null | undefined;
+	const plan = () =>
+		current !== undefined ? current : (current = planForBuild(db, view, footprints, hint));
+	// Plates stored before the kit layout came first were planned by the plain arranger: they are
+	// "stale" only when that planner would now plan something else (a color or variant change), never
+	// just because the planner changed. Their numbers and plates stay as they are.
+	// Plates stored by planner 2 (before run plates and joins) are compared with that planner's rules.
+	const storedV =
+		stored.length && stored.every((pl) => pl.v === stored[0].v) ? stored[0].v : undefined;
+	const compare =
+		stored.length === 0 || storedV === PLANNER_VERSION
+			? plan()
+			: storedV === 2
+				? planForBuild(db, view, footprints, hint, 2)
+				: planArrangement(view, footprints, hint, undefined, 'legacy');
+	const fresh = opts.summary === false ? null : plan();
 	const used: Record<string, PrintFootprint> = {};
 	for (const pl of stored)
 		for (const s of pl.parts) {
@@ -883,16 +946,16 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 			return { ...it, sil: key };
 		})
 	}));
-	return {
+	const info: ArrangementInfo = {
 		printer: view.printer,
 		layout: row?.plateLayout ?? null,
 		plates,
 		silhouettes,
-		fresh: plan
+		fresh: fresh
 			? {
-					plates: plan.result.plates.length,
-					warnings: plan.result.warnings,
-					unsized: plan.unsized
+					plates: fresh.result.plates.length,
+					warnings: fresh.result.warnings,
+					unsized: fresh.unsized
 				}
 			: null,
 		stale:
@@ -902,13 +965,14 @@ export function buildArrangement(db: Db, buildId: string, userId: string): Arran
 				pl.items.some((i) => typeof i === 'object' && i !== null && 'pose' in i)
 			) ||
 			(row?.plateLayout === ARRANGED_LAYOUT &&
-				!!plan &&
-				signature(plan.result.plates) !== signature(stored)) ||
-			(row?.plateLayout !== ARRANGED_LAYOUT && !!plan && templateColorsChanged(view)),
+				!!compare &&
+				signature(compare.result.plates) !== signature(stored)) ||
+			(row?.plateLayout !== ARRANGED_LAYOUT && !!view.printer && templateColorsChanged(view)),
 		template: view.printTemplate
 			? { fileName: view.printTemplate.fileName, printer: view.printTemplate.printer }
 			: null,
 		hasPlateRuns: hasPlateRuns(view),
 		footprints: used
 	};
+	return { info, plan };
 }

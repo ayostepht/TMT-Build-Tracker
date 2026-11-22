@@ -35,8 +35,18 @@
 	const label = $derived.by(() => {
 		let t = `Plate ${exp.plateNumber}${plate?.name ? ` · ${plate.name}` : ''}`;
 		const slug = exp.partSlugs?.[0];
+		const part = slug ? ctx.view.parts.find((x) => x.slug === slug) : null;
+		if (part && exp.comps?.length) {
+			// some pieces of one part ("Print some pieces…")
+			return `${t} · ${exp.comps.length} of ${part.components.length} pieces`;
+		}
 		const c = slug ? runChoices(ctx.view, exp.plateNumber).find((x) => x.slug === slug) : null;
 		if (c) t += ` · ${runOptionLabel(ctx, c)}`;
+		else if (plate && !plate.perPartRuns && exp.partSlugs?.length) {
+			// some parts of a single-run plate ("Print some parts…")
+			const all = plate.parts.filter((s) => ctx.view.state[s]).length;
+			if (exp.partSlugs.length < all) t += ` · ${exp.partSlugs.length} of ${all} parts`;
+		}
 		return t;
 	});
 
@@ -50,7 +60,8 @@
 				action: 'link',
 				buildId: ctx.id,
 				plateNumber: exp.plateNumber,
-				partSlugs: exp.partSlugs ?? undefined
+				partSlugs: exp.partSlugs ?? undefined,
+				comps: exp.comps?.length ? exp.comps : undefined
 			});
 			await ctx.refresh();
 			if (onlinked) await onlinked();

@@ -3,20 +3,23 @@
 // public product JSON. `npm run filaments:update` merges the supplement into catalog.json, so colors the
 // SpoolmanDB lacks (new Overture lines, Schoolhouse Spools) survive a catalog regeneration.
 //
-//   node scripts/fetch-vendor-filaments.mjs [--brand overture|schoolhouse]... [--from-dir DIR]
+//   node scripts/fetch-vendor-filaments.mjs [--brand overture|schoolhouse|spacecoast|dancyn]... [--from-dir DIR]
 //        [--hex-overrides FILE] [--delay MS] [--out FILE]
 //
 // Online: GET <store>/products.json?limit=250&page=N (polite delay, honours Retry-After on HTTP 429).
 // Offline: --from-dir reads saved JSON instead (DIR/<brand>.json or DIR/<brand>.<page>.json, each
 // {"products":[...]}), so nothing is fetched. Colors without a hex are left out and listed on stderr.
 //
-// Hex sources, best first: a hex written in the variant's option value or a product tag ("hexSource":
-// "store"), then --hex-overrides ("hexSource" taken from the file: "store" for a hex copied from the
+// Hex sources, best first: a hex written in the variant's option value or a product tag, or in the store's
+// own swatch markup (Dancyn: `swatchPage`, the merchant-written `--swatch-background`) ("hexSource":
+// "store"), then --hex-overrides (default: scripts/vendor-hex-overrides.json when it exists) ("hexSource" taken from the file: "store" for a hex copied from the
 // store, "image" for one sampled from a product photo). Never guessed from the color name.
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_OVERRIDES = join(HERE, 'vendor-hex-overrides.json');
 const OUT = resolve(
 	dirname(fileURLToPath(import.meta.url)),
 	'../src/lib/server/filaments/supplement.json'
@@ -55,6 +58,22 @@ export const VENDORS = {
 			{ handle: 'pctg', material: 'PCTG' },
 			{ handle: 'tpu', material: 'TPU', label: '95A' }
 		]
+	},
+	// Official MakeGood suppliers. Both are Shopify stores read through /products.json.
+	spacecoast: {
+		name: 'Space Coast 3D',
+		host: 'https://spacecoast3d.org',
+		// One product per color ("PETG — Gloss Klein Blue", "TPU 95A UHF — Royal Blue"): the color is the
+		// title's tail, the "Pack" option (single / case) is not a color. The store states no hex, so these
+		// come from --hex-overrides (sampled from the product photo, hexSource "image").
+		titleColor: /^[^—–]+[—–]\s*(.+)$/,
+		onlyHardness: '95A'
+	},
+	dancyn: {
+		name: 'Dancyn 3D Prints',
+		host: 'https://www.dancyn3dprints.com',
+		// The home page lists every variant as a swatch with the merchant's own hex (`--swatch-background`).
+		swatchPage: '/'
 	}
 };
 
@@ -79,7 +98,7 @@ export function hexOf(v) {
  * `{ skip }` with the reason. High-speed lines keep the plain material (PETG, TPU) so the picker's
  * material families and slot rules apply unchanged; the color name carries "HS".
  */
-export function classifyProduct(product, brand = '') {
+export function classifyProduct(product, brand = '', { onlyHardness } = {}) {
 	const title = String(product?.title ?? '');
 	const text = `${title} ${product?.product_type ?? ''}`;
 	if (NON_FILAMENT.test(title)) return { skip: 'not a filament spool' };
@@ -96,6 +115,12 @@ export function classifyProduct(product, brand = '') {
 		const h = /(?<![\d.])(\d{2,3})\s?-?([ad])\b/i.exec(text);
 		if (!h) return { skip: 'TPU hardness not stated' };
 		hardness = `${h[1]}${h[2].toUpperCase()}`;
+		// A hardness range (foaming "60-90A") is no single hardness: never added. `onlyHardness` (a vendor's
+		// setting) keeps just that hardness, e.g. "95A" for the chair slots.
+		const range = /\d{2,3}\s?-\s?\d{2,3}\s?[ad]\b/i.exec(text);
+		if (range) return { skip: `TPU hardness range (${range[0]}), not a single hardness` };
+		if (onlyHardness && hardness !== onlyHardness)
+			return { skip: `TPU hardness ${hardness}, only ${onlyHardness} is used` };
 	}
 	// Other qualifiers worth keeping in the name so name-based exclusions still see them.
 	const extra = [];
@@ -127,8 +152,19 @@ function colorOptionIndex(product) {
 	return i;
 }
 
+/** "Translucent - Amber" -> "Translucent Amber" (a dash after a finish word reads as a separator, not a name). */
+const tidyColorName = (s) =>
+	String(s)
+		.trim()
+		.replace(/^(translucent|transparent)\s*[-–—]\s*/i, '$1 ');
+
 /** Distinct color names of a product from its variants ("Color" option, else the single-option value). */
-export function productColors(product) {
+export function productColors(product, { titleColor } = {}) {
+	if (titleColor) {
+		const m = titleColor.exec(String(product?.title ?? ''));
+		const name = m ? tidyColorName(m[1]) : '';
+		return name ? [{ name, hex: null, image: (product.images ?? [])[0]?.src }] : [];
+	}
 	let idx = colorOptionIndex(product);
 	if (
 		idx < 0 &&
@@ -141,10 +177,11 @@ export function productColors(product) {
 		const raw = idx >= 0 ? v[`option${idx + 1}`] : null;
 		if (!raw || /^default title$/i.test(raw)) continue;
 		const hex = hexOf(raw);
-		const name = String(raw)
-			.replace(/\s*[([]?#[0-9a-f]{6}[)\]]?/i, '')
-			.replace(/\s*[-/|]\s*$/, '')
-			.trim();
+		const name = tidyColorName(
+			String(raw)
+				.replace(/\s*[([]?#[0-9a-f]{6}[)\]]?/i, '')
+				.replace(/\s*[-/|]\s*$/, '')
+		);
 		if (name && !seen.has(lc(name))) seen.set(lc(name), { name, hex });
 	}
 	const image = (product.images ?? [])[0]?.src;
@@ -152,15 +189,19 @@ export function productColors(product) {
 }
 
 /** Turn a product's color names into catalog colors; reports what it could not place. */
-export function convertProducts(products, brand, { hexOverrides = {}, skipped = [] } = {}) {
+export function convertProducts(
+	products,
+	brand,
+	{ hexOverrides = {}, skipped = [], titleColor, onlyHardness } = {}
+) {
 	const mats = new Map();
 	for (const p of products) {
-		const cls = classifyProduct(p, brand);
+		const cls = classifyProduct(p, brand, { onlyHardness });
 		if (cls.skip) {
 			skipped.push({ product: p.title, reason: cls.skip });
 			continue;
 		}
-		const colors = productColors(p);
+		const colors = productColors(p, { titleColor });
 		if (!colors.length) {
 			skipped.push({ product: p.title, reason: 'no color variants' });
 			continue;
@@ -217,7 +258,11 @@ export function buildSupplementBrand(vendorKey, products, opts = {}) {
 		name: v.name,
 		sourceUrl: v.host,
 		fetchedAt: opts.fetchedAt ?? new Date().toISOString(),
-		materials: convertProducts(products, v.name, opts)
+		materials: convertProducts(products, v.name, {
+			titleColor: v.titleColor,
+			onlyHardness: v.onlyHardness,
+			...opts
+		})
 	};
 }
 
@@ -227,6 +272,47 @@ export function mergeBrands(existing, brands) {
 		(b) => !brands.some((n) => lc(n.name) === lc(b.name))
 	);
 	return { brands: [...keep, ...brands].sort((a, b) => a.name.localeCompare(b.name)) };
+}
+
+/**
+ * Swatches of a store page whose theme writes the merchant's hex into the markup:
+ * `<a href="/products/<handle>?variant=..." class="swatch-color" title="<product> - <option>"
+ * style="--swatch-background: #rrggbb">`. Returns [{ handle, title, hex }]; the caller strips the product title.
+ */
+export function parseSwatchPage(html) {
+	const out = [];
+	for (const m of String(html).matchAll(/<a\b[^>]*class="swatch-color[^"]*"[^>]*>/g)) {
+		const tag = m[0];
+		const handle = /href="\/products\/([^"?]+)/.exec(tag)?.[1];
+		const title = /\btitle="([^"]*)"/.exec(tag)?.[1];
+		const hex = /--swatch-background:\s*(#[0-9a-fA-F]{6})\b/.exec(tag)?.[1];
+		if (handle && title && hex)
+			out.push({
+				handle,
+				title: title
+					.replace(/&#39;|&#x27;/g, "'")
+					.replace(/&amp;/g, '&')
+					.trim(),
+				hex: hex.toLowerCase()
+			});
+	}
+	return out;
+}
+
+/** hexOverrides ("handle|Color" -> { hex, hexSource: 'store' }) from a store's swatches, for its products. */
+export function swatchOverrides(swatches, products) {
+	const out = {};
+	for (const p of products) {
+		const title = String(p.title ?? '').trim();
+		for (const s of swatches) {
+			if (s.handle !== p.handle || !s.title.startsWith(`${title} - `)) continue;
+			out[`${p.handle}|${tidyColorName(s.title.slice(title.length + 3))}`] = {
+				hex: s.hex,
+				hexSource: 'store'
+			};
+		}
+	}
+	return out;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -473,7 +559,12 @@ async function sampleMissing(key, pages, args, hexOverrides) {
 async function main() {
 	const args = parseArgs(process.argv.slice(2));
 	const out = resolve(args.out ?? OUT);
-	const hexOverrides = args.overrides ? JSON.parse(await readFile(args.overrides, 'utf8')) : {};
+	let hexOverrides = {};
+	try {
+		hexOverrides = JSON.parse(await readFile(args.overrides ?? DEFAULT_OVERRIDES, 'utf8'));
+	} catch (e) {
+		if (args.overrides) throw e; // a named file must exist; the default one is optional
+	}
 	let existing = { brands: [] };
 	try {
 		existing = JSON.parse(await readFile(out, 'utf8'));
@@ -499,7 +590,16 @@ async function main() {
 			const products = args.dir
 				? await readSaved(args.dir, key)
 				: await fetchProducts(VENDORS[key].host, { delayMs: args.delay });
-			brand = buildSupplementBrand(key, products, { hexOverrides, skipped });
+			const v = VENDORS[key];
+			let overrides = hexOverrides;
+			if (v.swatchPage) {
+				// Saved copy: DIR/<key>.swatches.html; otherwise one polite GET of the store page.
+				const html = args.dir
+					? await readFile(join(args.dir, `${key}.swatches.html`), 'utf8')
+					: await getText(`${v.host}${v.swatchPage}`);
+				overrides = { ...swatchOverrides(parseSwatchPage(html), products), ...hexOverrides };
+			}
+			brand = buildSupplementBrand(key, products, { hexOverrides: overrides, skipped });
 			seen = `${products.length} products`;
 		}
 		brands.push(brand);

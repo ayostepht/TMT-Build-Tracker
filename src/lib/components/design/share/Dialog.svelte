@@ -11,7 +11,8 @@
 		onclose,
 		children,
 		testid,
-		danger = false
+		danger = false,
+		wide = false
 	}: {
 		title: string;
 		onclose: () => void;
@@ -19,6 +20,8 @@
 		testid?: string;
 		/** Destructive confirmation: focus starts on the `[data-cancel]` button, so a stray Enter cancels. */
 		danger?: boolean;
+		/** Roomier card on desktop (a preview beside its controls); phones are unchanged. */
+		wide?: boolean;
 	} = $props();
 
 	const uid = $props.id();
@@ -58,6 +61,7 @@
 
 <dialog
 	class="ds-modal ds-modal--sheet"
+	class:dlg-wide={wide}
 	aria-labelledby="{uid}-title"
 	data-testid={testid}
 	use:modal
@@ -71,6 +75,11 @@
 </dialog>
 
 <style>
+	@media (min-width: 761px) {
+		.ds-modal.dlg-wide {
+			width: min(900px, calc(100vw - 32px));
+		}
+	}
 	.dlg-head {
 		display: flex;
 		align-items: center;

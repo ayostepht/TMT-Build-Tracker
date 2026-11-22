@@ -165,6 +165,8 @@ export interface ExpectedPlate {
 	plate: number;
 	/** The part(s) the next job covers (perPartRuns plates: one color per print). */
 	partSlugs?: string[];
+	/** Only these pieces (indexes into the part's `components`) of the single part in `partSlugs` are on the print. */
+	comps?: number[];
 	/** The unlinked job that was already running when it was sent, or the first job that started after. */
 	jobId?: string;
 	at: number;

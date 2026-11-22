@@ -381,6 +381,11 @@ export const buildParts = sqliteTable(
 		assigneeUserId: text('assignee_user_id').references(() => user.id, { onDelete: 'set null' }),
 		/** Grams the maker typed for the whole part (all copies). Null = none entered. */
 		manualGrams: real('manual_grams'),
+		/**
+		 * Piece indexes (into PartDef.components) of this part that are on the printer right now.
+		 * Null = not a piece-level print (whole part, or not printing).
+		 */
+		printingComps: text('printing_comps', { mode: 'json' }).$type<number[]>(),
 		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
 			.notNull()
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -434,6 +439,8 @@ export const printRuns = sqliteTable(
 		plateNumber: integer('plate_number'),
 		partSlug: text('part_slug'),
 		partSlugs: text('part_slugs', { mode: 'json' }).$type<string[]>(),
+		/** Piece indexes the run covered; only meaningful with part_slug set. Null = whole part / plate run. */
+		comps: text('comps', { mode: 'json' }).$type<number[]>(),
 		date: text('date').notNull(),
 		result: text('result').notNull(),
 		grams: real('grams'),
@@ -618,6 +625,8 @@ export const printerJobs = sqliteTable(
 		buildId: text('build_id').references(() => builds.id, { onDelete: 'set null' }),
 		plateNumber: integer('plate_number'),
 		partSlugs: text('part_slugs', { mode: 'json' }).$type<string[]>(),
+		/** Pieces of the job's single part (part_slugs has one slug) the job covers. Null = whole part(s). */
+		comps: text('comps', { mode: 'json' }).$type<number[]>(),
 		fileName: text('file_name').notNull().default(''),
 		status: text('status').notNull().default('printing'), // printing | paused | done | failed | cancelled
 		progress: real('progress'),

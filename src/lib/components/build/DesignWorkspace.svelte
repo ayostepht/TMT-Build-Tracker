@@ -9,6 +9,7 @@
 		paletteReset,
 		roleBlockedReason
 	} from '#lib/domain/design.ts';
+	import { swatchColors } from '#lib/domain/share-picture.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 	import { getArrangement, setBuildDesign, setVariant, updateFilament } from '#lib/client/api.ts';
 	import { createCoalescer } from '#lib/client/coalesce.ts';
@@ -152,6 +153,8 @@
 		return out;
 	});
 	const hidden = $derived(hiddenSlugs(live));
+	/** Distinct colors of the visible parts, most used first: the swatches of "Share a picture". */
+	const pictureSwatches = $derived(swatchColors(live, colors));
 	const stats = $derived(filamentStats(live));
 	const part = $derived(live.allParts.find((p) => p.slug === selected) ?? null);
 
@@ -196,6 +199,8 @@
 
 	function openPicker(p: NonNullable<typeof picker>) {
 		picker = p;
+		pickEpoch++;
+		pickError = null;
 		// On phones the stage is pinned above the sheet, so the recolor stays visible without scrolling.
 	}
 
@@ -254,23 +259,54 @@
 		pendingLock = next;
 	}
 
-	async function pickFilament(role: string, v: PickedFilament) {
+	/** Bumped whenever the picker opens or closes: a save that finishes later must not speak in a new session. */
+	let pickEpoch = 0;
+	function closePicker() {
+		picker = null;
+		pickEpoch++;
+		pickError = null;
+	}
+
+	/** role → token of the latest pick, so only the newest save of a slot clears its optimistic color. */
+	const pickTokens: Record<string, number> = {};
+	let pickSeq = 0;
+
+	/** The sentence of the newest refused pick, shown at the picker; null when the last pick saved. */
+	let pickError = $state<string | null>(null);
+
+	/** Resolves to whether the save worked, so the picker can stop presenting a refused color. */
+	async function pickFilament(role: string, v: PickedFilament): Promise<boolean> {
+		const token = ++pickSeq;
+		const epoch = pickEpoch;
+		pickTokens[role] = token;
+		pickError = null;
 		optimistic = { ...optimistic, [role]: v };
 		announce = `${roleLabel(
 			role,
 			live.filaments.find((f) => f.key === role),
 			live.filaments
 		)} is now ${v.name}, ${v.material}`;
-		await ctx.act(() => updateFilament(ctx.id, role, v));
-		if (optimistic[role] === v) {
-			const next = { ...optimistic };
-			delete next[role];
-			optimistic = next;
+		// `act` re-fetches the view whether the save worked or not (a failure also shows its sentence),
+		// so by now the server's value is the truth: drop ours, unless a newer pick of this slot is in flight.
+		let ok: boolean;
+		try {
+			ok = await ctx.act(() => updateFilament(ctx.id, role, v));
+			// Only the newest pick of the slot may speak: a stale result must not overwrite a newer one.
+			if (pickTokens[role] === token && epoch === pickEpoch) pickError = ok ? null : ctx.error;
+		} finally {
+			// Even if `act` throws, the optimistic color must not stay stuck over the saved one.
+			if (pickTokens[role] === token) {
+				delete pickTokens[role];
+				const next = { ...optimistic };
+				delete next[role];
+				optimistic = next;
+			}
 		}
+		return ok;
 	}
 
 	async function addSlot(v: PickedFilament) {
-		picker = null;
+		closePicker();
 		announce = `Added a color slot: ${v.name}, ${v.material}`;
 		await ctx.act(() => setBuildDesign(ctx.id, { addRole: v }));
 	}
@@ -281,7 +317,7 @@
 	});
 	// Close the picker if its slot disappears or the user loses edit rights.
 	$effect(() => {
-		if (picker && (!ctx.canEdit || (picker.mode === 'edit' && !pickerSlot))) picker = null;
+		if (picker && (!ctx.canEdit || (picker.mode === 'edit' && !pickerSlot))) closePicker();
 	});
 
 	function pick(slug: string | null, from: 'row' | 'canvas' = 'canvas') {
@@ -385,6 +421,12 @@
 		<!-- Swatch picker (round 2): fills the panel while open, the rest of the panel is hidden (see .picking). -->
 		{#if picker?.mode === 'edit' && pickerSlot}
 			<div class="pickhost">
+				{#if pickError}
+					<!-- The page banner (role="alert", build layout) announces it; this copy stays pinned in view on a phone. -->
+					<p class="banner bad pickerr" aria-hidden="true" data-testid="picker-error">
+						{pickError}
+					</p>
+				{/if}
 				<SwatchPicker
 					title={roleLabel(pickerSlot.key, pickerSlot, live.filaments)}
 					family={pickerSlot.tpu ? 'tpu' : 'petg'}
@@ -392,7 +434,7 @@
 					slotMaterial={pickerSlot.material}
 					organizationId={ctx.view.build.organizationId}
 					onpick={(v) => pickFilament(pickerSlot.key, v)}
-					onclose={() => (picker = null)}
+					onclose={closePicker}
 				/>
 			</div>
 		{:else if picker?.mode === 'new'}
@@ -402,7 +444,7 @@
 					organizationId={ctx.view.build.organizationId}
 					mode="new"
 					onpick={(v) => addSlot(v)}
-					onclose={() => (picker = null)}
+					onclose={closePicker}
 				/>
 			</div>
 		{/if}
@@ -428,6 +470,13 @@
 		<DesignActions
 			{embedded}
 			snapshot={ctx.view.model ? () => stage!.snapshot({ width: 800, height: 600 }) : undefined}
+			picture={ctx.view.model
+				? {
+						// Transparent, no selection highlight; the picture trims and places the chair itself.
+						shot: () => stage!.snapshot({ width: 2200, height: 1650, clean: true }),
+						swatches: pictureSwatches
+					}
+				: undefined}
 		/>
 		<div
 			class="ds-seg ds-seg--fill dw-tabs"
@@ -706,6 +755,16 @@
 		/* The page can scroll past the picker, so its last row is never behind the build's bottom tab bar. */
 		margin-bottom: var(--bottom-bar-h, 0px);
 	}
+	/* A refused pick's sentence: pinned under the stage on a phone so it is seen from anywhere in the list. */
+	p.pickerr {
+		position: sticky;
+		top: calc(var(--stick, 0px) + var(--stageh) + 8px);
+		z-index: 5;
+		margin: 0 0 var(--sp-3);
+		flex: none;
+		/* Opaque, so swatches scrolling under it do not show through. */
+		background: linear-gradient(var(--bad-soft), var(--bad-soft)), var(--card);
+	}
 	/* Desktop: fixed-viewport two panes. The stage fills the left, the panel scrolls on its own. */
 	@media (min-width: 900px) {
 		.design,
@@ -740,6 +799,10 @@
 		}
 		.panel > * {
 			flex: none;
+		}
+		/* The picker pane is a fixed box here: the sentence sits in flow above the card. */
+		p.pickerr {
+			position: static;
 		}
 		.panel > .pickhost {
 			flex: 1 1 auto;
