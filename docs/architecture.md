@@ -577,6 +577,17 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   ΔE2000 < 3), OKLCH hue families (`colorFamily`), `approx` flag from `hexSource === 'image'`.
 - **Stage credit** (`ModelStage.svelte`): at 640 px or narrower the credit is a band under the
   canvas (`.view` above it); wider, an overlay.
+- **Share a picture** (#99): `domain/share-picture.ts` holds the pure rules (family 1600×2000;
+  `SOCIAL_SIZES` square 1080×1080, portrait 1080×1350, story 1080×1920 with safe bands and
+  `maxSections` 0/1/3; default texts and caps; `swatchColors`; `socialPalette` with computed
+  4.5:1 contrast; `fitText`, `fitSections`; file names `tmt-chair-family|social-<size>`).
+  `client/share-picture.ts` draws the 2D canvas, encodes PNG/JPEG and wraps share
+  (`navigator.share` with files, button hidden when unsupported) and download.
+  `design/share/SharePicture.svelte` is the dialog body, opened from `DesignActions` (needs
+  the model and WebGL; hidden in the embedded wizard; viewers may use it). The chair comes
+  from `ModelStage.snapshot({ clean: true })` (no selection highlight or dimming, transparent,
+  trimmed). Browser only: nothing is uploaded and no names are pre-filled. `Dialog` has a
+  `wide` prop for it.
 - **Parts:** `PartSheet` (part chip + slot strip over the stage), `PartList` (role filter
   chips, sticky groups). `share/DesignActions` above the tabs ("Saved automatically",
   Saved designs, Share / Save as design).
