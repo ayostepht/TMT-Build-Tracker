@@ -54,7 +54,7 @@ export const VARIANTS: Record<PictureVariant, VariantSpec> = {
 		credit: 'MakeGood Toddler Mobility Trainer · open design by MakeGood',
 		titleMax: 50,
 		lineMax: 90,
-		hint: 'A square picture for a feed, in your chair’s own colors.'
+		hint: 'A bolder picture for social media, in your chair’s own colors.'
 	}
 };
 
