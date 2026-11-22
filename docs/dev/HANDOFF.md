@@ -56,7 +56,11 @@ _Updated 2026-11-22, 22:30 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   (the maintainer saw portrait and tall clipped on an iPhone). Verified in Chromium and by
   an e2e check only; the maintainer checked it on a phone on the `edge` image
   (2026-11-22: "looks great"). Decided: the button stays in the hosted edition's demo.
-- **In flight:** nothing in this repository.
+- **In flight: release 0.9.4** (maintainer asked 2026-11-22). Release pull request from
+  `claude/sweet-johnson-59ma1x` into `edge`: version 0.9.4, CHANGELOG section,
+  `fixtures/v0.9.4/` (migrations 0000–0004). After it merges: Actions "Promote edge to
+  main" from `edge`, open the pull request into `main` by hand, the maintainer merges it
+  with a merge commit and creates tag `v0.9.4` from the release form (Target `main`).
 - **Also merged into `edge` 2026-11-22:** #100 "Add Space Coast 3D and Dancyn 3D Prints to
   the filament catalog; compact color picker" (5541c2c; no schema change). Both brands are
   official MakeGood suppliers and follow Schoolhouse Spools in the picker. The picker has
