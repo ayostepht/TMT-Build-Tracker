@@ -55,6 +55,21 @@ _Updated 2026-11-22, 20:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **Follow-up to #101 merged 2026-11-22:** #102 (b21d269): section text keeps typed line
   breaks, "Try again" when drawing fails, "Download started." note. Not on the test copy.
 - **In flight:** nothing in this repository.
+- **Open pull request from another session: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
+  (branch `claude/cool-davinci-qce08y` into `edge`; no schema change). It holds the catalog
+  data and picker order, and the hosted edition's compact color picker ported into
+  `SwatchPicker.svelte` in this edition's colors (maintainer, 2026-11-22, after comparing
+  screenshots): the new approximate swatches exposed a bug where a hovered swatch with a
+  note made the detail row taller and moved the grid from under the pointer
+  (`design.spec.ts:159` failed in CI); the row is now a fixed height. #98's behaviour is
+  kept. Merge it when CI is green (check its state first; if it is merged, it is not in
+  flight); it reaches the test copy with the next `edge` deploy. The catalog change is
+  open in the hosted edition as its #40 (branch `feat/filaments-space-coast-dancyn` into
+  `main`, CI green); that project's session merges it (merging is deploying). Offer the
+  hosted edition #98's picker behaviour, which its picker lacks. To regenerate these
+  vendors a cloud environment needs `spacecoast3d.org`, `www.dancyn3dprints.com` and
+  `cdn.shopify.com` on its allowed hosts; without them use
+  `fetch-vendor-filaments.mjs --from-dir` with saved pages.
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.

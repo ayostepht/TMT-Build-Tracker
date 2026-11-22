@@ -1,6 +1,147 @@
 {
 	"brands": [
 		{
+			"name": "Dancyn 3D Prints",
+			"sourceUrl": "https://www.dancyn3dprints.com",
+			"fetchedAt": "2026-11-22T18:23:08.446Z",
+			"materials": [
+				{
+					"material": "PETG",
+					"colors": [
+						{
+							"name": "Baby Blue",
+							"hex": "#83d7f3",
+							"hexSource": "store"
+						},
+						{
+							"name": "Black",
+							"hex": "#000000",
+							"hexSource": "store"
+						},
+						{
+							"name": "Blue",
+							"hex": "#005bd3",
+							"hexSource": "store"
+						},
+						{
+							"name": "Chestnut Brown",
+							"hex": "#aa4e0c",
+							"hexSource": "store"
+						},
+						{
+							"name": "Green Apple",
+							"hex": "#d8f964",
+							"hexSource": "store"
+						},
+						{
+							"name": "Olive Green",
+							"hex": "#8d9e82",
+							"hexSource": "store"
+						},
+						{
+							"name": "Orange",
+							"hex": "#ff8a00",
+							"hexSource": "store"
+						},
+						{
+							"name": "Pell Blue",
+							"hex": "#c7d3e1",
+							"hexSource": "store"
+						},
+						{
+							"name": "Purple",
+							"hex": "#7643a8",
+							"hexSource": "store"
+						},
+						{
+							"name": "Purple Crabapple",
+							"hex": "#ce8bd1",
+							"hexSource": "store"
+						},
+						{
+							"name": "Red",
+							"hex": "#f61f1f",
+							"hexSource": "store"
+						},
+						{
+							"name": "Silver",
+							"hex": "#bac0c6",
+							"hexSource": "store"
+						},
+						{
+							"name": "Stessy's Hot Pink",
+							"hex": "#ff6db3",
+							"hexSource": "store"
+						},
+						{
+							"name": "Translucent",
+							"hex": "#f4f0f0",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Amber",
+							"hex": "#fbbb81",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Citrine",
+							"hex": "#cdbe1f",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Crystal Blue",
+							"hex": "#66a7e0",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Lavender",
+							"hex": "#9724b0",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Mandarin",
+							"hex": "#ff8a00",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Rose Crystal",
+							"hex": "#f4b3b5",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Ruby",
+							"hex": "#e51310",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "Translucent Sea Glass",
+							"hex": "#019275",
+							"hexSource": "store",
+							"translucent": true
+						},
+						{
+							"name": "White",
+							"hex": "#ffffff",
+							"hexSource": "store"
+						},
+						{
+							"name": "Yellow",
+							"hex": "#ffe500",
+							"hexSource": "store"
+						}
+					]
+				}
+			]
+		},
+		{
 			"name": "Overture",
 			"sourceUrl": "https://overture3d.com",
 			"fetchedAt": "2026-11-09T21:19:26.774Z",
@@ -529,6 +670,84 @@
 						{
 							"name": "95A White",
 							"hex": "#e4dfd5",
+							"hexSource": "image"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Space Coast 3D",
+			"sourceUrl": "https://spacecoast3d.org",
+			"fetchedAt": "2026-11-22T18:33:41.009Z",
+			"materials": [
+				{
+					"material": "PETG",
+					"colors": [
+						{
+							"name": "Gloss Hot Pink",
+							"hex": "#a6465b",
+							"hexSource": "image"
+						},
+						{
+							"name": "Gloss Klein Blue",
+							"hex": "#143c80",
+							"hexSource": "image"
+						},
+						{
+							"name": "Transparent Amethyst Purple",
+							"hex": "#a971d2",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "Transparent Hot Pink",
+							"hex": "#da446a",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "Transparent Light Pink",
+							"hex": "#c38c8e",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "Transparent Ruby Red",
+							"hex": "#c4292a",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "Transparent Turquoise Blue",
+							"hex": "#0e86c9",
+							"hexSource": "image",
+							"translucent": true
+						}
+					]
+				},
+				{
+					"material": "TPU",
+					"colors": [
+						{
+							"name": "95A Bubblegum Pink",
+							"hex": "#b16b62",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Crystal Clear",
+							"hex": "#968b7a",
+							"hexSource": "image",
+							"translucent": true
+						},
+						{
+							"name": "95A Eclipse Black",
+							"hex": "#2b2a2a",
+							"hexSource": "image"
+						},
+						{
+							"name": "95A Royal Blue",
+							"hex": "#043866",
 							"hexSource": "image"
 						}
 					]

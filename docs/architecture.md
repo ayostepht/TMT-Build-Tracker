@@ -563,7 +563,14 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   (newest pick only; cleared on the next pick and when the picker opens or closes,
   `pickEpoch`), shown as `p.pickerr`: sticky under the pinned stage on phones, static above
   the card from 900 px, `aria-hidden` because the build layout's `role="alert"` banner
-  announces it. `SwatchPicker.onpick` may return a promise of success; on `false` the detail
+  announces it. The picker has the hosted edition's compact layout: a fixed-height `.detail`
+  row whose notes are one `.extras` line (ellipsis, full text in `title`), the "Other
+  brands" list as an overlay in the always-reserved `.otherswrap` (host height 0 on
+  desktop, summary absolutely positioned, so e2e targets its `summary`), the `edgeFade`
+  action (`data-fade-start` / `data-fade-end` on `.filters` and `.brandchips`), a sticky
+  header with the sheet as the desktop scroller, and `overflow-anchor: auto` on phones.
+  Hover and focus never move the grid (e2e: `swatch-picker.spec.ts`).
+  `SwatchPicker.onpick` may return a promise of success; on `false` the detail
   row drops the refused swatch. Swatches ignore touch for the hover preview (`touching`,
   reset by any key press) and `.sw:hover` applies only under `@media (hover: hover)`.
 - **Swatch picker** (`domain/swatch-picker.ts`): `exclusionReason` (TPU 95A only, no
@@ -645,12 +652,20 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   `scripts/fetch-vendor-filaments.mjs` regenerates the supplement (`--fetch-pages`,
   `--pages-dir`, `--sample-images` needs sharp, `--hex-overrides`).
 - Supplement: Overture (28 TPU + Matte Digital Blue, store hexes), Schoolhouse Spools (34,
-  hexes estimated from photos, `hexSource: 'image'`). Filascope hexes are category buckets,
-  not used.
+  hexes estimated from photos, `hexSource: 'image'`), Space Coast 3D (7 PETG + 4 TPU 95A; one
+  product per color, the color comes from the product title, `titleColor`; only 95A TPU,
+  `onlyHardness`; hexes sampled from product photos and kept in
+  `scripts/vendor-hex-overrides.json`, which the script reads by default) and Dancyn 3D
+  Prints (24 PETG; store hexes parsed from the home page's swatch markup, `swatchPage`).
+  `--from-dir DIR` (`<key>.json`, `<key>.swatches.html`) regenerates a vendor offline.
+  `update-filaments.mjs` has no merge-only mode: the 2026-11-22 catalog is the 2026-11-16
+  SpoolmanDB snapshot run through `mergeSupplement` with a new `fetchedAt`. Filascope hexes
+  are category buckets, not used.
 - `/api/filaments*`: `private, no-cache` + ETag from the catalog `fetchedAt` (304 when
   unchanged); client URL has `v=2`. `loadSwatches` has a 20 s timeout + retry + "Try again".
 - Custom filaments per workspace (`custom.ts`). Browser helpers `src/lib/filament-catalog.ts`;
-  UI `FilamentPicker.svelte`. `POPULAR_BRANDS` starts with Schoolhouse Spools.
+  UI `FilamentPicker.svelte`. `POPULAR_BRANDS` (`src/lib/domain/palettes.ts`) starts with the MakeGood suppliers:
+  Schoolhouse Spools, Space Coast 3D, Dancyn 3D Prints.
 
 ## Kit and startup (`kit-and-startup`)
 

@@ -29,10 +29,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## Vendor store product data (Overture, Schoolhouse Spools)
+## Vendor store product data (Overture, Schoolhouse Spools, Space Coast 3D, Dancyn 3D Prints)
 
 `src/lib/server/filaments/supplement.json` lists filament colors (names and hex values) read from the public
-product pages of [Overture](https://overture3d.com) and [Schoolhouse Spools](https://schoolhousespools.com),
+product pages of [Overture](https://overture3d.com), [Schoolhouse Spools](https://schoolhousespools.com),
+[Space Coast 3D](https://spacecoast3d.org) and [Dancyn 3D Prints](https://www.dancyn3dprints.com),
 for colors that SpoolmanDB does not have yet. `scripts/fetch-vendor-filaments.mjs` builds it and
 `scripts/update-filaments.mjs` merges it into `catalog.json`. Only factual data (brand, material, color name,
 color value) is kept; no images, descriptions or prices. Each entry says whether its hex came from the store

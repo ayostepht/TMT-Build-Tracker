@@ -484,7 +484,24 @@ Route each to the agent named in brackets.
   (edits autosave); undo stays palette-only; the generator is collapsed by default.
 - Existing builds keep their own role names (no migration for the TPU rename).
 - Filament catalog: PETG/PCTG/TPU only from vendor supplements, no PLA. Schoolhouse Spools
-  stays (approx. hexes, marked "Approx. color") and is a popular brand.
+  stays (approx. hexes, marked "Approx. color") and is a popular brand. Space Coast 3D
+  (PETG 7, TPU 95A 4; hexes estimated from photos) and Dancyn 3D Prints (PETG 24, store
+  hexes; no TPU sold) were added 2026-11-22 as official MakeGood suppliers and follow
+  Schoolhouse Spools in `POPULAR_BRANDS`. Left out: Space Coast's TPU Aero Foam (60–90A)
+  and the Ziro PLA Dancyn resells. The catalog was merged without a SpoolmanDB refresh
+  (snapshot 2026-11-16; a refresh would rename many unrelated colors, a separate decision).
+  Space Coast's TPU 95A Crystal Clear (`#968b7a`), PETG Gloss Hot Pink and TPU Bubblegum
+  Pink each have one dim photo; correct them in `scripts/vendor-hex-overrides.json` if a
+  maker reports the swatch is off.
+- Color picker (maintainer, 2026-11-22, #100): the picker follows the hosted edition's
+  compact layout in this edition's colors. Fixed-height detail row (`3.6rem` phone, `3rem`
+  desktop) with the notes on one clipped line and the full text in `title`; "Other brands"
+  is an overlay in an always-reserved row; brand chips are one sideways-scrolling row with
+  edge fades; sticky header with the sheet as the only scroll container on desktop.
+  Invariant, asserted by `swatch-picker.spec.ts` at 1440 and 390 px: hovering or focusing
+  a swatch never changes the height of anything above the grid. #98's behaviour is kept;
+  on phones `.sheet` keeps `overflow-anchor: auto`, because with `none` the refusal banner
+  shifts the grid under a finger. The hosted picker lacks #98's refusal handling.
 - Action links are buttons or clickable badges; plain text links only inside sentences.
 - Printers are read-only. Sole exception: Elegoo SDCP Cmd 386 `{"Enable":1}` to turn the
   camera on when someone views it. Never move, heat, pause, stop or start a print.
