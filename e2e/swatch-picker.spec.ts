@@ -217,3 +217,89 @@ test('desktop picker keeps the brand chips and hides the phone Brand select', as
 	if (process.env.R48_SHOTS)
 		await page.screenshot({ path: 'data/r48-shots-design/top-1440-light.png' });
 });
+
+// Regression: hovering (or focusing) a swatch whose detail row has an extra note line, or that
+// shows the "Other brands" disclosure, used to make the row above the grid taller. The grid slid
+// out from under the pointer and the mouse click never landed. The row now reserves its height.
+// At 390 px there is no hover on a phone, so the preview is driven by keyboard focus (the
+// component treats focus without a preceding touch pointerdown as the preview); the final pick
+// is still a real mouse click.
+for (const width of [1440, 390]) {
+	test(`swatch picker: hovering swatches never moves the grid, the click lands (${width}px)`, async ({
+		page
+	}) => {
+		await page.setViewportSize({ width, height: 900 });
+		const { buildId } = await ownerWithBuild(page, `pickerstable${width}`);
+		await page.goto(`/builds/${buildId}/design`);
+		await page.waitForLoadState('networkidle');
+		await page.getByRole('tab', { name: 'Colors' }).click();
+		await page.getByRole('button', { name: 'Add a color' }).click();
+		await page.getByRole('button', { name: /^TPU/ }).click();
+		const picker = page.getByTestId('swatch-picker');
+		await expect(picker).toBeVisible();
+		const search = picker.getByLabel('Search colors');
+		await search.fill('black');
+
+		const swatches = picker.getByTestId('swatch');
+		const detail = picker.getByTestId('swatch-detail');
+		const top = () =>
+			picker.locator('.body').evaluate((e) => e.getBoundingClientRect().top + window.scrollY);
+		const preview = async (sw: ReturnType<typeof swatches.first>) => {
+			await sw.scrollIntoViewIfNeeded();
+			if (width >= 1000) await sw.hover();
+			else await sw.focus();
+			await expect(detail).not.toContainText('Pick a swatch');
+		};
+
+		await expect(swatches.first()).toBeVisible();
+		let notUsed = swatches.and(page.locator('[aria-label*="not used by palettes"]'));
+		if ((await notUsed.count()) === 0) {
+			// Swatches palettes never use are folded away until the Type filter says "all types".
+			await picker.getByTestId('type-select').selectOption('all');
+			notUsed = swatches.and(page.locator('[aria-label*="not used by palettes"]'));
+		}
+		const normal = swatches
+			.and(page.locator(':not([aria-label*="approximate"]):not([aria-label*="not used"])'))
+			.first();
+		const approx = swatches.and(page.locator('[aria-label*="approximate"]')).first();
+		const skipped = notUsed.first();
+		if ((await approx.count()) === 0 || (await skipped.count()) === 0) {
+			test.skip(true, 'bundled catalog has no approximate / not-used TPU black swatch');
+			return;
+		}
+
+		await preview(normal);
+		const baseTop = await top();
+		const baseHeight = (await detail.boundingBox())!.height;
+		for (const sw of [approx, skipped, normal, approx]) {
+			await preview(sw);
+			expect(await top()).toBe(baseTop);
+			expect((await detail.boundingBox())!.height).toBe(baseHeight);
+		}
+		await expect(detail.getByTestId('swatch-approx')).toBeVisible();
+
+		// A merged swatch with the "Other brands" disclosure reserves its line too.
+		await search.fill('');
+		const merged = swatches.and(page.locator('[aria-label*="other brand"]')).first();
+		if ((await merged.count()) === 0) {
+			test.skip(true, 'bundled catalog has no merged "other brands" TPU swatch');
+			return;
+		}
+		// (The reserved note height depends on the swatches in view, so only the grid position and
+		// the detail height within this view are compared.)
+		await preview(normal);
+		const before = await top();
+		const viewHeight = (await detail.boundingBox())!.height;
+		await preview(merged);
+		await expect(picker.getByTestId('other-brands')).toBeVisible();
+		expect(await top()).toBe(before);
+		expect((await detail.boundingBox())!.height).toBe(viewHeight);
+
+		// A real mouse click on the approximate swatch lands and closes the picker.
+		await search.fill('black');
+		await preview(approx);
+		const box = (await approx.boundingBox())!;
+		await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+		await expect(picker).toHaveCount(0);
+	});
+}

@@ -294,6 +294,33 @@
 	}
 	const detailWhy = $derived(detail ? pickerReason(detail) : '');
 	const detailApprox = $derived(detail ? isApproxHex(detail) : false);
+	const APPROX_NOTE = 'Approx. color: estimated from product photos';
+	/**
+	 * The detail row must never change height with the hovered swatch: it sits above the grid, so a
+	 * taller row slides the swatch out from under the pointer and the click is lost. A hidden ghost
+	 * row reserves the room for the longest note set among the swatches in view.
+	 */
+	const noteSizer = $derived.by(() => {
+		const cands: { t: SwatchTuple }[] = [...sections.flatMap((s) => s.entries), ...neutralShown];
+		const cur = items.find(isCurrent);
+		if (cur) cands.push({ t: cur });
+		let best = '';
+		for (const { t } of cands) {
+			const text = [
+				isApproxHex(t) ? APPROX_NOTE : '',
+				pickerReason(t) ? `Palettes skip it: ${pickerReason(t)}` : ''
+			]
+				.filter(Boolean)
+				.join(' · ');
+			if (text.length > best.length) best = text;
+		}
+		return best;
+	});
+	/** The "Other brands" line is reserved the same way, whenever a merged swatch is in view. */
+	const anyOthers = $derived(
+		sections.some((s) => s.entries.some((e) => e.others?.length)) ||
+			neutralShown.some((e) => e.others?.length)
+	);
 
 	async function pick(t: SwatchTuple) {
 		hover = t;
@@ -572,52 +599,71 @@
 		</div>
 
 		<div class="detail" aria-live="polite" data-testid="swatch-detail">
-			{#if detail}
-				<span class="sp-dot" style="background-color:{detail[2]}" aria-hidden="true"></span>
+			<span class="drow ghost" aria-hidden="true">
+				<span class="sp-dot"></span>
 				<span class="dtxt">
-					<b>{nameOf(detail)}</b>
-					<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
-					{#if detailApprox}<span class="why" data-testid="swatch-approx"
-							>Approx. color: estimated from product photos</span
-						>{/if}
-					{#if detailWhy}<span class="why">Palettes skip it: {detailWhy}</span>{/if}
-					{#if detailOthers.length}<span class="muted" data-testid="swatch-also"
-							>{alsoText(detail, detailOthers)}</span
-						>{/if}
+					<b>&nbsp;</b>
+					<span>&nbsp;</span>
+					{#if noteSizer}<span class="dnotes sizer" data-sizer={noteSizer}></span>{/if}
 				</span>
-			{:else if current}
-				<span class="sp-dot" style="background-color:{current.hex}" aria-hidden="true"></span>
-				<span class="dtxt">
-					<b>{current.name}</b>
-					<span class="muted">{current.material} · {current.hex}</span>
-				</span>
-			{:else}
-				<span class="muted">Pick a swatch. Hover or focus one to see its name.</span>
-			{/if}
+			</span>
+			<span class="drow">
+				{#if detail}
+					<span class="sp-dot" style="background-color:{detail[2]}" aria-hidden="true"></span>
+					<span class="dtxt">
+						<b>{nameOf(detail)}</b>
+						<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
+						{#if detailApprox || detailWhy}
+							<span class="dnotes">
+								{#if detailApprox}<span class="why" data-testid="swatch-approx">{APPROX_NOTE}</span
+									>{/if}
+								{#if detailWhy}<span class="why">Palettes skip it: {detailWhy}</span>{/if}
+							</span>
+						{/if}
+					</span>
+				{:else if current}
+					<span class="sp-dot" style="background-color:{current.hex}" aria-hidden="true"></span>
+					<span class="dtxt">
+						<b>{current.name}</b>
+						<span class="muted">{current.material} · {current.hex}</span>
+					</span>
+				{:else}
+					<span class="muted">Pick a swatch. Hover or focus one to see its name.</span>
+				{/if}
+			</span>
 		</div>
 
-		{#if detailOthers.length}
-			<details class="others" data-testid="other-brands">
-				<summary>Other brands ({detailOthers.length})</summary>
-				<ul>
-					{#each detailOthers as o (o.t[0] + o.t[1] + o.t[2] + o.t[3])}
-						<li>
-							<button
-								type="button"
-								class="opick"
-								data-testid="other-brand"
-								aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
-								onclick={() => pick(o.t)}
-							>
-								<span class="sp-dot sm" style="background-color:{o.t[2]}" aria-hidden="true"></span>
-								<span class="mtxt"
-									><b>{o.t[0]} · {o.t[1]}</b> <span class="muted">{o.t[3]} · {o.t[2]}</span></span
-								>
-							</button>
-						</li>
-					{/each}
-				</ul>
-			</details>
+		{#if anyOthers || detailOthers.length}
+			<div class="otherslot">
+				{#if detail && detailOthers.length}
+					<details class="others" data-testid="other-brands">
+						<summary>Other brands ({detailOthers.length})</summary>
+						<ul>
+							{#each detailOthers as o (o.t[0] + o.t[1] + o.t[2] + o.t[3])}
+								<li>
+									<button
+										type="button"
+										class="opick"
+										data-testid="other-brand"
+										aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
+										onclick={() => pick(o.t)}
+									>
+										<span class="sp-dot sm" style="background-color:{o.t[2]}" aria-hidden="true"
+										></span>
+										<span class="mtxt"
+											><b>{o.t[0]} · {o.t[1]}</b>
+											<span class="muted">{o.t[3]} · {o.t[2]}</span></span
+										>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</details>
+					<span class="muted alsotxt" data-testid="swatch-also"
+						>{alsoText(detail, detailOthers)}</span
+					>
+				{/if}
+			</div>
 		{/if}
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -885,11 +931,52 @@
 	.typesel {
 		max-width: 190px;
 	}
+	/* A stack: the live row and a hidden ghost share one cell, so the row is as tall as the tallest. */
 	.detail {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0;
+		min-height: 40px;
+	}
+	.drow {
+		grid-area: 1 / 1;
 		display: flex;
 		align-items: center;
 		gap: var(--sp-5);
-		min-height: 40px;
+		min-width: 0;
+	}
+	.drow.ghost {
+		visibility: hidden;
+		pointer-events: none;
+	}
+	.dtxt .dnotes {
+		font-size: var(--fs-xs);
+		overflow: visible;
+		white-space: normal;
+		text-overflow: clip;
+		display: block;
+	}
+	.dtxt .dnotes span {
+		overflow: visible;
+		white-space: normal;
+		text-overflow: clip;
+	}
+	.dnotes > span + span::before {
+		content: ' · ';
+	}
+	.sizer::after {
+		content: attr(data-sizer);
+	}
+	.otherslot {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 var(--sp-5);
+		min-height: 1.5em;
+		font-size: var(--fs-sm);
+	}
+	.alsotxt {
+		font-size: var(--fs-xs);
 	}
 	.sp-dot {
 		width: 36px;
@@ -900,6 +987,7 @@
 	}
 	.dtxt {
 		display: grid;
+		flex: 1 1 0;
 		min-width: 0;
 		line-height: 1.25;
 	}
