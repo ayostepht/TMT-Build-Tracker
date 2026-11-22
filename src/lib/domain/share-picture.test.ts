@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	VARIANTS,
+	cleanBody,
 	cleanText,
 	contrastRatio,
 	SOCIAL_SIZES,
@@ -216,5 +217,56 @@ describe('fitSections', () => {
 				expect(m(l, Math.round(r.size * 1.15))).toBeLessThanOrEqual(600);
 			for (const l of b.bodyLines) expect(m(l, r.size)).toBeLessThanOrEqual(600);
 		}
+	});
+});
+
+describe('line breaks in a section body', () => {
+	const m = (t: string, size: number) => Array.from(t).length * (size / 2);
+	const base = { maxWidth: 600, sizes: [30, 26, 22], gap: 20 };
+
+	it('cleanBody keeps line breaks, collapses blank runs and trims the ends', () => {
+		expect(cleanBody('\n\n  a   b \r\n\n\n\nc\n \n', 100)).toBe('a b\n\nc');
+		expect(cleanBody('a\nb', 100)).toBe('a\nb');
+		expect(cleanBody('   ', 100)).toBe('');
+		expect(Array.from(cleanBody('😀\n'.repeat(50), 9)).length).toBeLessThanOrEqual(9);
+		expect(drawnSections([{ heading: 'H', body: 'one\n\n\ntwo' }], 'story')[0].body).toBe(
+			'one\n\ntwo'
+		);
+		expect(drawnSections([{ heading: ' a \n b ', body: '' }], 'story')[0].heading).toBe('a b');
+	});
+	it('starts a new line at each break and counts them against the height', () => {
+		const one = fitSections([{ heading: 'H', body: 'first second' }], m, {
+			...base,
+			maxHeight: 900
+		});
+		const two = fitSections([{ heading: 'H', body: 'first\nsecond' }], m, {
+			...base,
+			maxHeight: 900
+		});
+		const gap = fitSections([{ heading: 'H', body: 'first\n\nsecond' }], m, {
+			...base,
+			maxHeight: 900
+		});
+		expect(one.blocks[0].bodyLines).toEqual(['first second']);
+		expect(two.blocks[0].bodyLines).toEqual(['first', 'second']);
+		expect(gap.blocks[0].bodyLines).toEqual(['first', '', 'second']);
+		expect(two.height).toBeGreaterThan(one.height);
+		expect(gap.height).toBeGreaterThan(two.height);
+	});
+	it('shrinks, then cuts with an ellipsis, and never ends on an empty line', () => {
+		const body = Array.from({ length: 12 }, (_, i) => `line ${i}`).join('\n\n');
+		const shrunk = fitSections([{ heading: 'H', body: 'a\nb\nc\nd' }], m, {
+			...base,
+			maxHeight: 190
+		});
+		expect(shrunk.truncated).toBe(false);
+		expect(shrunk.size).toBeLessThan(30);
+		const r = fitSections([{ heading: 'H', body }], m, { ...base, maxHeight: 200 });
+		expect(r.truncated).toBe(true);
+		expect(r.height).toBeLessThanOrEqual(200);
+		const lines = r.blocks[0].bodyLines;
+		expect(lines.at(-1)).not.toBe('');
+		expect(lines.at(-1)!.endsWith('…')).toBe(true);
+		for (const l of lines) expect(m(l, r.size)).toBeLessThanOrEqual(600);
 	});
 });

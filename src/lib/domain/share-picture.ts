@@ -135,9 +135,26 @@ export function drawnSections(sections: TextSection[], size: SocialSize): TextSe
 		.slice(0, SOCIAL_SIZES[size].maxSections)
 		.map((s) => ({
 			heading: cleanText(s.heading, SECTION_HEADING_MAX),
-			body: cleanText(s.body, SECTION_BODY_MAX)
+			body: cleanBody(s.body, SECTION_BODY_MAX)
 		}))
 		.filter((s) => s.heading || s.body);
+}
+
+/**
+ * A section's body as it goes on the picture: line breaks are kept (each starts a new line), runs of
+ * blank lines become one empty line, leading and trailing ones go; spaces inside a line collapse.
+ * Capped at `max` characters (code points, line breaks included).
+ */
+export function cleanBody(s: string, max: number): string {
+	const capped = Array.from(s.replace(/\r\n?/g, '\n')).slice(0, max).join('');
+	const out: string[] = [];
+	for (const raw of capped.split('\n')) {
+		const l = raw.replace(/\s+/g, ' ').trim();
+		if (l) out.push(l);
+		else if (out.length && out[out.length - 1] !== '') out.push('');
+	}
+	while (out.length && out[out.length - 1] === '') out.pop();
+	return out.join('\n');
 }
 
 /** Pixel size of a picture. */
@@ -451,6 +468,33 @@ export function fitSections(
 ): FittedSections {
 	const lh = opts.lh ?? 1.32;
 	const sizes = opts.sizes.length ? opts.sizes : [24];
+	// A body keeps its line breaks: every paragraph wraps on its own, an empty one is an empty line.
+	const bodyLines = (body: string, size: number, maxLines: number): string[] => {
+		const m = (t: string) => measure(t, size, 'body');
+		const lines: string[] = [];
+		let cut = false;
+		for (const para of body ? body.split('\n') : []) {
+			const left = maxLines - lines.length;
+			if (left <= 0 || (para === '' && left <= 1)) {
+				cut = true;
+				break;
+			}
+			if (para === '') {
+				lines.push('');
+				continue;
+			}
+			const f = fitText(para, m, { sizes: [size], maxWidth: opts.maxWidth, maxLines: left });
+			lines.push(...f.lines);
+			if (f.truncated) break;
+		}
+		if (cut) {
+			while (lines.length && lines[lines.length - 1] === '') lines.pop();
+			const last = lines.length - 1;
+			if (last >= 0 && !lines[last].endsWith(ELLIPSIS))
+				lines[last] = ellipsize(lines[last], m, opts.maxWidth);
+		}
+		return lines;
+	};
 	const build = (size: number, maxBody: (i: number) => number) => {
 		const hs = headingSize(size);
 		return sections.map((sec, i): SectionBlock => {
@@ -461,14 +505,7 @@ export function fitSections(
 						maxLines: 1
 					}).lines
 				: [];
-			const b = sec.body
-				? fitText(sec.body, (t) => measure(t, size, 'body'), {
-						sizes: [size],
-						maxWidth: opts.maxWidth,
-						maxLines: Math.max(1, maxBody(i))
-					})
-				: { lines: [] as string[] };
-			return { headingLines: h, bodyLines: b.lines };
+			return { headingLines: h, bodyLines: bodyLines(sec.body, size, Math.max(1, maxBody(i))) };
 		});
 	};
 	const heightOf = (blocks: SectionBlock[], size: number) => {
