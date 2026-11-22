@@ -38,7 +38,7 @@ export const VARIANTS: Record<PictureVariant, VariantSpec> = {
 		defaultTitle: "Your chair's colors",
 		defaultLine: 'Printed colors can look a little different than on a screen.',
 		linePlaceholder: 'Optional: a short note',
-		credit: 'MakeGood TMT mobility trainer',
+		credit: 'MakeGood Toddler Mobility Trainer',
 		titleMax: 60,
 		lineMax: 120,
 		hint: 'A calm card to send to a family so they can approve the colors.'
@@ -48,10 +48,10 @@ export const VARIANTS: Record<PictureVariant, VariantSpec> = {
 		label: 'For social media',
 		width: 1080,
 		height: 1080,
-		defaultTitle: "We're building a TMT chair",
+		defaultTitle: "We're building a Toddler Mobility Trainer",
 		defaultLine: '',
 		linePlaceholder: 'Chapter name, or what you are asking for',
-		credit: 'MakeGood TMT mobility trainer · open design by MakeGood',
+		credit: 'MakeGood Toddler Mobility Trainer · open design by MakeGood',
 		titleMax: 50,
 		lineMax: 90,
 		hint: 'A square picture for a feed, in your chair’s own colors.'

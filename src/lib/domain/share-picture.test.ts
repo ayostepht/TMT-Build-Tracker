@@ -38,6 +38,19 @@ describe('variants and files', () => {
 	it('never carries a name from the build in its defaults', () => {
 		const all = JSON.stringify(VARIANTS);
 		expect(all).not.toMatch(/recipient|hospital|team|filament/i);
+		// The public does not know the abbreviation: nothing drawn or pre-filled says "TMT".
+		const drawn = Object.values(VARIANTS).flatMap((v) => [
+			v.defaultTitle,
+			v.defaultLine,
+			v.linePlaceholder,
+			v.credit
+		]);
+		expect(drawn.join(' ')).not.toMatch(/TMT/);
+		expect(VARIANTS.social.defaultTitle).toBe("We're building a Toddler Mobility Trainer");
+		expect(VARIANTS.family.credit).toBe('MakeGood Toddler Mobility Trainer');
+		expect(VARIANTS.social.credit).toBe(
+			'MakeGood Toddler Mobility Trainer · open design by MakeGood'
+		);
 	});
 });
 
