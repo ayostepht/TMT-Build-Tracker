@@ -254,18 +254,31 @@
 		pendingLock = next;
 	}
 
+	/** role → token of the latest pick, so only the newest save of a slot clears its optimistic color. */
+	const pickTokens: Record<string, number> = {};
+	let pickSeq = 0;
+
 	async function pickFilament(role: string, v: PickedFilament) {
+		const token = ++pickSeq;
+		pickTokens[role] = token;
 		optimistic = { ...optimistic, [role]: v };
 		announce = `${roleLabel(
 			role,
 			live.filaments.find((f) => f.key === role),
 			live.filaments
 		)} is now ${v.name}, ${v.material}`;
-		await ctx.act(() => updateFilament(ctx.id, role, v));
-		if (optimistic[role] === v) {
-			const next = { ...optimistic };
-			delete next[role];
-			optimistic = next;
+		// `act` re-fetches the view whether the save worked or not (a failure also shows its sentence),
+		// so by now the server's value is the truth: drop ours, unless a newer pick of this slot is in flight.
+		try {
+			await ctx.act(() => updateFilament(ctx.id, role, v));
+		} finally {
+			// Even if `act` throws, the optimistic color must not stay stuck over the saved one.
+			if (pickTokens[role] === token) {
+				delete pickTokens[role];
+				const next = { ...optimistic };
+				delete next[role];
+				optimistic = next;
+			}
 		}
 	}
 
@@ -385,6 +398,12 @@
 		<!-- Swatch picker (round 2): fills the panel while open, the rest of the panel is hidden (see .picking). -->
 		{#if picker?.mode === 'edit' && pickerSlot}
 			<div class="pickhost">
+				{#if ctx.error}
+					<!-- The page banner announces it, but it is scrolled out of sight while a phone is down in the picker. -->
+					<p class="banner bad pickerr" aria-hidden="true" data-testid="picker-error">
+						{ctx.error}
+					</p>
+				{/if}
 				<SwatchPicker
 					title={roleLabel(pickerSlot.key, pickerSlot, live.filaments)}
 					family={pickerSlot.tpu ? 'tpu' : 'petg'}
@@ -698,6 +717,10 @@
 		display: none;
 	}
 	/* Phones: the card grows with its content and the page scrolls (no fixed height, nothing overflows it). */
+	.pickerr {
+		margin: 0 0 var(--sp-3);
+		flex: none;
+	}
 	.pickhost {
 		display: flex;
 		flex-direction: column;

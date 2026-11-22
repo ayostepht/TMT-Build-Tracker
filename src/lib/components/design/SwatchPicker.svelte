@@ -72,6 +72,8 @@
 	let typeSeeded = false;
 	let recent = $state<SwatchTuple[]>([]);
 	let hover = $state<SwatchTuple | null>(null);
+	/** The last pointer press on a swatch was a finger (until the next key press). */
+	let touching = false;
 	let cap = $state(480);
 	let mine = $state<CustomFilament[]>([]);
 	let showAllMine = $state(false);
@@ -243,6 +245,7 @@
 
 	/** Arrow keys move through the swatches (rows by position), Home/End jump to the ends. */
 	function gridKey(e: KeyboardEvent) {
+		touching = false;
 		const el = e.target as HTMLElement;
 		if (!el.classList?.contains('sw') || !bodyEl) return;
 		if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
@@ -381,6 +384,8 @@
 
 <svelte:window
 	onkeydown={(e) => {
+		// Any key press ends "the last press was a finger": tabbing back into the grid previews again.
+		touching = false;
 		if (e.key === 'Escape') {
 			if (screen === 'form') screen = 'pick';
 			else onclose();
@@ -764,13 +769,19 @@
 			activeId = id;
 			pick(t);
 		}}
-		onpointerenter={() => (hover = t)}
+		onpointerdown={(e) => (touching = e.pointerType === 'touch')}
+		onpointerenter={(e) => {
+			// A finger is not hovering: changing the detail row on touch makes iOS treat the tap as
+			// "hover only" and swallow the click, so the pick is lost. The tap itself sets `hover`.
+			if (e.pointerType !== 'touch') hover = t;
+		}}
 		onfocus={() => {
 			activeId = id;
-			hover = t;
+			// Focus previews the swatch, but the focus a tap leaves behind must not move the row.
+			if (!touching) hover = t;
 		}}
-		onpointerleave={() => {
-			if (!others.length) hover = null;
+		onpointerleave={(e) => {
+			if (e.pointerType !== 'touch' && !others.length) hover = null;
 		}}
 	></button>
 {/snippet}
@@ -930,7 +941,13 @@
 		cursor: pointer;
 		box-shadow: var(--ring-swatch);
 	}
-	.sw:hover,
+	/* Hover only where a pointer can hover: iOS keeps :hover on the last tapped swatch. */
+	@media (hover: hover) {
+		.sw:hover {
+			transform: scale(1.12);
+			border-color: var(--ink);
+		}
+	}
 	.sw:focus-visible {
 		transform: scale(1.12);
 		border-color: var(--ink);
