@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
-copy on r63 = `edge` 230614a, the 0.9.3 app code plus #90, since 2026-11-20)._
+copy on r65 = `edge` 9f32307, the 0.9.3 app code plus #90 and #92–#96, since 2026-11-21)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
 decided. History goes in `docs/dev/CHANGELOG.md`; how things work goes in
@@ -18,7 +18,7 @@ done. Keep it under ~150 lines.
    `spoolman_cache`) and the frozen fixture `fixtures/v0.9.3/`. Contents since 0.9.2:
    Spoolman filaments (#71, #77, #81 fixes #79), dependency updates (#74), empty `ORIGIN`
    fix (#76), header detail lines and exact plate locators (#80), resource limits from the
-   public edition (#82, #84). The test copy runs r63 = `edge` 230614a (the 0.9.3 app code plus #90;
+   public edition (#82, #84). The test copy runs r65 = `edge` 9f32307 (the 0.9.3 app code plus #90 and #92–#96;
    see `docs/dev/CHANGELOG.md`); the maintainer confirmed the #79 Spare figures on real data,
    and #59 is closed. 0.9.2 (2026-11-16): `main` 48c9649, migrations 0001/0002.
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
@@ -238,7 +238,7 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 Route each to the agent named in brackets.
 
 - **Print some pieces of a part** (#93, merged into `edge` 2026-11-20 as 3c6ea33, and #95, 2026-11-21 as 005f5ad; migration
-  `0004_piece_prints`, additive): a part made of several pieces (Harness and Straps, 9
+  `0004_piece_prints`, additive; on the test copy since r64, #95 and #96 since r65): a part made of several pieces (Harness and Straps, 9
   pieces) has "Print some pieces…" (on the plate heading when it is the plate's only
   startable part, else on its row): pick pieces (all ticked by default), mark them printing
   or log them. A Success ticks exactly those pieces; the part is Printed when the last one
@@ -252,9 +252,7 @@ Route each to the agent named in brackets.
   log's id (#96, 9f32307: `convertPlateRuns` updates the original row for the first
   target part and inserts rows only for further parts). "Print some pieces…" and "Print some parts…" are entries in the status
   menu, not separate buttons. Not offered on
-  plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: the
-  migration needs the usual rehearsal on a copy of the real database before the test copy
-  gets it (no Docker in the cloud session); one piece print per part at a time; "×5"
+  plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: one piece print per part at a time; "×5"
   pieces count as one piece for the share; no e2e for drafts or multi-run plates (the test
   layout has no multi-piece part there) [e2e-playwright]; every future additive column
   must be added to `POST_BASELINE_COLUMNS` in `baseline-upgrade.test.ts` [kit-and-startup].
