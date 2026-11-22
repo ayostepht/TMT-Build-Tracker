@@ -330,9 +330,10 @@ Route each to the agent named in brackets.
   the top 250 px and bottom 340 px on tall). Only the typed text, the chair, swatches and
   the MakeGood credit are drawn; nothing is uploaded. `e2e/share-picture.spec.ts` seeds a
   synthetic model row and restores it in `afterAll`. Open: the system share sheet is
-  unchecked on a real iPhone and Android phone; line breaks in a section are flattened; no
-  "Try again" when drawing or encoding fails; the tall size leaves plain bands top and
-  bottom (maintainer saw it, no change asked).
+  unchecked on a real iPhone and Android phone; no e2e assertion for the compose retry
+  (`share-picture-retry`); the tall size leaves plain bands top and bottom (maintainer saw
+  it, no change asked). Follow-up: section text keeps typed line breaks (`cleanBody`), a
+  failed draw or encode offers "Try again" and disables Share and Download meanwhile.
 - **Color picker, refused pick** (#98, 41513e7) [design-studio-ui]: the sentence of a
   refused pick is pinned under the stage on phones (in flow above the card from 900 px);
   if the refused swatch sat directly under the stage when tapped, the pinned line can

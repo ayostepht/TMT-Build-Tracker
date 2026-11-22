@@ -53,10 +53,9 @@ _Updated 2026-11-22, 20:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   maintainer's phone check of the share sheet on the `edge` image, and the port of the
   follow-up below. Open question there: the button also shows in the demo (recommended:
   keep it).
-- **In flight:** a small follow-up to #101 on branch `claude/sweet-johnson-59ma1x`: line
-  breaks in a section's text are flattened into one paragraph; no "Try again" when drawing
-  or encoding fails (only when the 3D shot fails); "Saved to your downloads" shows even if
-  the browser blocked the download. Then port it into the hosted edition's #41.
+- **In flight:** the follow-up to #101 on branch `claude/sweet-johnson-59ma1x` (section
+  text keeps line breaks, "Try again" when drawing fails, "Download started." note), with
+  this handoff; merge when green, then port it into the hosted edition's #41.
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.

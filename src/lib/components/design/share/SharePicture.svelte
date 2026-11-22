@@ -143,7 +143,10 @@
 
 	// Redraw whenever something that shows on the picture changes (typing is debounced).
 	let token = 0;
+	/** Bumped by "Try again" after a failed draw: runs the compose step again with the current inputs. */
+	let redraw = $state(0);
 	$effect(() => {
+		void redraw;
 		const input = {
 			variant,
 			size,
@@ -179,7 +182,7 @@
 	function download() {
 		if (!blob) return;
 		downloadPicture(blob, fileName);
-		note = 'Saved to your downloads.';
+		note = 'Download started.';
 	}
 
 	async function share() {
@@ -259,6 +262,16 @@
 			{error}
 			{#if !chair}
 				<button type="button" class="btn sm" onclick={takeShot}>Try again</button>
+			{:else}
+				<button
+					type="button"
+					class="btn sm"
+					data-testid="share-picture-retry"
+					onclick={() => {
+						error = null;
+						redraw++;
+					}}>Try again</button
+				>
 			{/if}
 		</div>
 	{/if}
@@ -368,7 +381,7 @@
 				type="button"
 				class="btn primary"
 				data-testid="share-picture-share"
-				disabled={!blob || busy}
+				disabled={!blob || busy || !!error}
 				onclick={share}>Share</button
 			>
 		{/if}
@@ -377,7 +390,7 @@
 			class="btn"
 			class:primary={!canShare}
 			data-testid="share-picture-download"
-			disabled={!blob || busy}
+			disabled={!blob || busy || !!error}
 			onclick={download}>Download {format === 'png' ? 'PNG' : 'JPEG'}</button
 		>
 	</div>
