@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-21, 06:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-22, 18:30 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -36,10 +36,19 @@ _Updated 2026-11-21, 06:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   their row" (9f32307; opened from the hosted edition's session, its counterpart there is
   #37; no schema change): a confirmed plate replacement keeps a piece log's pieces and the
   log's id.
+- **Merged into `edge` 2026-11-22:** #98 "Color picker: a pick no longer hides the saved
+  color; taps on touch are not treated as hover" (41513e7; no schema change; port of the
+  hosted edition's #38). **Not on the test copy yet** (r65 is 9f32307). Beyond the hosted
+  pull request, to bring back there: the `finally` around the save, clearing the touch flag
+  on any key press, and the follow-up commit (refusal line pinned in view on a phone and
+  limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
 - **In flight:** nothing in this repository. The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** the maintainer tests r65; then pick from the follow-ups below or STATUS "Next steps".
+- **Next step:** deploy `edge` 41513e7 to the test copy (with the maintainer's OK; needs a
+  machine with `CLAUDE.local.md`), then the maintainer tests swatch taps on an iPhone (the
+  touch change is unconfirmed on iOS Safari); then pick from the follow-ups below or STATUS
+  "Next steps".
 - CI: an `image` job once hung in build-push for 25+ min (normal is ~4 min); cancel and re-run it.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
@@ -54,6 +63,9 @@ _Updated 2026-11-21, 06:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 
 ## Follow-ups
 
+- From #98: the pinned refusal line can cover the swatch just tapped when it sat directly
+  under the stage; a refused "My filaments" pick does not reset the detail row (STATUS,
+  design studio).
 - From #93: one piece print per part at a time; a "×5" piece counts as one piece for the
   share; no e2e for drafts or multi-piece parts on multi-run plates. One test of
   `print-some-pieces-printer.spec.ts` failed twice while two agents ran builds and e2e in
