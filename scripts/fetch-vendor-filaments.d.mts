@@ -5,16 +5,26 @@ import type {
 } from '#lib/server/filaments/types.ts';
 
 export const USER_AGENT: string;
-export const VENDORS: Record<string, { name: string; host: string }>;
+export const VENDORS: Record<
+	string,
+	{ name: string; host: string; titleColor?: RegExp; swatchPage?: string; onlyHardness?: string }
+>;
+export function parseSwatchPage(html: string): { handle: string; title: string; hex: string }[];
+export function swatchOverrides(
+	swatches: { handle: string; title: string; hex: string }[],
+	products: { handle: string; title: string }[]
+): Record<string, { hex: string; hexSource: 'store' }>;
 export function hexOf(v: unknown): string | null;
 export function classifyProduct(
 	product: unknown,
-	brand?: string
+	brand?: string,
+	opts?: { onlyHardness?: string }
 ):
 	| { skip: string }
 	| { material: string; finish?: string; highSpeed: boolean; label: string; skip?: undefined };
 export function productColors(
-	product: unknown
+	product: unknown,
+	opts?: { titleColor?: RegExp }
 ): { name: string; hex: string | null; image?: string }[];
 export function convertProducts(
 	products: unknown[],
@@ -22,6 +32,8 @@ export function convertProducts(
 	opts?: {
 		hexOverrides?: Record<string, { hex: string; hexSource?: 'store' | 'image' }>;
 		skipped?: { product: string; color?: string; reason: string; image?: string }[];
+		titleColor?: RegExp;
+		onlyHardness?: string;
 	}
 ): { material: string; colors: CatalogColor[] }[];
 export function buildSupplementBrand(

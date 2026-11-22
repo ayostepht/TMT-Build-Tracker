@@ -55,6 +55,18 @@ _Updated 2026-11-22, 20:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **Follow-up to #101 merged 2026-11-22:** #102 (b21d269): section text keeps typed line
   breaks, "Try again" when drawing fails, "Download started." note. Not on the test copy.
 - **In flight:** nothing in this repository.
+- **Also merged into `edge` 2026-11-22:** #100 "Add Space Coast 3D and Dancyn 3D Prints to
+  the filament catalog; compact color picker" (5541c2c; no schema change). Both brands are
+  official MakeGood suppliers and follow Schoolhouse Spools in the picker. The picker has
+  the hosted edition's compact layout in this edition's colors (maintainer's choice after
+  comparing screenshots), which also fixes swatches with a note that could not be clicked
+  with a mouse; #98's behaviour is kept. **Not on the test copy yet.** The catalog change
+  is open in the hosted edition as its #40 (branch `feat/filaments-space-coast-dancyn`,
+  CI green); that project's session merges it (merging is deploying). To offer there:
+  #98's refused-save handling, which the hosted picker lacks. To regenerate the two
+  vendors a cloud environment needs `spacecoast3d.org`, `www.dancyn3dprints.com` and
+  `cdn.shopify.com` on its allowed hosts; without them use
+  `fetch-vendor-filaments.mjs --from-dir` with saved pages.
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
