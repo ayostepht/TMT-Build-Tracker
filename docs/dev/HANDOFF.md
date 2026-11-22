@@ -44,10 +44,11 @@ _Updated 2026-11-22. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable
   limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
 - **In flight: #100 "Add Space Coast 3D and Dancyn 3D Prints to the filament catalog"**
   (branch `claude/cool-davinci-qce08y` into `edge`; data and picker order only, no schema
-  change; agent checks and `verifier` passed). Merge when CI is green; it reaches the test
-  copy with the next `edge` deploy. The same change is being opened in the hosted edition
-  from branch `feat/filaments-space-coast-dancyn` into its `main`; that project's session
-  merges there (merging is deploying). To regenerate these vendors a cloud environment
+  change; agent checks and `verifier` passed). This session merges it when CI is green (check its state
+  first; if it is merged, nothing is in flight here); it reaches the test copy with the
+  next `edge` deploy. The same change is open in the hosted edition as its #40 (branch
+  `feat/filaments-space-coast-dancyn` into `main`, checks passed there); that project's
+  session merges it (merging is deploying). To regenerate these vendors a cloud environment
   needs `spacecoast3d.org`, `www.dancyn3dprints.com` and `cdn.shopify.com` on its allowed
   hosts; without them use `fetch-vendor-filaments.mjs --from-dir` with saved pages. The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
