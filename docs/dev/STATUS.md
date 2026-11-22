@@ -2,7 +2,7 @@
 
 _Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
 copy on r65 = `edge` 9f32307, the 0.9.3 app code plus #90 and #92–#96, since 2026-11-21;
-#98 merged into `edge` 2026-11-22 as 41513e7 and #101 "Share a picture" as 76a65c0 with its follow-up #102 as b21d269, none on
+#98 merged into `edge` 2026-11-22 as 41513e7 and #101 "Share a picture" as 76a65c0 with its follow-ups #102 (b21d269) and #104 (fbd401d), none on
 the test copy yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
@@ -332,7 +332,7 @@ Route each to the agent named in brackets.
   synthetic model row and restores it in `afterAll`. Open: the system share sheet is
   unchecked on a real iPhone and Android phone; no e2e assertion for the compose retry
   (`share-picture-retry`); the tall size leaves plain bands top and bottom (maintainer saw
-  it, no change asked); the preview-fit fix (frame sized from the picture's ratio, 60dvh cap
+  it, no change asked); the preview-fit fix #104 (fbd401d; frame sized from the picture's ratio, 60dvh cap
   on phones; reported clipped on iPhone Safari for portrait and tall) awaits the maintainer's
   iPhone re-check. Follow-up #102 (b21d269): section text keeps typed line breaks (`cleanBody`), a
   failed draw or encode offers "Try again" and disables Share and Download meanwhile.

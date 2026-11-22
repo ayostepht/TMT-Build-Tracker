@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-22, 20:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-22, 21:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -49,11 +49,15 @@ _Updated 2026-11-22, 20:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   **Not on the test copy yet.** Unchecked: the system share sheet on a real iPhone and
   Android phone (headless Chromium has no file sharing).
 - **Hosted edition port of #101 and #102:** its #41 (branch `feat/share-picture`, head
-  fee5c43, `public-ci` green) is open and **not to be merged yet** (maintainer,
+  dd10228 with the ports of #102 and #104, `public-ci` green) is open and **not to be merged yet** (maintainer,
   2026-11-22): first the maintainer checks the share sheet on a phone on the `edge` image.
   Open question there: the button also shows in the demo (recommended: keep it).
 - **Follow-up to #101 merged 2026-11-22:** #102 (b21d269): section text keeps typed line
   breaks, "Try again" when drawing fails, "Download started." note. Not on the test copy.
+- **Preview fix merged 2026-11-22:** #104 (fbd401d): the whole picture fits the preview
+  (the maintainer saw portrait and tall clipped on an iPhone). Verified in Chromium and by
+  an e2e check only; **the maintainer re-checks on the iPhone** once the `edge` image is
+  pulled. Decided: the button stays in the hosted edition's demo.
 - **In flight:** nothing in this repository.
 - **Also merged into `edge` 2026-11-22:** #100 "Add Space Coast 3D and Dancyn 3D Prints to
   the filament catalog; compact color picker" (5541c2c; no schema change). Both brands are
@@ -70,7 +74,7 @@ _Updated 2026-11-22, 20:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** deploy `edge` b21d269 to the test copy (with the maintainer's OK; needs a
+- **Next step:** deploy `edge` fbd401d to the test copy (with the maintainer's OK; needs a
   machine with `CLAUDE.local.md`), then the maintainer tests swatch taps on an iPhone (the
   touch change is unconfirmed on iOS Safari) and Share a picture's share sheet; then pick from the follow-ups below or STATUS
   "Next steps".
