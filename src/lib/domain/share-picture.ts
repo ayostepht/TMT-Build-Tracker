@@ -67,9 +67,95 @@ export function mimeOf(format: PictureFormat): 'image/png' | 'image/jpeg' {
 	return format === 'png' ? 'image/png' : 'image/jpeg';
 }
 
-/** `tmt-chair-family.png`, `tmt-chair-social.jpg`. */
-export function pictureFileName(variant: PictureVariant, format: PictureFormat): string {
-	return `tmt-chair-${variant}.${format === 'png' ? 'png' : 'jpg'}`;
+export type SocialSize = 'square' | 'portrait' | 'story';
+
+export interface SocialSizeSpec {
+	id: SocialSize;
+	label: string;
+	hint: string;
+	width: number;
+	height: number;
+	/** Text sections allowed (Square keeps only the title and the one line). */
+	maxSections: number;
+	/** Keep text and swatches out of these bands (app chrome covers them in a story). */
+	safeTop: number;
+	safeBottom: number;
+	/** The chair panel never gets smaller than this while sections take room. */
+	minPanel: number;
+}
+
+export const SOCIAL_SIZES: Record<SocialSize, SocialSizeSpec> = {
+	square: {
+		id: 'square',
+		label: 'Square',
+		hint: 'grid post',
+		width: 1080,
+		height: 1080,
+		maxSections: 0,
+		safeTop: 64,
+		safeBottom: 36,
+		minPanel: 0
+	},
+	portrait: {
+		id: 'portrait',
+		label: 'Portrait',
+		hint: 'feed post',
+		width: 1080,
+		height: 1350,
+		maxSections: 1,
+		safeTop: 64,
+		safeBottom: 36,
+		minPanel: 560
+	},
+	story: {
+		id: 'story',
+		label: 'Tall',
+		hint: 'story',
+		width: 1080,
+		height: 1920,
+		maxSections: 3,
+		safeTop: 250,
+		safeBottom: 340,
+		minPanel: 640
+	}
+};
+export const SOCIAL_SIZE_IDS: SocialSize[] = ['square', 'portrait', 'story'];
+
+export const SECTION_HEADING_MAX = 40;
+export const SECTION_BODY_MAX = 220;
+
+export interface TextSection {
+	heading: string;
+	body: string;
+}
+
+/** The sections that get drawn: the first `maxSections`, with something typed, cleaned and capped. */
+export function drawnSections(sections: TextSection[], size: SocialSize): TextSection[] {
+	return sections
+		.slice(0, SOCIAL_SIZES[size].maxSections)
+		.map((s) => ({
+			heading: cleanText(s.heading, SECTION_HEADING_MAX),
+			body: cleanText(s.body, SECTION_BODY_MAX)
+		}))
+		.filter((s) => s.heading || s.body);
+}
+
+/** Pixel size of a picture. */
+export function pictureDims(
+	variant: PictureVariant,
+	size: SocialSize = 'square'
+): { width: number; height: number } {
+	return variant === 'social' ? SOCIAL_SIZES[size] : VARIANTS[variant];
+}
+
+/** `tmt-chair-family.png`, `tmt-chair-social-story.jpg`. */
+export function pictureFileName(
+	variant: PictureVariant,
+	format: PictureFormat,
+	size: SocialSize = 'square'
+): string {
+	const ext = format === 'png' ? 'png' : 'jpg';
+	return variant === 'social' ? `tmt-chair-social-${size}.${ext}` : `tmt-chair-${variant}.${ext}`;
 }
 
 /**
@@ -320,4 +406,122 @@ export function fitText(
 		lines[lastIdx] = ellipsize(tail, m, opts.maxWidth);
 	}
 	return { lines, size, truncated: true };
+}
+
+// ---- text sections ------------------------------------------------------------------------
+
+export interface SectionBlock {
+	headingLines: string[];
+	bodyLines: string[];
+}
+
+export interface FittedSections {
+	blocks: SectionBlock[];
+	/** Body font size; headings are `headingSize(size)`. */
+	size: number;
+	lineHeight: number;
+	height: number;
+	/** Lines were cut (with an ellipsis) because even the smallest size did not fit. */
+	truncated: boolean;
+}
+
+export const headingSize = (bodySize: number) => Math.round(bodySize * 1.15);
+
+export interface SectionFitOptions {
+	maxWidth: number;
+	maxHeight: number;
+	/** Body sizes to try, largest first. */
+	sizes: number[];
+	/** Space between sections. */
+	gap: number;
+	/** Line height factor (default 1.32). */
+	lh?: number;
+}
+
+/**
+ * Lay out heading + body sections in `maxHeight`: the largest body size whose wrapped text fits
+ * wins; at the smallest size the last lines are dropped and the final kept line ends in an ellipsis
+ * (every section keeps at least its heading and one body line while there is room). `measure` gets
+ * the kind so headings can be measured bold. Headings take one line (ellipsized).
+ */
+export function fitSections(
+	sections: TextSection[],
+	measure: (t: string, size: number, kind: 'heading' | 'body') => number,
+	opts: SectionFitOptions
+): FittedSections {
+	const lh = opts.lh ?? 1.32;
+	const sizes = opts.sizes.length ? opts.sizes : [24];
+	const build = (size: number, maxBody: (i: number) => number) => {
+		const hs = headingSize(size);
+		return sections.map((sec, i): SectionBlock => {
+			const h = sec.heading
+				? fitText(sec.heading, (t) => measure(t, hs, 'heading'), {
+						sizes: [hs],
+						maxWidth: opts.maxWidth,
+						maxLines: 1
+					}).lines
+				: [];
+			const b = sec.body
+				? fitText(sec.body, (t) => measure(t, size, 'body'), {
+						sizes: [size],
+						maxWidth: opts.maxWidth,
+						maxLines: Math.max(1, maxBody(i))
+					})
+				: { lines: [] as string[] };
+			return { headingLines: h, bodyLines: b.lines };
+		});
+	};
+	const heightOf = (blocks: SectionBlock[], size: number) => {
+		const hs = headingSize(size);
+		let h = 0;
+		blocks.forEach((b, i) => {
+			if (i) h += opts.gap;
+			h += b.headingLines.length * Math.round(hs * lh) + b.bodyLines.length * Math.round(size * lh);
+		});
+		return h;
+	};
+	if (!sections.length) return { blocks: [], size: sizes[0], lineHeight: lh, height: 0, truncated: false };
+	for (const size of sizes) {
+		const blocks = build(size, () => 999);
+		const height = heightOf(blocks, size);
+		if (height <= opts.maxHeight) return { blocks, size, lineHeight: lh, height, truncated: false };
+	}
+	// Smallest size and still too tall: hand out body lines from the top, ellipsize where it stops.
+	const size = sizes[sizes.length - 1];
+	const hs = headingSize(size);
+	const bodyLh = Math.round(size * lh);
+	const full = build(size, () => 999);
+	let room = opts.maxHeight;
+	const fixed = full.reduce(
+		(n, b, i) => n + (i ? opts.gap : 0) + b.headingLines.length * Math.round(hs * lh),
+		0
+	);
+	room -= fixed;
+	let lines = Math.max(0, Math.floor(room / bodyLh));
+	const allow = full.map((b) => b.bodyLines.length);
+	// Every section gets one line first, then the rest goes in order.
+	const give = allow.map(() => 0);
+	for (let i = 0; i < give.length && lines > 0; i++) if (allow[i]) (give[i] = 1), lines--;
+	for (let i = 0; i < give.length && lines > 0; i++) {
+		const more = Math.min(lines, allow[i] - give[i]);
+		give[i] += more;
+		lines -= more;
+	}
+	const blocks = build(size, (i) => give[i] || 1).map((b, i) => (give[i] ? b : { ...b, bodyLines: [] }));
+	// A body cut short must end in an ellipsis (fitText only adds one on its own at the very end).
+	blocks.forEach((b, i) => {
+		if (give[i] && give[i] < allow[i] && b.bodyLines.length) {
+			const last = b.bodyLines.length - 1;
+			if (!b.bodyLines[last].endsWith(ELLIPSIS)) {
+				const rest = sections[i].body.replace(/\s+/g, ' ').trim();
+				const m = (t: string) => measure(t, size, 'body');
+				b.bodyLines[last] = ellipsize(
+					b.bodyLines[last] + ' ' + rest.slice(b.bodyLines.join(' ').length),
+					m,
+					opts.maxWidth
+				);
+			}
+		}
+	});
+	return { blocks, size, lineHeight: lh, height: heightOf(blocks, size), truncated: true };
 }
