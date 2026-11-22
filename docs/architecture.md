@@ -557,6 +557,15 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   (`domain/labels.ts`): kit roles keep their label; a non-kit slot that collides with a kit
   label or another added slot gets " · added" / " · added N"; slot lists pass the build's
   filaments.
+- **Picking a filament** (`DesignWorkspace.pickFilament`): the pick shows at once through
+  `optimistic[role]` and is dropped when the newest save of that slot returns (`pickTokens`),
+  whatever the outcome; `ctx.act` has re-fetched the view by then. A refusal sets `pickError`
+  (newest pick only; cleared on the next pick and when the picker opens or closes,
+  `pickEpoch`), shown as `p.pickerr`: sticky under the pinned stage on phones, static above
+  the card from 900 px, `aria-hidden` because the build layout's `role="alert"` banner
+  announces it. `SwatchPicker.onpick` may return a promise of success; on `false` the detail
+  row drops the refused swatch. Swatches ignore touch for the hover preview (`touching`,
+  reset by any key press) and `.sw:hover` applies only under `@media (hover: hover)`.
 - **Swatch picker** (`domain/swatch-picker.ts`): `exclusionReason` (TPU 95A only, no
   silk/matte/…), a Type select (`type`: `''` standard, `'all'`, or one subtype id from
   `filamentSubtypes()` in `palettes.ts`, built from `EXCLUDED_FILAMENTS` + `hardnesses()`;
