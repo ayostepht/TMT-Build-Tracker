@@ -25,7 +25,7 @@ test('an editor change shows up on the owner page without a reload', async ({ pa
 	await expect(row(editor.page, slug)).toHaveAttribute('data-s', 'Printing');
 
 	await expect(header).toContainText('1 printing');
-	await expect(page.locator('.activity')).toContainText('Eddie Editor set');
+	await expect(page.locator('.activity')).toContainText('Eddie Editor put');
 	expect(await page.evaluate(() => (window as unknown as { __kept?: boolean }).__kept)).toBe(true);
 
 	await editor.context.close();

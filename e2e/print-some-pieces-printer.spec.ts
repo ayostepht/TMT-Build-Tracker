@@ -12,7 +12,6 @@ import type { Locator, Page } from '@playwright/test';
 
 const HARNESS = 'harness';
 const N = 9;
-const PLATE = 18;
 const PICKED = [0, 1, 2];
 
 let mock: MockSdcp;
@@ -79,15 +78,14 @@ async function setup(page: Page, label: string) {
 	return { buildId };
 }
 
-/** Print tab, grouped by plate: returns plate 18's heading. */
+/** Print tab, grouped by plate: returns the row of the part alone on plate 18. */
 async function openPrint(page: Page, buildId: string) {
 	await keepPrintedVisible(page, buildId);
 	await page.goto(`/builds/${buildId}/print`);
 	await page.waitForLoadState('networkidle');
 	await page.getByLabel('Group by').selectOption('plate');
-	const h = page.locator('.group-head').filter({
-		has: page.locator(`[data-testid="plate-status"][aria-label^="Plate ${PLATE} status"]`)
-	});
+	// Plate 18 holds one part: the part row's badge is its status control (the heading has none).
+	const h = page.locator(`.row[data-id="${HARNESS}"]`);
 	await expect(h).toBeVisible();
 	return h;
 }
@@ -95,7 +93,7 @@ async function openPrint(page: Page, buildId: string) {
 /** Picks the first three pieces in the picker and confirms. */
 async function pickSome(page: Page, buildId: string): Promise<Locator> {
 	const h = await openPrint(page, buildId);
-	await chooseExtra(h.getByTestId('plate-status'), 'plate-print-some-pieces');
+	await chooseExtra(h.getByTestId('part-status'), 'part-print-some');
 	const dlg = h.getByTestId('piece-pick');
 	await expect(dlg).toBeVisible();
 	const items = dlg.getByTestId('piece-pick-item');
@@ -132,9 +130,7 @@ test('Some pieces with a printer: Where, then the job is linked to exactly them,
 		`0/${N} pieces · 3 printing`
 	);
 	expect((await view(page, buildId)).state[HARNESS].printingComps).toEqual(PICKED);
-	await expect
-		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
-		.toBe(false);
+	await expect.poll(() => offers(h.getByTestId('part-status'), 'part-print-some')).toBe(false);
 
 	// The printer starts a job: it is expected for exactly those pieces.
 	mock.printing('benchy.gcode', 10);

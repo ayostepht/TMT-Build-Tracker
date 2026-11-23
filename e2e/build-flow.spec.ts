@@ -121,7 +121,7 @@ test('owner signs up, makes a chapter and build, and tracks a part to Printed', 
 	await expect(page).toHaveURL(/\/activity$/);
 	await expect(page.locator('.activity')).toContainText('Olive Owner logged a successful print');
 	await expect(page.locator('.activity')).toContainText('Olive Owner undid a successful print');
-	await expect(page.locator('.activity')).toContainText(`Olive Owner set ${name} to Printing`);
+	await expect(page.locator('.activity')).toContainText(`Olive Owner put ${name} on the printer`);
 });
 
 test('filament labels do not repeat the material', async ({ page }) => {

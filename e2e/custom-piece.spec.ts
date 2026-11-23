@@ -197,7 +197,8 @@ test('A sliced two-plate file becomes a custom part that replaces a kit part', a
 	await expect(head(page, n)).toBeVisible();
 	await expect(head(page, n)).toContainText('200 g');
 	await expect(head(page, n)).toContainText('10 h');
-	await expect(head(page, n).getByTestId('plate-status')).toBeVisible();
+	// A one-part plate has no heading badge (#115): its part row's badge stands for the plate.
+	await expect(row(page, plates[0].parts[0]).getByTestId('part-status')).toBeVisible();
 
 	// Log a print on the custom plate: its part is Printed and the parts-printed count rises.
 	const [printed0] = await partsCount(page);

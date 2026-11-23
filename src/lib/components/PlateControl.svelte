@@ -36,7 +36,9 @@
 		only = null,
 		size = 'sm',
 		alwaysLog = false,
-		pieces = true
+		pieces = true,
+		badge = true,
+		bare = false
 	}: {
 		plate: Plate;
 		only?: string | null;
@@ -44,6 +46,10 @@
 		alwaysLog?: boolean;
 		/** Offer "Print some pieces…" when the plate's only startable part has several pieces (a part row that has its own button turns it off). */
 		pieces?: boolean;
+		/** Show the status badge (false: a solo plate's heading, whose part row carries the badge). */
+		badge?: boolean;
+		/** Render nothing visible, only the sheets; the part row calls `pick` (see `isSoloPlate`). */
+		bare?: boolean;
 	} = $props();
 	const ctx = getBuildCtx();
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
@@ -154,7 +160,9 @@
 	// "Print some pieces…" sits here when the plate's only startable part is one with several pieces
 	// (Plate 18: Harness and Straps, alone on its plate); `PartPiecesAction` checks the rest.
 	const pieceSlug = $derived(
-		pieces && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length === 1 ? idle[0] : null
+		pieces && badge && !plate.perPartRuns && !only && plate.runs <= 1 && idle.length === 1
+			? idle[0]
+			: null
 	);
 	// The status menu's extra actions (below the statuses): "Print some parts…" or "Print some pieces…".
 	let piecesPicking = $state(false);
@@ -219,7 +227,8 @@
 		logSome = true;
 	}
 
-	function pick(s: string) {
+	/** Run a status pick for the plate (also called by a solo plate's part row). */
+	export function pick(s: string) {
 		if (s === 'Printing') {
 			if (!startSlugs.length) return;
 			if (hasPrinter) where = true;
@@ -235,18 +244,18 @@
 	}
 </script>
 
-<span class="plate-control">
-	<StatusBadge
-		label={only ? `${name(only)}, plate ${plate.number}` : `Plate ${plate.number}`}
-		status={plateStatus}
-		{options}
-		interactive={ctx.canEdit}
-		onpick={pick}
-		{extras}
-		testid="plate-status"
-	/>
+<span class="plate-control" class:bare>
+	{#if badge && !bare}<StatusBadge
+			label={only ? `${name(only)}, plate ${plate.number}` : `Plate ${plate.number}`}
+			status={plateStatus}
+			{options}
+			interactive={ctx.canEdit}
+			onpick={pick}
+			{extras}
+			testid="plate-status"
+		/>{/if}
 	{#if ctx.canEdit}
-		{#if !on.length && canLog}
+		{#if !on.length && canLog && !bare}
 			<button
 				class="{cls} ghost plc-text"
 				type="button"
@@ -306,6 +315,9 @@
 {/if}
 
 <style>
+	.plate-control.bare {
+		display: contents;
+	}
 	.plate-control {
 		display: inline-flex;
 		flex-wrap: wrap;
