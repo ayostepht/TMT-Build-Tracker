@@ -4,6 +4,8 @@ import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import { ApiError, requireEditor } from '../access';
 import { canSeeDesign } from '../designs/access';
 import { arrangeForPrinter } from './plates';
+import { loadBuildView } from './view';
+import { applyLibraryPieceTx, defaultLibraryRows } from '../custom-library';
 import type { Db } from '../db';
 import { assertUnder, countBuilds, countDrafts } from '../quota';
 import {
@@ -202,6 +204,41 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 					parts: p.parts
 				})
 				.run();
+		}
+		// Saved custom parts marked "Include in new builds": only for tracked builds made through the setup
+		// flow. Each piece gets its own savepoint, so one that cannot be added leaves no partial rows and
+		// never fails the build.
+		if (input.setup && input.kind !== 'draft') {
+			for (const lib of defaultLibraryRows(tx, input.organizationId)) {
+				try {
+					const made = tx.transaction((spRaw) => {
+						const sp = spRaw as unknown as Db;
+						const view = loadBuildView(sp, id, userId);
+						if (!view) return null;
+						return applyLibraryPieceTx(sp, view, lib, userId);
+					});
+					if (!made) continue;
+					tx.insert(activity)
+						.values({
+							buildId: id,
+							userId,
+							kind: 'custom.add',
+							payload: {
+								pieceId: made.pieceId,
+								name: lib.name,
+								fileName: lib.fileName,
+								plates: [],
+								sliced: lib.sliced,
+								replaced: made.skippedNames,
+								fromLibrary: true
+							}
+						})
+						.run();
+				} catch (e) {
+					// an unusable saved part is left out; anything unexpected still fails the build
+					if (!(e instanceof ApiError)) throw e;
+				}
+			}
 		}
 		tx.insert(activity)
 			.values({
