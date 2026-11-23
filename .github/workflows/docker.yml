@@ -14,7 +14,7 @@ name: docker
 # `sha-<short>` on every published build.
 # Pull requests never publish: the image job does not run for them. A pull request that changes
 # something the image is built from (Dockerfile, .dockerignore, package.json, package-lock.json,
-# .npmrc, kitpacks/, scripts/fetch-kitpacks*, this workflow) also runs `image-check`, which builds
+# .npmrc, kitpacks/, drizzle/, scripts/*.mjs, scripts/fetch-kitpacks*, this workflow) also runs `image-check`, which builds
 # both platforms with `push: false`: no secrets, no `packages: write`, and a read-only build cache
 # (cache-from only), so a pull request, forks included, cannot write to the cache that `image`
 # uses. Otherwise a broken Dockerfile would first show up after the merge into `edge`.
@@ -85,10 +85,11 @@ jobs:
           # --no-renames lists both sides of a rename; deleted files count too.
           while IFS= read -r -d '' f; do
             count=$((count + 1))
-            # Files the image is built from: `image-check` builds the image for a pull request
-            # that changes one of them.
+            # Files the image is built from or copies by name (Dockerfile, package files, kit packs,
+            # migrations, the runtime scripts): `image-check` builds the image for a pull request
+            # that changes one of them. Not src/: the `test` job builds that.
             case "$f" in
-              Dockerfile | .dockerignore | package.json | package-lock.json | .npmrc | kitpacks/* | scripts/fetch-kitpacks* | .github/workflows/docker.yml) image_inputs=true ;;
+              Dockerfile | .dockerignore | package.json | package-lock.json | .npmrc | kitpacks/* | drizzle/* | scripts/*.mjs | scripts/fetch-kitpacks* | .github/workflows/docker.yml) image_inputs=true ;;
             esac
             case "$f" in
               # Keep in sync with `paths-ignore` under `on.push`. A `.md` below src/, e2e/,
@@ -100,7 +101,7 @@ jobs:
               *) docs_only=false ;;
             esac
           done < <(git diff --name-only --no-renames -z HEAD^1 HEAD)
-          [ "$count" -gt 0 ] || docs_only=false
+          [ "$count" -gt 0 ] || { docs_only=false; image_inputs=true; }
           echo "$count changed file(s), docs_only=$docs_only, image_inputs=$image_inputs"
           echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
           echo "image_inputs=$image_inputs" >> "$GITHUB_OUTPUT"
