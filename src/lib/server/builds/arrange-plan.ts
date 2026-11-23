@@ -636,7 +636,11 @@ export const REARRANGE_KINDS = new Set([
 	'design.update',
 	'design.apply',
 	'build.variant',
-	'build.printer'
+	'build.printer',
+	'part.skip',
+	'part.restore',
+	'custom.add',
+	'custom.remove'
 ]);
 
 /** Advice appended to oversize warnings when the kit has other (printer-specific) layouts. */

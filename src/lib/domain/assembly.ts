@@ -37,17 +37,23 @@ export interface StepRow {
 	when: { group: string; option: string } | null;
 }
 
-/** Steps that apply to a build: `when` must match the chosen option; parts are limited to active ones. */
+/**
+ * Steps that apply to a build: `when` must match the chosen option; parts are limited to active ones.
+ * `skippedSlugs` ("Not printing") only thins the listed parts: a step exists while any of its parts is
+ * variant-active, so skipping never deletes assembly steps.
+ */
 export function filterSteps(
 	rows: StepRow[],
 	choices: Record<string, string>,
-	activeSlugs: Set<string>
+	activeSlugs: Set<string>,
+	skippedSlugs?: ReadonlySet<string>
 ): AssemblyStep[] {
 	const out: AssemblyStep[] = [];
 	for (const r of rows) {
 		if (r.when && choices[r.when.group] !== r.when.option) continue;
-		const parts = r.parts.filter((s) => activeSlugs.has(s));
-		if (r.parts.length > 0 && parts.length === 0) continue;
+		const active = r.parts.filter((s) => activeSlugs.has(s));
+		if (r.parts.length > 0 && active.length === 0) continue;
+		const parts = skippedSlugs?.size ? active.filter((s) => !skippedSlugs.has(s)) : active;
 		out.push({
 			key: r.key,
 			section: sectionOfStepKey(r.key),

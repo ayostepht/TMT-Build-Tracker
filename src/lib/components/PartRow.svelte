@@ -62,6 +62,7 @@
 	);
 	let where = $state(false);
 	let piecesPicking = $state(false);
+	const canSkip = $derived(ctx.canEdit && !!st && st.status !== 'Printing');
 	// Printing: with a printer connected (and the part on a plate) ask where; else mark it directly.
 	function pickStatus(s: string) {
 		if (s === 'Printing' && hasPrinter && plate) where = true;
@@ -199,6 +200,7 @@
 			</div>
 		</div>
 		<div class="settings">
+			{#if part.custom}<span class="pset hot" data-testid="part-custom">Custom</span>{/if}
 			{#if plate}<span class="pset plate" title="Plate in the print profile"
 					>Plate {plate.number}</span
 				>{/if}
@@ -231,16 +233,28 @@
 				options={[...PART_STATUSES]}
 				interactive={ctx.canEdit}
 				onpick={pickStatus}
-				extras={part.components.length && !plateOffersPieces && piecesOffered(ctx, part.slug)
-					? [
-							{
-								label: 'Print some pieces…',
-								testid: 'part-print-some',
-								ariaLabel: `Print some pieces of ${part.name}`,
-								run: () => (piecesPicking = true)
-							}
-						]
-					: []}
+				extras={[
+					...(part.components.length && !plateOffersPieces && piecesOffered(ctx, part.slug)
+						? [
+								{
+									label: 'Print some pieces…',
+									testid: 'part-print-some',
+									ariaLabel: `Print some pieces of ${part.name}`,
+									run: () => (piecesPicking = true)
+								}
+							]
+						: []),
+					...(canSkip
+						? [
+								{
+									label: 'Not printing this part',
+									testid: 'part-skip',
+									ariaLabel: `Not printing ${part.name}`,
+									run: () => void ctx.skipParts([part.slug], part.name)
+								}
+							]
+						: [])
+				]}
 				testid="part-status"
 				small
 			/>

@@ -101,6 +101,10 @@ export const moveBuild = (id: string, organizationId: string) =>
 export const setVariant = (id: string, group: string, option: string) =>
 	call('PATCH', `${b(id)}/variants`, { group, option });
 
+/** Mark parts "Not printing" (`skip: true`) or bring them back (`false`). */
+export const skipPartsApi = (id: string, slugs: string[], skip: boolean) =>
+	call('POST', `${b(id)}/parts/skip`, { slugs, skip });
+
 export const setPartStatus = (id: string, slug: string, status: PartStatus, printedOn?: string) =>
 	call('POST', `${b(id)}/parts/${encodeURIComponent(slug)}/status`, {
 		status,

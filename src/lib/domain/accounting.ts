@@ -9,6 +9,7 @@
  * lost (failed runs, and older Partial rows). A running print still counts as to print.
  */
 import { isPieceRun, printingPieces, runTargets } from './actions.ts';
+import { isCustomPlate, partBySlug } from './custom.ts';
 import { fmtH } from './format.ts';
 import { paceOf, type Pace } from './pace.ts';
 import { haveGramsOf, isDeductibleRun, isPreLinkRun, isSpoolmanLinked } from './spoolman.ts';
@@ -84,6 +85,12 @@ export function plateFileRoleGrams(
 	plate: Plate,
 	partRoles: Iterable<string>
 ): Record<string, number> | null {
+	// A custom plate's file is the whole truth about its filament (its slots were mapped to this
+	// build's roles at upload): every role in it counts, whatever the one custom part is set to.
+	if (isCustomPlate(plate)) {
+		const all = fileGrams(plate);
+		return all.length ? Object.fromEntries(all) : null;
+	}
 	const roles = new Set(partRoles);
 	const kept = fileGrams(plate).filter(([r]) => roles.has(r));
 	return kept.length ? Object.fromEntries(kept) : null;
@@ -144,7 +151,7 @@ type RunLike = Pick<
 /** Unrounded weights by role for the parts a run covers (the file's roles for a whole plate). */
 function runRoleWeights(view: BuildView, run: RunLike): Record<string, number> {
 	const slugs = runTargets(view, run as PrintRun | PrintRunInput).filter((s) => view.state[s]);
-	const roleOf = (s: string) => view.allParts.find((p) => p.slug === s)?.role;
+	const roleOf = (s: string) => partBySlug(view, s)?.role;
 	const plate =
 		run.plateNumber == null ? null : view.plates.find((p) => p.number === run.plateNumber);
 	const wholePlate = plate && slugs.length === plate.parts.length;
@@ -228,12 +235,12 @@ export function weakestGramsSource(sources: GramsSource[]): GramsSource {
 
 /** The grams of one part: see the order above. `perRun` divides by the plate's runs (1 when on no plate). */
 export function partGrams(view: BuildView, slug: string): GramsInfo {
-	const part =
-		view.parts.find((p) => p.slug === slug) ?? view.allParts.find((p) => p.slug === slug);
+	const part = partBySlug(view, slug);
 	const none: GramsInfo = { perRun: 0, total: 0, source: 'none', approx: false, unknown: [slug] };
 	if (!part) return none;
 	const plate = view.plates.find((p) => p.parts.includes(slug));
 	const runs = Math.max(1, plate?.runs || 1);
+	const customOwn = part.custom && plate && !plate.perPartRuns && isCustomPlate(plate);
 	const make = (total: number, source: GramsSource): GramsInfo => ({
 		perRun: total / runs,
 		total,
@@ -246,6 +253,15 @@ export function partGrams(view: BuildView, slug: string): GramsInfo {
 		perRun: g
 	});
 	const typedHere = positive(view.state[slug]?.manualGrams);
+	if (customOwn) {
+		// A custom part on its own plate takes the plate's typed or file grams (typed here first).
+		if (typedHere) return make(typedHere, 'user');
+		const typed = positive(plate.slicerGrams);
+		if (typed) return perRunOf(typed, plate.gramsSource === 'user' ? 'user' : 'file');
+		const file = fileGrams(plate).reduce((a, [, g]) => a + g, 0);
+		if (file > 0) return perRunOf(file, 'file');
+		return none;
+	}
 	const bySlicer = plate?.perPartRuns ? positive(plate.slicerByPart[slug]) : null;
 	if (bySlicer && plate?.gramsSource === 'user') return perRunOf(bySlicer, 'user');
 	if (typedHere) return make(typedHere, 'user');

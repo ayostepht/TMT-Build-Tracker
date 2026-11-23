@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db';
-import { buildPartProfiles, buildPlates, buildUploads } from '../db/schema';
+import { buildCustomPieces, buildPartProfiles, buildPlates, buildUploads } from '../db/schema';
 
 /** Moves grams keyed `from` onto `to`, adding to what `to` already has. Returns null when nothing changes. */
 function moveGrams(g: Record<string, number> | null | undefined, from: string, to: string) {
@@ -41,6 +41,17 @@ export function remapRoleKey(tx: Db, buildId: string, from: string, to: string):
 					and(eq(buildPartProfiles.buildId, buildId), eq(buildPartProfiles.partSlug, r.partSlug))
 				)
 				.run();
+	}
+	for (const c of tx
+		.select()
+		.from(buildCustomPieces)
+		.where(eq(buildCustomPieces.buildId, buildId))
+		.all()) {
+		if (!(c.parts ?? []).some((cp) => cp.role === from)) continue;
+		tx.update(buildCustomPieces)
+			.set({ parts: c.parts.map((cp) => (cp.role === from ? { ...cp, role: to } : cp)) })
+			.where(eq(buildCustomPieces.id, c.id))
+			.run();
 	}
 	for (const u of tx.select().from(buildUploads).where(eq(buildUploads.buildId, buildId)).all()) {
 		const fm = (u.summary as Record<string, unknown> | null)?.filamentMap;

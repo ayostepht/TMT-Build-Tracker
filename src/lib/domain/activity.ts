@@ -45,6 +45,9 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 /** How many pieces a payload's `comps` list names (whole numbers only); 0 for none. */
 const pieceCount = (v: unknown): number =>
 	Array.isArray(v) ? v.filter((x) => typeof x === 'number' && Number.isInteger(x)).length : 0;
+/** The strings of a payload list, control characters stripped. */
+const strList = (v: unknown): string[] =>
+	Array.isArray(v) ? v.flatMap((x) => (typeof x === 'string' && clean(x) ? [clean(x)] : [])) : [];
 const pieces = (n: number): string => `${n} piece${n === 1 ? '' : 's'}`;
 
 function list(items: string[]): string {
@@ -132,6 +135,28 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			return to
 				? `${who} set ${part(p.slug)} to ${to}`
 				: `${who} changed the status of ${part(p.slug)}`;
+		}
+		case 'part.skip':
+		case 'part.restore': {
+			const skip = a.kind === 'part.skip';
+			const pl = obj(p.plate);
+			const n = pl ? num(pl.number) : null;
+			const names = strList(p.names);
+			const what = n !== null ? plateRef(n) : names.length ? list(names) : 'a part';
+			return skip
+				? `${who} marked ${what} as not printing`
+				: `${who} brought ${what} back into the build`;
+		}
+		case 'custom.add': {
+			const plates = Array.isArray(p.plates)
+				? p.plates.filter((x): x is number => typeof x === 'number' && Number.isInteger(x))
+				: [];
+			const replaced = strList(p.replaced);
+			return `${who} added the custom piece "${str(p.name) ?? 'a custom piece'}"${str(p.fileName) ? ` (${str(p.fileName)})` : ''}${plates.length ? ` on ${list(plates.map(plateRef))}` : ''}${replaced.length ? `, replacing ${list(replaced)}` : ''}`;
+		}
+		case 'custom.remove': {
+			const restored = strList(p.restored);
+			return `${who} removed the custom piece "${str(p.name) ?? 'a custom piece'}"${restored.length ? ` and brought back ${list(restored)}` : ''}`;
 		}
 		case 'part.grams': {
 			const g = num(p.manualGrams);

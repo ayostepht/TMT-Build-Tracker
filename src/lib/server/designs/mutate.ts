@@ -24,7 +24,7 @@ import { remapRoleKey } from '../builds/role-keys';
 import { BuildStartedError } from '../builds/started-guard';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
-import { buildFilaments, builds, colorDesigns } from '../db/schema';
+import { buildCustomPieces, buildFilaments, builds, colorDesigns } from '../db/schema';
 import { canSeeDesign } from './access';
 import { isObj, type Obj } from '#lib/domain/guards.ts';
 
@@ -247,7 +247,14 @@ export function updateBuildDesign(db: Db, buildId: string, userId: string, body:
 			if (!f) throw new ApiError(404, 'Unknown color');
 			if (f.kit) bad("The kit's own colors cannot be removed");
 			const affected = view.allParts.filter((p) => roles[p.slug] === key);
-			if (affected.length) {
+			// Custom parts (never in `roles`) on this slot move too; skipped ones are not in the view, so read the rows.
+			const customOn = tx
+				.select({ parts: buildCustomPieces.parts })
+				.from(buildCustomPieces)
+				.where(eq(buildCustomPieces.buildId, buildId))
+				.all()
+				.reduce((n, r) => n + (r.parts ?? []).filter((cp) => cp.role === key).length, 0);
+			if (affected.length || customOn) {
 				if (!replaceWith)
 					throw new ApiError(409, 'Choose the color that replaces it for its parts first');
 				if (replaceWith === key) bad('A color cannot replace itself');
@@ -274,7 +281,7 @@ export function updateBuildDesign(db: Db, buildId: string, userId: string, body:
 				hex: f.hex,
 				spools: stockKg(f),
 				...(f.spoolmanSpoolId !== null ? { spoolmanSpoolId: f.spoolmanSpoolId } : {}),
-				parts: affected.length
+				parts: affected.length + customOn
 			};
 		};
 

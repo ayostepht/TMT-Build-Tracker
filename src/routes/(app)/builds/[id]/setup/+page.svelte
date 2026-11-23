@@ -155,7 +155,11 @@
 	const backTo = $derived<number | 'spoolman'>(
 		step === 4 && spoolmanOn ? 'spoolman' : isSpoolman ? 3 : step - 1
 	);
-	const partNames = $derived(Object.fromEntries(ctx.view.allParts.map((p) => [p.slug, p.name])));
+	const partNames = $derived(
+		Object.fromEntries(
+			[...ctx.view.allParts, ...ctx.view.parts.filter((p) => p.custom)].map((p) => [p.slug, p.name])
+		)
+	);
 </script>
 
 <svelte:head><title>Set up · {ctx.view.build.name} · TMT Build Tracker</title></svelte:head>

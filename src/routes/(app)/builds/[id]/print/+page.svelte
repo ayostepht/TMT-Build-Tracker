@@ -12,6 +12,7 @@
 	import PrinterHint from '#lib/components/PrinterHint.svelte';
 	import PrintToolbar from '#lib/components/PrintToolbar.svelte';
 	import PlateHistory from '#lib/components/PlateHistory.svelte';
+	import NotPrintingGroup from '#lib/components/NotPrintingGroup.svelte';
 
 	const ctx = getBuildCtx();
 
@@ -203,3 +204,5 @@
 		<div class="empty">Nothing left to show here. Everything in this filter is printed.</div>
 	{/each}
 </div>
+
+<NotPrintingGroup />

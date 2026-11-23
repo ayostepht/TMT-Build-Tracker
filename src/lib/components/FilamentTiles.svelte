@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
 		fmt,
+		partBySlug,
 		fmtH,
 		fmtSpools,
 		filamentStats,
@@ -49,7 +50,7 @@
 	});
 	const printUrl = $derived(resolve('/(app)/builds/[id]/print', { id: ctx.id }));
 	const settingsUrl = $derived(resolve('/(app)/builds/[id]/settings', { id: ctx.id }));
-	const nameOf = (slug: string) => ctx.view.allParts.find((p) => p.slug === slug)?.name ?? slug;
+	const nameOf = (slug: string) => partBySlug(ctx.view, slug)?.name ?? slug;
 	let openRole = $state<string | null>(null);
 	/** Roles whose spool history is open, the role whose add form is open, the add awaiting remove confirmation. */
 	let histOpen = $state<Record<string, boolean>>({});
