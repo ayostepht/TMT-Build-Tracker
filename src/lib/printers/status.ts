@@ -155,6 +155,8 @@ export interface PrinterJobView {
 	buildId: string | null;
 	plateNumber: number | null;
 	partSlugs: string[] | null;
+	/** Pieces of the job's single part that are on this print ("Print some pieces…"); null = the whole part(s). */
+	comps?: number[] | null;
 	fileName: string;
 	status: 'printing' | 'paused' | 'done' | 'failed' | 'cancelled';
 	progress: number | null;
@@ -172,6 +174,8 @@ export interface PrinterExpectedView {
 	buildId: string;
 	plateNumber: number;
 	partSlugs: string[] | null;
+	/** Pieces of the single part in `partSlugs`; null = the whole part. */
+	comps?: number[] | null;
 	/** The unlinked job the suggestion is about. */
 	jobId: string;
 	at: number;

@@ -21,6 +21,10 @@
 		const bits: string[] = [];
 		const total = plate?.parts.length ?? 0;
 		if (r.partSlug) bits.push(partOf(r.partSlug)?.name ?? r.partSlug);
+		if (r.comps?.length)
+			bits.push(
+				`${r.comps.length} of ${partOf(r.partSlug ?? '')?.components.length ?? r.comps.length} pieces`
+			);
 		else if (r.partSlugs?.length && r.partSlugs.length < total)
 			bits.push(`${r.partSlugs.length} of ${total} parts`);
 		if (plate && (plate.runs > 1 || plate.perPartRuns)) {

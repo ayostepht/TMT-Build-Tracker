@@ -47,6 +47,8 @@
 		width?: number;
 		height?: number;
 		background?: string;
+		/** No selection highlight or dimming (pictures to share). */
+		clean?: boolean;
 	}): Promise<Blob> {
 		if (!viewer) return Promise.reject(new Error('No 3D view to capture'));
 		return viewer.snapshot(opts);

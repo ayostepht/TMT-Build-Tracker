@@ -8,7 +8,9 @@
 	 * The menu is a manual popover (top layer), so no card with `overflow: hidden` can clip it; it is
 	 * placed with fixed coordinates under the badge (flipped above when there is no room) and kept
 	 * on screen. Keyboard: Enter/Space/ArrowDown opens, arrows/Home/End move, Enter picks, Escape
-	 * closes and returns focus to the badge, Tab closes. `onpick` runs after the menu has closed
+	 * closes and returns focus to the badge, Tab closes. `extras` are actions, not statuses ("Print
+	 * some parts…"): listed below the statuses after a separator, plain menu items that never get the
+	 * check mark; picking one closes the menu, returns focus to the badge and runs its `run`. `onpick` runs after the menu has closed
 	 * and focus is back on the badge, so a dialog opened from it restores focus here.
 	 */
 	let {
@@ -19,7 +21,8 @@
 		interactive = true,
 		testid,
 		optionPrefix = 'status-option',
-		small = false
+		small = false,
+		extras = []
 	}: {
 		/** What the badge is for, in the accessible name: "Plate 2", "Handle Right". */
 		label: string;
@@ -32,6 +35,8 @@
 		testid: string;
 		optionPrefix?: string;
 		small?: boolean;
+		/** Actions listed below the statuses (optional): `testid` goes on the menu item. */
+		extras?: { label: string; testid: string; ariaLabel?: string; run: () => void }[];
 	} = $props();
 
 	const uid = $props.id();
@@ -49,7 +54,7 @@
 						? 'ds-badge--warn'
 						: ''
 	);
-	const live = $derived(interactive && options.some((o) => o !== status));
+	const live = $derived(interactive && (options.some((o) => o !== status) || extras.length > 0));
 
 	function close(back: boolean) {
 		open = false;
@@ -59,6 +64,11 @@
 		close(true);
 		if (s !== status) onpick?.(s);
 	}
+	function act(run: () => void) {
+		close(true);
+		run();
+	}
+	const ITEMS = '[role="menuitemradio"], [role="menuitem"]';
 
 	/** Place the popover under the badge, on screen, then focus the checked (else first) item. */
 	function popup(node: HTMLElement) {
@@ -73,7 +83,7 @@
 		const top = below + h + 8 <= vh || a.top - h - 4 < 8 ? below : a.top - h - 4;
 		node.style.left = `${left}px`;
 		node.style.top = `${Math.max(8, top)}px`;
-		const items = node.querySelectorAll<HTMLElement>('[role="menuitemradio"]');
+		const items = node.querySelectorAll<HTMLElement>(ITEMS);
 		(node.querySelector<HTMLElement>('[aria-checked="true"]') ?? items[0])?.focus({
 			preventScroll: true
 		});
@@ -85,9 +95,7 @@
 	}
 
 	function onmenukey(e: KeyboardEvent) {
-		const items = [
-			...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role="menuitemradio"]')
-		];
+		const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(ITEMS)];
 		const i = items.indexOf(document.activeElement as HTMLElement);
 		const go = (n: number) => {
 			e.preventDefault();
@@ -159,6 +167,21 @@
 					<span class="sb-mark" aria-hidden="true">{o === status ? '✓' : ''}</span>{o}
 				</button>
 			{/each}
+			{#if extras.length}
+				{#if options.length}<div class="sb-sep" role="separator"></div>{/if}
+				{#each extras as x (x.testid)}
+					<button
+						class="sb-item sb-extra"
+						type="button"
+						role="menuitem"
+						aria-label={x.ariaLabel}
+						data-testid={x.testid}
+						onclick={() => act(x.run)}
+					>
+						<span class="sb-mark" aria-hidden="true"></span>{x.label}
+					</button>
+				{/each}
+			{/if}
 		</div>
 	{/if}
 {:else}
@@ -234,6 +257,11 @@
 	}
 	.sb-item:focus-visible {
 		box-shadow: inset 0 0 0 2px var(--accent);
+	}
+	.sb-sep {
+		height: 1px;
+		margin: var(--sp-2) var(--sp-3);
+		background: var(--line);
 	}
 	.sb-mark {
 		display: inline-block;

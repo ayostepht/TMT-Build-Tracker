@@ -21,8 +21,10 @@
 	/**
 	 * Picks how the plates of a template or a build are laid out.
 	 *
-	 * - "Arrange for my bed" (primary): the app packs the parts onto the bed you choose (standard
-	 *   size, custom size or a printer from the catalog). The bed is stored as the build's printer.
+	 * - "Arrange for my bed" (primary): the plates of the kit's own layout (or of your uploaded file) are
+	 *   placed on the bed you choose (standard size, custom size or a printer from the catalog); only parts
+	 *   whose color changed or that do not fit move (`domain/arrange-source.ts`). The bed is stored as the
+	 *   build's printer.
 	 * - "MakeGood's tuned profiles (Bambu)": the kit author's hand-tuned layouts.
 	 * - "Use my own sliced file" (existing builds with `allowUpload`).
 	 *
@@ -348,7 +350,10 @@
 						{/if}
 					</div>
 				{:else}
-					<span class="hint">The plates are arranged for this bed when the build is created.</span>
+					<span class="hint"
+						>The plates follow MakeGood's layout for this bed when the build is created; only parts
+						that cannot stay move.</span
+					>
 				{/if}
 			</div>
 		{/if}

@@ -52,7 +52,8 @@
 		slotMaterial?: string;
 		/** The build's workspace: its custom filaments show first and "Add a filament" saves into it. */
 		organizationId?: string;
-		onpick: (v: PickedFilament, family: Family) => void;
+		/** May return a promise of whether the save worked: on false the detail row stops naming the refused swatch. */
+		onpick: (v: PickedFilament, family: Family) => void | boolean | Promise<boolean | void>;
 		onclose: () => void;
 	} = $props();
 
@@ -72,6 +73,8 @@
 	let typeSeeded = false;
 	let recent = $state<SwatchTuple[]>([]);
 	let hover = $state<SwatchTuple | null>(null);
+	/** The last pointer press on a swatch was a finger (until the next key press). */
+	let touching = false;
 	let cap = $state(480);
 	let mine = $state<CustomFilament[]>([]);
 	let showAllMine = $state(false);
@@ -83,6 +86,35 @@
 	let note = $state('');
 	let searchEl = $state<HTMLInputElement>();
 	let sheetEl = $state<HTMLDivElement>();
+
+	/**
+	 * Marks a sideways scroller with data-fade-start / data-fade-end while content is hidden on that
+	 * side, so the CSS can fade that edge (a hint that the row scrolls). Only when it really scrolls.
+	 */
+	function edgeFade(node: HTMLElement) {
+		const measure = () => {
+			const scrolls =
+				getComputedStyle(node).overflowX === 'auto' && node.scrollWidth > node.clientWidth + 2;
+			node.toggleAttribute('data-fade-start', scrolls && node.scrollLeft > 2);
+			node.toggleAttribute(
+				'data-fade-end',
+				scrolls && node.scrollLeft + node.clientWidth < node.scrollWidth - 2
+			);
+		};
+		measure();
+		node.addEventListener('scroll', measure, { passive: true });
+		const ro = new ResizeObserver(measure);
+		ro.observe(node);
+		const mo = new MutationObserver(measure);
+		mo.observe(node, { childList: true, subtree: true });
+		return {
+			destroy() {
+				node.removeEventListener('scroll', measure);
+				ro.disconnect();
+				mo.disconnect();
+			}
+		};
+	}
 
 	onMount(() => {
 		// Non-modal panel: on close, focus goes back to the control that opened it (the panel it
@@ -243,6 +275,8 @@
 
 	/** Arrow keys move through the swatches (rows by position), Home/End jump to the ends. */
 	function gridKey(e: KeyboardEvent) {
+		// Any key press ends "the last press was a finger": tabbing back into the grid previews again.
+		touching = false;
 		const el = e.target as HTMLElement;
 		if (!el.classList?.contains('sw') || !bodyEl) return;
 		if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
@@ -291,11 +325,22 @@
 	}
 	const detailWhy = $derived(detail ? pickerReason(detail) : '');
 	const detailApprox = $derived(detail ? isApproxHex(detail) : false);
+	const extrasTitle = $derived(
+		[
+			detailApprox ? 'Approx. color: estimated from product photos' : '',
+			detailWhy ? `Palettes skip it: ${detailWhy}` : '',
+			detail && detailOthers.length ? alsoText(detail, detailOthers) : ''
+		]
+			.filter(Boolean)
+			.join(' · ')
+	);
 
-	function pick(t: SwatchTuple) {
+	async function pick(t: SwatchTuple) {
 		hover = t;
 		recent = rememberRecent(t);
-		onpick({ name: nameOf(t), material: t[3], hex: t[2] }, family);
+		const ok = await onpick({ name: nameOf(t), material: t[3], hex: t[2] }, family);
+		// A refused save: the slot keeps its saved color, so the row must not keep naming this one.
+		if (ok === false && hover === t) hover = null;
 	}
 
 	const myFit = $derived(mine.filter((f) => customFamily(f) === family));
@@ -381,6 +426,7 @@
 
 <svelte:window
 	onkeydown={(e) => {
+		touching = false;
 		if (e.key === 'Escape') {
 			if (screen === 'form') screen = 'pick';
 			else onclose();
@@ -456,7 +502,7 @@
 			{/if}
 		</div>
 
-		<div class="filters" role="group" aria-label="Filters">
+		<div class="filters" role="group" aria-label="Filters" use:edgeFade>
 			{#if typeOpts.length > 2}
 				<select
 					class="typesel"
@@ -528,7 +574,7 @@
 					{/if}
 				</select>
 			{/if}
-			<div class="chips brandchips" role="group" aria-label="Brands">
+			<div class="chips brandchips" role="group" aria-label="Brands" use:edgeFade>
 				<button
 					type="button"
 					class="ds-badge sp-chip"
@@ -570,13 +616,16 @@
 				<span class="dtxt">
 					<b>{nameOf(detail)}</b>
 					<span class="muted">{detail[0]} · {detail[3]} · {detail[2]}</span>
-					{#if detailApprox}<span class="why" data-testid="swatch-approx"
-							>Approx. color: estimated from product photos</span
-						>{/if}
-					{#if detailWhy}<span class="why">Palettes skip it: {detailWhy}</span>{/if}
-					{#if detailOthers.length}<span class="muted" data-testid="swatch-also"
-							>{alsoText(detail, detailOthers)}</span
-						>{/if}
+					<!-- One fixed-height line, so hovering never changes the height of what is above the grid. -->
+					<span class="extras why" class:hasothers={detailOthers.length > 0} title={extrasTitle}>
+						{#if detailApprox}<span data-testid="swatch-approx"
+								>Approx. color: estimated from product photos</span
+							>{/if}
+						{#if detailWhy}<span>Palettes skip it: {detailWhy}</span>{/if}
+						{#if detailOthers.length}<span class="muted" data-testid="swatch-also"
+								>{alsoText(detail, detailOthers)}</span
+							>{/if}
+					</span>
 				</span>
 			{:else if current}
 				<span class="sp-dot" style="background-color:{current.hex}" aria-hidden="true"></span>
@@ -589,29 +638,33 @@
 			{/if}
 		</div>
 
-		{#if detailOthers.length}
-			<details class="others" data-testid="other-brands">
-				<summary>Other brands ({detailOthers.length})</summary>
-				<ul>
-					{#each detailOthers as o (o.t[0] + o.t[1] + o.t[2] + o.t[3])}
-						<li>
-							<button
-								type="button"
-								class="opick"
-								data-testid="other-brand"
-								aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
-								onclick={() => pick(o.t)}
-							>
-								<span class="sp-dot sm" style="background-color:{o.t[2]}" aria-hidden="true"></span>
-								<span class="mtxt"
-									><b>{o.t[0]} · {o.t[1]}</b> <span class="muted">{o.t[3]} · {o.t[2]}</span></span
+		<!-- The row is always reserved and the list opens over the grid, so hovering never shifts the swatches. -->
+		<div class="otherswrap">
+			{#if detailOthers.length}
+				<details class="others" data-testid="other-brands">
+					<summary>Other brands ({detailOthers.length})</summary>
+					<ul>
+						{#each detailOthers as o (o.t[0] + o.t[1] + o.t[2] + o.t[3])}
+							<li>
+								<button
+									type="button"
+									class="opick"
+									data-testid="other-brand"
+									aria-label="Use {nameOf(o.t)}, {o.t[3]}, {o.t[2]}"
+									onclick={() => pick(o.t)}
 								>
-							</button>
-						</li>
-					{/each}
-				</ul>
-			</details>
-		{/if}
+									<span class="sp-dot sm" style="background-color:{o.t[2]}" aria-hidden="true"
+									></span>
+									<span class="mtxt"
+										><b>{o.t[0]} · {o.t[1]}</b> <span class="muted">{o.t[3]} · {o.t[2]}</span></span
+									>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</details>
+			{/if}
+		</div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="body" bind:this={bodyEl} onkeydown={gridKey}>
@@ -764,13 +817,19 @@
 			activeId = id;
 			pick(t);
 		}}
-		onpointerenter={() => (hover = t)}
+		onpointerdown={(e) => (touching = e.pointerType === 'touch')}
+		onpointerenter={(e) => {
+			// A finger is not hovering: changing the detail row on touch makes iOS treat the tap as
+			// "hover only" and swallow the click, so the pick is lost. The tap itself sets `hover`.
+			if (e.pointerType !== 'touch') hover = t;
+		}}
 		onfocus={() => {
 			activeId = id;
-			hover = t;
+			// Focus previews the swatch, but the focus a tap leaves behind must not move the row.
+			if (!touching) hover = t;
 		}}
-		onpointerleave={() => {
-			if (!others.length) hover = null;
+		onpointerleave={(e) => {
+			if (e.pointerType !== 'touch' && !others.length) hover = null;
 		}}
 	></button>
 {/snippet}
@@ -783,7 +842,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-4);
-		padding: var(--sp-5) var(--sp-6) 0;
+		padding: 0 var(--sp-6) 0;
+		/* The whole panel is the one scroll container (no nested grid scroller on short screens). */
+		overflow-y: auto;
+		overflow-x: hidden;
+		overscroll-behavior: contain;
+		overflow-anchor: none;
+		scroll-padding-top: 64px;
 		background: var(--card);
 		border: 1px solid var(--line);
 		border-radius: var(--r-xl);
@@ -796,6 +861,11 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--sp-4);
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		background: var(--card);
+		padding: var(--sp-5) 0 var(--sp-3);
 	}
 	h2 {
 		margin: 0;
@@ -857,6 +927,35 @@
 	.brandchips {
 		flex-wrap: nowrap;
 	}
+	/* A faded edge says "more this way" on a row that scrolls sideways. It is dropped while a
+	   control inside has focus so the focus ring is never faded. Colors come from the mask only. */
+	.filters:global([data-fade-end]):not(:focus-within),
+	.brandchips:global([data-fade-end]):not(:focus-within) {
+		-webkit-mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+		mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+	}
+	.filters:global([data-fade-start]):not(:focus-within),
+	.brandchips:global([data-fade-start]):not(:focus-within) {
+		-webkit-mask-image: linear-gradient(to right, transparent, black 32px);
+		mask-image: linear-gradient(to right, transparent, black 32px);
+	}
+	.filters:global([data-fade-start]):global([data-fade-end]):not(:focus-within),
+	.brandchips:global([data-fade-start]):global([data-fade-end]):not(:focus-within) {
+		-webkit-mask-image: linear-gradient(
+			to right,
+			transparent,
+			black 32px,
+			black calc(100% - 32px),
+			transparent
+		);
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			black 32px,
+			black calc(100% - 32px),
+			transparent
+		);
+	}
 	.sp-chip {
 		white-space: nowrap;
 		cursor: pointer;
@@ -876,7 +975,23 @@
 		display: flex;
 		align-items: center;
 		gap: var(--sp-5);
-		min-height: 40px;
+		/* Fixed: name, type line and one line of notes, whatever is hovered. */
+		height: 3.6rem;
+		overflow: hidden;
+	}
+	.extras {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-height: 1.25em;
+	}
+	.extras > span + span::before {
+		content: ' · ';
+	}
+	.otherswrap {
+		position: relative;
+		min-height: 1.4rem;
 	}
 	.sp-dot {
 		width: 36px;
@@ -904,14 +1019,11 @@
 		flex-wrap: wrap;
 	}
 	.body {
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
+		flex: none;
 		display: grid;
 		gap: var(--sp-7);
 		align-content: start;
 		padding-bottom: var(--sp-8);
-		overscroll-behavior: contain;
 	}
 	.grid {
 		display: grid;
@@ -930,7 +1042,13 @@
 		cursor: pointer;
 		box-shadow: var(--ring-swatch);
 	}
-	.sw:hover,
+	/* Hover only where a pointer can hover: iOS keeps :hover on the last tapped swatch. */
+	@media (hover: hover) {
+		.sw:hover {
+			transform: scale(1.12);
+			border-color: var(--ink);
+		}
+	}
 	.sw:focus-visible {
 		transform: scale(1.12);
 		border-color: var(--ink);
@@ -994,6 +1112,15 @@
 		overflow-y: auto;
 		display: grid;
 		gap: var(--sp-1);
+		position: absolute;
+		left: 0;
+		right: 0;
+		z-index: 1;
+		padding: var(--sp-2);
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: var(--r-lg);
+		box-shadow: var(--shadow-2);
 	}
 	.opick {
 		display: flex;
@@ -1139,11 +1266,17 @@
 		/* The card grows with its content and the page scrolls; nothing is clipped or overflows it. */
 		.sheet {
 			flex: none;
+			overflow: visible;
+			/* The page is the scroller here: let it keep the grid in place when a banner appears above. */
+			overflow-anchor: auto;
+			padding-top: var(--sp-5);
 			padding-bottom: var(--sp-5);
 		}
+		header {
+			position: static;
+			padding: 0;
+		}
 		.body {
-			flex: none;
-			overflow: visible;
 			padding-bottom: 0;
 		}
 		.sw {
@@ -1175,14 +1308,72 @@
 	}
 	@media (min-width: 900px) {
 		.sheet {
-			padding: var(--sp-7) var(--sp-8) 0;
+			padding: 0 var(--sp-8) 0;
 		}
+		.sheet {
+			gap: var(--sp-3);
+		}
+		header {
+			padding-top: var(--sp-4);
+			padding-bottom: var(--sp-2);
+		}
+		/* Compact: the two selects share one row, the brand chips are one swipeable row below. */
 		.filters {
 			flex-wrap: wrap;
 			overflow: visible;
+			padding-bottom: 0;
+			row-gap: var(--sp-3);
 		}
-		.brandchips {
-			display: contents;
+		.filters > select {
+			flex: 1 1 0;
+			min-width: 0;
+			max-width: none;
+			text-overflow: ellipsis;
+		}
+		.filters > .brandchips {
+			flex: 0 0 100%;
+			min-width: 0;
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			overscroll-behavior-x: contain;
+			scrollbar-width: thin;
+			padding-bottom: var(--sp-2);
+		}
+		.brandchips > select {
+			flex: none;
+		}
+		.searchrow input,
+		select {
+			padding-block: var(--sp-3);
+		}
+		.detail {
+			height: 3rem;
+			gap: var(--sp-4);
+		}
+		/* "Other brands" sits on the detail row's last line instead of taking a row of its own. */
+		.otherswrap {
+			min-height: 0;
+			height: 0;
+		}
+		.others summary {
+			position: absolute;
+			right: 0;
+			top: -1.5rem;
+			background: var(--card);
+			padding-left: var(--sp-3);
+		}
+		.extras.hasothers {
+			padding-right: 8rem;
+		}
+		.body {
+			gap: var(--sp-4);
+		}
+		h3 {
+			margin-bottom: var(--sp-2);
+		}
+		.grid {
+			gap: var(--sp-3);
+			padding: var(--sp-2) var(--sp-3);
 		}
 	}
 	@media (prefers-reduced-motion: no-preference) {

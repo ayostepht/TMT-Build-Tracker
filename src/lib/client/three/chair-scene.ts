@@ -844,8 +844,13 @@ export class ChairScene {
 
 	// ---- snapshot ----------------------------------------------------------------
 
-	/** PNG of the current view. Different aspect ratios keep the viewing direction and re-frame the chair. */
-	snapshot(opts: { width?: number; height?: number; background?: string } = {}): Promise<Blob> {
+	/**
+	 * PNG of the current view. Different aspect ratios keep the viewing direction and re-frame the chair.
+	 * `clean` leaves out the selection highlight and the dimming of the other parts (shared pictures).
+	 */
+	snapshot(
+		opts: { width?: number; height?: number; background?: string; clean?: boolean } = {}
+	): Promise<Blob> {
 		const THREE = this.THREE;
 		const cw = this.host.clientWidth || 1;
 		const ch = this.host.clientHeight || 1;
@@ -856,8 +861,11 @@ export class ChairScene {
 		const prevColor = new THREE.Color();
 		this.renderer.getClearColor(prevColor);
 		const prevAlpha = this.renderer.getClearAlpha();
+		const prevSel = { slug: this.selected, dim: this.dim };
+		const unselect = !!opts.clean && prevSel.slug !== null;
 		return new Promise<Blob>((resolve, reject) => {
 			try {
+				if (unselect) this.setSelection(null, false);
 				this.renderer.setPixelRatio(1);
 				this.renderer.setSize(width, height, false);
 				this.camera.aspect = width / height;
@@ -879,6 +887,7 @@ export class ChairScene {
 			} catch (e) {
 				reject(e);
 			} finally {
+				if (unselect) this.setSelection(prevSel.slug, prevSel.dim);
 				this.renderer.setClearColor(prevColor, prevAlpha);
 				this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 				this.camera.position.copy(savedPos);

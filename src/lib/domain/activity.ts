@@ -42,6 +42,10 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v ? clean(v
 const obj = (v: unknown): Obj | null =>
 	typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+/** How many pieces a payload's `comps` list names (whole numbers only); 0 for none. */
+const pieceCount = (v: unknown): number =>
+	Array.isArray(v) ? v.filter((x) => typeof x === 'number' && Number.isInteger(x)).length : 0;
+const pieces = (n: number): string => `${n} piece${n === 1 ? '' : 's'}`;
 
 function list(items: string[]): string {
 	if (items.length <= 1) return items[0] ?? '';
@@ -144,10 +148,17 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			}
 			return `${who} updated ${part(p.slug)}${bits.length ? ` (${list(bits)})` : ''}`;
 		}
-		case 'printing.start':
+		case 'printing.start': {
+			// Some pieces of one part ("Print some pieces…"): "3 pieces of Harness and Straps".
+			const n = pieceCount(p.comps);
+			const what =
+				n && Array.isArray(p.slugs) && p.slugs.length === 1
+					? `${pieces(n)} of ${part(p.slugs[0])}`
+					: parts(p.slugs);
 			return str(p.printer)
-				? `${who} put ${parts(p.slugs)} on ${str(p.printer)}`
-				: `${who} put ${parts(p.slugs)} on the printer`;
+				? `${who} put ${what} on ${str(p.printer)}`
+				: `${who} put ${what} on the printer`;
+		}
 		case 'printing.stop':
 			return `${who} took ${parts(p.slugs)} off the printer${num(p.unlinkedJobs) ? '; the running print is no longer linked to it' : ''}`;
 		case 'printing.setStart':
@@ -165,14 +176,17 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			const result = (str(p.result) ?? 'print').toLowerCase();
 			const adj = result === 'success' ? 'successful' : result === 'failed' ? 'failed' : result;
 			const plate = num(p.plateNumber);
+			const nPieces = pieceCount(p.comps);
 			const target =
-				plate !== null
-					? plateRef(plate)
-					: Array.isArray(p.partSlugs) && p.partSlugs.length
-						? parts(p.partSlugs)
-						: p.partSlug
-							? part(p.partSlug)
-							: 'a part';
+				nPieces && p.partSlug
+					? `${pieces(nPieces)} of ${part(p.partSlug)}${plate !== null ? ` (${plateRef(plate)})` : ''}`
+					: plate !== null
+						? plateRef(plate)
+						: Array.isArray(p.partSlugs) && p.partSlugs.length
+							? parts(p.partSlugs)
+							: p.partSlug
+								? part(p.partSlug)
+								: 'a part';
 			const split = p.split === true;
 			if (a.kind === 'run.undo')
 				return split

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { expectOnPrinter, jobAction, printing } from '#lib/client/api.ts';
 	import { printerStoreFor } from '#lib/client/printer-store.svelte.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
@@ -23,7 +24,10 @@
 		plateNumber,
 		label,
 		parts = [],
-		confirm = true
+		confirm = true,
+		partial = false,
+		note = '',
+		comps = null
 	}: {
 		open?: boolean;
 		slugs: string[];
@@ -34,20 +38,48 @@
 		parts?: { slug: string; name: string }[];
 		/** Show the printer-already-running confirmation here (false where another control does). */
 		confirm?: boolean;
+		/**
+		 * `slugs` are some of a single-run plate's parts ("Print some parts…", or what is left of a
+		 * plate with parts already printed): the expectation then names exactly them, so the printer's
+		 * job is linked to those parts only. Whole-plate starts leave it off and send nothing extra.
+		 */
+		partial?: boolean;
+		/** One line under the dialog title for a partial start: which parts are being started. */
+		note?: string;
+		/**
+		 * "Print some pieces…": these pieces (indexes into the part's `components`) of the single part in
+		 * `slugs` are on this print. The part is marked Printing with just them, the expectation names
+		 * them, and the printer's job is linked to the part and those pieces only.
+		 */
+		comps?: number[] | null;
 	} = $props();
 	const ctx = getBuildCtx();
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	$effect(() => store.acquire());
 	const list = $derived(store.printers.filter((p) => p.enabled));
 
-	async function go(printerId: string, printerName: string, which: string[]) {
+	async function go(printerId: string, printerName: string, which: string[], some: boolean) {
+		// pieces belong to one part
+		const pieces = !!comps?.length && which.length === 1;
 		await ctx.act(async () => {
 			// The printer's name goes in the start activity: the log sheet prefills it from there.
-			await printing(ctx.id, { action: 'start', slugs: which, printer: printerName });
-			// perPartRuns plates print one part (color) per job: tell the server which.
+			await printing(ctx.id, {
+				action: 'start',
+				slugs: which,
+				printer: printerName,
+				...(pieces ? { comps } : {})
+			});
+			// perPartRuns plates print one part (color) per job, and "some parts" of a plate print
+			// together: tell the server which parts the job is.
 			const perPart = ctx.view.plates.find((p) => p.number === plateNumber)?.perPartRuns;
 			// A not-connected printer answers { manual: true } and queues nothing: no confirmation follows.
-			await expectOnPrinter(printerId, ctx.id, plateNumber!, perPart ? which : undefined);
+			await expectOnPrinter(
+				printerId,
+				ctx.id,
+				plateNumber!,
+				perPart || some || pieces ? which : undefined,
+				pieces ? comps! : undefined
+			);
 		});
 		dismissed = false;
 		await store.load();
@@ -62,7 +94,8 @@
 					action: 'link',
 					buildId: ctx.id,
 					plateNumber: exp.plateNumber,
-					partSlugs: exp.partSlugs ?? undefined
+					partSlugs: exp.partSlugs ?? undefined,
+					comps: exp.comps?.length ? exp.comps : undefined
 				});
 				await ctx.refresh();
 				await store.load();
@@ -77,10 +110,15 @@
 		open = false;
 		const which = slug ? [slug] : slugs;
 		const chosen = printerId ? list.find((p) => p.id === printerId) : undefined;
-		if (chosen && plateNumber != null) void go(chosen.id, chosen.name, which);
+		if (chosen && plateNumber != null) void go(chosen.id, chosen.name, which, partial);
+		else if (comps?.length && which.length === 1)
+			void ctx.startPieces(which[0], [...comps], label, chosen?.name);
 		else void ctx.startParts(which, label, chosen?.name);
 	}
 
+	// The build's Overview lists unlinked jobs itself (PrinterJobs, with this same question): the
+	// plate cards there must not ask a second time.
+	const onOverview = $derived(page.route.id === '/(app)/builds/[id]');
 	let dismissed = $state(false);
 	const asking = $derived(
 		dismissed || plateNumber == null
@@ -90,9 +128,9 @@
 </script>
 
 {#if ctx.canEdit && open}
-	<WherePrinting printers={list} {parts} onconfirm={done} onclose={() => (open = false)} />
+	<WherePrinting printers={list} {parts} {note} onconfirm={done} onclose={() => (open = false)} />
 {/if}
-{#if ctx.canEdit && confirm}
+{#if ctx.canEdit && confirm && !onOverview}
 	{#each asking as e (e.printerId)}
 		<ExpectedConfirm exp={e} onother={() => (dismissed = true)} />
 	{/each}

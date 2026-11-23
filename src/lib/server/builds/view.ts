@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
+import { tickLoggedPieces } from '#lib/domain/actions.ts';
 import { filterSteps } from '#lib/domain/assembly.ts';
 import { linkedRunGrams } from '#lib/domain/accounting.ts';
 import { isPreLinkRun, readSpoolmanStock, type SpoolmanCacheData } from '#lib/domain/spoolman.ts';
@@ -407,6 +408,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			printedOn: s.printedOn,
 			runEstSeconds: s.runEstSeconds,
 			comps: s.comps,
+			printingComps: s.printingComps?.length ? s.printingComps : null,
 			assigneeUserId: s.assigneeUserId,
 			manualGrams: s.manualGrams,
 			updatedAt: s.updatedAt.toISOString()
@@ -421,6 +423,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			printedOn: null,
 			runEstSeconds: null,
 			comps: {},
+			printingComps: null,
 			assigneeUserId: null,
 			manualGrams: null,
 			updatedAt: b.createdAt.toISOString()
@@ -564,6 +567,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			plateNumber: r.plateNumber,
 			partSlug: r.partSlug,
 			partSlugs: r.partSlugs ?? null,
+			comps: r.comps?.length ? r.comps : null,
 			date: r.date,
 			result: r.result as RunResult,
 			grams: r.grams,
@@ -650,7 +654,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		canEdit: access.canEdit,
 		filaments,
 		parts,
-		state,
+		state: tickLoggedPieces({ runs, parts }, state),
 		variantGroups,
 		variantChoices,
 		allParts,
@@ -731,6 +735,7 @@ export function applyPatches(db: Db, buildId: string, patches: PartPatch[], now:
 		if ('printedOn' in p) set.printedOn = p.printedOn ?? null;
 		if ('runEstSeconds' in p) set.runEstSeconds = p.runEstSeconds ?? null;
 		if (p.comps !== undefined) set.comps = p.comps;
+		if ('printingComps' in p) set.printingComps = p.printingComps?.length ? p.printingComps : null;
 		if ('assigneeUserId' in p) set.assigneeUserId = p.assigneeUserId ?? null;
 		if ('manualGrams' in p) set.manualGrams = p.manualGrams ?? null;
 		db.update(buildParts)

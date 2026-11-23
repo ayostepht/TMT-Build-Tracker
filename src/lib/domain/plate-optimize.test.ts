@@ -10,7 +10,7 @@ import {
 } from './arrange.ts';
 import { fitOutline } from './geom2d.ts';
 import { WING_LEFT_AS_PLACED, WING_RIGHT_AS_PLACED } from './fixtures/wing-hulls.ts';
-import { layoutMetrics, type OptItem } from './plate-optimize.ts';
+import { layoutMetrics, nestOutlines, type OptItem } from './plate-optimize.ts';
 
 const roles: ArrangeRole[] = [{ key: 'primary', name: 'Primary', material: 'PETG' }];
 
@@ -277,5 +277,49 @@ describe("the maintainer's Centauri Carbon wings (tmt_4691.3mf)", () => {
 			metrics(run(parts, p).plates[0], parts, { ...p, keepOut: [cutter] }).minClearance
 		).toBeGreaterThan(0);
 		expect(it.w).toBeGreaterThan(c.w - 1);
+	});
+});
+
+describe('nestOutlines among items that stay', () => {
+	const rect = (w: number, d: number): [number, number][] => [
+		[-w / 2, -d / 2],
+		[w / 2, -d / 2],
+		[w / 2, d / 2],
+		[-w / 2, d / 2]
+	];
+	const setup = { bedX: 256, bedY: 256, margin: 1, spacing: 8 };
+	/** A 254 x 100 wall along the bottom edge, fixed in place. */
+	const wall: OptItem = {
+		outline: rect(254, 100),
+		rotatable: false,
+		rot: 0,
+		x: 128,
+		y: 51,
+		w: 254,
+		d: 100
+	};
+
+	it('puts new items in the free space with the spacing to the fixed ones, which are not returned', () => {
+		const out = nestOutlines([{ outline: rect(100, 100), angles: [0] }], setup, [wall])!;
+		expect(out).toHaveLength(1);
+		// above the wall (its top edge is 101) with at least 8 mm between them, inside the bed
+		expect(out[0].y - out[0].d / 2).toBeGreaterThanOrEqual(101 + 8 - 1e-6);
+		expect(out[0].y + out[0].d / 2).toBeLessThanOrEqual(255 + 1e-6);
+		expect(out[0].x - out[0].w / 2).toBeGreaterThanOrEqual(1 - 1e-6);
+	});
+
+	it('returns null when there is no room with that spacing, and fits with a smaller one', () => {
+		// 155 mm above the wall: 101 + 8 + 150 > 255 but 101 + 4 + 150 <= 255
+		const tall = [{ outline: rect(50, 150), angles: [0] }];
+		expect(nestOutlines(tall, setup, [wall])).toBeNull();
+		expect(nestOutlines(tall, { ...setup, spacing: 4 }, [wall])).not.toBeNull();
+	});
+
+	it('without fixed items it is the same as before', () => {
+		const items = [
+			{ outline: rect(100, 60), angles: [0, 90] },
+			{ outline: rect(80, 80), angles: [0, 90] }
+		];
+		expect(nestOutlines(items, setup, [])).toEqual(nestOutlines(items, setup));
 	});
 });
