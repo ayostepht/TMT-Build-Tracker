@@ -939,6 +939,16 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
 
 ## Release and deployment (`release-pwa`)
 
+- **Image build (2026-11-23):** Dockerfile stages `build` (`--platform=$BUILDPLATFORM`:
+  `npm ci` + `npm run build` once, natively; its `build/` is plain JavaScript), `deps`
+  (target platform: `npm ci --omit=dev`, the only emulated install), `kitpack`, `runtime`
+  (copies `build/` from `build`, `node_modules` from `deps`). Reason: the Vite build
+  intermittently hung under QEMU in the arm64 half of the `image` job. `image` has
+  `timeout-minutes: 20`, `e2e` 50. Pull requests that change image inputs (`changes`
+  output `image_inputs`: Dockerfile, `.dockerignore`, `package*.json`, `.npmrc`,
+  `kitpacks/*`, `scripts/fetch-kitpacks*`, the workflow) run `image-check`: both
+  platforms, `push: false`, reads the GHA cache and never writes it, no secrets.
+
 - **Docs-only CI fast path** (`.github/workflows/docker.yml`): a `changes` job lists a PR's
   files (`git diff HEAD^1 HEAD` on the merge checkout). If every file is docs (root-level
   `*.md`, `.github/**/*.md`, `docs/**`, `.claude/**`, `LICENSE`, `unraid/**`), `test` runs

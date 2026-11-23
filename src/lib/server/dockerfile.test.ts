@@ -57,7 +57,7 @@ describe('Dockerfile COPY sources', () => {
 		expect(missing).toEqual([]);
 	});
 
-	it('paths from --from stages (builder /app/scripts/...) exist in the repo too', () => {
+	it('paths from --from stages (build stage /app/scripts/...) exist in the repo too', () => {
 		const fromScripts = [
 			...text.replace(/\\\r?\n/g, ' ').matchAll(/\/app\/(scripts\/[^\s]+|drizzle|package\.json)/g)
 		].map((m) => m[1]);
