@@ -13,12 +13,21 @@ import { printerFromCatalog } from '#lib/printers/printer.ts';
 import { ApiError } from '../access';
 import { planArrangement } from '../builds/arrange-plan';
 import { createBuild } from '../builds/create';
-import { setPrinter } from '../builds/actions';
+import { setPrinter, skipParts } from '../builds/actions';
 import { updateBuildDesign } from '../designs/mutate';
 import { arrangeForPrinter, buildArrangement, setPlateLayout } from '../builds/plates';
 import { loadBuildView } from '../builds/view';
 import { openDb, runMigrations, type Db } from '../db';
-import { buildPlates, builds, member, organization, templates, user } from '../db/schema';
+import {
+	buildCustomPieces,
+	buildParts,
+	buildPlates,
+	builds,
+	member,
+	organization,
+	templates,
+	user
+} from '../db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { ExtractedPart } from '../print-geometry/extract';
 import type { PrintMesh } from '../print-geometry/mesh-format';
@@ -772,6 +781,79 @@ describe('exportBuild3mf with a database', () => {
 				const shown = view.plates.find((pl) => pl.number === g.number)!;
 				expect(shown, `plate ${g.number} is on the Print tab`).toBeTruthy();
 				expect(g.slugs).toEqual(shown.parts.filter((s) => GEOM.includes(s)).sort());
+			}
+		});
+
+		const addCustom = (id: string) => {
+			db.insert(buildCustomPieces)
+				.values({
+					id: `pc-${id}`,
+					buildId: id,
+					name: 'Beta handle',
+					fileName: 'beta.3mf',
+					sliced: true,
+					replaces: [],
+					parts: [{ slug: 'custom-aa11bb22', name: 'Beta handle', role: 'accent' }],
+					createdAt: new Date()
+				})
+				.run();
+			db.insert(buildParts).values({ buildId: id, partSlug: 'custom-aa11bb22' }).run();
+			const top = Math.max(
+				...db
+					.select()
+					.from(buildPlates)
+					.where(eq(buildPlates.buildId, id))
+					.all()
+					.map((r) => r.number),
+				0
+			);
+			db.insert(buildPlates)
+				.values({
+					buildId: id,
+					number: top + 1,
+					name: 'Beta handle',
+					estSeconds: 3600,
+					parts: ['custom-aa11bb22'],
+					source: `custom:pc-${id}`
+				})
+				.run();
+		};
+
+		it('a custom piece is never exported and changes nothing, on arranged plates and on a kit layout', () => {
+			for (const how of ['arranged', 'layout'] as const) {
+				const id = mk();
+				setPrinter(db, id, 'owner', { printer: cc });
+				if (how === 'arranged') arrangeForPrinter(db, id, 'owner');
+				else setPlateLayout(db, id, 'owner', { key: 'xpa' });
+				importSynthetic();
+				const before = prepareExport(db, id, 'owner', { flavor: 'orca' });
+				addCustom(id);
+				const after = prepareExport(db, id, 'owner', { flavor: 'orca' });
+				expect(slugsOf(after.plan)).toEqual(slugsOf(before.plan));
+				expect(after.plan.warnings).toEqual(before.plan.warnings);
+				expect(after.plan.missing).toEqual(before.plan.missing);
+				expect(after.plan.objects.some((o) => o.slug.startsWith('custom-'))).toBe(false);
+				expect(
+					previewExport(db, id, 'owner', { flavor: 'orca' }).plates.map((pl) => pl.number)
+				).toEqual(before.plan.plates.map((pl) => pl.number));
+			}
+		});
+
+		it('a part marked Not printing is not exported', () => {
+			for (const how of ['arranged', 'layout'] as const) {
+				const id = mk();
+				setPrinter(db, id, 'owner', { printer: cc });
+				if (how === 'arranged') arrangeForPrinter(db, id, 'owner');
+				else setPlateLayout(db, id, 'owner', { key: 'xpa' });
+				importSynthetic();
+				expect(
+					slugsOf(prepareExport(db, id, 'owner', { flavor: 'orca' }).plan).flatMap((g) => g.slugs)
+				).toContain('wing-left');
+				skipParts(db, id, 'owner', { slugs: ['wing-left'], skip: true });
+				const { plan: p } = prepareExport(db, id, 'owner', { flavor: 'orca' });
+				expect(slugsOf(p).flatMap((g) => g.slugs)).not.toContain('wing-left');
+				expect(p.objects.some((o) => o.slug === 'wing-left')).toBe(false);
+				expect(p.missing.some((m) => m.slug === 'wing-left')).toBe(false);
 			}
 		});
 

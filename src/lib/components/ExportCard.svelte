@@ -3,6 +3,7 @@
 	import { exportDownloadUrl, exportPreview, type ExportPreviewDto } from '#lib/client/api.ts';
 	import { busyRetrySeconds, createCoalescer } from '#lib/client/coalesce.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
+	import { isCustomPlate } from '#lib/domain/custom.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
 	import { exportPref, FLAVOR_OPTIONS } from '#lib/client/export-flavor.svelte.ts';
 
@@ -28,9 +29,12 @@
 	const key = $derived(
 		JSON.stringify([
 			flavor,
-			ctx.view.plates.map((p) => [p.number, p.parts, p.source, p.runs]),
+			// the export is of the kit's plates and parts: a custom piece (kept as sliced) never changes it
+			ctx.view.plates
+				.filter((p) => !isCustomPlate(p))
+				.map((p) => [p.number, p.parts, p.source, p.runs]),
 			ctx.view.printer ?? ctx.view.layoutPrinter,
-			ctx.view.parts.map((p) => [p.slug, p.role]),
+			ctx.view.parts.filter((p) => !p.custom).map((p) => [p.slug, p.role]),
 			ctx.view.filaments.map((f) => [f.key, f.hex, f.name, f.material])
 		])
 	);

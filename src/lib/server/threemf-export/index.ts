@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { ApiError } from '../access';
 import { arrangementWithPlan, buildLayouts } from '../builds/plates';
 import { loadFootprints, placeOnPlates, planForBuild } from '../builds/arrange-plan';
+import { kitOnly } from '#lib/domain/custom.ts';
 import { loadBuildView } from '../builds/view';
 import type { Db } from '../db';
 import { printDir, readPieceMesh } from '../print-geometry/store';
@@ -175,8 +176,11 @@ export function prepareExport(
 	userId: string,
 	opts: ExportOptions
 ): PreparedExport {
-	const loaded = loadBuildView(db, buildId, userId);
-	if (!loaded) throw new ApiError(404, 'Not found');
+	const full = loadBuildView(db, buildId, userId);
+	if (!full) throw new ApiError(404, 'Not found');
+	// Custom pieces keep their plates as sliced: kit parts and kit plates only go into the file. Parts marked
+	// "Not printing" are not in `parts` (like an inactive variant option), so they are not exported either.
+	const loaded = kitOnly(full);
 	// a built-in MakeGood layout stands for its bed when the build has no printer of its own
 	const view = loaded.printer ? loaded : { ...loaded, printer: loaded.layoutPrinter ?? null };
 	if (!view.printer)

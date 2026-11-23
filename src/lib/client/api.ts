@@ -444,6 +444,35 @@ export const applyPlateUpload = (
 /** Forget the per-part data learned from a sliced file (plates stay). */
 export const forgetPrintTemplate = (buildId: string) =>
 	call<{ removed: number }>('DELETE', `${b(buildId)}/print-template`);
+/** Add a parsed upload as a custom piece (an accessory or beta replacement) instead of replacing the plates. */
+export const addCustomPiece = (
+	buildId: string,
+	uploadId: string,
+	body: {
+		name: string;
+		/** File plate numbers to add (default: all). */
+		plates?: number[];
+		/** Prints per file plate number, 1 to 20. */
+		runs?: Record<string, number>;
+		/** 3MF filament slot (as a string) → build colour key. */
+		filamentMap?: Record<string, string>;
+		/** Colour of an unsliced file's part. */
+		role?: string;
+		/** Kit part slugs the piece replaces (they are marked Not printing). */
+		replaces?: string[];
+	}
+) =>
+	call<{ pieceId: string; plates: number[]; skipped: string[] }>(
+		'POST',
+		`${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}/custom`,
+		body
+	);
+/** Remove a custom piece; `restore` also brings back the kit parts it replaced. */
+export const removeCustomPiece = (buildId: string, pieceId: string, restore = false) =>
+	call<{ restored: string[] }>(
+		'DELETE',
+		`${b(buildId)}/custom-pieces/${encodeURIComponent(pieceId)}${restore ? '?restore=1' : ''}`
+	);
 export const discardPlateUpload = (buildId: string, uploadId: string) =>
 	call('DELETE', `${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}`);
 export const plateThumbnailUrl = (buildId: string, number: number, v = '') =>
