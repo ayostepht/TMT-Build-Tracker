@@ -400,13 +400,8 @@ test('Update saved part: later builds get the corrected values, earlier copies s
 	await openFiles(page, buildId);
 	const first = customPlates(await view(page, buildId))[0];
 	const section = page.getByRole('region', { name: `Plate ${first.number}`, exact: true });
-	// One box at a time: a save re-renders the card from the refreshed view, and that re-render writes
-	// the stored value back into a box that is being typed in (a typed value that has not been committed
-	// yet is lost). Wait for each save to show on the card before the next box is touched.
 	await type(section.getByLabel(/^Slicer time/), '12h');
-	await expect(section.getByTestId('time-override')).toBeVisible();
 	await type(section.getByLabel(/^Grams/), '250');
-	await expect(section.getByTestId('grams-override')).toBeVisible();
 	await expect
 		.poll(async () => customPlates(await view(page, buildId))[0])
 		.toMatchObject({ estSeconds: 43200, slicerGrams: 250 });
@@ -777,4 +772,51 @@ test.describe('on a phone', () => {
 		await noOverflow(page, 'build sheet (sliced)');
 		await dlg2.getByRole('button', { name: 'Cancel' }).last().click();
 	});
+});
+
+test('A refresh does not overwrite a half-typed grams box; Escape drops the edit', async ({
+	page
+}) => {
+	const { buildId } = await ownerWithBuild(page, 'cpm-focus');
+	await orgOf(page, buildId);
+	await openFiles(page, buildId);
+	const dlg = await openSheet(page, unsliced('FOCUS PLATE'), 'focus plate.3mf');
+	await dlg.getByTestId('custom-name').fill('Focus plate');
+	await type(dlg.getByLabel('Print time'), '2h');
+	await type(dlg.getByTestId('custom-plate-grams'), '200');
+	await fillColours(dlg);
+	await finishAdd(page, dlg, 'Focus plate');
+	const n = customPlates(await view(page, buildId))[0].number;
+	const stored = async () => customPlates(await view(page, buildId))[0];
+	await openFiles(page, buildId);
+	const section = page.getByRole('region', { name: `Plate ${n}`, exact: true });
+	const grams = section.getByLabel(/^Grams/);
+	await expect(grams).toHaveValue('200');
+	const patch = (data: object) =>
+		page.request.patch(`/api/builds/${buildId}/plates/${n}`, { headers: originOf(page), data });
+
+	// Typed but not committed; another member's edit arrives and the card refreshes.
+	await grams.click();
+	await grams.fill('250');
+	expect((await patch({ manualEstSeconds: 3600 })).status()).toBe(200);
+	await expect(section.getByLabel(/^Slicer time/)).toHaveValue(/1h/);
+	await page.waitForTimeout(300);
+	await expect(grams).toHaveValue('250');
+	await grams.press('Enter');
+	await expect.poll(async () => (await stored()).slicerGrams).toBe(250);
+
+	// A box nobody is typing in follows the stored value.
+	expect((await patch({ slicerGrams: 300 })).status()).toBe(200);
+	await expect(grams).toHaveValue('300');
+
+	// Escape drops the edit: the stored value is back and nothing is sent.
+	const sent: string[] = [];
+	page.on('request', (r) => r.method() === 'PATCH' && sent.push(r.url()));
+	await grams.click();
+	await grams.fill('999');
+	await grams.press('Escape');
+	await expect(grams).toHaveValue('300');
+	await page.waitForTimeout(500);
+	expect(sent).toEqual([]);
+	expect((await stored()).slicerGrams).toBe(300);
 });
