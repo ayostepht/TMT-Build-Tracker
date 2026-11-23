@@ -36,6 +36,13 @@
       "when": 1795203217495,
       "tag": "0004_piece_prints",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795397175874,
+      "tag": "0005_custom_pieces",
+      "breakpoints": true
     }
   ]
 }
