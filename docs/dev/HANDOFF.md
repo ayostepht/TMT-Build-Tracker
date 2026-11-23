@@ -33,7 +33,7 @@ _Updated 2026-11-23, 04:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
-- **Test copy:** r65 = `edge` 9f32307 (0.9.3 plus #90 and #92–#96) deployed 2026-11-21 (r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
+- **Test copy:** r67 = `edge` fbd401d (0.9.3 plus #90, #92–#96, #98, #100–#102 and #104) deployed 2026-11-22 (r66 = 76a65c0 earlier the same day; r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
 - **Merged into `edge` 2026-11-20, on the test copy since r64:**
@@ -51,7 +51,7 @@ _Updated 2026-11-23, 04:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   log's id.
 - **Merged into `edge` 2026-11-22:** #98 "Color picker: a pick no longer hides the saved
   color; taps on touch are not treated as hover" (41513e7; no schema change; port of the
-  hosted edition's #38). **Not on the test copy yet** (r65 is 9f32307). Beyond the hosted
+  hosted edition's #38). On the test copy since r66. Beyond the hosted
   pull request, to bring back there: the `finally` around the save, clearing the touch flag
   on any key press, and the follow-up commit (refusal line pinned in view on a phone and
   limited to pick errors, detail row back to the saved color, the in-viewport e2e check).
@@ -59,50 +59,56 @@ _Updated 2026-11-23, 04:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   (76a65c0; closes #99; browser only, no schema, server or dependency change). The
   maintainer approved the renderings in the session (family card; social square, portrait
   and tall with text sections; default texts say "Toddler Mobility Trainer", not "TMT").
-  **Not on the test copy yet.** Unchecked: the system share sheet on a real iPhone and
+  On the test copy since r66. Unchecked: the system share sheet on a real iPhone and
   Android phone (headless Chromium has no file sharing).
 - **Hosted edition port of #101, #102 and #104:** its #41 is merged there (a999ad6,
   2026-11-22, on the maintainer's go-ahead). The button stays in its demo.
 - **Follow-up to #101 merged 2026-11-22:** #102 (b21d269): section text keeps typed line
-  breaks, "Try again" when drawing fails, "Download started." note. Not on the test copy.
+  breaks, "Try again" when drawing fails, "Download started." note. On the test copy since r67.
 - **Preview fix merged 2026-11-22:** #104 (fbd401d): the whole picture fits the preview
   (the maintainer saw portrait and tall clipped on an iPhone). Verified in Chromium and by
   an e2e check only; the maintainer checked it on a phone on the `edge` image
   (2026-11-22: "looks great"). Decided: the button stays in the hosted edition's demo.
-- **In flight: release 0.9.4** (maintainer asked 2026-11-22). Release pull request #109
-  is merged into `edge` (ac45695: version 0.9.4, CHANGELOG section, `fixtures/v0.9.4/`,
-  migrations 0000–0004). Promotion pull request **#111** (`promote/ac45695` into `main`) is
-  open: the maintainer merges it with a merge commit, then creates tag `v0.9.4` from the
-  release form (Target `main`; notes = the CHANGELOG `[0.9.4]` section). After the tag:
-  check that `latest`, `0.9.4`, `0.9` and `sha-<main>` share one digest, then record the
-  release in STATUS item 0 and here.
+- **Release 0.9.4: tagged, images NOT published yet.** #109 (ac45695) and the promotion
+  #111 are merged (`main` c6350d9); the maintainer created tag `v0.9.4` and the GitHub
+  release on 2026-11-23 00:52 UTC. The tag's `docker` run 45091334147 passed `test` and
+  `e2e`, but its `image` job has hung in build-push since 01:21 UTC (third time this step
+  hangs). Checked 03:30 UTC: `latest` and `0.9` still point at the 0.9.3 digest
+  (`sha256:84f708…`), tag `0.9.4` does not exist; `sha-c6350d9` (from the push to `main`)
+  is published. **To do first:** cancel that run and use "Re-run failed jobs" (a cloud
+  session was not allowed to cancel a run, so this is the maintainer's click or a session on
+  the Mac), then check that `latest`, `0.9.4`, `0.9` and `sha-c6350d9` share one digest and
+  record the release in STATUS item 0 and here.
 - **Also merged into `edge` 2026-11-22:** #100 "Add Space Coast 3D and Dancyn 3D Prints to
   the filament catalog; compact color picker" (5541c2c; no schema change). Both brands are
   official MakeGood suppliers and follow Schoolhouse Spools in the picker. The picker has
   the hosted edition's compact layout in this edition's colors (maintainer's choice after
   comparing screenshots), which also fixes swatches with a note that could not be clicked
-  with a mouse; #98's behaviour is kept. **Not on the test copy yet.** The catalog change
+  with a mouse; #98's behaviour is kept. On the test copy since r67. The catalog change
   is open in the hosted edition as its #40 (branch `feat/filaments-space-coast-dancyn`,
   CI green); that project's session merges it (merging is deploying). To offer there:
   #98's refused-save handling, which the hosted picker lacks. To regenerate the two
   vendors a cloud environment needs `spacecoast3d.org`, `www.dancyn3dprints.com` and
   `cdn.shopify.com` on its allowed hosts; without them use
   `fetch-vendor-filaments.mjs --from-dir` with saved pages.
-- **In flight: #115** "Print tab: one status badge on single-part plates; Print some
-  pieces… in every part menu" (branch `claude/pensive-thompson-ei0e34`, head a0eed04 plus
-  this handoff commit, into `edge`; no schema change). The maintainer approved the
-  screenshots in the session (2026-11-23). Agent checks and `verifier` passed; one e2e test
-  ("A stopped job that is not logged…" in `print-some-pieces-printer.spec.ts`) fails
-  locally on `edge` c587129 as well, see STATUS. Left: merge once CI is green, then offer
-  the port to the hosted edition (the maintainer saw the same two badges there).
+- **Merged into `edge` 2026-11-23:** #115 "Print tab: one status badge on single-part
+  plates; Print some pieces… in every part menu" (6457a69; no schema change). The
+  maintainer approved the screenshots in the session. **Not on the test copy yet.** Not
+  ported to the hosted edition, where the maintainer saw the same two badges: offer it to
+  that project's session. It changed `PartRow.svelte`, `PlateControl.svelte`, the Print
+  page and several e2e specs, so open branches that touch them (#114, another session's
+  work: leave it to that session) need `edge` merged in.
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** deploy `edge` fbd401d to the test copy (with the maintainer's OK; needs a
-  machine with `CLAUDE.local.md`), then the maintainer tests swatch taps on an iPhone (the
-  touch change is unconfirmed on iOS Safari) and Share a picture's share sheet; then pick from the follow-ups below or STATUS
-  "Next steps".
-- CI: an `image` job once hung in build-push for 25+ min (normal is ~4 min); cancel and re-run it.
+- **Next step:** finish the 0.9.4 images (above). Then deploy `edge` 6457a69 to the test
+  copy (with the maintainer's OK; needs a machine with `CLAUDE.local.md`). Still for the
+  maintainer on the test copy (r67): swatch taps on an iPhone (the touch change is
+  unconfirmed on iOS Safari) and Share a picture's share sheet on iPhone and Android. Then
+  pick from the follow-ups below or STATUS "Next steps".
+- CI: the `image` job's build-push step takes ~3–4 min; it has hung three times (9f32307,
+  fbd401d, tag `v0.9.4`). Cancel the run and use "Re-run failed jobs": the passed test jobs
+  are kept and only the image is built again.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 
@@ -122,7 +128,9 @@ _Updated 2026-11-23, 04:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - From #93: one piece print per part at a time; a "×5" piece counts as one piece for the
   share; no e2e for drafts or multi-piece parts on multi-run plates. One test of
   `print-some-pieces-printer.spec.ts` failed twice while two agents ran builds and e2e in
-  the same checkout and passed in every clean run and in CI; no cause captured.
+  the same checkout and passed in every clean run and in CI; no cause captured. In a cloud
+  session container (2026-11-23) "A stopped job that is not logged…" failed every time, on
+  `edge` c587129 too, while CI passed it.
 - From #92: export of a never-arranged kit-layout build still plans twice (cost only; noted
   on the pull request); the real-kit tests don't run in CI.
 - From #90: two prints of one plate at the same time share one card and one log (a
