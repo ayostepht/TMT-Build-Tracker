@@ -34,6 +34,14 @@ const tooBig = () =>
 export interface ReceiveOptions {
 	/** Disk guard seam: return false when the server is almost out of space (-> 507). */
 	hasRoom?: () => boolean;
+	/**
+	 * Where the temp file goes and what it is called (default `<uploads>/3mf/<id>.3mf`). Callers that keep
+	 * nothing pass `importsDir()` and a `.zip` name, which `sweepImportsDir` removes after a crash.
+	 */
+	tempDir?: string;
+	tempExt?: string;
+	/** Skip the per-object G-code scan (CPU heavy), for callers that only need plate time and grams. */
+	skipGcodeStats?: boolean;
 }
 
 export async function receiveThreeMf(
@@ -55,9 +63,9 @@ export async function receiveThreeMf(
 		throw new ApiError(507, 'The server is almost out of disk space');
 
 	const id = randomUUID();
-	const dir = join(uploadsDir(), '3mf');
+	const dir = opts.tempDir ?? join(uploadsDir(), '3mf');
 	mkdirSync(dir, { recursive: true });
-	const path = join(dir, `${id}.3mf`);
+	const path = join(dir, `${id}${opts.tempExt ?? '.3mf'}`);
 	const fileName = (nameFromQuery ?? '').trim();
 	let size = 0;
 	try {
@@ -76,7 +84,7 @@ export async function receiveThreeMf(
 		try {
 			summary = await parseThreeMfFile(path);
 			// Per-object time and extrusion from the plates' G-code, while the file is still on disk.
-			if (summary.sliced) {
+			if (summary.sliced && !opts.skipGcodeStats) {
 				const rep = await attachGcodeObjectStats(path, summary);
 				if (rep.note) summary.warnings.push(rep.note);
 			}

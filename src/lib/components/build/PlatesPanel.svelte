@@ -10,7 +10,9 @@
 		plateThumbnailUrl,
 		arrangePlates,
 		forgetPrintTemplate,
+		refreshLibraryPiece,
 		removeCustomPiece,
+		renameCustomPiece,
 		saveCustomPieceToLibrary,
 		getArrangement,
 		exportDownloadUrl,
@@ -19,7 +21,7 @@
 	} from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from '#lib/components/build-context.svelte.ts';
 	import type { CustomPiece, Plate, PrintRun } from '#lib/domain/types.ts';
-	import { isCustomPlate } from '#lib/domain/custom.ts';
+	import { CUSTOM_NAME_MAX, isCustomPlate } from '#lib/domain/custom.ts';
 	import RoleChip from '#lib/components/RoleChip.svelte';
 	import RunTable from '#lib/components/RunTable.svelte';
 	import LogRunSheet from '#lib/components/LogRunSheet.svelte';
@@ -453,6 +455,53 @@
 			savingId = null;
 		}
 	}
+	// rename a custom part inline
+	let renamingId = $state<string | null>(null);
+	let renameText = $state('');
+	let renameBusy = $state(false);
+	function startRename(c: CustomPiece) {
+		renamingId = c.id;
+		renameText = c.name;
+	}
+	async function saveRename(c: CustomPiece) {
+		const name = renameText.trim();
+		if (renameBusy || !name) return;
+		if (name === c.name) {
+			renamingId = null;
+			return;
+		}
+		renameBusy = true;
+		try {
+			await renameCustomPiece(ctx.id, c.id, name);
+			renamingId = null;
+			notice = `Renamed "${c.name}" to "${name}".`;
+			await ctx.refresh();
+		} catch (e) {
+			ctx.error = e instanceof Error ? e.message : 'Could not rename the part.';
+		} finally {
+			renameBusy = false;
+		}
+	}
+	/** Overwrite the saved part with this build's values, so a correction made here is what other builds get. */
+	let updatingId = $state<string | null>(null);
+	async function updateSaved(c: CustomPiece) {
+		if (updatingId || !c.libraryId) return;
+		const yes = await asking.ask(
+			'New builds and other builds that add this part later use these values. Builds that already have it are not changed.',
+			{ title: `Update saved part "${c.name}"`, confirmLabel: 'Update saved part' }
+		);
+		if (!yes) return;
+		updatingId = c.id;
+		try {
+			await refreshLibraryPiece(ctx.view.build.organizationId, c.libraryId, ctx.id, c.id);
+			notice = `Updated the saved part "${c.name}".`;
+			await ctx.refresh();
+		} catch (e) {
+			ctx.error = e instanceof Error ? e.message : 'Could not update the saved part.';
+		} finally {
+			updatingId = null;
+		}
+	}
 	/** Kit parts the piece replaced that are still Not printing. */
 	const backParts = (c: CustomPiece) =>
 		ctx.view.skipped.filter((s) => !s.custom && c.replaces.includes(s.slug));
@@ -556,7 +605,41 @@
 				{@const gone = backParts(c)}
 				<li data-testid="custom-piece">
 					<div class="cl-text">
-						<b>{c.name}</b>
+						{#if renamingId === c.id}
+							<form
+								class="cl-rename"
+								data-testid="custom-rename-form"
+								onsubmit={(e) => {
+									e.preventDefault();
+									void saveRename(c);
+								}}
+							>
+								<input
+									type="text"
+									bind:value={renameText}
+									maxlength={CUSTOM_NAME_MAX}
+									autocomplete="off"
+									aria-label="Name of the custom part"
+									data-testid="custom-rename-input"
+									onkeydown={(e) => e.key === 'Escape' && (renamingId = null)}
+								/>
+								<button
+									class="btn sm primary"
+									type="submit"
+									data-testid="custom-rename-save"
+									disabled={renameBusy || !renameText.trim()}>Save</button
+								>
+								<button
+									class="btn sm"
+									type="button"
+									data-testid="custom-rename-cancel"
+									disabled={renameBusy}
+									onclick={() => (renamingId = null)}>Cancel</button
+								>
+							</form>
+						{:else}
+							<b>{c.name}</b>
+						{/if}
 						<span class="meta"
 							>{c.fileName ?? ''}{c.fileName ? ' · ' : ''}{c.plates.length} plate{c.plates
 								.length === 1
@@ -579,7 +662,24 @@
 						>
 					{/if}
 					{#if ctx.canEdit && !draft}
-						{#if !c.libraryId}
+						{#if renamingId !== c.id}
+							<button
+								class="btn sm"
+								type="button"
+								data-testid="custom-rename"
+								onclick={() => startRename(c)}>Rename</button
+							>
+						{/if}
+						{#if c.libraryId}
+							<button
+								class="btn sm"
+								type="button"
+								data-testid="custom-update-saved"
+								disabled={updatingId === c.id}
+								onclick={() => updateSaved(c)}
+								>{updatingId === c.id ? 'Updating…' : 'Update saved part'}</button
+							>
+						{:else}
 							<button
 								class="btn sm"
 								type="button"
@@ -1296,6 +1396,28 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--sp-3) var(--sp-6);
+	}
+	.cl-rename {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-3);
+		align-items: center;
+	}
+	.cl-rename input {
+		flex: 1 1 200px;
+		min-width: 0;
+		padding: 7px var(--sp-4);
+		border: 1px solid var(--field-line);
+		border-radius: var(--r-md);
+		background: var(--card);
+		color: var(--ink);
+		font-size: var(--fs-md);
+	}
+	@media (pointer: coarse) {
+		.cl-rename input {
+			font-size: var(--fs-field);
+			min-height: 40px;
+		}
 	}
 	.cl-saved {
 		font-size: var(--fs-sm);

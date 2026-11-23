@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-23, 17:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-23, 21:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -31,6 +31,19 @@ _Updated 2026-11-23, 17:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   copy since r68 (2026-11-23): both migrations were rehearsed on a copy of the real database
   first (all old row counts equal, integrity and foreign keys ok). `docker build` and the real-kit tests did not run in the cloud session (CI's
   `image` job runs on `edge`). Not ported to the hosted edition.
+- **Custom parts follow-ups** (maintainer's feedback after trying #113 in the local demo,
+  2026-11-23: "works exactly as intended", with tweaks) are on branch
+  `claude/gallant-newton-s64g9v`: the name is the first field and a part can be renamed;
+  print time and grams can be typed per plate when adding (their test file was a project
+  saved from the slicer, which carries neither: the note now says so); saved parts can be
+  edited (name, time, grams) and refreshed from a build ("Update saved part"); the page is
+  now "Custom parts", reachable from the Settings menu, and adds a part from a .3mf (read,
+  not kept: `POST /api/custom-library/inspect`) or by hand; plate grams and time boxes no
+  longer lose a half-typed value on a refresh. No migration. Gate passed on 855801b (check,
+  lint, 2436 unit tests, build, empty-database start, 23 e2e specs); security review with
+  no high or medium finding, its points fixed (the inspect route needed a body-cap rule).
+  Merges on green CI. After the maintainer is happy: port #113 and these follow-ups to the
+  hosted edition.
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).

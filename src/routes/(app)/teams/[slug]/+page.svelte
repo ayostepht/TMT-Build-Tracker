@@ -23,7 +23,7 @@
 				<a
 					class="btn"
 					href={resolve('/(app)/teams/[slug]/pieces', { slug: data.team.slug })}
-					data-testid="saved-parts-link">Saved parts</a
+					data-testid="saved-parts-link">Custom parts</a
 				>
 			</div>
 		{:else}
@@ -37,7 +37,7 @@
 			<a
 				class="btn"
 				href={resolve('/(app)/teams/[slug]/pieces', { slug: data.team.slug })}
-				data-testid="saved-parts-link">Saved parts</a
+				data-testid="saved-parts-link">Custom parts</a
 			>
 			{#if canEdit}
 				<a class="btn primary" href={resolve('/(app)/builds/new')} data-testid="new-build"

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { fmtHM, parseSlicerTime } from '#lib/domain/format.ts';
+	import { followProp } from './follow-prop.svelte.ts';
 
 	let {
 		label = 'Slicer time',
@@ -18,8 +20,15 @@
 	} = $props();
 
 	let bad = $state(false);
+	// The box follows `value` except while the maker is typing in it (see `followProp`).
+	let el = $state<HTMLInputElement>();
+	const follow = followProp(
+		() => el,
+		() => (value ? fmtHM(value) : '')
+	);
 
 	function commit(e: Event & { currentTarget: HTMLInputElement }) {
+		follow.committed();
 		const raw = e.currentTarget.value.trim();
 		if (raw === '') {
 			bad = false;
@@ -41,11 +50,20 @@
 		inputmode="text"
 		class="time-in"
 		{placeholder}
-		value={value ? fmtHM(value) : ''}
+		bind:this={el}
+		value={untrack(() => (value ? fmtHM(value) : ''))}
 		{disabled}
 		aria-invalid={bad}
+		oninput={follow.input}
+		onblur={follow.blur}
 		onchange={commit}
-		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+		onkeydown={(e) => {
+			if (e.key === 'Enter') e.currentTarget.blur();
+			else if (e.key === 'Escape') {
+				bad = false;
+				follow.abandon();
+			}
+		}}
 	/>
 </label>
 {#if bad}<span class="meta">Try 14h 20m, 14:20 or 14.3 (hours).</span>{/if}

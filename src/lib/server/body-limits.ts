@@ -46,6 +46,12 @@ export const BODY_CAP_RULES: BodyCapRule[] = [
 		what: 'slicer 3MF (MAX_3MF_MB)'
 	},
 	{
+		pattern: /^\/api\/custom-library\/inspect$/,
+		methods: ['POST'],
+		cap: () => maxThreeMfBytes() + FRAMING,
+		what: 'slicer 3MF (MAX_3MF_MB)'
+	},
+	{
 		pattern: /^\/api\/templates\/[^/]+\/print-geometry$/,
 		methods: ['POST'],
 		cap: () => maxThreeMfBytes() + FRAMING,

@@ -33,6 +33,32 @@ describe('bodyCapFor', () => {
 		expect(bodyCapFor('POST', '/api/templates/t1/print-geometry').cap).toBe(301 * MB);
 	});
 
+	it('lets the saved-part inspect route take a 3MF like the build upload', () => {
+		expect(bodyCapFor('POST', '/api/custom-library/inspect').cap).toBe(1024 * MB + MB);
+		process.env.MAX_3MF_MB = '300';
+		expect(bodyCapFor('POST', '/api/custom-library/inspect').cap).toBe(301 * MB);
+		expect(bodyCapFor('GET', '/api/custom-library/inspect').cap).toBe(DEFAULT_BODY_CAP);
+		expect(bodyCapFor('POST', '/api/custom-library/abc/refresh').cap).toBe(DEFAULT_BODY_CAP);
+		expect(bodyCapFor('POST', '/api/custom-library').cap).toBe(DEFAULT_BODY_CAP);
+	});
+
+	it('a 3MF over 1 MB passes the hook cap logic for inspect, but not for a JSON route', async () => {
+		const big = () =>
+			new Request('http://x/api/custom-library/inspect', {
+				method: 'POST',
+				body: new Uint8Array(3 * MB),
+				headers: { 'content-length': String(3 * MB) },
+				duplex: 'half'
+			} as RequestInit);
+		const inspect = bodyCapFor('POST', '/api/custom-library/inspect').cap;
+		expect(declaredTooLarge(big().headers, inspect)).toBe(false);
+		const { request, exceeded } = limitRequest(big(), inspect);
+		expect((await request.arrayBuffer()).byteLength).toBe(3 * MB);
+		expect(exceeded()).toBe(false);
+		const json = bodyCapFor('POST', '/api/custom-library').cap;
+		expect(declaredTooLarge(big().headers, json)).toBe(true);
+	});
+
 	it('uses the 256 MB default in public mode, and an explicit MAX_3MF_MB still wins', () => {
 		process.env.TMT_MODE = 'public';
 		expect(bodyCapFor('POST', '/api/builds/b1/plates/upload').cap).toBe(257 * MB);
