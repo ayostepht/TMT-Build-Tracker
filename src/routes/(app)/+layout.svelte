@@ -92,6 +92,9 @@
 			? resolve('/(app)/teams/[slug]/members', { slug: workspace.slug })
 			: null
 	);
+	const customPartsHref = $derived(
+		workspace ? resolve('/(app)/teams/[slug]/pieces', { slug: workspace.slug }) : null
+	);
 	const statsHref = $derived(
 		workspace ? resolve('/(app)/teams/[slug]/stats', { slug: workspace.slug }) : null
 	);
@@ -326,6 +329,7 @@
 								<a href={membersHref} data-testid="ws-members">Members</a>
 							{/if}
 							<a href={integrationsHref} data-testid="ws-integrations">Integrations</a>
+							<a href={customPartsHref} data-testid="ws-custom-parts">Custom parts</a>
 						</div>
 					{/if}
 				</div>

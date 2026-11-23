@@ -288,6 +288,14 @@
 				</p>
 			</details>
 			<details>
+				<summary>Where do I manage custom parts?</summary>
+				<p>
+					Open <b>Custom parts</b> in the Settings menu at the top. Editors can add a part there, with
+					or without a .3mf, type its print time and grams, give it a name of their own, and remove it.
+					The numbers you type are used for every build you add the part to afterwards.
+				</p>
+			</details>
+			<details>
 				<summary>Can I use it without a chapter?</summary>
 				<p>
 					Yes. <b>My builds</b> is yours from the day you sign up. You can move a build into a chapter
