@@ -47,6 +47,116 @@ export function cleanPieceName(v: unknown): string {
 	return name;
 }
 
+/** One plate of a piece about to be inserted (already validated and mapped onto the build's colors). */
+export interface NewPiecePlate {
+	/** Plate and part name. */
+	label: string;
+	/** A build filament role key. */
+	role: string;
+	estSeconds: number | null;
+	manualEstSeconds: number | null;
+	slicerGrams: number | null;
+	slicerGramsSource: 'user' | 'file' | null;
+	filamentGrams: Record<string, number>;
+	runs: number;
+	/** A thumbnail file to copy into the build's folder; null for none. */
+	thumbSource: string | null;
+}
+
+export interface NewPiece {
+	name: string;
+	fileName: string | null;
+	sliced: boolean;
+	/** Kit part slugs to mark "Not printing"; already validated, all active and not printing. */
+	replaces: string[];
+	libraryId: string | null;
+	plates: NewPiecePlate[];
+}
+
+/**
+ * The one place a custom piece is written into a build: the piece row, one part and one plate per plate
+ * (numbered after the highest plate), and the kit parts it replaces marked "Not printing" (written first, so
+ * a "printing right now" refusal leaves nothing behind). Thumbnails copied to disk are pushed on `written` so
+ * the caller can remove them when the transaction fails. Used by `addCustomPiece` and the library.
+ */
+export function insertCustomPieceTx(
+	tx: Db,
+	view: BuildView,
+	piece: NewPiece,
+	userId: string,
+	written: string[]
+): { pieceId: string; plates: number[]; skipped: string[]; skippedNames: string[] } {
+	const buildId = view.build.id;
+	const pieceId = randomBytes(8).toString('hex');
+	const top =
+		tx
+			.select({ n: max(buildPlates.number) })
+			.from(buildPlates)
+			.where(eq(buildPlates.buildId, buildId))
+			.get()?.n ?? 0;
+	const slugs = new Set<string>();
+	const items = piece.plates.map((pl, i) => {
+		let slug: string;
+		do slug = `custom-${randomBytes(4).toString('hex')}`;
+		while (slugs.has(slug));
+		slugs.add(slug);
+		return { pl, slug, number: top + 1 + i };
+	});
+
+	let skipped: string[] = [];
+	let skippedNames: string[] = [];
+	if (piece.replaces.length) {
+		const r = skipPartsTx(tx, view, piece.replaces, true);
+		skipped = r.changed;
+		skippedNames = r.names;
+	}
+
+	tx.insert(buildCustomPieces)
+		.values({
+			id: pieceId,
+			buildId,
+			name: piece.name,
+			fileName: piece.fileName,
+			sliced: piece.sliced,
+			replaces: skipped,
+			parts: items.map((x) => ({ slug: x.slug, name: x.pl.label, role: x.pl.role })),
+			libraryId: piece.libraryId,
+			createdBy: userId
+		})
+		.run();
+	for (const x of items) {
+		tx.insert(buildParts).values({ buildId, partSlug: x.slug }).run();
+		let thumb: string | null = null;
+		if (x.pl.thumbSource) {
+			const rel = customThumbRel(buildId, x.slug);
+			const dest = join(uploadsDir(), rel);
+			mkdirSync(dirname(dest), { recursive: true });
+			cpSync(x.pl.thumbSource, dest);
+			written.push(dest);
+			thumb = rel;
+		}
+		tx.insert(buildPlates)
+			.values({
+				buildId,
+				number: x.number,
+				name: x.pl.label,
+				estSeconds: x.pl.estSeconds,
+				manualEstSeconds: x.pl.manualEstSeconds,
+				runs: x.pl.runs,
+				perPartRuns: false,
+				parts: [x.slug],
+				slicerGrams: x.pl.slicerGrams,
+				slicerGramsSource: x.pl.slicerGramsSource,
+				slicerByPart: {},
+				thumbnailPath: thumb,
+				filamentGrams: x.pl.filamentGrams,
+				source: `custom:${pieceId}`
+			})
+			.run();
+	}
+	return { pieceId, plates: items.map((x) => x.number), skipped, skippedNames };
+}
+
 export interface AddCustomResult {
 	pieceId: string;
 	/** Numbers of the piece's plates as they are on the Print tab afterwards. */
@@ -155,20 +265,8 @@ export function addCustomPiece(
 			}
 
 			// plates of the piece: one custom part each
-			const pieceId = randomBytes(8).toString('hex');
-			const top =
-				tx
-					.select({ n: max(buildPlates.number) })
-					.from(buildPlates)
-					.where(eq(buildPlates.buildId, buildId))
-					.get()?.n ?? 0;
 			const multi = chosen.length > 1;
-			const slugs = new Set<string>();
-			const items = chosen.map((pl, i) => {
-				let slug: string;
-				do slug = `custom-${randomBytes(4).toString('hex')}`;
-				while (slugs.has(slug));
-				slugs.add(slug);
+			const plateSpecs: NewPiecePlate[] = chosen.map((pl) => {
 				const label = multi ? `${name} - ${pl.name.trim() || `Plate ${pl.index}`}` : name;
 				const fg: Record<string, number> = {};
 				for (const [idx, g] of Object.entries(pl.filamentGrams ?? {})) {
@@ -183,60 +281,35 @@ export function addCustomPiece(
 				const total = Object.values(fg).reduce((a, c) => a + c, 0);
 				const grams =
 					pl.grams && pl.grams > 0 ? pl.grams : total > 0 ? Math.round(total * 100) / 100 : null;
-				return { pl, slug, label, fg, role, grams, number: top + 1 + i };
+				const src = uploadThumbPath(uploadId, pl.index);
+				return {
+					label,
+					role,
+					estSeconds: summary.sliced ? pl.estSeconds : null,
+					manualEstSeconds: null,
+					slicerGrams: summary.sliced ? grams : null,
+					slicerGramsSource: summary.sliced && grams ? ('file' as const) : null,
+					filamentGrams: summary.sliced ? fg : {},
+					runs: runsOf.get(pl.index) ?? 1,
+					thumbSource: pl.hasThumbnail && existsSync(src) ? src : null
+				};
 			});
 
-			// kit parts that go: validated and written first, so a "printing right now" refusal leaves nothing behind
-			let skipped: string[] = [];
-			let skippedNames: string[] = [];
-			if (replaces.length) {
-				const r = skipPartsTx(tx, view, replaces, true);
-				skipped = r.changed;
-				skippedNames = r.names;
-			}
-
-			tx.insert(buildCustomPieces)
-				.values({
-					id: pieceId,
-					buildId,
+			const made = insertCustomPieceTx(
+				tx,
+				view,
+				{
 					name,
 					fileName: up.fileName,
 					sliced: summary.sliced,
-					replaces: skipped,
-					parts: items.map((x) => ({ slug: x.slug, name: x.label, role: x.role })),
-					createdBy: userId
-				})
-				.run();
-			for (const x of items) {
-				tx.insert(buildParts).values({ buildId, partSlug: x.slug }).run();
-				let thumb: string | null = null;
-				const src = uploadThumbPath(uploadId, x.pl.index);
-				if (x.pl.hasThumbnail && existsSync(src)) {
-					const rel = customThumbRel(buildId, x.slug);
-					const dest = join(uploadsDir(), rel);
-					mkdirSync(dirname(dest), { recursive: true });
-					cpSync(src, dest);
-					written.push(dest);
-					thumb = rel;
-				}
-				tx.insert(buildPlates)
-					.values({
-						buildId,
-						number: x.number,
-						name: x.label,
-						estSeconds: summary.sliced ? x.pl.estSeconds : null,
-						runs: runsOf.get(x.pl.index) ?? 1,
-						perPartRuns: false,
-						parts: [x.slug],
-						slicerGrams: summary.sliced ? x.grams : null,
-						slicerGramsSource: summary.sliced && x.grams ? 'file' : null,
-						slicerByPart: {},
-						thumbnailPath: thumb,
-						filamentGrams: summary.sliced ? x.fg : {},
-						source: `custom:${pieceId}`
-					})
-					.run();
-			}
+					replaces,
+					libraryId: null,
+					plates: plateSpecs
+				},
+				userId,
+				written
+			);
+			const { pieceId, skipped, skippedNames } = made;
 			tx.update(buildUploads)
 				.set({
 					status: 'applied',
@@ -244,7 +317,7 @@ export function addCustomPiece(
 				})
 				.where(eq(buildUploads.id, uploadId))
 				.run();
-			result = { pieceId, plates: items.map((x) => x.number), skipped };
+			result = { pieceId, plates: made.plates, skipped };
 			return {
 				kind: 'custom.add',
 				payload: {

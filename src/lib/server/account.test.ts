@@ -21,7 +21,8 @@ import {
 	session,
 	templates,
 	user,
-	verification
+	verification,
+	workspaceCustomPieces
 } from './db/schema';
 import { templateSeeds } from './seed';
 import { seedTemplates } from './seed/run';
@@ -557,6 +558,56 @@ describe('exportAccountData', () => {
 		expect(data.builds[0].build.id).toBe(b);
 		expect(data.builds[0].photos).toEqual([expect.objectContaining({ fileName: 'p.webp' })]);
 		expect(JSON.stringify(data)).not.toContain(dir);
+	});
+
+	it('lists the saved custom parts of each workspace and the builds custom pieces', async () => {
+		await signUp('Admin', 'admin@example.test');
+		const pat = await signUp('Pat', 'pat@example.test');
+		const personal = findPersonalWorkspace(db, pat.id)!;
+		addBuild(personal.id, pat.id);
+		addChapter('c1', [[pat.id, 'editor']]);
+		db.insert(workspaceCustomPieces)
+			.values({
+				organizationId: 'c1',
+				name: 'Beta handle',
+				fileName: 'beta.3mf',
+				sliced: true,
+				replaces: ['handle'],
+				plates: [
+					{
+						name: 'HANDLE',
+						estSeconds: 7200,
+						grams: 70,
+						filamentGrams: { primary: 70 },
+						role: 'primary',
+						runs: 1,
+						thumb: false
+					}
+				],
+				isDefault: true
+			})
+			.run();
+		const data = JSON.parse(exportAccountData(db, pat.id)) as {
+			customPieces: { workspace: string; parts: Record<string, unknown>[] }[];
+			builds: { customPieces: unknown[]; skippedParts: string[] }[];
+		};
+		expect(data.customPieces).toEqual([
+			{
+				workspace: 'Chapter c1',
+				parts: [
+					expect.objectContaining({
+						name: 'Beta handle',
+						fileName: 'beta.3mf',
+						sliced: true,
+						replaces: ['handle'],
+						isDefault: true,
+						plates: [expect.objectContaining({ name: 'HANDLE', estSeconds: 7200, grams: 70 })]
+					})
+				]
+			}
+		]);
+		expect(data.builds[0].customPieces).toEqual([]);
+		expect(data.builds[0].skippedParts).toEqual([]);
 	});
 });
 

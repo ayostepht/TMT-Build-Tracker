@@ -28,6 +28,7 @@ import {
 	buildUploads,
 	colorDesigns,
 	customFilaments,
+	workspaceCustomPieces,
 	invitation,
 	member,
 	organization,
@@ -457,6 +458,8 @@ export function exportAccountData(db: Db, userId: string): string {
 				variantChoices: v.variantChoices,
 				state: v.state,
 				plates: v.plates,
+				customPieces: v.customPieces,
+				skippedParts: v.skipped.map((x) => x.slug),
 				runs: v.runs,
 				activity: v.activity,
 				assembly: v.assembly,
@@ -496,6 +499,32 @@ export function exportAccountData(db: Db, userId: string): string {
 				.all()
 		: [];
 
+	// Saved custom parts of every workspace the user belongs to (per-plate summaries; no files exist).
+	const customPieces = orgs.map((o) => ({
+		workspace: o.id === mine?.id ? 'My builds' : o.name,
+		parts: db
+			.select()
+			.from(workspaceCustomPieces)
+			.where(eq(workspaceCustomPieces.organizationId, o.id))
+			.orderBy(asc(workspaceCustomPieces.createdAt))
+			.all()
+			.map((r) => ({
+				name: r.name,
+				fileName: r.fileName,
+				sliced: r.sliced,
+				replaces: r.replaces,
+				plates: r.plates.map((p) => ({
+					name: p.name,
+					estSeconds: p.estSeconds,
+					grams: p.grams,
+					filamentGrams: p.filamentGrams,
+					role: p.role,
+					runs: p.runs
+				})),
+				isDefault: r.isDefault
+			}))
+	}));
+
 	const json = JSON.stringify(
 		{
 			exportedAt: new Date().toISOString(),
@@ -515,6 +544,7 @@ export function exportAccountData(db: Db, userId: string): string {
 			})),
 			savedDesigns: designs,
 			customFilaments: filamentsOwn,
+			customPieces: customPieces.filter((c) => c.parts.length),
 			builds: exportedBuilds
 		},
 		null,
