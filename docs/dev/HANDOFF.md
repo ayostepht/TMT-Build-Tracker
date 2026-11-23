@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-23, 05:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-23, 16:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -19,7 +19,8 @@ _Updated 2026-11-23, 05:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 
 - **Issue #113 "custom parts": both parts are merged into `edge`** (maintainer,
   2026-11-23: prototype in this edition; merged on green CI while they were away, so they
-  have not seen either yet and the issue stays open until they have). #114 (fd48d08):
+  have not tried either yet and the issue stays open until they have; the `edge` image
+  holds both since the re-run of 8a62302's timed-out e2e job). #114 (fd48d08):
   migration `0005_custom_pieces`, restorable "Not printing" for parts and plates, "Add a
   custom part" from a .3mf on the Files tab. #117 (8a62302): migration
   `0006_custom_library`, "Save for new builds", saved parts added to other builds and to
@@ -101,14 +102,20 @@ _Updated 2026-11-23, 05:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** finish the 0.9.4 images (above). Then deploy `edge` 6457a69 to the test
-  copy (with the maintainer's OK; needs a machine with `CLAUDE.local.md`). Still for the
+- **Next step:** finish the 0.9.4 images (above). Then deploy `edge` 48c1f8f to the test
+  copy after a rehearsal of migrations 0005 and 0006 on a copy of the real database (it
+  holds both parts of #113; the maintainer then tries them) (with the maintainer's OK; needs a machine with `CLAUDE.local.md`). Still for the
   maintainer on the test copy (r67): swatch taps on an iPhone (the touch change is
   unconfirmed on iOS Safari) and Share a picture's share sheet on iPhone and Android. Then
   pick from the follow-ups below or STATUS "Next steps".
-- CI: the `image` job's build-push step takes ~3–4 min; it has hung three times (9f32307,
-  fbd401d, tag `v0.9.4`). Cancel the run and use "Re-run failed jobs": the passed test jobs
-  are kept and only the image is built again.
+- CI (#119, 48c1f8f, 2026-11-23): the `image` hangs came from the arm64 half running the
+  Vite build under QEMU (last output `rendering chunks...` in the arm64 builder stage). The
+  Dockerfile now builds the app once on the runner's platform (stage `build`) and installs
+  production dependencies per target (stage `deps`). `image` has a 20 minute timeout, `e2e`
+  50 (the suite takes 31–35 min; it hit the old 35 minute limit on 8a62302). Pull requests
+  that change image inputs run `image-check` (both platforms, no push). First `edge` run
+  with it (48c1f8f) passed on the first attempt. If `image` still fails or times out, use
+  "Re-run failed jobs". Not checked: an arm64 container on real hardware.
 - Dependabot: `@dependabot` commands posted through the GitHub tool arrive scrambled; use
   "Update branch" on its pull requests instead. Cloud sessions can't push tags.
 
