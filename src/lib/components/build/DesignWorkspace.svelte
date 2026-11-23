@@ -5,6 +5,7 @@
 	import {
 		applyPartRole,
 		designColors,
+		designParts,
 		hiddenSlugs,
 		paletteReset,
 		roleBlockedReason
@@ -162,7 +163,9 @@
 	const noPreview = $derived.by((): string[] => {
 		if (!ctx.view.model || !ready) return [];
 		const shown = ready.rendered;
-		return ctx.view.parts.filter((p) => !shown.includes(p.slug)).map((p) => p.slug);
+		return designParts(ctx.view)
+			.filter((p) => !shown.includes(p.slug))
+			.map((p) => p.slug);
 	});
 
 	// "Plates and export are out of date": the same server rule Files uses (`arrangement.stale`),

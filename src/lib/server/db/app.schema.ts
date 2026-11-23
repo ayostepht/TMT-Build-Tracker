@@ -386,11 +386,46 @@ export const buildParts = sqliteTable(
 		 * Null = not a piece-level print (whole part, or not printing).
 		 */
 		printingComps: text('printing_comps', { mode: 'json' }).$type<number[]>(),
+		/**
+		 * Maker marked this part 'Not printing' (issue 113): it leaves progress, filament and
+		 * time totals; status and runs are kept so it can be restored.
+		 */
+		skipped: integer('skipped', { mode: 'boolean' }).notNull().default(false),
 		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
 			.notNull()
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 	},
 	(t) => [primaryKey({ columns: [t.buildId, t.partSlug] })]
+);
+
+/**
+ * A custom piece added to one build from the maker's own .3mf. Its plates are `build_plates`
+ * rows with `source = 'custom:<id>'`, its parts are `build_parts` rows with the slugs in
+ * `parts`; never part of a template.
+ */
+export const buildCustomPieces = sqliteTable(
+	'build_custom_pieces',
+	{
+		id: id(),
+		buildId: buildId(),
+		name: text('name').notNull(),
+		fileName: text('file_name'),
+		sliced: integer('sliced', { mode: 'boolean' }).notNull().default(false),
+		/** Kit part slugs this piece replaces. */
+		replaces: text('replaces', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		parts: text('parts', { mode: 'json' })
+			.$type<{ slug: string; name: string; role: string }[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		/** Workspace library entry (no foreign key; a later migration adds that table). */
+		libraryId: text('library_id'),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt()
+	},
+	(t) => [index('build_custom_pieces_build_idx').on(t.buildId)]
 );
 
 export const buildPlates = sqliteTable(

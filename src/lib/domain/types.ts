@@ -137,6 +137,8 @@ export interface PartDef {
 	variantOption: string | null; // VariantOption.key
 	guideRefs: { page: number; text: string }[];
 	sort: number;
+	/** Set on a part of a custom piece (section 'Custom', bomGrams null, qty 1); absent on kit parts. */
+	custom?: { pieceId: string };
 }
 
 /** Mutable per-build progress for one part. */
@@ -179,7 +181,7 @@ export interface Plate {
 	gramsSource?: 'user' | 'file' | 'printer' | 'slice' | null;
 	thumbnailPath: string | null; // served via GET /api/builds/[id]/plates/[number]/thumbnail when set
 	filamentGrams: Record<string, number>; // grams per run by filament role key, from a sliced 3MF; {} when unknown
-	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>' | 'arranged'
+	source: string; // 'template' | 'layout:<key>' | 'upload:<uploadId>' | 'arranged' | 'custom:<pieceId>'
 	/** Where `estSeconds` comes from: the slicer (uploaded plates as-is), the build's print template ("from your slice", per-part data learned from a sliced file), MakeGood's profile, or our estimate from MakeGood's X/P/A times. Absent/null = unknown. */
 	estSource?: 'manual' | 'slicer' | 'learned' | 'profile' | 'estimate' | null;
 	/** Only when a manual time is set: the time and source it overrides (the file's or the estimate). */
@@ -388,6 +390,41 @@ export interface BuildView {
 	printTemplate?: PrintTemplateInfo | null;
 	/** Whether the build has started printing (see `buildStarted`); `started.started` is false for drafts. */
 	started: StartedInfo;
+	/** Parts the maker marked "Not printing" (restorable), kit parts first. Not in `parts`, `state` or any total. */
+	skipped: SkippedPart[];
+	/** Custom parts and plates uploaded to this build; their parts are in `parts` (section 'Custom'), never in `allParts`. */
+	customPieces: CustomPiece[];
+}
+
+/** A part marked "Not printing": kept out of progress, filament and time until it is brought back. */
+export interface SkippedPart {
+	slug: string;
+	name: string;
+	role: string;
+	/** The status it comes back with (never recomputed from runs). */
+	status: PartStatus;
+	/** The plate it sits on (the stored plate row), null when on no plate. */
+	plateNumber: number | null;
+	plateName: string | null;
+	custom: boolean;
+}
+
+/** A non-standard accessory or beta replacement a maker uploaded as a 3MF. */
+export interface CustomPiece {
+	id: string;
+	name: string;
+	fileName: string | null;
+	/** The file carried slicer data (time and grams). */
+	sliced: boolean;
+	/** Kit part slugs this piece replaces (the UI offers to bring back those still skipped). */
+	replaces: string[];
+	/** Slugs of its parts (`custom-<hex>`). */
+	parts: string[];
+	/** Numbers of its plates (`build_plates.source = 'custom:<id>'`). */
+	plates: number[];
+	libraryId: string | null;
+	/** No runs on its parts or plates and nothing Printing or live: it can be removed. */
+	removable: boolean;
 }
 
 /** Per-part data learned from a sliced file, as it applies to the build's current colors. */
@@ -477,7 +514,10 @@ export interface HandoffRecord {
 }
 
 /** A change to one part's state produced by a domain action; the server persists it. */
-export type PartPatch = { slug: string } & Partial<Omit<PartState, 'slug' | 'updatedAt'>>;
+export type PartPatch = { slug: string } & Partial<Omit<PartState, 'slug' | 'updatedAt'>> & {
+		/** Not printing (`build_parts.skipped`). Only the skip action sets it; status and runs stay as they are. */
+		skipped?: boolean;
+	};
 
 /**
  * The printer a build is planned for (set in New build, Settings or the Files tab).

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { parseGrams, plateGramsBadge } from '#lib/domain/index.ts';
+	import { parseGrams, partBySlug, plateGramsBadge } from '#lib/domain/index.ts';
 	import type { Plate } from '#lib/domain/types.ts';
 	import { updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx } from './build-context.svelte.ts';
@@ -15,7 +15,7 @@
 	let open = $state(false);
 	let draft = $state<Record<string, string>>({});
 	let busy = $state(false);
-	const nameOf = (slug: string) => ctx.view.allParts.find((p) => p.slug === slug)?.name ?? slug;
+	const nameOf = (slug: string) => partBySlug(ctx.view, slug)?.name ?? slug;
 	const bad = (slug: string) => {
 		const v = parseGrams(draft[slug] ?? '');
 		return v !== null && (Number.isNaN(v) || v > 20000);

@@ -1,7 +1,12 @@
 import { getContext, setContext } from 'svelte';
-import { SvelteDate } from 'svelte/reactivity';
+import { SvelteDate, SvelteSet } from 'svelte/reactivity';
 import type { BuildView, FilamentRole, PartPatch, PartStatus } from '#lib/domain/types.ts';
-import { getView, printing, setPartStatus as apiSetPartStatus } from '#lib/client/api.ts';
+import {
+	getView,
+	printing,
+	setPartStatus as apiSetPartStatus,
+	skipPartsApi
+} from '#lib/client/api.ts';
 import { applyPatches, setStatus, startPrinting, stopPrinting } from '#lib/domain/actions.ts';
 import { snapshotParts, type PartSnapshot } from '#lib/domain/logrun.ts';
 import { filamentLabel } from '#lib/domain/labels.ts';
@@ -147,6 +152,61 @@ export class BuildCtx {
 			},
 			{ patches }
 		);
+	}
+
+	/**
+	 * "Not printing": take these parts (or a whole plate's parts) out of the build, restorably. The view
+	 * drops them at once (optimistic) and the Undo toast brings them back with their stored status.
+	 */
+	async skipParts(slugs: string[], label = this.#nameOf(slugs)): Promise<boolean> {
+		const set = new SvelteSet(slugs);
+		const before = this.view;
+		this.error = null;
+		const skipped = before.parts
+			.filter((p) => set.has(p.slug))
+			.map((p) => ({
+				slug: p.slug,
+				name: p.name,
+				role: p.role,
+				status: before.state[p.slug]?.status ?? ('To print' as PartStatus),
+				plateNumber: before.plates.find((pl) => pl.parts.includes(p.slug))?.number ?? null,
+				plateName: before.plates.find((pl) => pl.parts.includes(p.slug))?.name ?? null,
+				custom: !!p.custom
+			}));
+		this.view = {
+			...before,
+			parts: before.parts.filter((p) => !set.has(p.slug)),
+			state: Object.fromEntries(Object.entries(before.state).filter(([s]) => !set.has(s))),
+			plates: before.plates
+				.map((pl) => ({ ...pl, parts: pl.parts.filter((s) => !set.has(s)) }))
+				.filter((pl) => pl.parts.length),
+			skipped: [...before.skipped, ...skipped]
+		};
+		try {
+			await skipPartsApi(this.id, slugs, true);
+		} catch (e) {
+			this.view = before;
+			this.error = e instanceof Error ? e.message : 'That did not save.';
+			await this.refresh();
+			return false;
+		}
+		await this.refresh();
+		toasts.push(
+			`${label} · not printing`,
+			{
+				label: 'Undo',
+				run: async () => {
+					if (await this.restoreSkipped(slugs)) toasts.push('Undone', undefined, 4000);
+				}
+			},
+			UNDO_MS
+		);
+		return true;
+	}
+
+	/** Bring "Not printing" parts back; their stored status comes back with them. */
+	restoreSkipped(slugs: string[]): Promise<boolean> {
+		return this.act(() => skipPartsApi(this.id, slugs, false));
 	}
 
 	/** Set one part's status (the per-part control): optimistic, with an Undo toast. */

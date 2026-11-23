@@ -50,11 +50,15 @@ export function buildRows(db: Db, orgIds: string[], kind: BuildKind = 'build'): 
 		.map(({ templateId, choices, createdAt, ...b }) => {
 			const off = inactiveSlugs(groupsByTemplate.get(templateId) ?? [], choices);
 			const rows = db
-				.select({ slug: buildParts.partSlug, status: buildParts.status })
+				.select({
+					slug: buildParts.partSlug,
+					status: buildParts.status,
+					skipped: buildParts.skipped
+				})
 				.from(buildParts)
 				.where(eq(buildParts.buildId, b.id))
 				.all()
-				.filter((r) => !off.has(r.slug));
+				.filter((r) => !off.has(r.slug) && !r.skipped);
 			const total = rows.length;
 			const printed = rows.filter((r) => r.status === 'Printed').length;
 			return {

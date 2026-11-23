@@ -32,6 +32,7 @@ import {
 import { planPlateParts, twinGroups } from '#lib/domain/twins.ts';
 import { toStoredSummary, type StoredSummary, type ThreeMfSummary } from '#lib/domain/threemf.ts';
 import type { BuildView } from '#lib/domain/types.ts';
+import { isCustomSource } from '#lib/domain/custom.ts';
 import { deltaE } from '#lib/domain/color.ts';
 import { inactiveSlugs, resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import type { ArrangedPlate, ArrangementInfo, ArrangeWarning } from '#lib/domain/arrange.ts';
@@ -68,6 +69,7 @@ import {
 	writePlan
 } from './arrange-plan';
 import { loadBuildView } from './view';
+import { clearKitThumbs, customThumbRel, CUSTOM_SLUG, detachCustomPlates } from './custom-plates';
 import { clearProfiles, learnFromSummary, storeProfiles } from './part-profiles';
 import { ensureSilhouettes } from '../print-geometry/store';
 
@@ -86,9 +88,8 @@ export const buildThumbRel = (buildId: string, n: number) => `plates/${buildId}/
 export const buildThumbAbs = (buildId: string, n: number) =>
 	join(uploadsDir(), buildThumbRel(buildId, n));
 
-function clearBuildThumbs(buildId: string) {
-	rmSync(join(uploadsDir(), 'plates', buildId), { recursive: true, force: true });
-}
+/** Kit plate thumbnails only: a custom piece's plates (and their thumbnails) survive a plate replacement. */
+const clearBuildThumbs = clearKitThumbs;
 
 // ---- layouts
 
@@ -285,6 +286,7 @@ export function setPlateLayout(
 		const convertRuns = guardPlateReplace(tx, buildId, view, flags);
 		requireConversion(view, convertRuns);
 		const convertedRuns = convertPlateRuns(tx, buildId, view);
+		const reattachCustom = detachCustomPlates(tx, buildId);
 		tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 		for (const p of layout!.plates)
 			tx.insert(buildPlates)
@@ -299,6 +301,7 @@ export function setPlateLayout(
 					source: `layout:${key}`
 				})
 				.run();
+		reattachCustom();
 		tx.update(builds).set({ plateLayout: key }).where(eq(builds.id, buildId)).run();
 		clearBuildThumbs(buildId);
 		result = { plates: layout!.plates.length, convertedRuns };
@@ -439,7 +442,7 @@ export function createUpload(
 	return { uploadId: row.id, summary, suggestions: suggestUpload(view, summary) };
 }
 
-function getUpload(db: Db, buildId: string, uploadId: string) {
+export function getUpload(db: Db, buildId: string, uploadId: string) {
 	const u = db
 		.select()
 		.from(buildUploads)
@@ -675,6 +678,7 @@ export function applyUpload(
 			buildId,
 			rows.map(({ pl, slugs }) => ({ number: pl.index, parts: slugs }))
 		);
+		const reattachCustom = detachCustomPlates(tx, buildId);
 		tx.delete(buildPlates).where(eq(buildPlates.buildId, buildId)).run();
 		clearBuildThumbs(buildId);
 		const twinPlates: ApplyResult['twinPlates'] = [];
@@ -726,6 +730,7 @@ export function applyUpload(
 				})
 				.run();
 		}
+		reattachCustom();
 		tx.update(builds)
 			.set({ plateLayout: 'upload', variantChoices: choices })
 			.where(eq(builds.id, buildId))
@@ -769,11 +774,20 @@ export function plateThumbnailFile(
 ): string | null {
 	if (!buildAccess(db, buildId, userId)) throw new ApiError(404, 'Not found');
 	const row = db
-		.select({ p: buildPlates.thumbnailPath })
+		.select({ p: buildPlates.thumbnailPath, source: buildPlates.source, parts: buildPlates.parts })
 		.from(buildPlates)
 		.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.number, number)))
 		.get();
-	if (!row?.p || row.p !== buildThumbRel(buildId, number)) return null;
+	// The path is recomputed from the plate's own number (kit plates) or custom part slug (custom plates),
+	// never served as stored.
+	const slug = row && isCustomSource(row.source) ? row.parts[0] : undefined;
+	const expected =
+		slug !== undefined
+			? CUSTOM_SLUG.test(slug)
+				? customThumbRel(buildId, slug)
+				: null
+			: buildThumbRel(buildId, number);
+	if (!row?.p || !expected || row.p !== expected) return null;
 	const abs = join(uploadsDir(), row.p);
 	return existsSync(abs) ? abs : null;
 }

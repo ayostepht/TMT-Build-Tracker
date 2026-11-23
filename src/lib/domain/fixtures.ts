@@ -117,7 +117,9 @@ export function makeView(
 		assembly: { steps: [], items: {} },
 		photos: [],
 		handoff: null,
-		started: undefined as never
+		started: undefined as never,
+		skipped: [],
+		customPieces: []
 	};
 	view.started = buildStarted(view);
 	return view;

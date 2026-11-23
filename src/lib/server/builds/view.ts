@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
 import { tickLoggedPieces } from '#lib/domain/actions.ts';
 import { filterSteps } from '#lib/domain/assembly.ts';
+import { CUSTOM_SECTION, isCustomSource } from '#lib/domain/custom.ts';
 import { linkedRunGrams } from '#lib/domain/accounting.ts';
 import { isPreLinkRun, readSpoolmanStock, type SpoolmanCacheData } from '#lib/domain/spoolman.ts';
 import { buildStarted, type LiveJobs } from '#lib/domain/started.ts';
@@ -14,6 +15,7 @@ import type {
 	BuildPhase,
 	BuildPrinter,
 	BuildView,
+	CustomPiece,
 	PartDef,
 	PartPatch,
 	PartState,
@@ -22,6 +24,7 @@ import type {
 	Plate,
 	PrintRun,
 	RunResult,
+	SkippedPart,
 	TemplateModelInfo
 } from '#lib/domain/types.ts';
 import { materialFamily } from '#lib/filament-catalog.ts';
@@ -34,6 +37,7 @@ import { loadProfileRows, resolveProfiles } from './part-profiles';
 import {
 	activity,
 	buildAssembly,
+	buildCustomPieces,
 	buildFilaments,
 	buildHandoff,
 	buildPhotos,
@@ -145,7 +149,13 @@ export function startedBuildIds(db: Db, buildIds: string[]): Set<string> {
 	for (const r of db
 		.select({ id: buildParts.buildId, slug: buildParts.partSlug })
 		.from(buildParts)
-		.where(and(inArray(buildParts.buildId, ids), ne(buildParts.status, 'To print')))
+		.where(
+			and(
+				inArray(buildParts.buildId, ids),
+				ne(buildParts.status, 'To print'),
+				eq(buildParts.skipped, false)
+			)
+		)
 		.all())
 		if (!inactiveByBuild.get(r.id)?.has(r.slug)) started.add(r.id);
 	return started;
@@ -364,7 +374,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 
 	const variantGroups = tpl.variantGroups ?? [];
 	const variantChoices = resolveChoices(variantGroups, b.variantChoices);
-	const inactive = inactiveSlugs(variantGroups, variantChoices);
+	const variantInactive = inactiveSlugs(variantGroups, variantChoices);
 	const variantOf = variantOfPart(variantGroups);
 
 	const allParts: PartDef[] = db
@@ -396,10 +406,53 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			guideRefs: p.guideRefs,
 			sort: p.sort
 		}));
-	const parts = allParts.filter((p) => !inactive.has(p.slug));
+	// Custom pieces (uploaded accessories / beta replacements): their parts join `parts` after the kit
+	// parts (never `allParts`, which drives designs), and their plates are build_plates rows.
+	const pieceRows = db
+		.select()
+		.from(buildCustomPieces)
+		.where(eq(buildCustomPieces.buildId, buildId))
+		.orderBy(asc(buildCustomPieces.createdAt), asc(buildCustomPieces.id))
+		.all();
+	const customParts: PartDef[] = pieceRows.flatMap((piece, pi) =>
+		(piece.parts ?? []).map((cp, i) => ({
+			slug: cp.slug,
+			name: cp.name,
+			section: CUSTOM_SECTION,
+			role: cp.role,
+			defaultRole: cp.role,
+			locked: false,
+			bomGrams: null,
+			qty: 1,
+			walls: null,
+			infill: '',
+			supports: '',
+			brim: null,
+			sourceFile: piece.fileName ?? '',
+			notes: [],
+			components: [],
+			allowedMaterials: [],
+			symmetryGroup: null,
+			variantGroup: null,
+			variantOption: null,
+			guideRefs: [],
+			sort: 100000 + pi * 1000 + i,
+			custom: { pieceId: piece.id }
+		}))
+	);
+	const partRows = db.select().from(buildParts).where(eq(buildParts.buildId, buildId)).all();
+	// "Not printing": hidden like an inactive variant option, but restorable and listed in `skipped`.
+	const skippedSlugs = new Set(
+		partRows.filter((r) => r.skipped && !variantInactive.has(r.partSlug)).map((r) => r.partSlug)
+	);
+	const inactive = new Set([...variantInactive, ...skippedSlugs]);
+	const parts = [
+		...allParts.filter((p) => !inactive.has(p.slug)),
+		...customParts.filter((p) => !inactive.has(p.slug))
+	];
 
 	const state: Record<string, PartState> = {};
-	for (const s of db.select().from(buildParts).where(eq(buildParts.buildId, buildId)).all()) {
+	for (const s of partRows) {
 		if (inactive.has(s.partSlug)) continue;
 		state[s.partSlug] = {
 			slug: s.partSlug,
@@ -447,6 +500,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		.all())
 		layoutNotes.set(l.key, new Map(l.plates.map((p) => [p.number, p.runNote ?? null])));
 	const noteFor = (source: string | null, number: number): string | null => {
+		if (isCustomSource(source)) return null;
 		if (source?.startsWith('layout:')) return layoutNotes.get(source.slice(7))?.get(number) ?? null;
 		if (source?.startsWith('upload:') || source === 'arranged') return null;
 		return runNotes.get(number) ?? null;
@@ -476,7 +530,11 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 	// those are the slicer's own numbers; not per-part-run plates, whose unit is a single part).
 	const learnedRows = learned.size
 		? rawPlates.filter(
-				(p) => p.source !== 'arranged' && !p.source?.startsWith('upload:') && !p.perPartRuns
+				(p) =>
+					p.source !== 'arranged' &&
+					!p.source?.startsWith('upload:') &&
+					!isCustomSource(p.source) &&
+					!p.perPartRuns
 			)
 		: [];
 	const arrangedEst =
@@ -511,7 +569,7 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 				: {
 						estSeconds: p.estSeconds,
 						estSource: p.estSeconds
-							? p.source?.startsWith('upload:')
+							? p.source?.startsWith('upload:') || isCustomSource(p.source)
 								? ('slicer' as const)
 								: ('profile' as const)
 							: null,
@@ -631,6 +689,53 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		: null;
 
 	const kind = b.kind === 'draft' ? 'draft' : 'build';
+	// Drafts are never started (buildStarted ignores jobs and runs for them).
+	const liveJobs = kind === 'draft' ? undefined : loadLiveJobs(db, buildId);
+
+	const stateOf = (slug: string) => partRows.find((r) => r.partSlug === slug);
+	const liveSlugs = new Set(liveJobs?.slugs ?? []);
+	const plateOf = (slug: string) => rawPlates.find((pl) => pl.parts.includes(slug));
+	const customSlugs = new Set(customParts.map((p) => p.slug));
+	const skipped: SkippedPart[] = [...allParts, ...customParts]
+		.filter((p) => skippedSlugs.has(p.slug))
+		.map((p) => {
+			const pl = plateOf(p.slug);
+			return {
+				slug: p.slug,
+				name: p.name,
+				role: p.role,
+				status: (stateOf(p.slug)?.status ?? 'To print') as PartStatus,
+				plateNumber: pl?.number ?? null,
+				plateName: pl?.name ?? null,
+				custom: customSlugs.has(p.slug)
+			};
+		});
+	const customPieces: CustomPiece[] = pieceRows.map((piece) => {
+		const slugs = (piece.parts ?? []).map((cp) => cp.slug);
+		const plateNums = rawPlates
+			.filter((pl) => pl.source === `custom:${piece.id}`)
+			.map((pl) => pl.number);
+		const hasRun = runs.some(
+			(r) =>
+				(r.plateNumber != null && plateNums.includes(r.plateNumber)) ||
+				(r.partSlug != null && slugs.includes(r.partSlug)) ||
+				(r.partSlugs ?? []).some((s) => slugs.includes(s))
+		);
+		const busy =
+			slugs.some((s) => stateOf(s)?.status === 'Printing' || liveSlugs.has(s)) ||
+			plateNums.some((n) => liveJobs?.plates.includes(n));
+		return {
+			id: piece.id,
+			name: piece.name,
+			fileName: piece.fileName,
+			sliced: piece.sliced,
+			replaces: piece.replaces ?? [],
+			parts: slugs,
+			plates: plateNums,
+			libraryId: piece.libraryId,
+			removable: !hasRun && !busy
+		};
+	});
 	const result: BuildView = {
 		build: {
 			id: b.id,
@@ -680,14 +785,22 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 		members,
 		printer: (b.printer as BuildPrinter | null) ?? null,
 		layoutPrinter: b.printer ? null : layoutBed(b.plateLayout ?? defaultLayoutKey(db, tpl.id)),
-		assembly: loadAssembly(db, buildId, tpl.id, variantChoices, parts),
+		assembly: loadAssembly(
+			db,
+			buildId,
+			tpl.id,
+			variantChoices,
+			new Set(allParts.filter((p) => !variantInactive.has(p.slug)).map((p) => p.slug)),
+			skippedSlugs
+		),
 		photos: loadPhotos(db, buildId),
 		handoff: loadHandoff(db, buildId, access.canEdit),
-		started: undefined as never
+		started: undefined as never,
+		skipped,
+		customPieces
 	};
 	attachSpoolman(db, result, b.organizationId);
-	// Drafts are never started (buildStarted ignores jobs and runs for them).
-	result.started = buildStarted(result, kind === 'draft' ? undefined : loadLiveJobs(db, buildId));
+	result.started = buildStarted(result, liveJobs);
 	return result;
 }
 
@@ -720,7 +833,7 @@ export function gramsSourceOf(
 		return own.some((g) => g > 0) ? 'slice' : null;
 	}
 	if (p.slicerGramsSource) return p.slicerGramsSource;
-	if (!p.source?.startsWith('upload:')) return 'user';
+	if (!p.source?.startsWith('upload:') && !isCustomSource(p.source)) return 'user';
 	if (p.perPartRuns) return new Set(typed).size === 1 ? 'file' : 'user';
 	const fileTotal = Object.values(p.filamentGrams ?? {}).reduce((a, b) => a + b, 0);
 	return fileTotal > 0 && Math.abs(fileTotal - (p.slicerGrams ?? 0)) < 0.5 ? 'file' : 'user';
@@ -738,6 +851,7 @@ export function applyPatches(db: Db, buildId: string, patches: PartPatch[], now:
 		if ('printingComps' in p) set.printingComps = p.printingComps?.length ? p.printingComps : null;
 		if ('assigneeUserId' in p) set.assigneeUserId = p.assigneeUserId ?? null;
 		if ('manualGrams' in p) set.manualGrams = p.manualGrams ?? null;
+		if (typeof p.skipped === 'boolean') set.skipped = p.skipped;
 		db.update(buildParts)
 			.set(set)
 			.where(and(eq(buildParts.buildId, buildId), eq(buildParts.partSlug, slug)))
@@ -750,7 +864,8 @@ function loadAssembly(
 	buildId: string,
 	templateId: string,
 	choices: Record<string, string>,
-	activeParts: PartDef[]
+	activeSlugs: Set<string>,
+	skippedSlugs: Set<string>
 ): BuildAssembly {
 	const rows = db
 		.select()
@@ -768,7 +883,8 @@ function loadAssembly(
 			checks: r.checks,
 			when: r.when ?? null
 		}));
-	const steps = filterSteps(rows, choices, new Set(activeParts.map((p) => p.slug)));
+	// Step existence follows the variant-active parts; "Not printing" only thins the listed parts.
+	const steps = filterSteps(rows, choices, activeSlugs, skippedSlugs);
 	const items: BuildAssembly['items'] = {};
 	for (const { a, userName } of db
 		.select({ a: buildAssembly, userName: user.name })

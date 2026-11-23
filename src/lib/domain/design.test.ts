@@ -3,6 +3,8 @@ import { roleLabel } from './labels.ts';
 import {
 	applyPartRole,
 	designColors,
+	designParts,
+	partsByRole,
 	effectivePartRoles,
 	hiddenSlugs,
 	materialAllowed,
@@ -196,5 +198,20 @@ describe('roleLabel for added slots', () => {
 		const all = [add('a', 'Accent PETG', 'PETG'), add('b', 'Accent PETG', 'PETG')];
 		expect(roleLabel('a', all[0], all)).toBe('Accent PETG · added');
 		expect(roleLabel('b', all[1], all)).toBe('Accent PETG · added 2');
+	});
+});
+
+describe('designParts', () => {
+	it('leaves custom parts out of the design and of partsByRole', () => {
+		const v = makeView();
+		const custom = {
+			...v.parts[0],
+			slug: 'custom-x1',
+			section: 'Custom',
+			custom: { pieceId: 'p' }
+		};
+		const view = { ...v, parts: [...v.parts, custom] };
+		expect(designParts(view).map((p) => p.slug)).toEqual(v.parts.map((p) => p.slug));
+		expect([...partsByRole(view).values()].flat().some((p) => p.slug === 'custom-x1')).toBe(false);
 	});
 });

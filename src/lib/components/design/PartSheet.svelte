@@ -32,6 +32,7 @@
 	const current = $derived(view.filaments.find((f) => f.key === part.role));
 	const peers = $derived(symmetryPeers(view, part.slug).filter((p) => p.slug !== part.slug));
 	const inactive = $derived(!view.parts.some((p) => p.slug === part.slug));
+	const notPrinting = $derived(view.skipped.some((s) => s.slug === part.slug));
 	const slotName = $derived(roleLabel(part.role, current, view.filaments));
 	const guide = $derived(part.guideRefs.map((g) => `p. ${g.page}`).join(', '));
 	const mats = $derived(part.allowedMaterials.join(' or '));
@@ -78,8 +79,9 @@
 	{#if noPreview || inactive}
 		<p class="note muted">
 			{#if noPreview}No 3D preview for this part. Its color still counts.{/if}
-			{#if inactive}Not used by the current options, so it is hidden in 3D and left out of the
-				totals.{/if}
+			{#if notPrinting}Not printing: left out of the totals until it is brought back on the Print
+				tab.{:else if inactive}Not used by the current options, so it is hidden in 3D and left out
+				of the totals.{/if}
 		</p>
 	{/if}
 	{#if view.canEdit}

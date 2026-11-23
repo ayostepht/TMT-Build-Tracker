@@ -281,6 +281,105 @@ export function setPartStatus(
 	});
 }
 
+/** Most slugs one skip / restore request may name. */
+export const MAX_SKIP_SLUGS = 200;
+
+/**
+ * "Not printing" (skip) or bring back (restore) parts of a build, on the caller's transaction:
+ * validates and writes `build_parts.skipped`, returns what changed, writes no activity row (the caller
+ * does, see `skipParts`; a custom-piece upload that replaces kit parts calls this inside its own
+ * mutation). Status, run history and the stored columns stay untouched: restoring brings the stored
+ * status back, never a recompute from runs.
+ *
+ * - skip: slugs must be active parts of the build (kit or custom); one that is Printing or on a live
+ *   printer job is refused with 409; one already skipped is ignored.
+ * - restore: slugs must be in `view.skipped`; one that is active already is ignored.
+ *
+ * `view` is the view loaded before this change. `changed` is empty when nothing needed doing.
+ */
+export function skipPartsTx(
+	tx: Db,
+	view: BuildView,
+	slugs: unknown,
+	skip: boolean,
+	now: Date = new Date()
+): { changed: string[]; names: string[]; plate?: { number: number; name: string } } {
+	if (!Array.isArray(slugs) || slugs.length === 0 || slugs.length > MAX_SKIP_SLUGS)
+		bad(`slugs must be a list of 1 to ${MAX_SKIP_SLUGS} parts`);
+	const wanted = [...new Set(slugs as unknown[])];
+	const skippedBy = new Map(view.skipped.map((s) => [s.slug, s]));
+	const changed: string[] = [];
+	for (const s of wanted) {
+		if (typeof s !== 'string' || s.length > PART_SLUG_MAX) bad('Unknown part');
+		if (skip) {
+			if (skippedBy.has(s)) continue;
+			if (!hasPart(view, s)) bad('Unknown part');
+			changed.push(s);
+		} else {
+			if (!skippedBy.has(s)) {
+				if (!hasPart(view, s)) bad('Unknown part');
+				continue;
+			}
+			changed.push(s);
+		}
+	}
+	if (skip && changed.length) {
+		const live = livePrintingSlugs(tx, view.build.id);
+		const nameOf = (s: string) => view.parts.find((p) => p.slug === s)?.name ?? s;
+		for (const s of changed)
+			if (view.state[s]?.status === 'Printing' || live.has(s))
+				throw new ApiError(
+					409,
+					`${nameOf(s)} is printing right now. Take it off the printer first.`
+				);
+	}
+	const named = (s: string) =>
+		skip ? (view.parts.find((p) => p.slug === s)?.name ?? s) : (skippedBy.get(s)?.name ?? s);
+	let plate: { number: number; name: string } | undefined;
+	if (changed.length > 1) {
+		const set = new Set(changed);
+		if (skip) {
+			const pl = view.plates.find(
+				(x) => x.parts.length === set.size && x.parts.every((s) => set.has(s))
+			);
+			if (pl) plate = { number: pl.number, name: pl.name };
+		} else {
+			const first = skippedBy.get(changed[0]);
+			const n = first?.plateNumber ?? null;
+			if (n !== null) {
+				const onPlate = view.skipped.filter((x) => x.plateNumber === n);
+				if (onPlate.length === set.size && onPlate.every((x) => set.has(x.slug)))
+					plate = { number: n, name: first?.plateName ?? '' };
+			}
+		}
+	}
+	if (changed.length)
+		applyPatches(
+			tx,
+			view.build.id,
+			changed.map((slug) => ({ slug, skipped: skip })),
+			now
+		);
+	return { changed, names: changed.map(named), ...(plate ? { plate } : {}) };
+}
+
+/**
+ * Body `{ slugs, skip }`: mark parts "Not printing" (`skip: true`) or bring them back (`false`).
+ * Editors and owners; drafts refuse it (no build tracking).
+ */
+export function skipParts(db: Db, buildId: string, userId: string, body: unknown): void {
+	if (!isObj(body) || typeof body.skip !== 'boolean') bad('skip must be true or false');
+	const skip = body.skip;
+	mutateBuild(db, buildId, userId, (tx, view, now) => {
+		const r = skipPartsTx(tx, view, body.slugs, skip, now);
+		if (!r.changed.length) return { kind: skip ? 'part.skip' : 'part.restore', skip: true };
+		return {
+			kind: skip ? 'part.skip' : 'part.restore',
+			payload: { slugs: r.changed, names: r.names, ...(r.plate ? { plate: r.plate } : {}) }
+		};
+	});
+}
+
 /** Upper bound for a typed part weight (all copies), in grams. */
 export const MAX_PART_GRAMS = 20000;
 

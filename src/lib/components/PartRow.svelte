@@ -52,6 +52,8 @@
 	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
 	let where = $state(false);
 	let piecesPicking = $state(false);
+	// A part's badge always has other statuses to offer, so the item never creates the menu.
+	const canSkip = $derived(ctx.canEdit && !!st && st.status !== 'Printing');
 	// Printing: with a printer connected (and the part on a plate) ask where; else mark it directly.
 	// Print tab by plate, plate with this one part: this badge stands for the plate (heading has none),
 	// so Printing / Printed / To print run PlateControl's plate-level paths (log sheet, printer dialog, Undo).
@@ -197,6 +199,7 @@
 			</div>
 		</div>
 		<div class="settings">
+			{#if part.custom}<span class="pset hot" data-testid="part-custom">Custom</span>{/if}
 			{#if plate}<span class="pset plate" title="Plate in the print profile"
 					>Plate {plate.number}</span
 				>{/if}
@@ -229,16 +232,28 @@
 				options={[...PART_STATUSES]}
 				interactive={ctx.canEdit}
 				onpick={pickStatus}
-				extras={part.components.length && piecesOffered(ctx, part.slug)
-					? [
-							{
-								label: 'Print some pieces…',
-								testid: 'part-print-some',
-								ariaLabel: `Print some pieces of ${part.name}`,
-								run: () => (piecesPicking = true)
-							}
-						]
-					: []}
+				extras={[
+					...(canSkip
+						? [
+								{
+									label: 'Not printing this part',
+									testid: 'part-skip',
+									ariaLabel: `Not printing ${part.name}`,
+									run: () => void ctx.skipParts([part.slug], part.name)
+								}
+							]
+						: []),
+					...(part.components.length && piecesOffered(ctx, part.slug)
+						? [
+								{
+									label: 'Print some pieces…',
+									testid: 'part-print-some',
+									ariaLabel: `Print some pieces of ${part.name}`,
+									run: () => (piecesPicking = true)
+								}
+							]
+						: [])
+				]}
 				testid="part-status"
 				small
 			/>

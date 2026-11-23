@@ -169,6 +169,23 @@
 	const offerPieces = $derived(!!pieceSlug && piecesOffered(ctx, pieceSlug));
 	const extras = $derived.by(() => {
 		const out: { label: string; testid: string; ariaLabel: string; run: () => void }[] = [];
+		// "Not printing" (the plate, or on a one-part-per-run plate this part) comes first so the
+		// "Print some …" entries stay last. Never offered once everything is Printed (no menu then).
+		const sk = scope.filter((s) => ctx.view.state[s]);
+		if (
+			ctx.canEdit &&
+			sk.length &&
+			!sk.some((s) => status(s) === 'Printing') &&
+			!sk.every((s) => status(s) === 'Printed')
+		)
+			out.push({
+				label: only ? 'Not printing this part' : 'Not printing this plate',
+				testid: 'plate-skip',
+				ariaLabel: only
+					? `Not printing ${name(only)} of plate ${plate.number}`
+					: `Not printing plate ${plate.number}`,
+				run: () => void ctx.skipParts(sk, only ? name(only) : `Plate ${plate.number}`)
+			});
 		if (canPickSome)
 			out.push({
 				label: 'Print some parts…',
