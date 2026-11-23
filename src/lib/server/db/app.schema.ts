@@ -428,6 +428,50 @@ export const buildCustomPieces = sqliteTable(
 	(t) => [index('build_custom_pieces_build_idx').on(t.buildId)]
 );
 
+/** Per-plate summary of a library piece (no geometry, never the 3MF). */
+export type LibraryPlate = {
+	name: string;
+	estSeconds: number | null;
+	grams: number | null;
+	filamentGrams: Record<string, number>;
+	role: string;
+	runs: number;
+	thumb: boolean;
+};
+
+/**
+ * A custom part saved to a workspace (team or personal) from a build's custom piece so new
+ * builds can include it. Holds per-plate summaries only, never the 3MF;
+ * `build_custom_pieces.library_id` points here without a foreign key.
+ */
+export const workspaceCustomPieces = sqliteTable(
+	'workspace_custom_pieces',
+	{
+		id: id(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		fileName: text('file_name'),
+		sliced: integer('sliced', { mode: 'boolean' }).notNull().default(false),
+		/** The kit the `replaces` slugs refer to (no foreign key). */
+		templateId: text('template_id'),
+		replaces: text('replaces', { mode: 'json' })
+			.$type<string[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		plates: text('plates', { mode: 'json' })
+			.$type<LibraryPlate[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		/** Included in new builds by default. */
+		isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt()
+	},
+	(t) => [index('workspace_custom_pieces_org_idx').on(t.organizationId)]
+);
+
 export const buildPlates = sqliteTable(
 	'build_plates',
 	{

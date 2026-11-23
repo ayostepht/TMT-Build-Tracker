@@ -43,6 +43,13 @@
       "when": 1795397175874,
       "tag": "0005_custom_pieces",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795406475780,
+      "tag": "0006_custom_library",
+      "breakpoints": true
     }
   ]
 }
