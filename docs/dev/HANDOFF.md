@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-23, 04:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-23, 05:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -17,19 +17,19 @@ _Updated 2026-11-23, 04:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 
 ## State
 
-- **Issue #113 "custom parts"** (maintainer, 2026-11-23: prototype in this edition, two
-  pull requests, each merged into `edge` once the routine and CI are green; the maintainer
-  has not seen either yet). Part 1 is merged: #114 (fd48d08; migration
-  `0005_custom_pieces`; restorable "Not printing" for parts and plates; "Add a custom part"
-  from a .3mf on the Files tab). Part 2 is on branch `claude/gallant-newton-s64g9v`
-  (migration `0006_custom_library`; "Save for new builds", saved parts applied to other
-  builds and to new builds, the wizard's Options step, the Saved parts page): gate passed
-  on 16c2a8f (check, lint, 2405 unit tests, build, empty-database start, 22 e2e specs),
-  security review with no high or medium finding. It merges when CI is green; the issue
-  stays open until the maintainer has tried both on the `edge` image. Decisions, known
-  limits and the questions for the maintainer are in STATUS "Waiting on the maintainer".
-  Both migrations are additive and need a rehearsal before the test copy takes them. Not
-  ported to the hosted edition.
+- **Issue #113 "custom parts": both parts are merged into `edge`** (maintainer,
+  2026-11-23: prototype in this edition; merged on green CI while they were away, so they
+  have not seen either yet and the issue stays open until they have). #114 (fd48d08):
+  migration `0005_custom_pieces`, restorable "Not printing" for parts and plates, "Add a
+  custom part" from a .3mf on the Files tab. #117 (8a62302): migration
+  `0006_custom_library`, "Save for new builds", saved parts added to other builds and to
+  new builds, the wizard's Options step, the Saved parts page. Gates: check, lint, 2405
+  unit tests, build, empty-database start, 22 e2e specs, CI `test` and `e2e` green; two
+  security reviews with no high or medium finding. Decisions, known limits and two
+  questions for the maintainer are in STATUS "Waiting on the maintainer". Not on the test
+  copy: both migrations are additive and need a rehearsal on a copy of the real database
+  first. `docker build` and the real-kit tests did not run in the cloud session (CI's
+  `image` job runs on `edge`). Not ported to the hosted edition.
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
