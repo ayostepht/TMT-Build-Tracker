@@ -493,7 +493,9 @@
 <style>
 	.lpf {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--sp-5);
+		min-width: 0;
 	}
 	.lpf h3 {
 		margin: 0;
@@ -520,7 +522,14 @@
 		color: var(--ink);
 		font-size: var(--fs-sm);
 	}
+	.lpf-drop input[type='file'] {
+		max-width: 100%;
+		min-width: 0;
+	}
 	.lpf-drop {
+		min-width: 0;
+		max-width: 100%;
+		box-sizing: border-box;
 		display: grid;
 		place-items: center;
 		padding: 22px var(--sp-6);
