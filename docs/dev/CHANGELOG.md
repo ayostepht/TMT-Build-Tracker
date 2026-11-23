@@ -7,6 +7,19 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r67** (published `sha-fbd401d` = `edge` fbd401d = #104 "Share a picture: the whole picture
+  fits the preview", digest `sha256:dcf3b188eb5b…22535b`, same as `edge`, 2026-11-22; `edge`
+  def4728 adds docs only): also brings #102 (section text keeps line breaks, "Try again" when
+  drawing fails) and #100 (Space Coast 3D and Dancyn 3D Prints in the catalog, compact color
+  picker). The first image job for fbd401d hung in build-push for 23 min and was cancelled;
+  "Re-run failed jobs" built it in about 3 min. No migration (journal stays at 5), no
+  rehearsal. Live: health ok, no startup errors. Rollback: stop, restore
+  `tmt-backup-pre-r67.db`, re-tag `r66` as `test`.
+- **r66** (published `sha-76a65c0` = `edge` 76a65c0 = #101 "Share a picture of a build's
+  colors", digest `sha256:9ccc2f820513…e0a50`, 2026-11-22): also brings #98 (a pick no longer
+  hides the saved color; touch is not treated as hover). Deployed while #102's image was
+  still building. No migration (journal stays at 5), no rehearsal. Live: health ok, no
+  startup errors. Rollback: stop, restore `tmt-backup-pre-r66.db`, re-tag `r65` as `test`.
 - **r65** (published `sha-9f32307` = `edge` 9f32307 = #96 "Converted plate logs keep their pieces
   and their row", digest `sha256:d4bbd2d4e12d…aa5bf`, same as `edge`, 2026-11-21; `edge` ba3dd7d
   adds docs only): also brings #95 (logged pieces ticked and locked; "Print some…" entries move

@@ -1,8 +1,9 @@
 # Project status
 
-_Last updated: 2026-11-16 (0.9.2 released, see item 0; `edge` is the default branch; test
-copy on r65 = `edge` 9f32307, the 0.9.3 app code plus #90 and #92–#96, since 2026-11-21;
-#98 merged into `edge` 2026-11-22 as 41513e7 and #101 "Share a picture" as 76a65c0 with its follow-ups #102 (b21d269) and #104 (fbd401d), none on
+_Last updated: 2026-11-23 (0.9.3 is the published release, see item 0; 0.9.4 is tagged on
+`main` c6350d9 but its images are not published yet, see `docs/dev/HANDOFF.md`; `edge` is the
+default branch; test copy on r67 = `edge` fbd401d, the 0.9.3 app code plus #90, #92–#96, #98,
+#100–#102 and #104, since 2026-11-22; #115 merged into `edge` 2026-11-23 as 6457a69, not on
 the test copy yet)._
 
 This file holds **current facts only**: what works, what's open, what's next, what's
@@ -20,7 +21,7 @@ done. Keep it under ~150 lines.
    `spoolman_cache`) and the frozen fixture `fixtures/v0.9.3/`. Contents since 0.9.2:
    Spoolman filaments (#71, #77, #81 fixes #79), dependency updates (#74), empty `ORIGIN`
    fix (#76), header detail lines and exact plate locators (#80), resource limits from the
-   public edition (#82, #84). The test copy runs r65 = `edge` 9f32307 (the 0.9.3 app code plus #90 and #92–#96;
+   public edition (#82, #84). The test copy runs r67 = `edge` fbd401d (the 0.9.3 app code plus #90, #92–#96, #98, #100–#102 and #104;
    see `docs/dev/CHANGELOG.md`); the maintainer confirmed the #79 Spare figures on real data,
    and #59 is closed. 0.9.2 (2026-11-16): `main` 48c9649, migrations 0001/0002.
    **Release routine (learned 2026-11-13):** release PR into `edge` (version, CHANGELOG,
@@ -255,7 +256,7 @@ Route each to the agent named in brackets.
   prevents that, and no server path loses ticks. A confirmed plate replacement keeps a piece log's pieces and every converted
   log's id (#96, 9f32307: `convertPlateRuns` updates the original row for the first
   target part and inserts rows only for further parts). "Print some pieces…" and "Print some parts…" are entries in the status
-  menu, not separate buttons. On the Print tab grouped by plate, a plate with exactly one part (single run; `isSoloPlate`) has no status badge in its heading (maintainer, 2026-11-23): the row's badge stands for the plate (Printing = plate-level start, Printed = Finish & log sheet, take-off) and the heading keeps "Log a print…" and History; plates with several parts keep the heading badge with "Print some parts…". Known: `print-some-pieces-printer.spec.ts` "A stopped job that is not logged…" fails on `edge` c587129 too (Overview `expected-confirm` never appears), cause not found [printers / build-state]. Not offered on
+  menu, not separate buttons. On the Print tab grouped by plate, a plate with exactly one part (single run; `isSoloPlate`) has no status badge in its heading (maintainer, 2026-11-23): the row's badge stands for the plate (Printing = plate-level start, Printed = Finish & log sheet, take-off) and the heading keeps "Log a print…" and History; plates with several parts keep the heading badge with "Print some parts…". Known: `print-some-pieces-printer.spec.ts` "A stopped job that is not logged…" fails in a cloud session container, on `edge` c587129 too (Overview `expected-confirm` never appears), but passes in CI; cause not found [printers / build-state]. Not offered on
   plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: one piece print per part at a time; "×5"
   pieces count as one piece for the share; no e2e for drafts or multi-run plates (the test
   layout has no multi-piece part there) [e2e-playwright]; every future additive column
