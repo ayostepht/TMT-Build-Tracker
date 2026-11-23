@@ -62,6 +62,7 @@
 	);
 	let where = $state(false);
 	let piecesPicking = $state(false);
+	// A part's badge always has other statuses to offer, so the item never creates the menu.
 	const canSkip = $derived(ctx.canEdit && !!st && st.status !== 'Printing');
 	// Printing: with a printer connected (and the part on a plate) ask where; else mark it directly.
 	function pickStatus(s: string) {
@@ -234,16 +235,6 @@
 				interactive={ctx.canEdit}
 				onpick={pickStatus}
 				extras={[
-					...(part.components.length && !plateOffersPieces && piecesOffered(ctx, part.slug)
-						? [
-								{
-									label: 'Print some pieces…',
-									testid: 'part-print-some',
-									ariaLabel: `Print some pieces of ${part.name}`,
-									run: () => (piecesPicking = true)
-								}
-							]
-						: []),
 					...(canSkip
 						? [
 								{
@@ -251,6 +242,16 @@
 									testid: 'part-skip',
 									ariaLabel: `Not printing ${part.name}`,
 									run: () => void ctx.skipParts([part.slug], part.name)
+								}
+							]
+						: []),
+					...(part.components.length && !plateOffersPieces && piecesOffered(ctx, part.slug)
+						? [
+								{
+									label: 'Print some pieces…',
+									testid: 'part-print-some',
+									ariaLabel: `Print some pieces of ${part.name}`,
+									run: () => (piecesPicking = true)
 								}
 							]
 						: [])
