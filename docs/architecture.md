@@ -72,6 +72,25 @@ Sections match the subagents in `.claude/agents/`:
   (`elapsedSec + remainingSec`), via `startPrinting(view, slugs, now, live)`.
 - **Variants:** `templates.variant_groups`, `builds.variant_choices`, `domain/variants.ts`.
   `BuildView.parts`/`state`/`plates` hold active parts only; `allParts` has everything.
+- **Not printing (skip, #113):** `build_parts.skipped` is a read-time filter in
+  `loadBuildView`: inactive = variant-inactive ∪ skipped, for `parts`, `state` and plate
+  parts. `build_plates.parts` is never rewritten, so a restore puts the part back on its
+  plate; a plate with every part skipped disappears. `view.skipped` lists them; `list.ts`
+  and `startedBuildIds` ignore skipped rows. Restore keeps the stored status and never
+  recomputes from runs. Assembly steps stay (`filterSteps` 4th argument). The arranger,
+  planner and export read `view.parts`, so a skipped part is left out like an unchosen
+  variant. API `POST /api/builds/[id]/parts/skip`; server `skipParts` / `skipPartsTx`
+  (inside another mutation, no activity row). Refused for a Printing or live part.
+- **Custom pieces (#113):** a `build_custom_pieces` row becomes one `PartDef` per plate
+  (section 'Custom', `custom.pieceId`, role from `parts[].role`) in `view.parts`, never in
+  `allParts` (designs resolve slugs through `allParts`, so a custom slug cannot enter
+  `design.partRoles`; design UI iterates `designParts(view)`). Its plates are
+  `build_plates` rows with `source = 'custom:<pieceId>'`. `domain/custom.ts`: `partBySlug`,
+  `kitOnly(view)`, caps. Accounting: a custom plate trusts its file's role map, a custom
+  part takes its plate's grams; no run note, not in the learned-time model.
+  `remapRoleKey` / `removeSlot` re-key custom part roles. Activity kinds `part.skip`,
+  `part.restore`, `custom.add`, `custom.remove` (all in `REARRANGE_KINDS`; none may start
+  with `plates.`, which drafts allow).
 - **Workspaces:** every user has a personal workspace (organization with metadata
   `{ personal: true, userId }`, "My builds", created on sign-up and lazily for legacy users
   in `teams.ts`). Personal workspaces can't take invitations. Builds move personal → chapter
@@ -336,6 +355,18 @@ create|prelink`, plus `spoolmanSpoolId`/`archived` extras on `filament.stock.add
   printer set, `PlateLayoutPicker` shows a one-line `printerSummary()`. In build mode
   `PlatesPanel` owns the single `plates/layouts` fetch and hands it to the picker through
   `preload` (`null` = loading: heading seeded from the plates' `source`, select disabled).
+- **Custom pieces (#113):** `builds/custom-pieces.ts` (`addCustomPiece` from a parsed
+  upload through the unchanged upload endpoint, `removeCustomPiece`; routes
+  `POST /api/builds/[id]/plates/upload/[uploadId]/custom`,
+  `DELETE /api/builds/[id]/custom-pieces/[pieceId]?restore=1`) and
+  `builds/custom-plates.ts` (`detachCustomPlates`: `setPlateLayout`, `applyUpload` and
+  `writePlan` detach custom plates before their whole-build delete and re-attach them after
+  the kit plates, renumbered; thumbnails at `plates/<buildId>/custom-<slug>.png`,
+  `clearKitThumbs` removes only `<n>.png`, `plateThumbnailFile` recomputes the path).
+  `kitOnly(view)` keeps custom parts and plates out of `planArrangement`, `placeOnPlates`,
+  `loadKitSource` and `prepareExport`. Plate numbers are max+1 on add and are not
+  renumbered on removal. A piece with runs is not deleted (mark it Not printing). UI:
+  `CustomPieceUpload.svelte`, "Custom parts" in `PlatesPanel`.
 - **Export:** `src/lib/server/threemf-export/` (Orca/Elegoo, Bambu, plain), painted
   supports, `bed_exclude_area`.
 
@@ -737,6 +768,8 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   temp uploads and scratch folders older than 1 h that no queued job needs). Schema:
   `site_admin`.
 
+- **Migration `0005_custom_pieces` (unreleased, additive, #113):** `build_parts.skipped`
+  and table `build_custom_pieces` (`library_id` has no foreign key yet).
 - **Piece prints (migration `0004_piece_prints`, unreleased, additive):** nullable JSON
   `number[]` columns `build_parts.printing_comps`, `print_runs.comps` and
   `printer_jobs.comps`; old rows stay NULL. `baseline-upgrade.test.ts` hashes legacy content
