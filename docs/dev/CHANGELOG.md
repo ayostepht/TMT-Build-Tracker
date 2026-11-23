@@ -7,6 +7,14 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r69** (published `sha-0f432ad` = `edge` 0f432ad = #122 "Custom parts: your own name, typed
+  time and grams, and a Custom parts page", digest `sha256:039fcc054fe0…03bc92`, same as `edge`,
+  2026-11-23): follow-ups to #113. A custom part can be renamed, each plate takes a typed print
+  time and grams, the Custom parts page (Settings menu) adds, edits and removes saved parts,
+  "Update saved part" copies a build's corrections back, and plate grams and time boxes keep
+  what is being typed through a refresh. No migration (journal stays at 7), no rehearsal. Live:
+  health ok, no startup errors, integrity ok. Not checked signed in. Rollback: stop, re-tag
+  `r68` as `test` (backup `tmt-backup-pre-r69.db`).
 - **r68** (published `sha-48c1f8f` = `edge` 48c1f8f = #119 "Image build: bundle the app once on
   the build platform", digest `sha256:6e5a95724d52…5c40fc`, same as `edge`, 2026-11-23; `edge`
   1ed2cf0 adds docs only): brings #114 ("Not printing" for parts and plates, custom parts from a

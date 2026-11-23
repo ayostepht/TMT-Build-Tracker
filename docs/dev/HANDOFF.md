@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-23, 21:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-23, 22:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -47,7 +47,7 @@ _Updated 2026-11-23, 21:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
-- **Test copy:** r68 = `edge` 48c1f8f (0.9.4 plus #114, #115, #117 and #119; migrations 0005 and 0006, rehearsed on a copy of the real database) deployed 2026-11-23 (r67 = fbd401d and r66 = 76a65c0 on 2026-11-22; r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
+- **Test copy:** r69 = `edge` 0f432ad (0.9.4 plus #114, #115, #117, #119 and #122 "Custom parts: your own name, typed time and grams, and a Custom parts page"; no migration) deployed 2026-11-23 (r68 = 48c1f8f earlier the same day, with migrations 0005 and 0006 rehearsed on a copy of the real database; r67 = fbd401d and r66 = 76a65c0 on 2026-11-22; r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
 - **Merged into `edge` 2026-11-20, on the test copy since r64:**
@@ -115,9 +115,9 @@ _Updated 2026-11-23, 21:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** finish the 0.9.4 images (above). The test copy runs `edge` 48c1f8f (r68), so the
+- **Next step:** finish the 0.9.4 images (above). The test copy runs `edge` 0f432ad (r69), so the
   maintainer can try both parts of #113 and #115 there. Still for the
-  maintainer on the test copy (r68): swatch taps on an iPhone (the touch change is
+  maintainer on the test copy (r69): swatch taps on an iPhone (the touch change is
   unconfirmed on iOS Safari) and Share a picture's share sheet on iPhone and Android. Then
   pick from the follow-ups below or STATUS "Next steps".
 - CI (#119, 48c1f8f, 2026-11-23): the `image` hangs came from the arm64 half running the
