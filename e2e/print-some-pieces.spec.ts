@@ -53,10 +53,9 @@ const names = (v: ViewJson, idx: number[]) =>
 const write = (page: Page, method: 'post' | 'patch', url: string, data: unknown) =>
 	page.request[method](url, { data, headers: { origin: new URL(page.url()).origin } });
 
+/** A plate's heading, found by its title. A solo plate (one part) has no status badge in it. */
 const head = (page: Page, plate: number) =>
-	page.locator('.group-head').filter({
-		has: page.locator(`[data-testid="plate-status"][aria-label^="Plate ${plate} status"]`)
-	});
+	page.locator('.group-head').filter({ hasText: new RegExp(`Plate ${plate}(?!\\d)`) });
 
 /** On a phone the grouping control is behind the Filter button; the page already groups by plate. */
 async function groupByPlate(page: Page) {
@@ -79,12 +78,13 @@ async function openPrint(page: Page, buildId: string, plate = PLATE) {
 /** Harness build: a fresh owner with a build; the Print tab open on plate 18. */
 async function start(page: Page, label: string) {
 	const { buildId, chapterUrl } = await ownerWithBuild(page, label);
-	const h = await openPrint(page, buildId);
-	return { buildId, chapterUrl, h };
+	await openPrint(page, buildId);
+	// Plate 18 is a solo plate: the part row's badge is the plate's one status control.
+	return { buildId, chapterUrl, h: row(page, HARNESS) };
 }
 
 async function openPicker(h: Locator) {
-	await chooseExtra(h.getByTestId('plate-status'), 'plate-print-some-pieces');
+	await chooseExtra(h.getByTestId('part-status'), 'part-print-some');
 	const dlg = h.getByTestId('piece-pick');
 	await expect(dlg).toBeVisible();
 	return dlg;
@@ -145,7 +145,7 @@ const tag = (page: Page) => row(page, HARNESS).getByTestId('part-pieces');
 const grams = (t: string | null) =>
 	Number(/(\d[\d,]*(?:\.\d+)?) g/.exec(t ?? '')?.[1]?.replace(',', ''));
 
-test('Placement: one action, on the plate heading when the part is alone on its plate', async ({
+test("Placement: a solo plate has one status badge, the row's; a shared plate keeps the heading's", async ({
 	page
 }) => {
 	const { buildId, h } = await start(page, 'pcplace');
@@ -153,27 +153,34 @@ test('Placement: one action, on the plate heading when the part is alone on its 
 	expect(v.plates.find((p) => p.number === PLATE)?.parts).toEqual([HARNESS]);
 	expect(v.parts.find((p) => p.slug === HARNESS)?.components).toHaveLength(N);
 
-	await expect
-		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
-		.toBe(true);
-	await h.getByTestId('plate-status').click();
-	const entry = h.getByTestId('plate-print-some-pieces');
-	await expect(entry).toHaveText('Print some pieces…');
-	await expect(entry).toHaveRole('menuitem');
+	// Plate 18 holds one part: its heading has no status badge (but keeps Log a print…), the row has one.
+	const solo = head(page, PLATE);
+	await expect(solo).toBeVisible();
+	await expect(solo.getByTestId('plate-status')).toHaveCount(0);
+	await expect(solo.getByRole('button', { name: /^Log a print on plate/ })).toBeVisible();
+	await expect(
+		page.locator('.group').filter({ has: solo }).locator('[data-testid$="-status"]')
+	).toHaveCount(1);
+	await expect.poll(() => offers(h.getByTestId('part-status'), 'part-print-some')).toBe(true);
+	await h.getByTestId('part-status').click();
+	await expect(h.getByTestId('part-print-some')).toHaveText('Print some pieces…');
+	await expect(h.getByTestId('part-print-some')).toHaveRole('menuitem');
 	await page.keyboard.press('Escape');
-	// Never both: the part row leaves its own button out.
-	await expect(row(page, HARNESS)).toBeVisible();
-	await expect
-		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
-		.toBe(false);
+	// Picking from the row opens the piece pick sheet.
+	await chooseExtra(row(page, HARNESS).getByTestId('part-status'), 'part-print-some');
+	const rowSheet = row(page, HARNESS).getByTestId('piece-pick');
+	await expect(rowSheet).toBeVisible();
+	await expect(rowSheet.getByTestId('piece-pick-item')).toHaveCount(N);
+	await page.keyboard.press('Escape');
+	await expect(rowSheet).toBeHidden();
 	// All ticked: the part is the plate's only startable part, so it is not a "parts" pick either.
-	await expect.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some')).toBe(false);
 
 	// Connectors (5 pieces) shares plate 12 with other parts: the button sits on its row, not the heading.
 	const plate12 = v.plates.find((p) => p.parts.includes('connectors'))!;
 	expect(plate12.parts.length).toBeGreaterThan(1);
 	const h12 = head(page, plate12.number);
 	await expect(h12).toBeVisible();
+	await expect(h12.getByTestId('plate-status')).toHaveCount(1);
 	await expect
 		.poll(() => offers(h12.getByTestId('plate-status'), 'plate-print-some-pieces'))
 		.toBe(false);
@@ -262,9 +269,7 @@ test('Marking 3 of 9 pieces printing: row tag, Overview card, one activity row',
 	expect(v.state[HARNESS].printingComps).toEqual([0, 1, 2]);
 	expect(ticks(v)).toEqual([]);
 	// Printing: nothing more to pick, on the heading or the row.
-	await expect
-		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
-		.toBe(false);
+	await expect.poll(() => offers(h.getByTestId('part-status'), 'part-print-some')).toBe(false);
 	await expect
 		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
 		.toBe(false);
@@ -301,14 +306,12 @@ test('Undo restores Printing with its piece list', async ({ page }) => {
 	await expect
 		.poll(async () => (await view(page, buildId)).state[HARNESS].printingComps ?? [])
 		.toEqual([]);
-	await expect
-		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
-		.toBe(true);
+	await expect.poll(() => offers(h.getByTestId('part-status'), 'part-print-some')).toBe(true);
 
 	// Mark again, take it off the printer, then undo that: the list comes back.
 	await markFirst(page, h, 3);
 	await expect(row(page, HARNESS)).toHaveAttribute('data-s', 'Printing');
-	await chooseStatus(h.getByTestId('plate-status'), 'To print');
+	await chooseStatus(h.getByTestId('part-status'), 'To print');
 	await expect(row(page, HARNESS)).toHaveAttribute('data-s', 'To print');
 	await expect(tag(page)).toHaveText(`0/${N} pieces`);
 	await undo(page, 'off the printer');
@@ -358,12 +361,10 @@ test('Logging 3 pieces: the part goes to To print with 3 of 9 ticked; the rest f
 			[3, 4, 5, 6, 7, 8]
 		])
 	);
-	// Printed: nothing left to pick, and the plate's badge is a plain label without a menu (so the
-	// heading is found by its text; `h` matches the interactive badge only).
-	const printed = page.locator('.group-head').filter({ hasText: `Plate ${PLATE} ·` });
-	await expect(printed.getByTestId('plate-status')).toHaveText('Printed');
-	await expect(printed.getByTestId('plate-status')).not.toHaveAttribute('aria-haspopup', 'menu');
-	await expect(printed.getByTestId('plate-print-some-pieces')).toHaveCount(0);
+	// Printed: nothing left to pick.
+	await expect(h.getByTestId('part-status')).toHaveAttribute('data-status', 'Printed');
+	await expect(h.getByTestId('part-print-some')).toHaveCount(0);
+	await expect.poll(() => offers(h.getByTestId('part-status'), 'part-print-some')).toBe(false);
 });
 
 test('Mark 3 pieces printing, then log them: Success ticks exactly those pieces', async ({
@@ -373,7 +374,7 @@ test('Mark 3 pieces printing, then log them: Success ticks exactly those pieces'
 	await markFirst(page, h, 3);
 	await expect(row(page, HARNESS)).toHaveAttribute('data-s', 'Printing');
 	// Printed from the plate control: the log sheet opens for the printing pieces.
-	await chooseStatus(h.getByTestId('plate-status'), 'Printed');
+	await chooseStatus(h.getByTestId('part-status'), 'Printed');
 	const sheet = page.getByRole('dialog');
 	await expect(sheet).toBeVisible();
 	await expect(sheet.getByTestId('log-pieces')).toContainText(`3 of ${N} pieces`);
@@ -487,11 +488,11 @@ test('Pieces covered by a Success log are ticked and locked until the log is del
 
 test('The menu entry has no check mark and is reachable by keyboard', async ({ page }) => {
 	const { h } = await start(page, 'pckeys');
-	const badge = h.getByTestId('plate-status');
+	const badge = h.getByTestId('part-status');
 	await badge.click();
 	const menu = page.getByTestId('status-menu');
 	await expect(menu).toBeVisible();
-	const entry = menu.getByTestId('plate-print-some-pieces');
+	const entry = menu.getByTestId('part-print-some');
 	await expect(entry).toHaveRole('menuitem');
 	await expect(entry).not.toHaveAttribute('aria-checked');
 	await expect(entry).toHaveAccessibleName('Print some pieces of Harness and Straps');
@@ -515,16 +516,14 @@ test('Take off printer clears the piece list', async ({ page }) => {
 	const { buildId, h } = await start(page, 'pctakeoff');
 	await markFirst(page, h, 3);
 	await expect(tag(page)).toHaveText(`0/${N} pieces · 3 printing`);
-	await chooseStatus(h.getByTestId('plate-status'), 'To print');
+	await chooseStatus(h.getByTestId('part-status'), 'To print');
 	await expect(row(page, HARNESS)).toHaveAttribute('data-s', 'To print');
 	await expect(tag(page)).toHaveText(`0/${N} pieces`);
 	const v = await view(page, buildId);
 	expect(v.state[HARNESS].printingComps ?? []).toEqual([]);
 	expect(ticks(v)).toEqual([]);
 	expect(v.runs).toHaveLength(0);
-	await expect
-		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
-		.toBe(true);
+	await expect.poll(() => offers(h.getByTestId('part-status'), 'part-print-some')).toBe(true);
 });
 
 test('Ticking an on-printer piece by hand takes it off the print', async ({ page }) => {
@@ -588,9 +587,7 @@ test('Picking every piece still to print is the whole-part start', async ({ page
 test('Hidden for a viewer, and when fewer than two pieces are left', async ({ page, browser }) => {
 	const { buildId, chapterUrl, h } = await start(page, 'pcabsent');
 	// The control shows (guards against a vacuous "absent" below).
-	await expect
-		.poll(() => offers(h.getByTestId('plate-status'), 'plate-print-some-pieces'))
-		.toBe(true);
+	await expect.poll(() => offers(h.getByTestId('part-status'), 'part-print-some')).toBe(true);
 
 	// One piece left: nothing to pick (a single piece is just the part).
 	const ticked = Object.fromEntries(Array.from({ length: N - 1 }, (_, i) => [String(i), true]));
@@ -603,7 +600,7 @@ test('Hidden for a viewer, and when fewer than two pieces are left', async ({ pa
 	await groupByPlate(page);
 	await expect(tag(page)).toHaveText(`${N - 1}/${N} pieces`);
 	await expect
-		.poll(() => offers(head(page, PLATE).getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
 		.toBe(false);
 	await expect
 		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
@@ -625,7 +622,7 @@ test('Hidden for a viewer, and when fewer than two pieces are left', async ({ pa
 	await page.waitForLoadState('networkidle');
 	await groupByPlate(page);
 	await expect
-		.poll(() => offers(head(page, PLATE).getByTestId('plate-status'), 'plate-print-some-pieces'))
+		.poll(() => offers(row(page, HARNESS).getByTestId('part-status'), 'part-print-some'))
 		.toBe(true);
 
 	// A viewer sees the plate and the part but not the action.
@@ -732,11 +729,12 @@ for (const width of [390, 360]) {
 	}) => {
 		const { buildId } = await ownerWithBuild(page, `pcphone${width}`);
 		await page.setViewportSize({ width, height: 800 });
-		const h = await openPrint(page, buildId);
-		// The plate heading with its status menu open does not overflow the phone.
-		await h.getByTestId('plate-status').click();
+		await openPrint(page, buildId);
+		const h = row(page, HARNESS);
+		// The part row's status menu open does not overflow the phone.
+		await h.getByTestId('part-status').click();
 		const menu = page.getByTestId('status-menu');
-		await expect(menu.getByTestId('plate-print-some-pieces')).toBeVisible();
+		await expect(menu.getByTestId('part-print-some')).toBeVisible();
 		const mb = await menu.boundingBox();
 		expect(mb!.x).toBeGreaterThanOrEqual(0);
 		expect(mb!.x + mb!.width).toBeLessThanOrEqual(width);
@@ -779,3 +777,25 @@ for (const width of [390, 360]) {
 		await expect(row(page, HARNESS)).toHaveAttribute('data-s', 'Printing');
 	});
 }
+
+test('Solo plate: the row badge runs the plate-level start and the Finish & log sheet', async ({
+	page
+}) => {
+	const { buildId, h } = await start(page, 'pcsolo');
+	// Printing from the row: the plate-labelled Undo toast (not a part status change).
+	await chooseStatus(h.getByTestId('part-status'), 'Printing');
+	await expect(row(page, HARNESS)).toHaveAttribute('data-s', 'Printing');
+	await expect(page.locator('.toasts')).toContainText('plate 18');
+	// Printed from the row opens the Finish & log sheet instead of a silent status change.
+	await chooseStatus(h.getByTestId('part-status'), 'Printed');
+	const sheet = page.getByRole('dialog', { name: /Finish & log plate 18/ });
+	await expect(sheet).toBeVisible();
+	expect((await view(page, buildId)).state[HARNESS].status).toBe('Printing');
+	await sheet.getByRole('button', { name: 'Success', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(sheet).toBeHidden();
+	await expect(row(page, HARNESS)).toHaveAttribute('data-s', 'Printed');
+	const v = await view(page, buildId);
+	expect(v.runs).toHaveLength(1);
+	expect(v.runs[0]).toMatchObject({ plateNumber: PLATE, result: 'Success' });
+});

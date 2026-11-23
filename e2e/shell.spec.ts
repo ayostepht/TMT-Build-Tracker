@@ -400,7 +400,7 @@ test.describe('toast on a phone', () => {
 		const { buildId } = await ownerWithBuild(page, 'toast');
 		await page.goto(`/builds/${buildId}/print`);
 		await page.waitForLoadState('networkidle');
-		await chooseStatus(page.getByTestId('part-status').first(), 'Printed');
+		await chooseStatus(page.getByTestId('part-status').first(), 'Printing');
 		const toast = page.locator('.toast').first();
 		await expect(toast).toBeVisible();
 		const m = await page.evaluate(() => {
