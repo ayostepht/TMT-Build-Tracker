@@ -32,7 +32,7 @@ const bad = (m: string): never => {
 /** Most kit parts one piece can replace, and most filament slots a file can map. */
 const MAX_REPLACES = 60;
 const MAX_SLOTS = 32;
-const MAX_RUNS = 20;
+export const MAX_RUNS = 20;
 const MAX_TYPED = 1000;
 
 /** Trimmed, control and bidi characters dropped, at most `CUSTOM_NAME_MAX` characters. */

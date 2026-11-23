@@ -34,6 +34,12 @@ const tooBig = () =>
 export interface ReceiveOptions {
 	/** Disk guard seam: return false when the server is almost out of space (-> 507). */
 	hasRoom?: () => boolean;
+	/**
+	 * Where the temp file goes and what it is called (default `<uploads>/3mf/<id>.3mf`). Callers that keep
+	 * nothing pass `importsDir()` and a `.zip` name, which `sweepImportsDir` removes after a crash.
+	 */
+	tempDir?: string;
+	tempExt?: string;
 }
 
 export async function receiveThreeMf(
@@ -55,9 +61,9 @@ export async function receiveThreeMf(
 		throw new ApiError(507, 'The server is almost out of disk space');
 
 	const id = randomUUID();
-	const dir = join(uploadsDir(), '3mf');
+	const dir = opts.tempDir ?? join(uploadsDir(), '3mf');
 	mkdirSync(dir, { recursive: true });
-	const path = join(dir, `${id}.3mf`);
+	const path = join(dir, `${id}${opts.tempExt ?? '.3mf'}`);
 	const fileName = (nameFromQuery ?? '').trim();
 	let size = 0;
 	try {

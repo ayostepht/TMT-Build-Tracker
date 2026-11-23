@@ -16,6 +16,7 @@ import { isObj, type Obj } from '#lib/domain/guards.ts';
 import type { BuildView } from '#lib/domain/types.ts';
 import { ApiError, buildAccess, requireEditor, requireMember } from './access';
 import {
+	MAX_RUNS,
 	cleanGrams,
 	cleanPieceName,
 	cleanSeconds,
@@ -31,11 +32,15 @@ import type { Db } from './db';
 import {
 	buildCustomPieces,
 	buildPlates,
+	templateFilamentRoles,
+	templateParts,
 	user,
 	workspaceCustomPieces,
 	type LibraryPlate
 } from './db/schema';
 import { emitBuildEvent } from './events';
+import { defaultTemplate, listTemplatesFor } from './templates/fork';
+import type { ThreeMfSummary } from '#lib/domain/threemf.ts';
 
 /** Most saved custom parts one workspace can hold. */
 export const MAX_LIBRARY_PIECES = 50;
@@ -532,4 +537,254 @@ export function libraryRowsByIds(db: Db, orgId: string, ids: string[]): LibraryR
 			and(eq(workspaceCustomPieces.organizationId, orgId), inArray(workspaceCustomPieces.id, ids))
 		)
 		.all();
+}
+
+// ---- creating a saved part by hand (no build, no file kept)
+
+const MAX_REPLACES = 60;
+const MAX_SLOTS = 32;
+/* eslint-disable-next-line no-control-regex */
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]+/g;
+
+/** A plate name: optional; control characters dropped, at most 80 characters. */
+function cleanPlateName(v: unknown): string {
+	if (v === undefined || v === null) return '';
+	if (typeof v !== 'string') throw new ApiError(400, 'A plate name must be text');
+	return v.replace(CONTROL, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim();
+}
+
+/** What a form needs to build a saved part by hand: the kit it is for, its filament roles and part names. */
+export interface LibraryTemplateOptions {
+	templateId: string;
+	name: string;
+	roles: { key: string; name: string; material: string; hex: string }[];
+	parts: { slug: string; name: string; section: string }[];
+}
+
+/** Roles and parts of the workspace's default kit (the oldest built-in template); members only. */
+export function libraryTemplateOptions(
+	db: Db,
+	orgId: string,
+	userId: string
+): LibraryTemplateOptions {
+	requireMember(db, orgId, userId);
+	const t = defaultTemplate(db);
+	return {
+		templateId: t.id,
+		name: t.name,
+		roles: db
+			.select({
+				key: templateFilamentRoles.key,
+				name: templateFilamentRoles.name,
+				material: templateFilamentRoles.material,
+				hex: templateFilamentRoles.hex
+			})
+			.from(templateFilamentRoles)
+			.where(eq(templateFilamentRoles.templateId, t.id))
+			.all(),
+		parts: db
+			.select({
+				slug: templateParts.slug,
+				name: templateParts.name,
+				section: templateParts.section
+			})
+			.from(templateParts)
+			.where(eq(templateParts.templateId, t.id))
+			.orderBy(asc(templateParts.sort))
+			.all()
+	};
+}
+
+/**
+ * Create a saved part without a build (editors and owners). Roles (`role`, `filamentGrams` keys) must be
+ * filament roles of the kit and `replaces` part slugs of it; the kit is `templateId` (a built-in one or the
+ * workspace's own copy: anything else is a 404) or the default built-in kit. Time and grams per print
+ * (typed numbers: stored as typed). Without `filamentGrams` the grams count under `role`.
+ */
+export function createLibraryPiece(
+	db: Db,
+	userId: string,
+	orgId: string,
+	input: unknown
+): LibraryPieceView {
+	requireEditor(db, orgId, userId);
+	if (!isObj(input)) throw new ApiError(400, 'Invalid body');
+	const b = input as Obj;
+	const name = cleanPieceName(b.name);
+	let fileName: string | null = null;
+	if (b.fileName !== undefined && b.fileName !== null) {
+		if (typeof b.fileName !== 'string') throw new ApiError(400, 'fileName must be text');
+		fileName = b.fileName.replace(CONTROL, ' ').trim().slice(0, 255) || null;
+	}
+	for (const f of ['sliced', 'isDefault'] as const)
+		if (b[f] !== undefined && typeof b[f] !== 'boolean')
+			throw new ApiError(400, `${f} must be true or false`);
+
+	// the kit: built-in or this workspace's own copy
+	let templateId: string;
+	if (b.templateId === undefined || b.templateId === null) templateId = defaultTemplate(db).id;
+	else {
+		if (typeof b.templateId !== 'string') throw new ApiError(400, 'templateId must be text');
+		if (!listTemplatesFor(db, orgId).some((t) => t.id === b.templateId))
+			throw new ApiError(404, 'Not found');
+		templateId = b.templateId;
+	}
+	const roleKeys = new Set(
+		db
+			.select({ k: templateFilamentRoles.key })
+			.from(templateFilamentRoles)
+			.where(eq(templateFilamentRoles.templateId, templateId))
+			.all()
+			.map((r) => r.k)
+	);
+	let replaces: string[] = [];
+	if (b.replaces !== undefined) {
+		if (!Array.isArray(b.replaces) || b.replaces.length > MAX_REPLACES)
+			throw new ApiError(400, `replaces must be a list of at most ${MAX_REPLACES} parts`);
+		const slugs = new Set(
+			db
+				.select({ s: templateParts.slug })
+				.from(templateParts)
+				.where(eq(templateParts.templateId, templateId))
+				.all()
+				.map((r) => r.s)
+		);
+		for (const s of b.replaces)
+			if (typeof s !== 'string' || !slugs.has(s))
+				throw new ApiError(400, 'Unknown part in replaces');
+		replaces = [...new Set(b.replaces as string[])];
+	}
+
+	if (!Array.isArray(b.plates) || !b.plates.length || b.plates.length > MAX_CUSTOM_PLATES)
+		throw new ApiError(400, `A saved part needs 1 to ${MAX_CUSTOM_PLATES} plates`);
+	const plates: LibraryPlate[] = b.plates.map((raw: unknown) => {
+		if (!isObj(raw)) throw new ApiError(400, 'Each plate must be an object');
+		const p = raw as Obj;
+		if (typeof p.role !== 'string' || !roleKeys.has(p.role))
+			throw new ApiError(400, 'role must be a filament color of the kit');
+		const runs = p.runs ?? 1;
+		if (typeof runs !== 'number' || !Number.isInteger(runs) || runs < 1 || runs > MAX_RUNS)
+			throw new ApiError(400, `runs must be a whole number from 1 to ${MAX_RUNS}`);
+		const estSeconds =
+			p.estSeconds === undefined || p.estSeconds === null
+				? null
+				: cleanSeconds(p.estSeconds, 'estSeconds');
+		let grams = p.grams === undefined || p.grams === null ? null : cleanGrams(p.grams, 'grams');
+		let fg: Record<string, number> = {};
+		if (p.filamentGrams !== undefined && p.filamentGrams !== null) {
+			if (!isObj(p.filamentGrams)) throw new ApiError(400, 'filamentGrams must be an object');
+			const entries = Object.entries(p.filamentGrams as Obj);
+			if (entries.length > MAX_SLOTS)
+				throw new ApiError(400, 'filamentGrams lists too many colors');
+			for (const [k, v] of entries) {
+				if (!roleKeys.has(k))
+					throw new ApiError(400, 'filamentGrams must use filament colors of the kit');
+				fg[k] = cleanGrams(v, 'filamentGrams');
+			}
+			const sum = round2(Object.values(fg).reduce((a, c) => a + c, 0));
+			if (!Object.keys(fg).length) fg = {};
+			else if (grams === null) grams = sum;
+			else fg = scaleGrams(fg, grams);
+		}
+		return {
+			name: cleanPlateName(p.name),
+			estSeconds,
+			grams,
+			filamentGrams: fg,
+			role: p.role,
+			runs,
+			thumb: false
+		};
+	});
+
+	return toView(
+		db.transaction((txRaw) => {
+			const tx = txRaw as unknown as Db;
+			const have = tx
+				.select({ id: workspaceCustomPieces.id })
+				.from(workspaceCustomPieces)
+				.where(eq(workspaceCustomPieces.organizationId, orgId))
+				.all().length;
+			if (have >= MAX_LIBRARY_PIECES)
+				throw new ApiError(
+					400,
+					`A workspace can keep at most ${MAX_LIBRARY_PIECES} saved custom parts. Delete one first.`
+				);
+			return tx
+				.insert(workspaceCustomPieces)
+				.values({
+					organizationId: orgId,
+					name,
+					fileName,
+					sliced: b.sliced === true,
+					templateId,
+					replaces,
+					plates,
+					isDefault: b.isDefault === true,
+					createdBy: userId
+				})
+				.returning()
+				.get();
+		})
+	);
+}
+
+// ---- reading a file for that form (nothing is stored)
+
+export interface InspectedFile {
+	fileName: string;
+	sliced: boolean;
+	printer: string | null;
+	warnings: string[];
+	/** The file's filament slots (the keys of a plate's `filamentGrams`). */
+	filaments: { slot: string; name?: string; material: string; color: string | null }[];
+	plates: {
+		index: number;
+		name: string;
+		estSeconds: number | null;
+		grams: number | null;
+		runsHint: number;
+		filamentGrams: Record<string, number>;
+		/** The slots this plate uses, with their grams. */
+		filaments: {
+			slot: string;
+			name?: string;
+			material: string;
+			color: string | null;
+			grams: number;
+		}[];
+	}[];
+}
+
+/** The part of a parsed 3MF the "add a saved part" form uses: numbers and slots, no thumbnails, no objects. */
+export function inspectSummary(fileName: string, s: ThreeMfSummary): InspectedFile {
+	const slot = (i: number) => s.filaments.find((f) => f.index === i);
+	const info = (key: string) => {
+		const f = slot(Number(key));
+		return {
+			slot: key,
+			...(f?.name ? { name: f.name } : {}),
+			material: f?.type ?? '',
+			color: f?.color ?? null
+		};
+	};
+	return {
+		fileName,
+		sliced: s.sliced,
+		printer: s.printer,
+		warnings: s.warnings.slice(0, 20),
+		filaments: s.filaments.map((f) => info(String(f.index))),
+		plates: s.plates.slice(0, 200).map((p) => {
+			const fg = s.sliced ? { ...p.filamentGrams } : {};
+			return {
+				index: p.index,
+				name: p.name,
+				estSeconds: s.sliced ? p.estSeconds : null,
+				grams: s.sliced ? p.grams : null,
+				runsHint: p.runsHint,
+				filamentGrams: fg,
+				filaments: Object.entries(fg).map(([k, g]) => ({ ...info(k), grams: g }))
+			};
+		})
+	};
 }
