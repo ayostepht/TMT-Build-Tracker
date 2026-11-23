@@ -239,3 +239,29 @@ describe.skipIf(!realFile || !existsSync(realFile))('real H-series file', () => 
 		expect(ms).toBeLessThan(30_000);
 	});
 });
+
+describe('Orca-family project saved from the slicer without slicing', () => {
+	// ElegooSlicer / Orca 2.4 keep slice_info.config as a header only: no <plate>, no prediction or weight.
+	// plate_1.json (bbox, first layer time) is there, which makes the file look sliced to its owner.
+	const bytes = makeProjectThreeMf({
+		app: 'OrcaSlicer-2.4.0',
+		headerOnlySliceInfo: true,
+		printerModel: 'Elegoo Centauri Carbon',
+		printerSettingsId: 'Elegoo Centauri Carbon 0.4 nozzle',
+		plates: [{ name: 'CUP', objects: [{ name: 'Cup holder' }] }],
+		extra: {
+			'Metadata/plate_1.json': strToU8(
+				JSON.stringify({ bbox_all: [0, 0, 80, 80], first_layer_time: 120 })
+			)
+		}
+	});
+
+	it('is unsliced with no time or grams, and does not fail', async () => {
+		const s = await parseThreeMfBytes(bytes);
+		expect(s.kind).toBe('project');
+		expect(s.sliced).toBe(false);
+		expect(s.plates).toHaveLength(1);
+		expect(s.plates[0]).toMatchObject({ estSeconds: null, grams: null, filamentGrams: {} });
+		expect(s.plates[0].objects.map((o) => o.name)).toContain('Cup holder');
+	});
+});

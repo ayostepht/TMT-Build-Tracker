@@ -10,7 +10,8 @@
 		type LibraryPiece,
 		type UploadResult
 	} from '#lib/client/api.ts';
-	import { fmt, fmtH } from '#lib/domain/index.ts';
+	import { fmt, fmtH, MAX_PRINT_SECONDS, parseGrams } from '#lib/domain/index.ts';
+	import SlicerTimeInput from './SlicerTimeInput.svelte';
 	import { CUSTOM_NAME_MAX, MAX_CUSTOM_PIECES, MAX_CUSTOM_PLATES } from '#lib/domain/custom.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 
@@ -40,6 +41,10 @@
 	let name = $state('');
 	let include = $state<Record<number, boolean>>({});
 	let runs = $state<Record<number, number>>({});
+	/** Print time per file plate, seconds: from the file when sliced, typed otherwise. */
+	let times = $state<Record<number, number | null>>({});
+	/** Grams per print per file plate, as typed (decimal comma accepted). */
+	let gramsText = $state<Record<number, string>>({});
 	let colours = $state<Record<string, string>>({});
 	let role = $state('');
 	let replaces = $state<string[]>([]);
@@ -69,6 +74,13 @@
 	const haveCustom = $derived(view.customPieces.reduce((n, c) => n + c.plates.length, 0));
 	const roomPlates = $derived(Math.max(0, MAX_CUSTOM_PLATES - haveCustom));
 	const full = $derived(view.customPieces.length >= MAX_CUSTOM_PIECES);
+	/** Same limit as a typed part weight on the server. */
+	const MAX_GRAMS = 20000;
+	const typedGrams = (i: number) => parseGrams(gramsText[i] ?? '');
+	const gramsBad = (i: number) => {
+		const g = typedGrams(i);
+		return g !== null && (Number.isNaN(g) || g <= 0 || g > MAX_GRAMS);
+	};
 	const sliced = $derived(!!up?.summary.sliced);
 	const chosen = $derived(up ? up.summary.plates.filter((p) => include[p.index]) : []);
 	/** Filament slots that carry grams on a chosen plate: each needs a colour of this build. */
@@ -85,6 +97,9 @@
 	);
 	const missingColour = $derived([...usedSlots].some((i) => !colours[i]));
 	const overCap = $derived(chosen.length > roomPlates);
+	const badNumbers = $derived(
+		chosen.some((p) => gramsBad(p.index) || (times[p.index] ?? 0) > MAX_PRINT_SECONDS)
+	);
 	const problem = $derived(
 		full
 			? `A build can have at most ${MAX_CUSTOM_PIECES} custom parts.`
@@ -94,11 +109,13 @@
 					? 'Choose at least one plate.'
 					: overCap
 						? `A build can have at most ${MAX_CUSTOM_PLATES} custom plates (${haveCustom} now).`
-						: missingColour
-							? 'Choose a color for every filament the plates use.'
-							: !sliced && !role
-								? 'Choose a color.'
-								: null
+						: badNumbers
+							? 'Check the print time (at most 30 days) and the grams (more than 0, at most 20000).'
+							: missingColour
+								? 'Choose a color for every filament the plates use.'
+								: !sliced && !role
+									? 'Choose a color.'
+									: null
 	);
 
 	// Kit parts grouped by the plate they print on; the ones on no plate come last.
@@ -151,6 +168,15 @@
 			include = Object.fromEntries(
 				r.summary.plates.map((p, i) => [p.index, i < Math.max(1, roomPlates)])
 			);
+			times = Object.fromEntries(
+				r.summary.plates.map((p) => [p.index, r.summary.sliced ? p.estSeconds : null])
+			);
+			gramsText = Object.fromEntries(
+				r.summary.plates.map((p) => [
+					p.index,
+					r.summary.sliced && p.grams && p.grams > 0 ? String(Math.round(p.grams * 100) / 100) : ''
+				])
+			);
 			runs = Object.fromEntries(
 				r.summary.plates.map((p) => [p.index, Math.min(20, Math.max(1, p.runsHint || 1))])
 			);
@@ -180,6 +206,16 @@
 				name: name.trim(),
 				plates: chosen.map((p) => p.index),
 				runs: Object.fromEntries(chosen.map((p) => [String(p.index), runs[p.index] ?? 1])),
+				// what is in the boxes: the file's own numbers come back unchanged, typed ones are stored as typed
+				times: Object.fromEntries(
+					chosen.flatMap((p) => (times[p.index] ? [[String(p.index), times[p.index]!]] : []))
+				),
+				grams: Object.fromEntries(
+					chosen.flatMap((p) => {
+						const g = typedGrams(p.index);
+						return g && !Number.isNaN(g) ? [[String(p.index), g]] : [];
+					})
+				),
 				...(sliced
 					? {
 							filamentMap: Object.fromEntries([...usedSlots].map((i) => [i, colours[i]]))
@@ -325,19 +361,6 @@
 		{/if}
 	{:else if up}
 		{@const s = up.summary}
-		<p class="meta cpu-sum">
-			<b>{fileName}</b>
-			· {s.sliced ? 'sliced' : 'not sliced'}
-			{#if s.printer}· {s.printer}{/if}
-		</p>
-		{#each s.warnings as w (w)}<p class="cpu-note">{w}</p>{/each}
-		{#if !s.sliced}
-			<p class="cpu-note" data-testid="custom-unsliced-note">
-				This file is not sliced, so it has no print time or grams. Add it now and type the time and
-				grams on its plate afterwards.
-			</p>
-		{/if}
-
 		<label class="cpu-field">
 			<span class="cpu-label">Name</span>
 			<input
@@ -346,8 +369,23 @@
 				maxlength={CUSTOM_NAME_MAX}
 				data-testid="custom-name"
 				autocomplete="off"
+				aria-describedby="cpu-name-hint"
 			/>
+			<span class="meta" id="cpu-name-hint">Shown on the Print tab and in saved parts.</span>
 		</label>
+		<p class="meta cpu-sum">
+			<b>{fileName}</b>
+			· {s.sliced ? 'sliced' : 'not sliced'}
+			{#if s.printer}· {s.printer}{/if}
+		</p>
+		{#each s.warnings as w (w)}<p class="cpu-note">{w}</p>{/each}
+		{#if !s.sliced}
+			<p class="cpu-note" data-testid="custom-unsliced-note">
+				This file has no print time or weight in it. A project saved from the slicer does not keep
+				them: export the sliced file instead (in Bambu Studio, Orca or Elegoo Slicer: slice, then
+				Export, Export plate sliced file, a .gcode.3mf), or type the time and grams below.
+			</p>
+		{/if}
 
 		<h3>Plates ({s.plates.length})</h3>
 		{#if roomPlates < s.plates.length}
@@ -382,9 +420,34 @@
 								{pl.estSeconds ? fmtH(pl.estSeconds) : 'no time'}
 								· {pl.grams ? `${fmt(pl.grams)} g` : 'no grams'}
 							{:else}
-								no time or grams yet
+								no time or grams in the file
 							{/if}
 						</span>
+					</div>
+					<div class="cpu-nums">
+						<SlicerTimeInput
+							label="Print time"
+							value={times[pl.index]}
+							placeholder="e.g. 2h 30m"
+							title="Time of one print of this plate. Type what your slicer shows."
+							disabled={!include[pl.index]}
+							onsave={(sec) => (times[pl.index] = sec)}
+						/>
+						<label class="slicer-in cpu-grams" title="Grams of one print of this plate.">
+							Grams
+							<input
+								type="text"
+								inputmode="decimal"
+								autocomplete="off"
+								placeholder="g"
+								class="cpu-g-in"
+								aria-label="Grams of one print of plate {pl.index}"
+								aria-invalid={gramsBad(pl.index)}
+								data-testid="custom-plate-grams"
+								disabled={!include[pl.index]}
+								bind:value={gramsText[pl.index]}
+							/>
+						</label>
 					</div>
 					<label class="cpu-runs">
 						<span class="meta">Prints</span>
@@ -607,6 +670,28 @@
 		flex: 1 1 140px;
 		overflow-wrap: anywhere;
 	}
+	.cpu-nums {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-4) var(--sp-5);
+		flex: 1 1 100%;
+	}
+	.cpu-nums :global(.slicer-in) {
+		display: grid;
+		gap: var(--sp-1);
+		font-size: var(--fs-sm);
+		color: var(--muted);
+	}
+	.cpu .cpu-nums :global(input[type='text']) {
+		width: 9em;
+		padding: 7px var(--sp-4);
+		border: 1px solid var(--field-line);
+		border-radius: var(--r-md);
+		background: var(--card);
+		color: var(--ink);
+		font-size: var(--fs-md);
+		text-align: left;
+	}
 	.cpu-runs {
 		display: grid;
 		gap: var(--sp-1);
@@ -715,6 +800,10 @@
 		background: var(--card);
 	}
 	@media (pointer: coarse) {
+		.cpu .cpu-nums :global(input[type='text']) {
+			font-size: var(--fs-field);
+			min-height: 40px;
+		}
 		.cpu input[type='text'],
 		.cpu input[type='number'],
 		.cpu select {

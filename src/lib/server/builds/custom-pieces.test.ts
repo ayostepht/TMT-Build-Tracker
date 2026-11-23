@@ -38,7 +38,7 @@ import {
 	skipParts,
 	updatePlate
 } from './actions';
-import { addCustomPiece, removeCustomPiece } from './custom-pieces';
+import { addCustomPiece, removeCustomPiece, renameCustomPiece } from './custom-pieces';
 import { createBuild } from './create';
 import {
 	loadKitSource,
@@ -690,5 +690,181 @@ describe('safety', () => {
 		removeBuildPlateFiles(id);
 		expect(existsSync(dir)).toBe(false);
 		expect(existsSync(join(uploadsDir(), 'plates', other))).toBe(true);
+	});
+});
+
+describe('typing the time and grams when adding', () => {
+	const ok = { name: 'Typed', filamentMap: { '1': 'primary', '2': 'soft' } };
+
+	it('an unsliced file takes a typed time and grams; the grams count under the chosen color', async () => {
+		const id = mk();
+		const up = await upload(id, 'unsliced');
+		const g0 = filamentStats(view(id)).find((f) => f.role === 'accent')!.total;
+		const t0 = timeStats(view(id)).totalSec;
+		add(id, up.uploadId, {
+			name: 'Cup holder',
+			role: 'accent',
+			times: { '1': 5400 },
+			grams: { '1': 42.5 },
+			runs: { '1': 2 }
+		});
+		const [pl] = customPlates(id);
+		expect(pl).toMatchObject({
+			estSeconds: 5400,
+			estSource: 'manual',
+			slicerGrams: 42.5,
+			gramsSource: 'user',
+			runs: 2
+		});
+		const row = db.select().from(buildPlates).where(eq(buildPlates.number, pl.number)).get()!;
+		expect(row).toMatchObject({
+			estSeconds: null,
+			manualEstSeconds: 5400,
+			manualEstSource: 'user',
+			slicerGrams: 42.5,
+			slicerGramsSource: 'user'
+		});
+		expect(row.filamentGrams).toEqual({});
+		const v = view(id);
+		expect(timeStats(v).totalSec - t0).toBe(2 * 5400);
+		expect(filamentStats(v).find((f) => f.role === 'accent')!.total - g0).toBeCloseTo(85, 1);
+	});
+
+	it('a sliced file keeps its own numbers unless a different one is typed', async () => {
+		const id = mk();
+		const up = await upload(id);
+		add(id, up.uploadId, {
+			...ok,
+			// plate 1: same time as the file (stays the file's), grams changed; plate 2: time changed only
+			times: { '1': 7200, '2': 4000 },
+			grams: { '1': 140, '2': 12.5 }
+		});
+		const [a, b] = customPlates(id);
+		const rows = db.select().from(buildPlates).orderBy(buildPlates.number).all();
+		const ra = rows.find((r) => r.number === a.number)!;
+		const rb = rows.find((r) => r.number === b.number)!;
+		expect(ra).toMatchObject({ estSeconds: 7200, manualEstSeconds: null, manualEstSource: null });
+		expect(ra).toMatchObject({ slicerGrams: 140, slicerGramsSource: 'user' });
+		// 30 + 40 g in the file, doubled to 140 g: scaled per color
+		expect(ra.filamentGrams).toEqual({ primary: 60, soft: 80 });
+		expect(rb).toMatchObject({ estSeconds: 3600, manualEstSeconds: 4000, manualEstSource: 'user' });
+		expect(rb).toMatchObject({ slicerGrams: 12.5, slicerGramsSource: 'file' });
+		expect(rb.filamentGrams).toEqual({ primary: 12.5 });
+		expect(b).toMatchObject({ estSeconds: 4000, estSource: 'manual' });
+		expect(filamentStats(view(id)).find((f) => f.role === 'soft')!.total).toBeGreaterThanOrEqual(
+			80
+		);
+	});
+
+	it('refuses values out of range, wrong shapes and prototype keys', async () => {
+		const id = mk();
+		const up = await upload(id);
+		const bad = (extra: Record<string, unknown>) =>
+			status(() => add(id, up.uploadId, { ...ok, ...extra }));
+		expect(bad({ times: { '1': 0 } })).toBe(400);
+		expect(bad({ times: { '1': 2_592_001 } })).toBe(400);
+		expect(bad({ times: { '1': 'soon' } })).toBe(400);
+		expect(bad({ times: { '1': Number.NaN } })).toBe(400);
+		expect(bad({ times: [5] })).toBe(400);
+		expect(bad({ grams: { '1': 0 } })).toBe(400);
+		expect(bad({ grams: { '1': -3 } })).toBe(400);
+		expect(bad({ grams: { '1': 20001 } })).toBe(400);
+		expect(bad({ grams: { '1': '5' } })).toBe(400);
+		expect(bad({ grams: 'x' })).toBe(400);
+		expect(bad({ times: JSON.parse('{"__proto__": 100}') })).toBe(400);
+		expect(bad({ grams: JSON.parse('{"constructor": 5}') })).toBe(400);
+		expect(customPlates(id)).toEqual([]);
+		// a plate the file does not have is ignored, not applied to another
+		add(id, up.uploadId, { ...ok, times: { '9': 100 } });
+		expect(customPlates(id).map((p) => p.estSeconds)).toEqual([7200, 3600]);
+	});
+});
+
+describe('renaming a custom piece', () => {
+	it('renames the piece, its parts and its plates, and records the change', async () => {
+		const id = mk();
+		const up = await upload(id);
+		const r = add(id, up.uploadId, {
+			name: 'Beta handle',
+			filamentMap: { '1': 'primary', '2': 'soft' }
+		});
+		expect(renameCustomPiece(db, id, 'owner', r.pieceId, { name: '  Push   handle ' })).toEqual({
+			name: 'Push handle'
+		});
+		const v = view(id);
+		expect(v.customPieces[0].name).toBe('Push handle');
+		expect(customPlates(id).map((p) => p.name)).toEqual([
+			'Push handle - HANDLE BAR',
+			'Push handle - HANDLE GRIP'
+		]);
+		expect(v.customPieces[0].parts.map((s) => v.parts.find((p) => p.slug === s)!.name)).toEqual([
+			'Push handle - HANDLE BAR',
+			'Push handle - HANDLE GRIP'
+		]);
+		const row = db.select().from(buildCustomPieces).get()!;
+		expect(row.parts.map((p) => p.name)).toEqual([
+			'Push handle - HANDLE BAR',
+			'Push handle - HANDLE GRIP'
+		]);
+		const act = db.select().from(activity).where(eq(activity.kind, 'custom.rename')).all();
+		expect(act).toHaveLength(1);
+		expect(act[0].payload).toEqual({
+			pieceId: r.pieceId,
+			name: 'Push handle',
+			from: 'Beta handle'
+		});
+		expect(
+			describeActivity(
+				{
+					id: 'x',
+					userId: 'owner',
+					userName: 'Owen',
+					kind: 'custom.rename',
+					payload: act[0].payload,
+					at: ''
+				},
+				v
+			)
+		).toBe('Owen renamed the custom part "Beta handle" to "Push handle"');
+		// the same name again changes and records nothing
+		renameCustomPiece(db, id, 'owner', r.pieceId, { name: 'Push handle' });
+		expect(db.select().from(activity).where(eq(activity.kind, 'custom.rename')).all()).toHaveLength(
+			1
+		);
+	});
+
+	it('a single-plate piece takes the new name on its plate and part', async () => {
+		const id = mk();
+		const up = await upload(id, 'unsliced');
+		const r = add(id, up.uploadId, { name: 'Cup', role: 'accent' });
+		renameCustomPiece(db, id, 'owner', r.pieceId, { name: 'Cup holder v2' });
+		const v = view(id);
+		expect(customPlates(id)[0].name).toBe('Cup holder v2');
+		expect(v.parts.find((p) => p.slug === customPlates(id)[0].parts[0])!.name).toBe(
+			'Cup holder v2'
+		);
+	});
+
+	it('does not touch the rearranging: custom.rename is not a re-arrange kind', async () => {
+		const { REARRANGE_KINDS } = await import('./arrange-plan');
+		expect(REARRANGE_KINDS.has('custom.rename')).toBe(false);
+	});
+
+	it('refuses viewers, drafts, foreign pieces and bad names', async () => {
+		const id = mk();
+		const up = await upload(id);
+		const r = add(id, up.uploadId, { name: 'Beta', filamentMap: { '1': 'primary', '2': 'soft' } });
+		const other = mk();
+		expect(status(() => renameCustomPiece(db, id, 'viewer', r.pieceId, { name: 'x' }))).toBe(403);
+		expect(status(() => renameCustomPiece(db, id, 'outsider', r.pieceId, { name: 'x' }))).toBe(404);
+		expect(status(() => renameCustomPiece(db, id, 'owner', 'nope', { name: 'x' }))).toBe(404);
+		expect(status(() => renameCustomPiece(db, other, 'owner', r.pieceId, { name: 'x' }))).toBe(404);
+		expect(status(() => renameCustomPiece(db, id, 'owner', r.pieceId, { name: '   ' }))).toBe(400);
+		expect(status(() => renameCustomPiece(db, id, 'owner', r.pieceId, { name: 5 }))).toBe(400);
+		expect(status(() => renameCustomPiece(db, id, 'owner', r.pieceId, null))).toBe(400);
+		expect(status(() => renameCustomPiece(db, id, 'owner', r.pieceId, {}))).toBe(400);
+		const draft = mk({ kind: 'draft' });
+		expect(status(() => renameCustomPiece(db, draft, 'owner', r.pieceId, { name: 'x' }))).toBe(400);
+		expect(view(id).customPieces[0].name).toBe('Beta');
 	});
 });

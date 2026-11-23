@@ -11,7 +11,7 @@
 import { randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { and, eq, max } from 'drizzle-orm';
+import { and, asc, eq, max } from 'drizzle-orm';
 import { CUSTOM_NAME_MAX, MAX_CUSTOM_PIECES, MAX_CUSTOM_PLATES } from '#lib/domain/custom.ts';
 import { isObj, type Obj } from '#lib/domain/guards.ts';
 import type { StoredSummary } from '#lib/domain/threemf.ts';
@@ -20,7 +20,8 @@ import { ApiError } from '../access';
 import { uploadsDir } from '../config';
 import type { Db } from '../db';
 import { buildCustomPieces, buildParts, buildPlates, buildUploads } from '../db/schema';
-import { mutateBuild, skipPartsTx } from './actions';
+import { MAX_PRINT_SECONDS } from '#lib/domain/format.ts';
+import { MAX_PART_GRAMS, mutateBuild, skipPartsTx } from './actions';
 import { customThumbRel, removeCustomThumb } from './custom-plates';
 import { getUpload, uploadDir, uploadThumbPath } from './plates';
 
@@ -32,6 +33,7 @@ const bad = (m: string): never => {
 const MAX_REPLACES = 60;
 const MAX_SLOTS = 32;
 const MAX_RUNS = 20;
+const MAX_TYPED = 1000;
 
 /** Trimmed, control and bidi characters dropped, at most `CUSTOM_NAME_MAX` characters. */
 export function cleanPieceName(v: unknown): string {
@@ -47,6 +49,66 @@ export function cleanPieceName(v: unknown): string {
 	return name;
 }
 
+/** Name of a plate (and its part) of a piece: the piece's name, plus the plate's own name when it has several. */
+export function customPlateLabel(
+	pieceName: string,
+	plateName: string,
+	multi: boolean,
+	fallbackNumber: number
+): string {
+	return multi ? `${pieceName} - ${plateName.trim() || `Plate ${fallbackNumber}`}` : pieceName;
+}
+
+/** The plate's own name inside a label made by `customPlateLabel`; null when it does not follow that form. */
+export function ownPlateName(label: string, pieceName: string): string | null {
+	const prefix = `${pieceName} - `;
+	return label.startsWith(prefix) ? label.slice(prefix.length) : null;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** A typed print time: whole seconds from 1 up to 30 days. */
+export function cleanSeconds(v: unknown, field = 'time'): number {
+	if (typeof v !== 'number' || !Number.isFinite(v) || v < 1 || v > MAX_PRINT_SECONDS)
+		return bad(`${field} must be from 1 second to 30 days`);
+	return Math.round(v);
+}
+
+/** Typed grams of one print: more than 0, at most the part weight limit, two decimals. */
+export function cleanGrams(v: unknown, field = 'grams'): number {
+	const msg = `${field} must be more than 0 and at most ${MAX_PART_GRAMS}`;
+	if (typeof v !== 'number' || !Number.isFinite(v) || !(v > 0) || v > MAX_PART_GRAMS)
+		return bad(msg);
+	const g = round2(v);
+	return g > 0 ? g : bad(msg);
+}
+
+/** Scale per-role grams so they add up to `total` (proportionally). */
+export function scaleGrams(fg: Record<string, number>, total: number): Record<string, number> {
+	const sum = Object.values(fg).reduce((a, c) => a + c, 0);
+	if (!(sum > 0)) return { ...fg };
+	return Object.fromEntries(Object.entries(fg).map(([k, g]) => [k, round2((g * total) / sum)]));
+}
+
+/** `{ "<file plate number>": value }` into a map; keys must be whole numbers (never `__proto__`). */
+function typedByPlate(
+	v: unknown,
+	field: string,
+	check: (n: unknown, f: string) => number
+): Map<number, number> {
+	const out = new Map<number, number>();
+	if (v === undefined) return out;
+	if (!isObj(v)) return bad(`${field} must be an object`);
+	const entries = Object.entries(v as Obj);
+	if (entries.length > MAX_TYPED) return bad(`${field} lists too many plates`);
+	for (const [k, val] of entries) {
+		if (!/^\d{1,6}$/.test(k)) return bad(`${field} must be keyed by plate number`);
+		if (val === null) continue;
+		out.set(Number(k), check(val, field));
+	}
+	return out;
+}
+
 /** One plate of a piece about to be inserted (already validated and mapped onto the build's colors). */
 export interface NewPiecePlate {
 	/** Plate and part name. */
@@ -54,6 +116,7 @@ export interface NewPiecePlate {
 	/** A build filament role key. */
 	role: string;
 	estSeconds: number | null;
+	/** A time the maker typed (stored with source 'user'). */
 	manualEstSeconds: number | null;
 	slicerGrams: number | null;
 	slicerGramsSource: 'user' | 'file' | null;
@@ -142,6 +205,7 @@ export function insertCustomPieceTx(
 				name: x.pl.label,
 				estSeconds: x.pl.estSeconds,
 				manualEstSeconds: x.pl.manualEstSeconds,
+				manualEstSource: x.pl.manualEstSeconds ? 'user' : null,
 				runs: x.pl.runs,
 				perPartRuns: false,
 				parts: [x.slug],
@@ -166,7 +230,7 @@ export interface AddCustomResult {
 }
 
 /**
- * Body `{ name, plates?, runs?, filamentMap, role?, replaces? }` on a parsed upload of the build.
+ * Body `{ name, plates?, runs?, times?, grams?, filamentMap, role?, replaces? }` on a parsed upload of the build.
  * Editors and owners; drafts refuse it (no build tracking).
  */
 export function addCustomPiece(
@@ -230,6 +294,10 @@ export function addCustomPiece(
 				}
 			}
 
+			// times and grams the maker typed per file plate (own numeric keys only)
+			const timesOf = typedByPlate(b.times, 'times', cleanSeconds);
+			const gramsOf = typedByPlate(b.grams, 'grams', cleanGrams);
+
 			// the file's filament slots → the build's colours
 			const roleKeys = new Set(view.filaments.map((f) => f.key));
 			// own keys only: slot ids come from the file and may be `constructor` or `__proto__`
@@ -267,7 +335,7 @@ export function addCustomPiece(
 			// plates of the piece: one custom part each
 			const multi = chosen.length > 1;
 			const plateSpecs: NewPiecePlate[] = chosen.map((pl) => {
-				const label = multi ? `${name} - ${pl.name.trim() || `Plate ${pl.index}`}` : name;
+				const label = customPlateLabel(name, pl.name, multi, pl.index);
 				const fg: Record<string, number> = {};
 				for (const [idx, g] of Object.entries(pl.filamentGrams ?? {})) {
 					if (!(g > 0)) continue;
@@ -279,17 +347,28 @@ export function addCustomPiece(
 				let role = Object.entries(fg).sort((a, c) => c[1] - a[1])[0]?.[0] ?? fallback!;
 				if (!roleKeys.has(role)) role = fallback!;
 				const total = Object.values(fg).reduce((a, c) => a + c, 0);
-				const grams =
-					pl.grams && pl.grams > 0 ? pl.grams : total > 0 ? Math.round(total * 100) / 100 : null;
+				const fileGrams =
+					summary.sliced && pl.grams && pl.grams > 0
+						? pl.grams
+						: summary.sliced && total > 0
+							? round2(total)
+							: null;
+				const fileSeconds = summary.sliced ? pl.estSeconds : null;
+				// a typed value equal to the file's is the file's; a different one is the maker's own
+				const typedSeconds = timesOf.get(pl.index);
+				const typedGrams = gramsOf.get(pl.index);
+				const gramsTyped = typedGrams !== undefined && typedGrams !== fileGrams;
 				const src = uploadThumbPath(uploadId, pl.index);
 				return {
 					label,
 					role,
-					estSeconds: summary.sliced ? pl.estSeconds : null,
-					manualEstSeconds: null,
-					slicerGrams: summary.sliced ? grams : null,
-					slicerGramsSource: summary.sliced && grams ? ('file' as const) : null,
-					filamentGrams: summary.sliced ? fg : {},
+					estSeconds: fileSeconds,
+					manualEstSeconds:
+						typedSeconds !== undefined && typedSeconds !== fileSeconds ? typedSeconds : null,
+					slicerGrams: gramsTyped ? typedGrams! : fileGrams,
+					slicerGramsSource: gramsTyped ? ('user' as const) : fileGrams ? ('file' as const) : null,
+					// per-colour grams follow a typed total; with none in the file, the part's colour carries it
+					filamentGrams: !summary.sliced ? {} : gramsTyped ? scaleGrams(fg, typedGrams!) : fg,
 					runs: runsOf.get(pl.index) ?? 1,
 					thumbSource: pl.hasThumbnail && existsSync(src) ? src : null
 				};
@@ -348,6 +427,55 @@ export function addCustomPiece(
 		.map((r) => r.n)
 		.sort((a, c) => a - c);
 	return { ...result, plates: final.length ? final : result.plates };
+}
+
+/**
+ * Rename a custom piece: its row, its parts and its plates (named as `customPlateLabel` names them at
+ * insert). Editors and owners; drafts refuse it. A saved part the piece is linked to is not changed.
+ */
+export function renameCustomPiece(
+	db: Db,
+	buildId: string,
+	userId: string,
+	pieceId: string,
+	body: unknown
+): { name: string } {
+	if (!isObj(body)) bad('Invalid body');
+	let name = '';
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		if (view.build.kind === 'draft')
+			throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
+		name = cleanPieceName((body as Obj).name);
+		const piece = tx
+			.select()
+			.from(buildCustomPieces)
+			.where(and(eq(buildCustomPieces.id, pieceId), eq(buildCustomPieces.buildId, buildId)))
+			.get();
+		if (!piece) throw new ApiError(404, 'Custom piece not found');
+		if (piece.name === name) return { kind: 'custom.rename', payload: {}, skip: true };
+		const rows = tx
+			.select()
+			.from(buildPlates)
+			.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.source, `custom:${pieceId}`)))
+			.orderBy(asc(buildPlates.number))
+			.all();
+		const multi = rows.length > 1;
+		const labelOf = new Map<string, string>();
+		rows.forEach((r, i) => {
+			const label = customPlateLabel(name, ownPlateName(r.name, piece.name) ?? '', multi, i + 1);
+			tx.update(buildPlates)
+				.set({ name: label })
+				.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.number, r.number)))
+				.run();
+			if (r.parts[0]) labelOf.set(r.parts[0], label);
+		});
+		tx.update(buildCustomPieces)
+			.set({ name, parts: piece.parts.map((p) => ({ ...p, name: labelOf.get(p.slug) ?? p.name })) })
+			.where(eq(buildCustomPieces.id, pieceId))
+			.run();
+		return { kind: 'custom.rename', payload: { pieceId, name, from: piece.name } };
+	});
+	return { name };
 }
 
 /**

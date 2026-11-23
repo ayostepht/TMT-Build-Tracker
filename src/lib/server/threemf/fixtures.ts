@@ -44,6 +44,11 @@ export interface FixtureOptions {
 	plates: FixturePlate[];
 	/** Write slice_info.config (a sliced file). */
 	sliced?: boolean;
+	/**
+	 * A project saved from the slicer without slicing: `slice_info.config` holds only the header (client
+	 * name and version), no `<plate>`. Ignored when `sliced` is set.
+	 */
+	headerOnlySliceInfo?: boolean;
 	/** Extra zip entries. */
 	extra?: Record<string, Uint8Array>;
 }
@@ -111,7 +116,7 @@ export function makeProjectThreeMf(o: FixtureOptions): Uint8Array {
 				o.filamentIds ?? types.map((t) => `Bambu ${t} Basic @BBL H2D 0.4 nozzle`)
 		})
 	);
-	if (o.sliced)
+	if (o.sliced || o.headerOnlySliceInfo)
 		files['Metadata/slice_info.config'] = strToU8(
 			`<?xml version="1.0" encoding="UTF-8"?><config><header><header_item key="X-BBL-Client-Type" value="slicer"/></header>${sliceXml.join('')}</config>`
 		);

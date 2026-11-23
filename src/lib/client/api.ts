@@ -454,6 +454,10 @@ export const addCustomPiece = (
 		plates?: number[];
 		/** Prints per file plate number, 1 to 20. */
 		runs?: Record<string, number>;
+		/** Print time the maker typed, per file plate number, whole seconds (1 to 30 days). */
+		times?: Record<string, number>;
+		/** Grams per print the maker typed, per file plate number. */
+		grams?: Record<string, number>;
 		/** 3MF filament slot (as a string) → build colour key. */
 		filamentMap?: Record<string, string>;
 		/** Colour of an unsliced file's part. */
@@ -473,6 +477,11 @@ export const removeCustomPiece = (buildId: string, pieceId: string, restore = fa
 		'DELETE',
 		`${b(buildId)}/custom-pieces/${encodeURIComponent(pieceId)}${restore ? '?restore=1' : ''}`
 	);
+/** Rename a custom piece of a build (its parts and plates follow). */
+export const renameCustomPiece = (buildId: string, pieceId: string, name: string) =>
+	call<{ name: string }>('PATCH', `${b(buildId)}/custom-pieces/${encodeURIComponent(pieceId)}`, {
+		name
+	});
 /** A saved custom part of a workspace (per-plate summaries; never the file). */
 export interface LibraryPiece {
 	id: string;
@@ -482,6 +491,8 @@ export interface LibraryPiece {
 	templateId: string | null;
 	replaces: string[];
 	plates: {
+		/** 0-based position, what `updateLibraryPiece` `plates[].index` means. */
+		index: number;
 		name: string;
 		estSeconds: number | null;
 		grams: number | null;
@@ -506,11 +517,28 @@ export const saveCustomPieceToLibrary = (buildId: string, pieceId: string, isDef
 export const updateLibraryPiece = (
 	organizationId: string,
 	id: string,
-	body: { name?: string; isDefault?: boolean }
+	body: {
+		name?: string;
+		isDefault?: boolean;
+		/** Correct a plate's time (seconds, 1 to 30 days) and grams per print; `null` clears. */
+		plates?: { index: number; estSeconds?: number | null; grams?: number | null }[];
+	}
 ) =>
 	call<{ piece: LibraryPiece }>('PATCH', `/api/custom-library/${encodeURIComponent(id)}`, {
 		organizationId,
 		...body
+	});
+/** Overwrite a saved part from a build's linked custom piece as it is now (editors). */
+export const refreshLibraryPiece = (
+	organizationId: string,
+	id: string,
+	buildId: string,
+	pieceId: string
+) =>
+	call<{ piece: LibraryPiece }>('POST', `/api/custom-library/${encodeURIComponent(id)}/refresh`, {
+		organizationId,
+		buildId,
+		pieceId
 	});
 /** Delete a saved part; builds keep the pieces they already have. */
 export const deleteLibraryPiece = (organizationId: string, id: string) =>

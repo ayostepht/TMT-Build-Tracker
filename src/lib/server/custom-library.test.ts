@@ -22,7 +22,7 @@ import { seedTemplates } from './seed/run';
 import { makeProjectThreeMf } from './threemf/fixtures';
 import { parseThreeMfBytes } from './threemf';
 import { setPartStatus, skipParts, updatePlate } from './builds/actions';
-import { addCustomPiece } from './builds/custom-pieces';
+import { addCustomPiece, renameCustomPiece } from './builds/custom-pieces';
 import { createBuild } from './builds/create';
 import { createUpload } from './builds/plates';
 import { loadBuildView } from './builds/view';
@@ -32,6 +32,7 @@ import {
 	applyLibraryPieceTx,
 	deleteLibraryPiece,
 	listLibrary,
+	refreshLibraryPiece,
 	saveToLibrary,
 	updateLibraryPiece
 } from './custom-library';
@@ -168,8 +169,8 @@ describe('saving to the library', () => {
 			totalGrams: 70 + 2 * 12.5
 		});
 		expect(saved.plates).toEqual([
-			{ name: 'HANDLE BAR', estSeconds: 7200, grams: 70, role: 'soft', runs: 1 },
-			{ name: 'HANDLE GRIP', estSeconds: 3600, grams: 12.5, role: 'primary', runs: 2 }
+			{ index: 0, name: 'HANDLE BAR', estSeconds: 7200, grams: 70, role: 'soft', runs: 1 },
+			{ index: 1, name: 'HANDLE GRIP', estSeconds: 3600, grams: 12.5, role: 'primary', runs: 2 }
 		]);
 		expect(saved).not.toHaveProperty('createdBy');
 		const r = libRow(saved.id);
@@ -493,5 +494,187 @@ describe('account export', () => {
 				parts: [expect.objectContaining({ name: 'Cup holder', isDefault: true })]
 			}
 		]);
+	});
+});
+
+/** An unsliced file added with typed numbers. */
+async function addTyped(buildId: string, extra: Record<string, unknown> = {}) {
+	const bytes = makeProjectThreeMf({
+		plates: [{ name: 'CUP', objects: [{ name: 'Cup holder' }] }]
+	});
+	const parsed = await parseThreeMfBytes(bytes);
+	const up = createUpload(
+		db,
+		buildId,
+		'owner',
+		{ name: 'cup.3mf', size: bytes.length },
+		parsed,
+		view(buildId)
+	);
+	return addCustomPiece(db, buildId, 'owner', up.uploadId, {
+		name: 'Cup holder',
+		role: 'accent',
+		...extra
+	});
+}
+
+describe('typed numbers stick for reuse', () => {
+	it('saving keeps what was typed when adding, and a new build gets it', async () => {
+		const id = mk();
+		const p = await addTyped(id, { times: { '1': 5400 }, grams: { '1': 42.5 }, runs: { '1': 2 } });
+		const saved = saveToLibrary(db, 'owner', id, p.pieceId);
+		expect(saved).toMatchObject({ sliced: false, totalSeconds: 10800, totalGrams: 85 });
+		expect(saved.plates[0]).toMatchObject({
+			index: 0,
+			estSeconds: 5400,
+			grams: 42.5,
+			role: 'accent',
+			runs: 2
+		});
+		const next = mk();
+		applyLibraryPiece(db, next, 'owner', saved.id);
+		expect(customPlates(next)[0]).toMatchObject({
+			estSeconds: 5400,
+			estSource: 'manual',
+			slicerGrams: 42.5,
+			gramsSource: 'user'
+		});
+	});
+
+	it('updating plates: time, grams rescale per color, grams on the role when empty, null clears', () => {
+		const r = row({
+			plates: [
+				{
+					name: 'A',
+					estSeconds: 600,
+					grams: 10,
+					filamentGrams: { primary: 4, soft: 6 },
+					role: 'primary',
+					runs: 1,
+					thumb: false
+				},
+				{
+					name: 'B',
+					estSeconds: null,
+					grams: null,
+					filamentGrams: {},
+					role: 'accent',
+					runs: 2,
+					thumb: false
+				}
+			] as LibraryPlate[]
+		});
+		const u = updateLibraryPiece(db, 'owner', 'org1', r.id, {
+			plates: [
+				{ index: 0, estSeconds: 7200, grams: 20 },
+				{ index: 1, grams: 33.333 }
+			]
+		});
+		expect(u.plates[0]).toMatchObject({ index: 0, estSeconds: 7200, grams: 20, runs: 1 });
+		expect(u.plates[1]).toMatchObject({ index: 1, estSeconds: null, grams: 33.33, role: 'accent' });
+		expect(libRow(r.id).plates[0].filamentGrams).toEqual({ primary: 8, soft: 12 });
+		expect(libRow(r.id).plates[1].filamentGrams).toEqual({ accent: 33.33 });
+		expect(u.totalGrams).toBeCloseTo(20 + 2 * 33.33, 2);
+		const c = updateLibraryPiece(db, 'owner', 'org1', r.id, {
+			plates: [{ index: 0, estSeconds: null, grams: null }]
+		});
+		expect(c.plates[0]).toMatchObject({ estSeconds: null, grams: null });
+		expect(libRow(r.id).plates[0].filamentGrams).toEqual({});
+	});
+
+	it('updating plates is checked: bounds, shape, duplicates, roles and workspaces', () => {
+		const r = row();
+		const upd = (plates: unknown, user = 'owner', org = 'org1') =>
+			status(() => updateLibraryPiece(db, user, org, r.id, { plates }));
+		expect(upd([{ index: 0, estSeconds: 0 }])).toBe(400);
+		expect(upd([{ index: 0, estSeconds: 2_592_001 }])).toBe(400);
+		expect(upd([{ index: 0, grams: 0 }])).toBe(400);
+		expect(upd([{ index: 0, grams: 20001 }])).toBe(400);
+		expect(upd([{ index: 0, grams: '5' }])).toBe(400);
+		expect(upd([{ index: 1, grams: 5 }])).toBe(400);
+		expect(upd([{ index: -1, grams: 5 }])).toBe(400);
+		expect(upd([{ index: 0.5, grams: 5 }])).toBe(400);
+		expect(
+			upd([
+				{ index: 0, grams: 5 },
+				{ index: 0, grams: 6 }
+			])
+		).toBe(400);
+		expect(upd([])).toBe(400);
+		expect(upd('x')).toBe(400);
+		expect(upd([null])).toBe(400);
+		expect(upd([{ index: 0, grams: 5 }], 'viewer')).toBe(403);
+		expect(upd([{ index: 0, grams: 5 }], 'other', 'org2')).toBe(404);
+		expect(upd([{ index: 0, grams: 5 }], 'outsider')).toBe(404);
+		expect(libRow(r.id).plates[0]).toMatchObject({ estSeconds: 600, grams: 5 });
+	});
+});
+
+describe('refreshing a saved part from a build', () => {
+	it('overwrites name, time, grams and prints with the build piece as it is now', async () => {
+		const id = mk();
+		const p = await addPiece(id);
+		const saved = saveToLibrary(db, 'owner', id, p.pieceId);
+		const [pl] = customPlates(id);
+		updatePlate(db, id, 'owner', pl.number, { manualEstSeconds: 9000, slicerGrams: 50 });
+		renameCustomPiece(db, id, 'owner', p.pieceId, { name: 'Beta handle v2' });
+		// nothing changes until the maker updates the saved part
+		expect(libRow(saved.id).name).toBe('Beta handle');
+		const r = refreshLibraryPiece(db, 'owner', 'org1', saved.id, id, p.pieceId);
+		expect(r.name).toBe('Beta handle v2');
+		expect(r.plates[0]).toMatchObject({ name: 'HANDLE BAR', estSeconds: 9000, grams: 50 });
+		expect(r.plates[1]).toMatchObject({
+			name: 'HANDLE GRIP',
+			estSeconds: 3600,
+			grams: 12.5,
+			runs: 2
+		});
+		expect(libRow(saved.id).name).toBe('Beta handle v2');
+		// the next build gets the corrected values; the first build is as it was
+		const next = mk();
+		applyLibraryPiece(db, next, 'owner', saved.id);
+		expect(customPlates(next).map((x) => x.name)).toEqual([
+			'Beta handle v2 - HANDLE BAR',
+			'Beta handle v2 - HANDLE GRIP'
+		]);
+		expect(customPlates(next)[0].slicerGrams).toBe(50);
+		expect(db.select().from(workspaceCustomPieces).all()).toHaveLength(1);
+	});
+
+	it('is refused for viewers, outsiders, drafts, unlinked or foreign pieces and other workspaces', async () => {
+		const id = mk();
+		const p = await addPiece(id);
+		const saved = saveToLibrary(db, 'owner', id, p.pieceId);
+		const go = (user = 'owner', org = 'org1', lib = saved.id, build = id, piece = p.pieceId) =>
+			status(() => refreshLibraryPiece(db, user, org, lib, build, piece));
+		expect(go('viewer')).toBe(403);
+		expect(go('outsider')).toBe(404);
+		expect(go('other', 'org2')).toBe(404); // the row is another workspace's
+		expect(go('other', 'org2', saved.id, mk('org2', 'other'))).toBe(404);
+		expect(go('owner', 'org1', 'nope')).toBe(404);
+		expect(go('owner', 'org1', saved.id, 'nope')).toBe(404);
+		expect(go('owner', 'org1', saved.id, id, 'nope')).toBe(404);
+		// a piece of another build of the workspace
+		expect(go('owner', 'org1', saved.id, mk())).toBe(404);
+		// a piece linked to a different saved part, or to none
+		const other = row({ name: 'Other' });
+		expect(go('owner', 'org1', other.id)).toBe(400);
+		const free = await addPiece(id, { name: 'Free' });
+		expect(go('owner', 'org1', saved.id, id, free.pieceId)).toBe(400);
+		// a build of another workspace under this workspace's row
+		const o2 = mk('org2', 'other');
+		const p2 = await addPieceAs(o2, 'other');
+		expect(go('owner', 'org1', saved.id, o2, p2.pieceId)).toBe(404);
+		expect(libRow(saved.id).name).toBe('Beta handle');
+	});
+
+	it('refuses a draft build', async () => {
+		const id = mk();
+		const p = await addPiece(id);
+		const saved = saveToLibrary(db, 'owner', id, p.pieceId);
+		const draft = mk('org1', 'owner', 'draft');
+		expect(status(() => refreshLibraryPiece(db, 'owner', 'org1', saved.id, draft, p.pieceId))).toBe(
+			400
+		);
 	});
 });

@@ -158,6 +158,8 @@ function describeMarked(a: ActivityItem, view: Names): string {
 			const restored = strList(p.restored);
 			return `${who} removed the custom piece "${str(p.name) ?? 'a custom piece'}"${restored.length ? ` and brought back ${list(restored)}` : ''}`;
 		}
+		case 'custom.rename':
+			return `${who} renamed the custom part "${str(p.from) ?? 'a custom part'}" to "${str(p.name) ?? 'a new name'}"`;
 		case 'part.grams': {
 			const g = num(p.manualGrams);
 			return g !== null

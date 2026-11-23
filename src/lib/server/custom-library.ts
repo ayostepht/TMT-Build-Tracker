@@ -15,7 +15,16 @@ import { MAX_CUSTOM_PIECES, MAX_CUSTOM_PLATES } from '#lib/domain/custom.ts';
 import { isObj, type Obj } from '#lib/domain/guards.ts';
 import type { BuildView } from '#lib/domain/types.ts';
 import { ApiError, buildAccess, requireEditor, requireMember } from './access';
-import { insertCustomPieceTx, cleanPieceName, type NewPiecePlate } from './builds/custom-pieces';
+import {
+	cleanGrams,
+	cleanPieceName,
+	cleanSeconds,
+	customPlateLabel,
+	insertCustomPieceTx,
+	ownPlateName,
+	scaleGrams,
+	type NewPiecePlate
+} from './builds/custom-pieces';
 import { livePrintingSlugs, mutateBuild } from './builds/actions';
 import { loadBuildView } from './builds/view';
 import type { Db } from './db';
@@ -42,6 +51,8 @@ export interface LibraryPieceView {
 	templateId: string | null;
 	replaces: string[];
 	plates: {
+		/** Position in the saved part (0-based): what `updateLibraryPiece` `plates[].index` means. */
+		index: number;
 		name: string;
 		estSeconds: number | null;
 		grams: number | null;
@@ -66,7 +77,8 @@ const toView = (r: LibraryRow): LibraryPieceView => {
 		sliced: r.sliced,
 		templateId: r.templateId,
 		replaces: r.replaces ?? [],
-		plates: plates.map((p) => ({
+		plates: plates.map((p, i) => ({
+			index: i,
 			name: p.name,
 			estSeconds: p.estSeconds,
 			grams: p.grams,
@@ -114,6 +126,40 @@ function announce(db: Db, buildId: string, userId: string, kind: string): void {
 		kind,
 		by: u?.name ?? null,
 		at: new Date().toISOString()
+	});
+}
+
+/**
+ * The per-plate summaries of a build's custom piece as the library keeps them: the typed time wins over
+ * the file's, grams are the plate's (typed or file) with the per-color split, role is the part's color.
+ */
+function piecePlates(
+	tx: Db,
+	userId: string,
+	buildId: string,
+	piece: typeof buildCustomPieces.$inferSelect
+): LibraryPlate[] {
+	const view = loadBuildView(tx, buildId, userId);
+	if (!view) throw new ApiError(404, 'Not found');
+	const rows = tx
+		.select()
+		.from(buildPlates)
+		.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.source, `custom:${piece.id}`)))
+		.orderBy(asc(buildPlates.number))
+		.all();
+	return rows.map((r) => {
+		const slug = r.parts[0];
+		const part = piece.parts.find((p) => p.slug === slug);
+		const role = view.parts.find((p) => p.slug === slug)?.role ?? part?.role ?? '';
+		return {
+			name: ownPlateName(r.name, piece.name) ?? r.name,
+			estSeconds: r.manualEstSeconds ?? r.estSeconds ?? null,
+			grams: r.slicerGrams ?? null,
+			filamentGrams: { ...(r.filamentGrams ?? {}) },
+			role,
+			runs: r.runs,
+			thumb: false
+		};
 	});
 }
 
@@ -167,29 +213,7 @@ export function saveToLibrary(
 				400,
 				`A workspace can keep at most ${MAX_LIBRARY_PIECES} saved custom parts. Delete one first.`
 			);
-		const view = loadBuildView(tx, buildId, userId);
-		if (!view) throw new ApiError(404, 'Not found');
-		const rows = tx
-			.select()
-			.from(buildPlates)
-			.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.source, `custom:${pieceId}`)))
-			.orderBy(asc(buildPlates.number))
-			.all();
-		const prefix = `${piece.name} - `;
-		const plates: LibraryPlate[] = rows.map((r) => {
-			const slug = r.parts[0];
-			const part = piece.parts.find((p) => p.slug === slug);
-			const role = view.parts.find((p) => p.slug === slug)?.role ?? part?.role ?? '';
-			return {
-				name: r.name.startsWith(prefix) ? r.name.slice(prefix.length) : r.name,
-				estSeconds: r.manualEstSeconds ?? r.estSeconds ?? null,
-				grams: r.slicerGrams ?? null,
-				filamentGrams: { ...(r.filamentGrams ?? {}) },
-				role,
-				runs: r.runs,
-				thumb: false
-			};
-		});
+		const plates = piecePlates(tx, userId, buildId, piece);
 		if (!plates.length) throw new ApiError(400, 'This custom piece has no plates to save');
 		const saved = tx
 			.insert(workspaceCustomPieces)
@@ -198,7 +222,7 @@ export function saveToLibrary(
 				name: piece.name,
 				fileName: piece.fileName,
 				sliced: piece.sliced,
-				templateId: view.build.templateId,
+				templateId: loadBuildView(tx, buildId, userId)?.build.templateId ?? null,
 				replaces: [...(piece.replaces ?? [])],
 				plates,
 				isDefault: opts.isDefault === true,
@@ -216,7 +240,46 @@ export function saveToLibrary(
 	return toView(row);
 }
 
-/** Rename a saved part or switch "in new builds by default" (editors and owners). */
+/**
+ * The saved plates with the typed `plates: [{ index, estSeconds?, grams? }]` applied (`index` is the 0-based
+ * position; `null` clears a value). A new grams value rescales the plate's per-color grams, or puts them on
+ * the plate's color when there are none.
+ */
+function editedPlates(current: LibraryPlate[], v: unknown): LibraryPlate[] {
+	if (!Array.isArray(v) || !v.length || v.length > MAX_CUSTOM_PLATES)
+		throw new ApiError(400, 'plates must be a list of plates to change');
+	const next = current.map((p) => ({ ...p, filamentGrams: { ...(p.filamentGrams ?? {}) } }));
+	const seen = new Set<number>();
+	for (const e of v) {
+		if (!isObj(e)) throw new ApiError(400, 'Each plate change must be an object');
+		const ch = e as Obj;
+		const i = ch.index;
+		if (typeof i !== 'number' || !Number.isInteger(i) || i < 0 || i >= next.length)
+			throw new ApiError(400, 'index must be the position of a plate of the saved part');
+		if (seen.has(i)) throw new ApiError(400, 'A plate can be listed only once');
+		seen.add(i);
+		const p = next[i];
+		if (ch.estSeconds !== undefined)
+			p.estSeconds = ch.estSeconds === null ? null : cleanSeconds(ch.estSeconds, 'estSeconds');
+		if (ch.grams !== undefined) {
+			if (ch.grams === null) {
+				p.grams = null;
+				p.filamentGrams = {};
+			} else {
+				const g = cleanGrams(ch.grams);
+				p.grams = g;
+				p.filamentGrams = Object.keys(p.filamentGrams).length
+					? scaleGrams(p.filamentGrams, g)
+					: p.role
+						? { [p.role]: g }
+						: {};
+			}
+		}
+	}
+	return next;
+}
+
+/** Rename a saved part, switch "in new builds by default" or correct its plates' time and grams (editors and owners). */
 export function updateLibraryPiece(
 	db: Db,
 	userId: string,
@@ -225,7 +288,7 @@ export function updateLibraryPiece(
 	body: unknown
 ): LibraryPieceView {
 	requireEditor(db, orgId, userId);
-	rowOf(db, orgId, libId);
+	const row = rowOf(db, orgId, libId);
 	if (!isObj(body)) throw new ApiError(400, 'Invalid body');
 	const b = body as Obj;
 	const set: Partial<typeof workspaceCustomPieces.$inferInsert> = {};
@@ -235,9 +298,55 @@ export function updateLibraryPiece(
 			throw new ApiError(400, 'isDefault must be true or false');
 		set.isDefault = b.isDefault;
 	}
+	if (b.plates !== undefined) set.plates = editedPlates(row.plates ?? [], b.plates);
 	if (!Object.keys(set).length) throw new ApiError(400, 'Nothing to update');
 	db.update(workspaceCustomPieces).set(set).where(eq(workspaceCustomPieces.id, libId)).run();
 	return toView(rowOf(db, orgId, libId));
+}
+
+/**
+ * Overwrite a saved part from a build's custom piece as it is now (name, file name, per-plate time, grams,
+ * color and prints), so a correction made in one build is what new builds get. Editors and owners of the
+ * workspace; the build and its piece must belong to the workspace and the piece must be linked to this row.
+ * Builds that already have the part are not changed.
+ */
+export function refreshLibraryPiece(
+	db: Db,
+	userId: string,
+	orgId: string,
+	libId: string,
+	buildId: string,
+	pieceId: string
+): LibraryPieceView {
+	requireEditor(db, orgId, userId);
+	rowOf(db, orgId, libId);
+	const access = buildAccess(db, buildId, userId);
+	if (!access || access.organizationId !== orgId) throw new ApiError(404, 'Not found');
+	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
+	if (access.kind === 'draft')
+		throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
+	if (typeof pieceId !== 'string') throw new ApiError(404, 'Custom piece not found');
+	const row = db.transaction((txRaw) => {
+		const tx = txRaw as unknown as Db;
+		const piece = tx
+			.select()
+			.from(buildCustomPieces)
+			.where(and(eq(buildCustomPieces.id, pieceId), eq(buildCustomPieces.buildId, buildId)))
+			.get();
+		if (!piece) throw new ApiError(404, 'Custom piece not found');
+		if (piece.libraryId !== libId)
+			throw new ApiError(400, 'This custom part is not linked to that saved part');
+		const plates = piecePlates(tx, userId, buildId, piece);
+		if (!plates.length) throw new ApiError(400, 'This custom piece has no plates to save');
+		return tx
+			.update(workspaceCustomPieces)
+			.set({ name: piece.name, fileName: piece.fileName, sliced: piece.sliced, plates })
+			.where(eq(workspaceCustomPieces.id, libId))
+			.returning()
+			.get();
+	});
+	announce(db, buildId, userId, 'custom.library');
+	return toView(row);
 }
 
 /** Delete a saved part. Builds keep the pieces they already have; their "Saved" mark goes (editors and owners). */
@@ -326,7 +435,7 @@ export function applyLibraryPieceTx(
 			fg[key] = round2((fg[key] ?? 0) + g);
 		}
 		return {
-			label: multi ? `${lib.name} - ${p.name.trim() || `Plate ${i + 1}`}` : lib.name,
+			label: customPlateLabel(lib.name, p.name, multi, i + 1),
 			role: mapRole(p.role),
 			// a sliced file's numbers are the file's; for a part saved without one they were typed
 			estSeconds: lib.sliced ? p.estSeconds : null,
