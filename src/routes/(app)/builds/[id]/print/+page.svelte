@@ -9,6 +9,7 @@
 	import PlateTime from '#lib/components/PlateTime.svelte';
 	import PlateGrams from '#lib/components/PlateGrams.svelte';
 	import PlateControl from '#lib/components/PlateControl.svelte';
+	import { isSoloPlate } from '#lib/components/solo-plate.ts';
 	import PrinterHint from '#lib/components/PrinterHint.svelte';
 	import PrintToolbar from '#lib/components/PrintToolbar.svelte';
 	import PlateHistory from '#lib/components/PlateHistory.svelte';
@@ -137,7 +138,10 @@
 
 {#snippet startFor(key: string)}
 	{@const pl = ctx.view.plates.find((p) => String(p.number) === key)}
-	{#if pl}<PlateGrams plate={pl} /><PlateTime plate={pl} /><PlateControl plate={pl} />{/if}
+	{#if pl}<PlateGrams plate={pl} /><PlateTime plate={pl} /><PlateControl
+			plate={pl}
+			badge={!isSoloPlate(pl)}
+		/>{/if}
 	{#if histCount(key)}
 		<button
 			class="btn sm ghost"

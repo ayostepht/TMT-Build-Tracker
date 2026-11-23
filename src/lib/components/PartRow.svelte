@@ -2,13 +2,14 @@
 	import { PART_STATUSES, type PartDef, type PrintRun } from '#lib/domain/types.ts';
 	import { fmt, partGrams, plateOf } from '#lib/domain/index.ts';
 	import { parseGrams, partRuns } from '#lib/domain/logrun.ts';
-	import { betweenRuns, loggedPieces, printingPieces, runTargets } from '#lib/domain/actions.ts';
+	import { loggedPieces, printingPieces, runTargets } from '#lib/domain/actions.ts';
 	import { updatePart } from '#lib/client/api.ts';
 	import { getBuildCtx, filLabel } from './build-context.svelte.ts';
 	import Swatch from './Swatch.svelte';
 	import RunTable from './RunTable.svelte';
 	import LogRunSheet from './LogRunSheet.svelte';
 	import PlateControl from './PlateControl.svelte';
+	import { isSoloPlate } from './solo-plate.ts';
 	import PartPiecesAction, { piecesOffered } from './PartPiecesAction.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import StartOnPrinter from './StartOnPrinter.svelte';
@@ -49,21 +50,18 @@
 	const log = $derived(partRuns(ctx.view, part.slug));
 	const store = printerStoreFor(ctx, ctx.view.build.organizationId, ctx.view.build.id);
 	const hasPrinter = $derived(store.printers.some((p) => p.enabled));
-	// The plate heading above this row already offers "Print some pieces…" when this is the only part of
-	// its plate still to start (PlateControl): the row then leaves it out so there is one button.
-	const plateOffersPieces = $derived(
-		plateHeader &&
-			!!plate &&
-			plate.parts.filter(
-				(s) =>
-					ctx.view.state[s]?.status !== 'Printed' &&
-					!(ctx.view.state[s]?.status === 'Printing' && !betweenRuns(ctx.view, s))
-			).length === 1
-	);
 	let where = $state(false);
 	let piecesPicking = $state(false);
 	// Printing: with a printer connected (and the part on a plate) ask where; else mark it directly.
+	// Print tab by plate, plate with this one part: this badge stands for the plate (heading has none),
+	// so Printing / Printed / To print run PlateControl's plate-level paths (log sheet, printer dialog, Undo).
+	const solo = $derived(plateHeader && isSoloPlate(plate));
+	let plateCtl = $state<{ pick: (s: string) => void }>();
 	function pickStatus(s: string) {
+		if (solo && plateCtl) {
+			const takeOff = s === 'To print' && st?.status === 'Printing';
+			if (s === 'Printing' || s === 'Printed' || takeOff) return plateCtl.pick(s);
+		}
 		if (s === 'Printing' && hasPrinter && plate) where = true;
 		else void ctx.setPartStatus(part.slug, s as (typeof PART_STATUSES)[number]);
 	}
@@ -218,7 +216,7 @@
 			{/if}
 		</div>
 		<div class="pr-actions">
-			{#if part.components.length && !plateOffersPieces}
+			{#if part.components.length}
 				<PartPiecesAction
 					slug={part.slug}
 					bind:picking={piecesPicking}
@@ -231,7 +229,7 @@
 				options={[...PART_STATUSES]}
 				interactive={ctx.canEdit}
 				onpick={pickStatus}
-				extras={part.components.length && !plateOffersPieces && piecesOffered(ctx, part.slug)
+				extras={part.components.length && piecesOffered(ctx, part.slug)
 					? [
 							{
 								label: 'Print some pieces…',
@@ -283,6 +281,9 @@
 					>Enter the grams as a number up to 20000 (for example 162.5).</small
 				>{/if}
 		</form>
+	{/if}
+	{#if solo && ctx.canEdit && plate}
+		<PlateControl bind:this={plateCtl} {plate} pieces={false} bare />
 	{/if}
 	{#if ctx.canEdit && plate}
 		<StartOnPrinter

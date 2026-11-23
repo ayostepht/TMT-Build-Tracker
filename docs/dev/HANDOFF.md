@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-23, 00:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-23. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -75,6 +75,13 @@ _Updated 2026-11-23, 00:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   vendors a cloud environment needs `spacecoast3d.org`, `www.dancyn3dprints.com` and
   `cdn.shopify.com` on its allowed hosts; without them use
   `fetch-vendor-filaments.mjs --from-dir` with saved pages.
+- **In flight: #115** "Print tab: one status badge on single-part plates; Print some
+  pieces… in every part menu" (branch `claude/pensive-thompson-ei0e34`, head a0eed04 plus
+  this handoff commit, into `edge`; no schema change). The maintainer approved the
+  screenshots in the session (2026-11-23). Agent checks and `verifier` passed; one e2e test
+  ("A stopped job that is not logged…" in `print-some-pieces-printer.spec.ts`) fails
+  locally on `edge` c587129 as well, see STATUS. Left: merge once CI is green, then offer
+  the port to the hosted edition (the maintainer saw the same two badges there).
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.

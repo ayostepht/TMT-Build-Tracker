@@ -6,6 +6,11 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Print some pieces…" is always in a part's status menu.** On the Print tab grouped by plate, a multi-piece part that was the only part of its plate left to start showed the entry only in the plate heading's menu, so the part's own menu looked like it was missing it. The part's menu now always offers it.
+- **One status badge on a plate with a single part.** On the Print tab grouped by plate, a plate that holds just one part no longer shows a second status badge in its heading; the part's own badge (next to the plate info) does the job, including the log sheet when you pick Printed and the printer question when you pick Printing. The heading keeps "Log a print…", History, grams and time. Plates with several parts keep the badge in the heading.
+
 ## [0.9.4] - 2026-11-22
 
 **Upgrading:** back up your `/data` folder first. This release adds database migration 0004 (additive: it records which pieces of a multi-piece part are on a print; existing data is not rewritten). It runs automatically when the container starts and cannot be undone, so to go back to 0.9.3 you restore the backup. See [Backup and upgrade](docs/guides/backup-and-upgrade.md).

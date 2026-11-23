@@ -245,8 +245,12 @@ count, {userId})` in the same synchronous transaction as its insert; a refusal i
 
 - **Start/log control**: `PlateControl.svelte` is the one control (Start printing / Finish &
   log / Take off printer / Log a print…) on Print, Files, the Now card and the landing;
-  props `plate`, `only?`, `size?`, `alwaysLog?`. `PlateStart` and `LogPlateButton` are
-  retired.
+  props `plate`, `only?`, `size?`, `alwaysLog?`, `pieces?`, `badge?` (false: no status badge, the
+  rest stays) and `bare?` (no visible UI, only the sheets; its exported `pick` is called by
+  the owner). On the Print tab grouped by plate, a solo plate (`isSoloPlate` in
+  `components/solo-plate.ts`: one part, not `perPartRuns`, `runs <= 1`) gets `badge={false}`
+  in its heading and `PartRow` mounts a bare `PlateControl`, delegating Printing, Printed and
+  take-off to it. `PlateStart` and `LogPlateButton` are retired.
 - **Optimistic actions**: `BuildCtx.act(fn, { patches })` applies `applyPatches`
   (`domain/actions.ts`) at once, rolls back on failure, and the re-fetched view always wins.
   `setPartStatus`, `startParts`, `takeOffParts`, `restoreParts` each push a 15 s Undo toast

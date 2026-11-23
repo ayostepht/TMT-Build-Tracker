@@ -244,8 +244,7 @@ Route each to the agent named in brackets.
 
 - **Print some pieces of a part** (#93, merged into `edge` 2026-11-20 as 3c6ea33, and #95, 2026-11-21 as 005f5ad; migration
   `0004_piece_prints`, additive; on the test copy since r64, #95 and #96 since r65): a part made of several pieces (Harness and Straps, 9
-  pieces) has "Print some pieces…" (on the plate heading when it is the plate's only
-  startable part, else on its row): pick pieces (all ticked by default), mark them printing
+  pieces) has "Print some pieces…" in its row's status menu in every grouping (2026-11-23, superseding #95's "one button"): pick pieces (all ticked by default), mark them printing
   or log them. A Success ticks exactly those pieces; the part is Printed when the last one
   is ticked, else back to To print; Failed ticks nothing and flags Reprint; no Partial.
   Now printing shows "3 of 9 pieces" with grams and time by piece count (approximate).
@@ -256,7 +255,7 @@ Route each to the agent named in brackets.
   prevents that, and no server path loses ticks. A confirmed plate replacement keeps a piece log's pieces and every converted
   log's id (#96, 9f32307: `convertPlateRuns` updates the original row for the first
   target part and inserts rows only for further parts). "Print some pieces…" and "Print some parts…" are entries in the status
-  menu, not separate buttons. Not offered on
+  menu, not separate buttons. On the Print tab grouped by plate, a plate with exactly one part (single run; `isSoloPlate`) has no status badge in its heading (maintainer, 2026-11-23): the row's badge stands for the plate (Printing = plate-level start, Printed = Finish & log sheet, take-off) and the heading keeps "Log a print…" and History; plates with several parts keep the heading badge with "Print some parts…". Known: `print-some-pieces-printer.spec.ts` "A stopped job that is not logged…" fails on `edge` c587129 too (Overview `expected-confirm` never appears), cause not found [printers / build-state]. Not offered on
   plates with `runs > 1` or `perPartRuns`, or while the part is Printing. Open: one piece print per part at a time; "×5"
   pieces count as one piece for the share; no e2e for drafts or multi-run plates (the test
   layout has no multi-piece part there) [e2e-playwright]; every future additive column
