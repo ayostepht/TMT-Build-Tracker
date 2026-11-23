@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { MAX_CUSTOM_PIECES, MAX_CUSTOM_PLATES } from '#lib/domain/custom.ts';
 import type { BuildKind, BuildPrinter } from '#lib/domain/types.ts';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import { ApiError, requireEditor } from '../access';
@@ -209,15 +210,26 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 		// flow. Each piece gets its own savepoint, so one that cannot be added leaves no partial rows and
 		// never fails the build.
 		if (input.setup && input.kind !== 'draft') {
+			// Bounded work: the caps stop the loop, rows that cannot fit are skipped without loading the view,
+			// and the view is reloaded only after a piece was written (a failed piece rolled back to its savepoint).
+			let pieces = 0;
+			let platesUsed = 0;
+			let view: ReturnType<typeof loadBuildView> | undefined;
 			for (const lib of defaultLibraryRows(tx, input.organizationId)) {
+				if (pieces >= MAX_CUSTOM_PIECES || platesUsed >= MAX_CUSTOM_PLATES) break;
+				const n = (lib.plates ?? []).length;
+				if (!n || platesUsed + n > MAX_CUSTOM_PLATES) continue;
 				try {
-					const made = tx.transaction((spRaw) => {
-						const sp = spRaw as unknown as Db;
-						const view = loadBuildView(sp, id, userId);
-						if (!view) return null;
-						return applyLibraryPieceTx(sp, view, lib, userId);
-					});
+					view ??= loadBuildView(tx, id, userId);
+					if (!view) break;
+					const current = view;
+					const made = tx.transaction((spRaw) =>
+						applyLibraryPieceTx(spRaw as unknown as Db, current, lib, userId)
+					);
 					if (!made) continue;
+					pieces++;
+					platesUsed += n;
+					view = undefined;
 					tx.insert(activity)
 						.values({
 							buildId: id,

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { isCustomPlate } from '#lib/domain/custom.ts';
+import { MAX_CUSTOM_PIECES, isCustomPlate } from '#lib/domain/custom.ts';
 import { ApiError } from '../access';
 import { openDb, runMigrations, type Db } from '../db';
 import {
@@ -21,12 +21,14 @@ import {
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 
+const applyCalls = { n: 0 };
 // A saved part named "Late failure" is applied for real and then fails: proves the per-piece savepoint.
 vi.mock('../custom-library', async (orig) => {
 	const real = await orig<typeof import('../custom-library')>();
 	return {
 		...real,
 		applyLibraryPieceTx: ((...args: Parameters<typeof real.applyLibraryPieceTx>) => {
+			applyCalls.n++;
 			const r = real.applyLibraryPieceTx(...args);
 			if (args[2].name === 'Late failure') throw new ApiError(400, 'late failure');
 			return r;
@@ -177,5 +179,14 @@ describe('createBuild: saved custom parts marked "Include in new builds"', () =>
 			.filter((p) => p.partSlug.startsWith('custom'));
 		expect(customParts.length).toBe(v.parts.filter((p) => p.custom).length);
 		expect(kinds(id).filter((x) => x === 'custom.add')).toHaveLength(1);
+	});
+
+	it('stops at the custom piece cap and still creates the build', () => {
+		for (let i = 0; i < MAX_CUSTOM_PIECES + 5; i++) save('org1', `Part ${i}`);
+		applyCalls.n = 0;
+		const id = mk();
+		expect(view(id).customPieces).toHaveLength(MAX_CUSTOM_PIECES);
+		expect(applyCalls.n).toBe(MAX_CUSTOM_PIECES);
+		expect(kinds(id)).toContain('build.create');
 	});
 });
