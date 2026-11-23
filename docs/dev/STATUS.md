@@ -207,8 +207,8 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
   (2026-11-23): skip is restorable, never a delete; custom parts stay as sliced (not
   arranged, not exported, not in the 3D chair or a color design); a piece with print logs
   is marked Not printing, not removed. Known limits: a plate that keeps some parts still
-  shows the whole plate's time and typed grams; a custom piece cannot be renamed or
-  re-colored after adding; the sliced-file upload does not hand over to the custom flow;
+  shows the whole plate's time and typed grams; a custom piece cannot be
+  re-colored after adding (it can be renamed); the sliced-file upload does not hand over to the custom flow;
   the
   export note after a skip on a started arranged build says "The colors changed"; real-kit
   tests and `docker build` did not run in the cloud session. **Part 2, saved custom parts**
