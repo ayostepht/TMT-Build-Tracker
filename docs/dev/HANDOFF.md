@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-23, 16:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-23, 17:40 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -27,14 +27,14 @@ _Updated 2026-11-23, 16:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   new builds, the wizard's Options step, the Saved parts page. Gates: check, lint, 2405
   unit tests, build, empty-database start, 22 e2e specs, CI `test` and `e2e` green; two
   security reviews with no high or medium finding. Decisions, known limits and two
-  questions for the maintainer are in STATUS "Waiting on the maintainer". Not on the test
-  copy: both migrations are additive and need a rehearsal on a copy of the real database
-  first. `docker build` and the real-kit tests did not run in the cloud session (CI's
+  questions for the maintainer are in STATUS "Waiting on the maintainer". On the test
+  copy since r68 (2026-11-23): both migrations were rehearsed on a copy of the real database
+  first (all old row counts equal, integrity and foreign keys ok). `docker build` and the real-kit tests did not run in the cloud session (CI's
   `image` job runs on `edge`). Not ported to the hosted edition.
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
-- **Test copy:** r67 = `edge` fbd401d (0.9.3 plus #90, #92–#96, #98, #100–#102 and #104) deployed 2026-11-22 (r66 = 76a65c0 earlier the same day; r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
+- **Test copy:** r68 = `edge` 48c1f8f (0.9.4 plus #114, #115, #117 and #119; migrations 0005 and 0006, rehearsed on a copy of the real database) deployed 2026-11-23 (r67 = fbd401d and r66 = 76a65c0 on 2026-11-22; r64 = 7efeb4d with migration 0004, rehearsed on a copy of the real database, 2026-11-20); see
   `docs/dev/CHANGELOG.md`. The maintainer confirmed the #79 Spare figures on real data.
 - **Spoolman (#59)** is complete and closed.
 - **Merged into `edge` 2026-11-20, on the test copy since r64:**
@@ -94,7 +94,7 @@ _Updated 2026-11-23, 16:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   `fetch-vendor-filaments.mjs --from-dir` with saved pages.
 - **Merged into `edge` 2026-11-23:** #115 "Print tab: one status badge on single-part
   plates; Print some pieces… in every part menu" (6457a69; no schema change). The
-  maintainer approved the screenshots in the session. **Not on the test copy yet.** Not
+  maintainer approved the screenshots in the session. On the test copy since r68. Not
   ported to the hosted edition, where the maintainer saw the same two badges: offer it to
   that project's session. It changed `PartRow.svelte`, `PlateControl.svelte`, the Print
   page and several e2e specs, so open branches that touch them (#114, another session's
@@ -102,10 +102,9 @@ _Updated 2026-11-23, 16:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** finish the 0.9.4 images (above). Then deploy `edge` 48c1f8f to the test
-  copy after a rehearsal of migrations 0005 and 0006 on a copy of the real database (it
-  holds both parts of #113; the maintainer then tries them) (with the maintainer's OK; needs a machine with `CLAUDE.local.md`). Still for the
-  maintainer on the test copy (r67): swatch taps on an iPhone (the touch change is
+- **Next step:** finish the 0.9.4 images (above). The test copy runs `edge` 48c1f8f (r68), so the
+  maintainer can try both parts of #113 and #115 there. Still for the
+  maintainer on the test copy (r68): swatch taps on an iPhone (the touch change is
   unconfirmed on iOS Safari) and Share a picture's share sheet on iPhone and Android. Then
   pick from the follow-ups below or STATUS "Next steps".
 - CI (#119, 48c1f8f, 2026-11-23): the `image` hangs came from the arm64 half running the
