@@ -11,6 +11,7 @@ import {
 	uniqueEmail
 } from './helpers';
 import { makeProjectThreeMf } from '../src/lib/server/threemf/fixtures';
+import { randomBytes } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -121,6 +122,15 @@ const twoTone = () =>
 				objects: [{ name: 'two tone' }]
 			}
 		]
+	});
+/** A sliced one-plate file padded past 1.5 MB with an incompressible entry. */
+const bigFile = () =>
+	makeProjectThreeMf({
+		sliced: true,
+		app: 'ElegooSlicer-1.0.0',
+		filamentTypes: ['PETG'],
+		plates: [plateSpec('BIG PLATE', 7200, 100)],
+		extra: { 'Metadata/padding.bin': new Uint8Array(randomBytes(1_700_000)) }
 	});
 const asFile = (buffer: Uint8Array, name: string) => ({
 	name,
@@ -390,8 +400,13 @@ test('Update saved part: later builds get the corrected values, earlier copies s
 	await openFiles(page, buildId);
 	const first = customPlates(await view(page, buildId))[0];
 	const section = page.getByRole('region', { name: `Plate ${first.number}`, exact: true });
+	// One box at a time: a save re-renders the card from the refreshed view, and that re-render writes
+	// the stored value back into a box that is being typed in (a typed value that has not been committed
+	// yet is lost). Wait for each save to show on the card before the next box is touched.
 	await type(section.getByLabel(/^Slicer time/), '12h');
+	await expect(section.getByTestId('time-override')).toBeVisible();
 	await type(section.getByLabel(/^Grams/), '250');
+	await expect(section.getByTestId('grams-override')).toBeVisible();
 	await expect
 		.poll(async () => customPlates(await view(page, buildId))[0])
 		.toMatchObject({ estSeconds: 43200, slicerGrams: 250 });
@@ -511,6 +526,18 @@ test('Custom parts page: Settings menu, add by hand and from files, new builds, 
 	await form.getByTestId('library-create').click();
 	await expect(page.getByTestId('saved-part-notice')).toContainText('Added "Two tone"');
 	await expect(page.getByTestId('saved-part')).toHaveCount(3);
+
+	// A file larger than 1.5 MB is read like a small one (the inspect route takes the 3MF limit).
+	const big = bigFile();
+	expect(big.length).toBeGreaterThan(1_500_000);
+	await page.getByTestId('saved-part-add').click();
+	await form.getByTestId('library-3mf-file').setInputFiles(asFile(big, 'big plate.3mf'));
+	await expect(form.getByTestId('library-name')).toHaveValue('big plate');
+	await expect(form.getByTestId('library-plate-grams')).toHaveValue('100');
+	await expect(form.getByLabel('Print time')).toHaveValue('2h 00m');
+	await expect(form.getByRole('alert')).toHaveCount(0);
+	await form.getByRole('button', { name: 'Cancel' }).first().click();
+	await expect(form).toHaveCount(0);
 	lib = await library(page, org);
 	expect(lib.find((l) => l.name === 'Wall hook')).toMatchObject({
 		totalSeconds: 10800,
