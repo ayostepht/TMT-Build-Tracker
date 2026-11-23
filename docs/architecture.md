@@ -1046,7 +1046,7 @@ mock-spoolman}.ts`. `syncRunDeduction` runs per role under `withSpoolmanLock` (i
   mode), 256 thumbnails;
   STEP zips 10,000 entries.
 - **Request pipeline** (`hooks.server.ts`): boot validation (`bootProblems`, exit 1) → body
-  cap by route (`body-limits.ts`, default 1 MB) → `/api/auth/*` to Better Auth with a trusted
+  cap by route (`body-limits.ts`, default 1 MB; `MAX_3MF_MB` + 1 MB for `POST /api/builds/[id]/plates/upload`, `/api/custom-library/inspect` and print-geometry; STEP zips 200 MB) → `/api/auth/*` to Better Auth with a trusted
   client address (`client-ip.ts`: `ADDRESS_HEADER`/`XFF_DEPTH`; fails closed) → session →
   write rate → resolve with security headers (`security-headers.ts`; page CSP with nonces in
   `vite.config.ts`). `scripts/response-defaults.mjs` (preloaded by `proxy-origin.mjs`, must

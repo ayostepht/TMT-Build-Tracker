@@ -28,7 +28,7 @@ export const POST: RequestHandler = (event) =>
 				organizationId: org,
 				request: event.request,
 				name: event.url.searchParams.get('name'),
-				receive: { tempDir: importsDir(), tempExt: '.zip' }
+				receive: { tempDir: importsDir(), tempExt: '.zip', skipGcodeStats: true }
 			},
 			(up) => inspectSummary(up.fileName, up.summary)
 		);

@@ -756,29 +756,38 @@ export interface InspectedFile {
 	}[];
 }
 
+/** Text taken from a file, echoed to the browser: control characters dropped, capped. */
+const echo = (v: unknown, max: number): string =>
+	typeof v === 'string'
+		? v.replace(CONTROL, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim()
+		: '';
+
 /** The part of a parsed 3MF the "add a saved part" form uses: numbers and slots, no thumbnails, no objects. */
 export function inspectSummary(fileName: string, s: ThreeMfSummary): InspectedFile {
 	const slot = (i: number) => s.filaments.find((f) => f.index === i);
 	const info = (key: string) => {
 		const f = slot(Number(key));
+		const name = echo(f?.name, 80);
 		return {
 			slot: key,
-			...(f?.name ? { name: f.name } : {}),
-			material: f?.type ?? '',
-			color: f?.color ?? null
+			...(name ? { name } : {}),
+			material: echo(f?.type, 40),
+			color: typeof f?.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(f.color) ? f.color : null
 		};
 	};
 	return {
-		fileName,
+		fileName: echo(fileName, 255) || 'upload.3mf',
 		sliced: s.sliced,
-		printer: s.printer,
-		warnings: s.warnings.slice(0, 20),
-		filaments: s.filaments.map((f) => info(String(f.index))),
+		printer: echo(s.printer, 80) || null,
+		warnings: s.warnings.slice(0, 20).map((w) => echo(w, 300)),
+		filaments: s.filaments.slice(0, MAX_SLOTS).map((f) => info(String(f.index))),
 		plates: s.plates.slice(0, 200).map((p) => {
-			const fg = s.sliced ? { ...p.filamentGrams } : {};
+			const fg: Record<string, number> = {};
+			if (s.sliced)
+				for (const [k, g] of Object.entries(p.filamentGrams ?? {}).slice(0, MAX_SLOTS)) fg[k] = g;
 			return {
 				index: p.index,
-				name: p.name,
+				name: echo(p.name, 80),
 				estSeconds: s.sliced ? p.estSeconds : null,
 				grams: s.sliced ? p.grams : null,
 				runsHint: p.runsHint,

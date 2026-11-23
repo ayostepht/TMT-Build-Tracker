@@ -40,6 +40,8 @@ export interface ReceiveOptions {
 	 */
 	tempDir?: string;
 	tempExt?: string;
+	/** Skip the per-object G-code scan (CPU heavy), for callers that only need plate time and grams. */
+	skipGcodeStats?: boolean;
 }
 
 export async function receiveThreeMf(
@@ -82,7 +84,7 @@ export async function receiveThreeMf(
 		try {
 			summary = await parseThreeMfFile(path);
 			// Per-object time and extrusion from the plates' G-code, while the file is still on disk.
-			if (summary.sliced) {
+			if (summary.sliced && !opts.skipGcodeStats) {
 				const rep = await attachGcodeObjectStats(path, summary);
 				if (rep.note) summary.warnings.push(rep.note);
 			}

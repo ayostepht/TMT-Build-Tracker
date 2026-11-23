@@ -30,6 +30,17 @@ import {
 } from './custom-library';
 
 const h = vi.hoisted(() => ({ db: null as unknown }));
+const gcode = vi.hoisted(() => ({ scans: 0 }));
+vi.mock('./threemf/gcode-stats', async (orig) => {
+	const real = await orig<typeof import('./threemf/gcode-stats')>();
+	return {
+		...real,
+		attachGcodeObjectStats: (...a: Parameters<typeof real.attachGcodeObjectStats>) => {
+			gcode.scans++;
+			return real.attachGcodeObjectStats(...a);
+		}
+	};
+});
 vi.mock('#lib/server/db/index.ts', async (orig) => ({
 	...(await orig<object>()),
 	getDb: () => h.db
@@ -389,6 +400,63 @@ describe('POST /api/custom-library/inspect', () => {
 		expect((await call(new Uint8Array(0))).status).toBe(400);
 		expect(temp()).toEqual([]);
 		expect(db.select().from(buildUploads).all()).toEqual([]);
+	});
+
+	it('does not run the G-code scan, but still returns time and grams; a build upload does', async () => {
+		const file = makeProjectThreeMf({
+			sliced: true,
+			filamentTypes: ['PETG'],
+			plates: [
+				{
+					name: 'BAR',
+					prediction: 600,
+					weight: 12,
+					filaments: { 1: 12 },
+					objects: [{ name: 'Bar' }]
+				}
+			],
+			extra: { 'Metadata/plate_1.gcode': new TextEncoder().encode('; generated\nG1 X1\n') }
+		});
+		gcode.scans = 0;
+		const j = await (await call(file)).json();
+		expect(j.plates[0]).toMatchObject({ estSeconds: 600, grams: 12, filamentGrams: { '1': 12 } });
+		expect(gcode.scans).toBe(0);
+		const { receiveThreeMf } = await import('./threemf/upload');
+		const req = new Request('http://x/u', {
+			method: 'POST',
+			body: file as unknown as BodyInit,
+			headers: { 'content-type': 'application/octet-stream' }
+		});
+		await receiveThreeMf(req, 'a.3mf');
+		expect(gcode.scans).toBe(1);
+	});
+
+	it('controls and caps the text it echoes from the file', async () => {
+		const long = 'N'.repeat(500);
+		const file = makeProjectThreeMf({
+			sliced: true,
+			filamentTypes: ['PETG'],
+			filamentIds: [`Brand ${'F'.repeat(400)} PETG`],
+			printerModel: 'P'.repeat(400),
+			plates: [
+				{
+					name: `${long}\u202eX`,
+					prediction: 60,
+					weight: 1,
+					filaments: { 1: 1 },
+					objects: [{ name: 'Bar' }]
+				}
+			]
+		});
+		const res = await call(file, { name: `${'f'.repeat(400)}.3mf` });
+		const j = await res.json();
+		expect(j.fileName.length).toBeLessThanOrEqual(255);
+		expect(j.plates[0].name.length).toBeLessThanOrEqual(80);
+		expect(j.plates[0].name).not.toContain('\u202e');
+		expect(j.printer.length).toBeLessThanOrEqual(80);
+		for (const f of [...j.filaments, ...j.plates[0].filaments])
+			expect((f.name ?? '').length).toBeLessThanOrEqual(80);
+		expect(temp()).toEqual([]);
 	});
 
 	it('removes the temp file when the client aborts mid-stream', async () => {
