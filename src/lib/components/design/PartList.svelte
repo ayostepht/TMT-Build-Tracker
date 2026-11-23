@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { designParts } from '#lib/domain/design.ts';
 	import { roleLabel, sortRoles } from '#lib/domain/labels.ts';
 	import type { BuildView, PartDef } from '#lib/domain/types.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
@@ -32,7 +33,7 @@
 
 	const groups = $derived.by(() => {
 		const by: Record<string, PartDef[]> = {};
-		for (const p of view.parts) {
+		for (const p of designParts(view)) {
 			if (roleFilter && p.role !== roleFilter) continue;
 			if (!matches(p)) continue;
 			(by[p.section] ??= []).push(p);
@@ -45,11 +46,11 @@
 	/** Slots that have parts, with how many match the search (so the chips stay honest). */
 	const chips = $derived(
 		sortRoles(
-			view.filaments.filter((f) => view.parts.some((p) => p.role === f.key)),
+			view.filaments.filter((f) => designParts(view).some((p) => p.role === f.key)),
 			(f) => f.key
 		).map((f) => ({
 			f,
-			n: view.parts.filter((p) => p.role === f.key && matches(p)).length
+			n: designParts(view).filter((p) => p.role === f.key && matches(p)).length
 		}))
 	);
 	const slot = (role: string) => view.filaments.find((f) => f.key === role);

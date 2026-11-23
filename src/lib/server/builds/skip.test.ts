@@ -295,4 +295,30 @@ describe('custom pieces in the view', () => {
 		const row = db.select().from(builds).where(eq(builds.id, id)).get()!;
 		expect(JSON.stringify(row.design)).not.toContain('custom-aa11');
 	});
+
+	it('a design mutation never takes a custom slug into partRoles', () => {
+		addPiece();
+		for (const body of [
+			{ partRoles: { 'custom-aa11': 'primary' } },
+			{ lock: { slugs: ['custom-aa11'], locked: true } }
+		])
+			expect(status(() => updateBuildDesign(db, id, 'owner', body as never))).toBe(400);
+		// Some kit part can move to another slot: that write must work and carry no custom slug.
+		const v = view();
+		let moved = false;
+		for (const p of v.allParts)
+			for (const f of v.filaments) {
+				if (moved || f.key === p.role || p.locked) continue;
+				try {
+					updateBuildDesign(db, id, 'owner', { partRoles: { [p.slug]: f.key } } as never);
+					moved = true;
+				} catch {
+					/* material mismatch: try the next */
+				}
+			}
+		expect(moved).toBe(true);
+		const row = db.select().from(builds).where(eq(builds.id, id)).get()!;
+		expect(JSON.stringify(row.design)).not.toContain('custom-aa11');
+		expect(view().parts.find((p) => p.slug === 'custom-aa11')!.role).toBe('accent');
+	});
 });

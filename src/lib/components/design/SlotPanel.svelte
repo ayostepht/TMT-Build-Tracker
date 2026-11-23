@@ -3,7 +3,7 @@
 	import { fmt, fmtSpools, stockKg, type FilamentStat } from '#lib/domain/index.ts';
 	import type { BuildView, FilamentRole } from '#lib/domain/types.ts';
 	import { setBuildDesign } from '#lib/client/api.ts';
-	import { removeImpact } from '#lib/domain/design.ts';
+	import { designParts, removeImpact } from '#lib/domain/design.ts';
 	import RemoveColorDialog from './RemoveColorDialog.svelte';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
 	import SpoolmanSlotLine from '#lib/components/SpoolmanSlotLine.svelte';
@@ -49,7 +49,7 @@
 	);
 
 	const statOf = (f: FilamentRole) => stats.find((s) => s.role === f.key);
-	const partCount = (f: FilamentRole) => view.parts.filter((p) => p.role === f.key).length;
+	const partCount = (f: FilamentRole) => designParts(view).filter((p) => p.role === f.key).length;
 	const totalG = $derived(stats.reduce((a, s) => a + s.total, 0));
 	const shortCount = $derived(draft ? 0 : stats.filter((s) => s.short && s.total > 0).length);
 

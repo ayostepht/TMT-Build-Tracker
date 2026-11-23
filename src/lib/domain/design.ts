@@ -52,6 +52,14 @@ export function designColors(
 	return out;
 }
 
+/**
+ * The active kit parts a color design covers: `view.parts` without custom parts (a maker's own
+ * piece takes its color from a build filament, never from the design).
+ */
+export function designParts(view: Pick<BuildView, 'parts'>): PartDef[] {
+	return view.parts.filter((p) => !p.custom);
+}
+
 /** Slugs of parts that belong to a variant option that is not chosen. */
 export function hiddenSlugs(view: Pick<BuildView, 'allParts' | 'parts'>): string[] {
 	const active = new Set(view.parts.map((p) => p.slug));
@@ -125,7 +133,7 @@ export function partsByRole(
 	opts: { all?: boolean } = {}
 ): Map<string, PartDef[]> {
 	const m = new Map<string, PartDef[]>();
-	for (const p of opts.all ? view.allParts : view.parts) {
+	for (const p of opts.all ? view.allParts : designParts(view)) {
 		const l = m.get(p.role);
 		if (l) l.push(p);
 		else m.set(p.role, [p]);

@@ -69,9 +69,9 @@
 					: overCap
 						? `A build can have at most ${MAX_CUSTOM_PLATES} custom plates (${haveCustom} now).`
 						: missingColour
-							? 'Choose a colour for every filament the plates use.'
+							? 'Choose a color for every filament the plates use.'
 							: !sliced && !role
-								? 'Choose a colour.'
+								? 'Choose a color.'
 								: null
 	);
 
@@ -317,7 +317,7 @@
 			{/each}
 		</ul>
 
-		<h3>Colours</h3>
+		<h3>Colors</h3>
 		{#if s.sliced}
 			<div class="cpu-fil">
 				{#each s.filaments as f (f.index)}
@@ -325,10 +325,7 @@
 						<label class="cpu-slot">
 							<span class="cpu-swatch" style="background:{f.color ?? 'transparent'}"></span>
 							<span class="cpu-fl">#{f.index} {f.type}{f.name ? ` · ${f.name}` : ''}</span>
-							<select
-								bind:value={colours[String(f.index)]}
-								aria-label="Build colour for #{f.index}"
-							>
+							<select bind:value={colours[String(f.index)]} aria-label="Build color for #{f.index}">
 								<option value="">Choose…</option>
 								{#each view.filaments as r (r.key)}
 									<option value={r.key}>{r.name} ({r.material})</option>
@@ -342,7 +339,7 @@
 		{:else}
 			<label class="cpu-slot">
 				<span class="cpu-fl">Printed in</span>
-				<select bind:value={role} aria-label="Colour of the part">
+				<select bind:value={role} aria-label="Color of the part">
 					{#each view.filaments as r (r.key)}
 						<option value={r.key}>{r.name} ({r.material})</option>
 					{/each}
