@@ -17,6 +17,7 @@ To update an install, see [Backup and upgrade](docs/guides/backup-and-upgrade.md
 
 ### Fixed
 
+- Typing grams or a print time on a plate is no longer lost when the page refreshes in the middle (for example when your previous change is still saving, or another member edits the build): the box keeps what you are typing. Escape drops the edit.
 - **"Print some pieces…" is always in a part's status menu.** On the Print tab grouped by plate, a multi-piece part that was the only part of its plate left to start showed the entry only in the plate heading's menu, so the part's own menu looked like it was missing it. The part's menu now always offers it.
 - **One status badge on a plate with a single part.** On the Print tab grouped by plate, a plate that holds just one part no longer shows a second status badge in its heading; the part's own badge (next to the plate info) does the job, including the log sheet when you pick Printed and the printer question when you pick Printing. The heading keeps "Log a print…", History, grams and time. Plates with several parts keep the badge in the heading.
 
