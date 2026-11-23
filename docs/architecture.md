@@ -371,6 +371,21 @@ create|prelink`, plus `spoolmanSpoolId`/`archived` extras on `filament.stock.add
   `loadKitSource` and `prepareExport`. Plate numbers are max+1 on add and are not
   renumbered on removal. A piece with runs is not deleted (mark it Not printing). UI:
   `CustomPieceUpload.svelte`, "Custom parts" in `PlatesPanel`.
+- **Saved custom parts (#113, `workspace_custom_pieces`, migration 0006):**
+  `server/custom-library.ts`: `saveToLibrary` (from a build's piece: per-plate summaries
+  only, no 3MF, no thumbnails; a typed plate time wins), `listLibrary` (members only),
+  `updateLibraryPiece`, `deleteLibraryPiece` (nulls `build_custom_pieces.library_id`, builds
+  keep their pieces), `applyLibraryPieceTx` (no permission check or activity row: the
+  caller's job; idempotent per `library_id`; unknown roles fall back to the build's first
+  role; `replaces` only for the same template and skippable parts) and `applyLibraryPiece`
+  (through `mutateBuild`). `insertCustomPieceTx` in `builds/custom-pieces.ts` is the single
+  insert path for custom pieces. Rows are scoped by `organization_id`; a foreign id is 404;
+  writes need editor+; cap 50 per workspace. Routes: `/api/custom-library` (GET, POST),
+  `/api/custom-library/[id]` (PATCH, DELETE), `POST /api/builds/[id]/custom-pieces`.
+  `createBuild` applies the workspace's default rows for setup builds inside the create
+  transaction, one savepoint per piece (a failing piece is skipped). UI: checkbox and saved
+  list in `CustomPieceUpload`, "Saved" tag in `PlatesPanel`, page `teams/[slug]/pieces`,
+  the wizard's Options step (`savedParts` from the setup page load).
 - **Export:** `src/lib/server/threemf-export/` (Orca/Elegoo, Bambu, plain), painted
   supports, `bed_exclude_area`.
 

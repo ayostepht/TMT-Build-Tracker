@@ -210,10 +210,19 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
   is marked Not printing, not removed. Known limits: a plate that keeps some parts still
   shows the whole plate's time and typed grams; a custom piece cannot be renamed or
   re-colored after adding; the sliced-file upload does not hand over to the custom flow;
-  the account data export lists custom plates but not the pieces or skipped parts; the
+  the
   export note after a skip on a started arranged build says "The colors changed"; real-kit
-  tests and `docker build` did not run in the cloud session. Part 2 (save a custom part to
-  the workspace and offer it in new builds) is tracked in the handoff.
+  tests and `docker build` did not run in the cloud session. **Part 2, saved custom parts**
+  (migration `0006_custom_library`, additive): "Save for new builds" on the Files tab keeps
+  a part's plates, time, grams, colors and replaced parts for the workspace (no file, no
+  thumbnail); the "Add a custom part" sheet adds a saved part to another build; the Saved
+  parts page (button on the workspace's Builds page) renames, deletes and sets "Include in
+  new builds"; such parts are added in `createBuild` for builds started with the setup
+  wizard, and the wizard's Options step lists saved parts with Add / Remove. Questions:
+  a "Saved parts" tab in the workspace tab bar as well as the button? The account data
+  export lists the saved parts of every workspace the user belongs to (custom filaments
+  export only the user's own): keep, or limit to workspaces they can edit? Open: the plate
+  cap branch of the defaults loop has no unit test; a saved part has no thumbnail.
 - (2026-11-13, issues #29 / #30) **Review PR #32** (#30 picker Type filter: default reads
   "95A" / "PETG", subtypes with counts; plus hovered selected badges stay readable) on the
   `edge` image after merge. **#29 one-piece push handle** (branch

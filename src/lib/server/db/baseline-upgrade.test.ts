@@ -95,7 +95,11 @@ const POST_BASELINE_COLUMNS = new Set([
 	'build_parts.skipped'
 ]);
 /** Tables added after the baseline (empty in the legacy database). */
-const POST_BASELINE_TABLES = new Set(['spoolman_cache', 'build_custom_pieces']);
+const POST_BASELINE_TABLES = new Set([
+	'spoolman_cache',
+	'build_custom_pieces',
+	'workspace_custom_pieces'
+]);
 /** Number of migrations in the committed journal (the baseline plus later ones). */
 const JOURNAL_LENGTH = (
 	JSON.parse(readFileSync('./drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] }

@@ -1,9 +1,13 @@
 <script lang="ts">
 	import {
 		addCustomPiece,
+		applyLibraryPiece,
 		discardPlateUpload,
+		listCustomLibrary,
+		saveCustomPieceToLibrary,
 		uploadThreeMf,
 		uploadThumbnailUrl,
+		type LibraryPiece,
 		type UploadResult
 	} from '#lib/client/api.ts';
 	import { fmt, fmtH } from '#lib/domain/index.ts';
@@ -39,6 +43,28 @@
 	let colours = $state<Record<string, string>>({});
 	let role = $state('');
 	let replaces = $state<string[]>([]);
+	let saveForLater = $state(false);
+
+	// The workspace's saved parts that this build does not hold yet.
+	let library = $state<LibraryPiece[]>([]);
+	let applying = $state<string | null>(null);
+	const offered = $derived(
+		library.filter((l) => !view.customPieces.some((c) => c.libraryId === l.id))
+	);
+	$effect(() => {
+		const org = view.build.organizationId;
+		let live = true;
+		listCustomLibrary(org)
+			.then((r) => {
+				if (live) library = r.pieces;
+			})
+			.catch(() => {
+				/* the list is a shortcut; adding a file still works */
+			});
+		return () => {
+			live = false;
+		};
+	});
 
 	const haveCustom = $derived(view.customPieces.reduce((n, c) => n + c.plates.length, 0));
 	const roomPlates = $derived(Math.max(0, MAX_CUSTOM_PLATES - haveCustom));
@@ -162,12 +188,41 @@
 				replaces
 			});
 			const n = r.plates.length;
-			ondone(
-				`Added "${name.trim()}": ${n} plate${n === 1 ? '' : 's'} (${r.plates.join(', ')}) after the kit's plates${r.skipped.length ? `; ${r.skipped.length} kit part${r.skipped.length === 1 ? '' : 's'} marked Not printing` : ''}.`
-			);
+			let msg = `Added "${name.trim()}": ${n} plate${n === 1 ? '' : 's'} (${r.plates.join(', ')}) after the kit's plates${r.skipped.length ? `; ${r.skipped.length} kit part${r.skipped.length === 1 ? '' : 's'} marked Not printing` : ''}.`;
+			if (saveForLater) {
+				// a failed save never undoes the add
+				try {
+					await saveCustomPieceToLibrary(view.build.id, r.pieceId);
+					msg += ' Saved for new builds.';
+				} catch (e) {
+					msg += ` It could not be saved for new builds: ${e instanceof Error ? e.message : 'try the Save button on the part.'}`;
+				}
+			}
+			ondone(msg);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not add the part.';
 			phase = 'review';
+		}
+	}
+
+	/** Add a saved part of the workspace to this build, without a file. */
+	async function applySaved(l: LibraryPiece) {
+		if (applying) return;
+		applying = l.id;
+		error = null;
+		try {
+			const r = await applyLibraryPiece(view.build.id, l.id);
+			if ('already' in r) {
+				ondone(`"${l.name}" is already in this build.`);
+				return;
+			}
+			const n = r.plates.length;
+			ondone(
+				`Added "${l.name}": ${n} plate${n === 1 ? '' : 's'} (${r.plates.join(', ')}) after the kit's plates${r.skipped.length ? `; replaced ${r.skipped.map(nameOfKit).join(', ')} (marked Not printing)` : ''}.`
+			);
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not add the part.';
+			applying = null;
 		}
 	}
 
@@ -204,6 +259,37 @@
 			them, with the print time and grams from the file, and join the Print tab after the kit's
 			plates. The file itself is not kept.
 		</p>
+		{#if phase === 'pick' && offered.length}
+			<div class="cpu-saved" data-testid="custom-saved-list">
+				<h3>Saved custom parts</h3>
+				<ul>
+					{#each offered as l (l.id)}
+						<li class="ds-card ds-card--compact cpu-saved-row">
+							<div class="cpu-info">
+								<b>{l.name}</b>
+								<span class="meta">
+									{l.plates.length} plate{l.plates.length === 1 ? '' : 's'}
+									· {l.totalSeconds ? fmtH(l.totalSeconds) : 'no time'}
+									· {l.totalGrams ? `${fmt(l.totalGrams)} g` : 'no grams'}
+									{#if l.replaces.length}· replaces {l.replaces.length} kit part{l.replaces
+											.length === 1
+											? ''
+											: 's'}{/if}
+								</span>
+							</div>
+							<button
+								class="btn sm"
+								type="button"
+								data-testid="custom-saved-add"
+								disabled={!!applying || full}
+								onclick={() => applySaved(l)}>{applying === l.id ? 'Adding…' : 'Add'}</button
+							>
+						</li>
+					{/each}
+				</ul>
+				<h3>Or add a file</h3>
+			</div>
+		{/if}
 		{#if phase === 'pick'}
 			<label
 				class="cpu-drop"
@@ -373,6 +459,16 @@
 				{/each}
 			</details>
 		{/if}
+
+		<label class="cpu-save">
+			<input type="checkbox" bind:checked={saveForLater} data-testid="custom-save-library" />
+			<span>
+				<b>Save for new builds</b>
+				<span class="meta"
+					>Keeps its plates, time and grams for this workspace. The file is not kept.</span
+				>
+			</span>
+		</label>
 
 		{#if replaces.length}
 			<p class="meta cpu-sel">Replacing: {replaces.map(nameOfKit).join(', ')}</p>
@@ -565,6 +661,40 @@
 		gap: var(--sp-4);
 		align-items: center;
 		min-height: 32px;
+	}
+	.cpu-saved {
+		display: grid;
+		gap: var(--sp-4);
+	}
+	.cpu-saved ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: var(--sp-4);
+	}
+	.cpu-saved-row {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-4) var(--sp-5);
+		background: var(--paper);
+	}
+	.cpu-saved-row .cpu-info {
+		display: grid;
+		gap: var(--sp-1);
+		min-width: 0;
+		flex: 1 1 140px;
+		overflow-wrap: anywhere;
+	}
+	.cpu-save {
+		display: flex;
+		gap: var(--sp-4);
+		align-items: flex-start;
+		min-height: 32px;
+	}
+	.cpu-save > span {
+		display: grid;
+		gap: var(--sp-1);
 	}
 	.cpu-sel {
 		overflow-wrap: anywhere;

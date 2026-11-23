@@ -11,6 +11,7 @@
 		arrangePlates,
 		forgetPrintTemplate,
 		removeCustomPiece,
+		saveCustomPieceToLibrary,
 		getArrangement,
 		exportDownloadUrl,
 		type ArrangementDto,
@@ -437,6 +438,21 @@
 	let removing = $state<CustomPiece | null>(null);
 	let removeBack = $state(true);
 	let removeBusy = $state(false);
+	let savingId = $state<string | null>(null);
+	/** Keep a custom part's plates, time and grams in the workspace for new builds. */
+	async function saveForNewBuilds(c: CustomPiece) {
+		if (savingId) return;
+		savingId = c.id;
+		try {
+			await saveCustomPieceToLibrary(ctx.id, c.id);
+			notice = `Saved "${c.name}" for new builds.`;
+			await ctx.refresh();
+		} catch (e) {
+			ctx.error = e instanceof Error ? e.message : 'Could not save the part.';
+		} finally {
+			savingId = null;
+		}
+	}
 	/** Kit parts the piece replaced that are still Not printing. */
 	const backParts = (c: CustomPiece) =>
 		ctx.view.skipped.filter((s) => !s.custom && c.replaces.includes(s.slug));
@@ -557,7 +573,22 @@
 							>
 						{/if}
 					</div>
+					{#if c.libraryId}
+						<span class="cl-saved" data-testid="custom-saved" title="Saved for new builds"
+							>Saved</span
+						>
+					{/if}
 					{#if ctx.canEdit && !draft}
+						{#if !c.libraryId}
+							<button
+								class="btn sm"
+								type="button"
+								data-testid="custom-save"
+								disabled={savingId === c.id}
+								onclick={() => saveForNewBuilds(c)}
+								>{savingId === c.id ? 'Saving…' : 'Save for new builds'}</button
+							>
+						{/if}
 						<button
 							class="btn sm"
 							type="button"
@@ -1265,6 +1296,14 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--sp-3) var(--sp-6);
+	}
+	.cl-saved {
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		color: var(--muted);
+		padding: 2px var(--sp-4);
+		border: 1px solid var(--line);
+		border-radius: 999px;
 	}
 	.cl-text {
 		display: grid;

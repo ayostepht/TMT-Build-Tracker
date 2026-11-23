@@ -1,9 +1,12 @@
 import { and, eq } from 'drizzle-orm';
+import { MAX_CUSTOM_PIECES, MAX_CUSTOM_PLATES } from '#lib/domain/custom.ts';
 import type { BuildKind, BuildPrinter } from '#lib/domain/types.ts';
 import { resolveChoices, validateChoices } from '#lib/domain/variants.ts';
 import { ApiError, requireEditor } from '../access';
 import { canSeeDesign } from '../designs/access';
 import { arrangeForPrinter } from './plates';
+import { loadBuildView } from './view';
+import { applyLibraryPieceTx, defaultLibraryRows } from '../custom-library';
 import type { Db } from '../db';
 import { assertUnder, countBuilds, countDrafts } from '../quota';
 import {
@@ -202,6 +205,52 @@ export function createBuild(db: Db, input: CreateBuildInput, userId: string): st
 					parts: p.parts
 				})
 				.run();
+		}
+		// Saved custom parts marked "Include in new builds": only for tracked builds made through the setup
+		// flow. Each piece gets its own savepoint, so one that cannot be added leaves no partial rows and
+		// never fails the build.
+		if (input.setup && input.kind !== 'draft') {
+			// Bounded work: the caps stop the loop, rows that cannot fit are skipped without loading the view,
+			// and the view is reloaded only after a piece was written (a failed piece rolled back to its savepoint).
+			let pieces = 0;
+			let platesUsed = 0;
+			let view: ReturnType<typeof loadBuildView> | undefined;
+			for (const lib of defaultLibraryRows(tx, input.organizationId)) {
+				if (pieces >= MAX_CUSTOM_PIECES || platesUsed >= MAX_CUSTOM_PLATES) break;
+				const n = (lib.plates ?? []).length;
+				if (!n || platesUsed + n > MAX_CUSTOM_PLATES) continue;
+				try {
+					view ??= loadBuildView(tx, id, userId);
+					if (!view) break;
+					const current = view;
+					const made = tx.transaction((spRaw) =>
+						applyLibraryPieceTx(spRaw as unknown as Db, current, lib, userId)
+					);
+					if (!made) continue;
+					pieces++;
+					platesUsed += n;
+					view = undefined;
+					tx.insert(activity)
+						.values({
+							buildId: id,
+							userId,
+							kind: 'custom.add',
+							payload: {
+								pieceId: made.pieceId,
+								name: lib.name,
+								fileName: lib.fileName,
+								plates: [],
+								sliced: lib.sliced,
+								replaced: made.skippedNames,
+								fromLibrary: true
+							}
+						})
+						.run();
+				} catch (e) {
+					// an unusable saved part is left out; anything unexpected still fails the build
+					if (!(e instanceof ApiError)) throw e;
+				}
+			}
 		}
 		tx.insert(activity)
 			.values({

@@ -473,6 +473,58 @@ export const removeCustomPiece = (buildId: string, pieceId: string, restore = fa
 		'DELETE',
 		`${b(buildId)}/custom-pieces/${encodeURIComponent(pieceId)}${restore ? '?restore=1' : ''}`
 	);
+/** A saved custom part of a workspace (per-plate summaries; never the file). */
+export interface LibraryPiece {
+	id: string;
+	name: string;
+	fileName: string | null;
+	sliced: boolean;
+	templateId: string | null;
+	replaces: string[];
+	plates: {
+		name: string;
+		estSeconds: number | null;
+		grams: number | null;
+		role: string;
+		runs: number;
+	}[];
+	isDefault: boolean;
+	/** All prints of all plates. */
+	totalSeconds: number;
+	totalGrams: number;
+}
+/** The workspace's saved custom parts (members). */
+export const listCustomLibrary = (organizationId: string) =>
+	call<{ pieces: LibraryPiece[] }>(
+		'GET',
+		`/api/custom-library?organizationId=${encodeURIComponent(organizationId)}`
+	);
+/** Save a custom piece of a build for new builds of the workspace (idempotent). */
+export const saveCustomPieceToLibrary = (buildId: string, pieceId: string, isDefault = false) =>
+	call<{ piece: LibraryPiece }>('POST', '/api/custom-library', { buildId, pieceId, isDefault });
+/** Rename a saved part or switch "in new builds by default". */
+export const updateLibraryPiece = (
+	organizationId: string,
+	id: string,
+	body: { name?: string; isDefault?: boolean }
+) =>
+	call<{ piece: LibraryPiece }>('PATCH', `/api/custom-library/${encodeURIComponent(id)}`, {
+		organizationId,
+		...body
+	});
+/** Delete a saved part; builds keep the pieces they already have. */
+export const deleteLibraryPiece = (organizationId: string, id: string) =>
+	call(
+		'DELETE',
+		`/api/custom-library/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(organizationId)}`
+	);
+/** Add a saved part to a build. `already: true` when the build has it. */
+export const applyLibraryPiece = (buildId: string, libraryId: string) =>
+	call<{ pieceId: string; plates: number[]; skipped: string[] } | { already: true }>(
+		'POST',
+		`${b(buildId)}/custom-pieces`,
+		{ libraryId }
+	);
 export const discardPlateUpload = (buildId: string, uploadId: string) =>
 	call('DELETE', `${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}`);
 export const plateThumbnailUrl = (buildId: string, number: number, v = '') =>

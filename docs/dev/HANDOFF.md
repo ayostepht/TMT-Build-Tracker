@@ -17,19 +17,19 @@ _Updated 2026-11-23, 04:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 
 ## State
 
-- **In flight: issue #113 "custom parts"** (maintainer, 2026-11-23: prototype in this
-  edition, two pull requests, each merged into `edge` once the routine and CI are green).
-  Part 1 = branch `claude/gallant-newton-s64g9v`: migration `0005_custom_pieces`,
-  restorable "Not printing" for parts and plates, "Add a custom part" from a .3mf on the
-  Files tab (see STATUS "Waiting on the maintainer" for the decisions and known limits).
-  Gate: check, lint, 2381 unit tests, build, empty-data start, 20 e2e specs; security
-  review with no high or medium finding (the low ones are fixed). Part 2 (workspace
-  library of saved custom parts, offered in the new-build flow; migration 0006 adds table
-  `workspace_custom_pieces`, `build_custom_pieces.library_id` already exists) restarts the
-  same branch name from `edge` after part 1 merges. Plan for part 2: summaries only, no
-  stored 3MF; thumbnails under `custom-library/<orgId>/<libId>/` counted in quota and
-  removed with the workspace; default pieces applied in `createBuild`; a team page to
-  rename, set default and delete.
+- **Issue #113 "custom parts"** (maintainer, 2026-11-23: prototype in this edition, two
+  pull requests, each merged into `edge` once the routine and CI are green; the maintainer
+  has not seen either yet). Part 1 is merged: #114 (fd48d08; migration
+  `0005_custom_pieces`; restorable "Not printing" for parts and plates; "Add a custom part"
+  from a .3mf on the Files tab). Part 2 is on branch `claude/gallant-newton-s64g9v`
+  (migration `0006_custom_library`; "Save for new builds", saved parts applied to other
+  builds and to new builds, the wizard's Options step, the Saved parts page): gate passed
+  on 16c2a8f (check, lint, 2405 unit tests, build, empty-database start, 22 e2e specs),
+  security review with no high or medium finding. It merges when CI is green; the issue
+  stays open until the maintainer has tried both on the `edge` image. Decisions, known
+  limits and the questions for the maintainer are in STATUS "Waiting on the maintainer".
+  Both migrations are additive and need a rehearsal before the test copy takes them. Not
+  ported to the hosted edition.
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).

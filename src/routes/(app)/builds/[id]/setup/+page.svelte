@@ -2,7 +2,15 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { applyDesign, previewApplyDesign, setSetupStep, setVariant } from '#lib/client/api.ts';
+	import {
+		applyDesign,
+		applyLibraryPiece,
+		previewApplyDesign,
+		removeCustomPiece,
+		setSetupStep,
+		setVariant
+	} from '#lib/client/api.ts';
+	import { fmt, fmtHM } from '#lib/domain/format.ts';
 	import { offerDesignUndo } from '#lib/client/design-undo.ts';
 	import { designSnapshot, type ApplyMode } from '#lib/domain/design-apply.ts';
 	import { getBuildCtx } from '#lib/components/build-context.svelte.ts';
@@ -155,6 +163,24 @@
 	const backTo = $derived<number | 'spoolman'>(
 		step === 4 && spoolmanOn ? 'spoolman' : isSpoolman ? 3 : step - 1
 	);
+	/** Saved custom parts of the workspace; "in" = this build already holds a piece made from it. */
+	const savedParts = $derived(
+		data.savedParts.map((s) => ({
+			...s,
+			pieceId: ctx.view.customPieces.find((c) => c.libraryId === s.id)?.id ?? null
+		}))
+	);
+	let savedBusy = $state('');
+	async function toggleSaved(s: (typeof savedParts)[number]) {
+		savedBusy = s.id;
+		try {
+			await ctx.act(() =>
+				s.pieceId ? removeCustomPiece(ctx.id, s.pieceId, true) : applyLibraryPiece(ctx.id, s.id)
+			);
+		} finally {
+			savedBusy = '';
+		}
+	}
 	const partNames = $derived(
 		Object.fromEntries(
 			[...ctx.view.allParts, ...ctx.view.parts.filter((p) => p.custom)].map((p) => [p.slug, p.name])
@@ -247,6 +273,40 @@
 				<p class="muted">This kit has no options. Carry on.</p>
 			{/if}
 		</section>
+		{#if savedParts.length}
+			<section class="card" aria-labelledby="saved-h" data-testid="setup-saved-parts">
+				<h2 id="saved-h">Saved custom parts</h2>
+				<p class="muted">
+					Parts saved for this workspace. Adding one counts its filament and print time in this
+					build's estimate.
+				</p>
+				<ul class="svlist">
+					{#each savedParts as s (s.id)}
+						<li class="svrow" data-testid="setup-saved-part" data-name={s.name}>
+							<div class="svinfo">
+								<b>{s.name}</b>
+								<span class="muted svmeta">
+									{s.plates.length}
+									{s.plates.length === 1 ? 'plate' : 'plates'} · {s.totalSeconds
+										? fmtHM(s.totalSeconds)
+										: 'no time'} · {fmt(s.totalGrams)} g{s.replacesNames.length
+										? ` · replaces ${s.replacesNames.join(', ')}`
+										: ''}
+								</span>
+							</div>
+							<button
+								type="button"
+								class="btn sm"
+								class:primary={!s.pieceId}
+								disabled={savedBusy === s.id}
+								data-testid={s.pieceId ? 'setup-saved-remove' : 'setup-saved-add'}
+								onclick={() => toggleSaved(s)}>{s.pieceId ? 'Remove' : 'Add'}</button
+							>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 	{:else if isSpoolman}
 		<section class="card" aria-labelledby="sm-h" data-testid="setup-spoolman">
 			<h2 id="sm-h">Spoolman</h2>
@@ -450,6 +510,32 @@
 	}
 	.designs .btn {
 		min-height: 40px;
+	}
+	.svlist {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+	}
+	.svrow {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px 12px;
+		padding: 12px 0;
+		border-top: 1px solid var(--line);
+		min-width: 0;
+	}
+	.svinfo {
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+		flex: 1 1 220px;
+		overflow-wrap: anywhere;
+	}
+	.svmeta {
+		font-size: var(--fs-sm);
 	}
 	.smlist {
 		list-style: none;
