@@ -7,6 +7,16 @@ state in `docs/dev/STATUS.md`. Add one entry per deploy (2-4 lines: what changed
 
 ## 2026-11
 
+- **r68** (published `sha-48c1f8f` = `edge` 48c1f8f = #119 "Image build: bundle the app once on
+  the build platform", digest `sha256:6e5a95724d52…5c40fc`, same as `edge`, 2026-11-23; `edge`
+  1ed2cf0 adds docs only): brings #114 ("Not printing" for parts and plates, custom parts from a
+  .3mf), #117 (saved custom parts for new builds) and #115 (one status badge on single-part
+  plates, "Print some pieces…" in every part menu). Migrations `0005_custom_pieces` and
+  `0006_custom_library` (additive: `build_custom_pieces`, `workspace_custom_pieces`,
+  `build_parts.skipped`; journal 5 → 7), rehearsed on a copy of the real database: 38 → 40
+  tables, all old row counts equal, integrity and foreign keys ok. Live: health ok, no startup
+  errors, integrity ok. Not checked signed in. Rollback: stop, restore
+  `tmt-backup-pre-r68.db`, re-tag `r67` as `test`.
 - **r67** (published `sha-fbd401d` = `edge` fbd401d = #104 "Share a picture: the whole picture
   fits the preview", digest `sha256:dcf3b188eb5b…22535b`, same as `edge`, 2026-11-22; `edge`
   def4728 adds docs only): also brings #102 (section text keeps line breaks, "Try again" when
