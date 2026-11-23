@@ -386,6 +386,26 @@ create|prelink`, plus `spoolmanSpoolId`/`archived` extras on `filament.stock.add
   transaction, one savepoint per piece (a failing piece is skipped). UI: checkbox and saved
   list in `CustomPieceUpload`, "Saved" tag in `PlatesPanel`, page `teams/[slug]/pieces`,
   the wizard's Options step (`savedParts` from the setup page load).
+- **Custom parts follow-ups (2026-11-23):** `custom-pieces.ts` exports `customPlateLabel` /
+  `ownPlateName` (one naming rule for insert, apply and rename), `renameCustomPiece`
+  (`PATCH /api/builds/[id]/custom-pieces/[pieceId]`, activity `custom.rename`, on purpose not
+  in `REARRANGE_KINDS`) and the validators `cleanSeconds`, `cleanGrams`, `scaleGrams`.
+  `addCustomPiece` takes `times` / `grams` per file plate: a typed time goes to
+  `manual_est_seconds` (source `user`), typed grams to `slicer_grams` (source `user`) with
+  the file's per-color grams rescaled; for a file without grams `filament_grams` stays
+  empty and the grams follow the part's role. `custom-library.ts`: `createLibraryPiece`
+  (second body shape of `POST /api/custom-library`; role keys are the kit's
+  `template_filament_roles` keys, not per-build slots), plate edits in
+  `updateLibraryPiece`, `refreshLibraryPiece` (`POST /api/custom-library/[id]/refresh`:
+  copies a build piece's values back to its saved part), `libraryTemplateOptions` (the
+  `template` in `GET /api/custom-library`). `POST /api/custom-library/inspect` reads a 3MF
+  for the add form and stores nothing: temp file `uploads/imports/<uuid>.zip`, removed in
+  `receiveThreeMf`'s `finally` and covered by `sweepImportsDir`. `threemf/upload-guard.ts`
+  `guardedReceiveThreeMf` (slot, quota, raw body, disk floor) is shared with the build
+  upload route. A project file saved from an Orca-family slicer has a header-only
+  `slice_info.config` and no G-code: it parses as unsliced (fixture option
+  `headerOnlySliceInfo`). UI: `LibraryPartForm.svelte` on `teams/[slug]/pieces` ("Custom
+  parts", also in the Settings menu, `ws-custom-parts`).
 - **Export:** `src/lib/server/threemf-export/` (Orca/Elegoo, Bambu, plain), painted
   supports, `bed_exclude_area`.
 
