@@ -72,6 +72,9 @@ export function addCustomPiece(
 	const written: string[] = []; // thumbnails copied to disk; removed again when the transaction fails
 	try {
 		mutateBuild(db, buildId, userId, (tx, view) => {
+			// refuse before anything is read from or written to disk
+			if (view.build.kind === 'draft')
+				throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 			const name = cleanPieceName(b.name);
 			const up = getUpload(tx, buildId, uploadId);
 			if (up.status !== 'parsed')
@@ -119,7 +122,8 @@ export function addCustomPiece(
 
 			// the file's filament slots → the build's colours
 			const roleKeys = new Set(view.filaments.map((f) => f.key));
-			const filamentMap: Record<string, string> = {};
+			// own keys only: slot ids come from the file and may be `constructor` or `__proto__`
+			const filamentMap: Record<string, string> = Object.create(null);
 			if (b.filamentMap !== undefined) {
 				if (!isObj(b.filamentMap)) bad('filamentMap must be an object');
 				const entries = Object.entries(b.filamentMap as Obj);
@@ -137,7 +141,7 @@ export function addCustomPiece(
 				fallback = b.role as string;
 			}
 			fallback ??= Object.values(filamentMap)[0] ?? view.filaments[0]?.key;
-			if (!fallback) bad('This build has no filament colours yet');
+			if (!fallback || !roleKeys.has(fallback)) bad('This build has no filament colours yet');
 
 			// kit parts the piece replaces
 			let replaces: string[] = [];
@@ -169,12 +173,13 @@ export function addCustomPiece(
 				const fg: Record<string, number> = {};
 				for (const [idx, g] of Object.entries(pl.filamentGrams ?? {})) {
 					if (!(g > 0)) continue;
-					const role = filamentMap[idx];
-					if (!role) bad(`Choose a colour for filament ${idx}`);
+					const role = Object.hasOwn(filamentMap, idx) ? filamentMap[idx] : undefined;
+					if (!role || !roleKeys.has(role)) return bad(`Choose a colour for filament ${idx}`);
 					fg[role] = Math.round(((fg[role] ?? 0) + g) * 100) / 100;
 				}
 				// the colour carrying most of the plate's grams; the chosen fallback when nothing is known
-				const role = Object.entries(fg).sort((a, c) => c[1] - a[1])[0]?.[0] ?? fallback!;
+				let role = Object.entries(fg).sort((a, c) => c[1] - a[1])[0]?.[0] ?? fallback!;
+				if (!roleKeys.has(role)) role = fallback!;
 				const total = Object.values(fg).reduce((a, c) => a + c, 0);
 				const grams =
 					pl.grams && pl.grams > 0 ? pl.grams : total > 0 ? Math.round(total * 100) / 100 : null;
@@ -239,7 +244,6 @@ export function addCustomPiece(
 				})
 				.where(eq(buildUploads.id, uploadId))
 				.run();
-			rmSync(uploadDir(uploadId), { recursive: true, force: true });
 			result = { pieceId, plates: items.map((x) => x.number), skipped };
 			return {
 				kind: 'custom.add',
@@ -247,7 +251,8 @@ export function addCustomPiece(
 					pieceId,
 					name,
 					fileName: up.fileName,
-					plates: result.plates,
+					// numbers can still change in the automatic re-arrange that follows: not recorded
+					plates: [],
 					sliced: summary.sliced,
 					replaced: skippedNames
 				}
@@ -257,6 +262,8 @@ export function addCustomPiece(
 		for (const f of written) rmSync(f, { force: true });
 		throw e;
 	}
+	// the stored 3MF's folder goes only once the add has been saved
+	rmSync(uploadDir(uploadId), { recursive: true, force: true });
 	// A re-arrange right after the add renumbers custom plates (they follow the new kit plates): read the final numbers.
 	const final = db
 		.select({ n: buildPlates.number })

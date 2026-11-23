@@ -10,6 +10,7 @@ import type { BuildPrinter } from '#lib/domain/types.ts';
 import { catalogPrinter } from '#lib/printers/catalog.ts';
 import { printerFromCatalog } from '#lib/printers/printer.ts';
 import { ApiError } from '../access';
+import { removeBuildPlateFiles } from './custom-plates';
 import { uploadsDir } from '../config';
 import { openDb, runMigrations, type Db } from '../db';
 import {
@@ -29,7 +30,14 @@ import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { makeProjectThreeMf } from '../threemf/fixtures';
 import { parseThreeMfBytes } from '../threemf';
-import { addRun, promoteDraft, setPartStatus, skipParts, updatePlate } from './actions';
+import {
+	addRun,
+	deleteBuild,
+	promoteDraft,
+	setPartStatus,
+	skipParts,
+	updatePlate
+} from './actions';
 import { addCustomPiece, removeCustomPiece } from './custom-pieces';
 import { createBuild } from './create';
 import {
@@ -44,6 +52,7 @@ import {
 	arrangeForPrinter,
 	buildArrangement,
 	createUpload,
+	uploadDir,
 	plateThumbnailFile,
 	setPlateLayout
 } from './plates';
@@ -610,5 +619,76 @@ describe('the arranger and the export never see custom pieces', () => {
 		expect(kitPlates(id).flatMap((p) => p.parts)).not.toContain('handle-right');
 		expect(printers).toBeTruthy();
 		expect(printerJobs).toBeTruthy();
+	});
+});
+
+describe('safety', () => {
+	it('a filament id from the file that is an inherited member name is not a colour', async () => {
+		const id = mk();
+		const bytes = makeProjectThreeMf({
+			sliced: true,
+			filamentTypes: ['PETG'],
+			plates: [
+				{ name: 'P', prediction: 100, weight: 5, filaments: { 1: 5 }, objects: [{ name: 'x' }] }
+			]
+		});
+		const parsed = await parseThreeMfBytes(bytes);
+		parsed.plates[0].filamentGrams = { constructor: 5, __proto__x: 1 } as Record<string, number>;
+		const up = createUpload(
+			db,
+			id,
+			'owner',
+			{ name: 'a.3mf', size: bytes.length },
+			parsed,
+			view(id)
+		);
+		for (const fm of [{}, { '1': 'primary' }]) {
+			expect(status(() => add(id, up.uploadId, { name: 'X', filamentMap: fm }))).toBe(400);
+		}
+		expect(
+			status(() => add(id, up.uploadId, { name: 'X', filamentMap: { constructor: 'toString' } }))
+		).toBe(400);
+		expect(customPlates(id)).toEqual([]);
+		expect(view(id).customPieces).toEqual([]);
+		expect(
+			db.select().from(buildUploads).where(eq(buildUploads.id, up.uploadId)).get()!.status
+		).toBe('parsed');
+	});
+
+	it('a failed add leaves the parsed upload in place and usable', async () => {
+		const draft = mk({ kind: 'draft' });
+		const up = await upload(draft);
+		expect(
+			status(() =>
+				add(draft, up.uploadId, { name: 'X', filamentMap: { '1': 'primary', '2': 'soft' } })
+			)
+		).toBe(400);
+		expect(existsSync(uploadDir(up.uploadId))).toBe(true);
+		expect(
+			db.select().from(buildUploads).where(eq(buildUploads.id, up.uploadId)).get()!.status
+		).toBe('parsed');
+		promoteDraft(db, draft, 'owner');
+		add(draft, up.uploadId, { name: 'X', filamentMap: { '1': 'primary', '2': 'soft' } });
+		expect(view(draft).customPieces).toHaveLength(1);
+		expect(existsSync(uploadDir(up.uploadId))).toBe(false);
+	});
+
+	it('deleting a build removes its plate thumbnails, custom ones included', async () => {
+		const id = mk();
+		const other = mk();
+		add(id, (await upload(id)).uploadId, {
+			name: 'A',
+			filamentMap: { '1': 'primary', '2': 'soft' }
+		});
+		add(other, (await upload(other)).uploadId, {
+			name: 'B',
+			filamentMap: { '1': 'primary', '2': 'soft' }
+		});
+		const dir = join(uploadsDir(), 'plates', id);
+		expect(existsSync(dir)).toBe(true);
+		deleteBuild(db, id, 'owner');
+		removeBuildPlateFiles(id);
+		expect(existsSync(dir)).toBe(false);
+		expect(existsSync(join(uploadsDir(), 'plates', other))).toBe(true);
 	});
 });

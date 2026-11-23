@@ -81,3 +81,9 @@ export function removeCustomThumb(buildId: string, slug: string): void {
 	if (!CUSTOM_SLUG.test(slug)) return;
 	rmSync(join(uploadsDir(), customThumbRel(buildId, slug)), { force: true });
 }
+
+/** Remove a deleted build's plate thumbnails (kit and custom). Call with the access-checked build id, after the delete. */
+export function removeBuildPlateFiles(buildId: string): void {
+	if (!/^[A-Za-z0-9_-]+$/.test(buildId)) return;
+	rmSync(join(uploadsDir(), plateThumbDir(buildId)), { recursive: true, force: true });
+}
