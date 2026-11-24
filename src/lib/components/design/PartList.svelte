@@ -188,6 +188,7 @@
 <style>
 	.parts {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--sp-3);
 	}
 	.phead {
@@ -263,6 +264,7 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--sp-1);
 	}
 	.prow {
@@ -310,6 +312,10 @@
 	}
 	.slotname {
 		margin-left: auto;
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 		font-size: var(--fs-xs);
 		white-space: nowrap;
 	}
@@ -318,6 +324,7 @@
 		gap: var(--sp-2);
 	}
 	.tag {
+		flex: none;
 		font: 500 var(--fs-xs)/1 var(--f-mono);
 		padding: var(--sp-2) var(--sp-3);
 		border-radius: var(--r-sm);
