@@ -35,28 +35,45 @@ const MAX_SLOTS = 32;
 export const MAX_RUNS = 20;
 const MAX_TYPED = 1000;
 
+/** Text from a file or a form: control and bidi characters dropped, spaces collapsed, at most `max` characters. */
+export function cleanText(v: unknown, max: number): string {
+	return typeof v === 'string'
+		? v
+				// eslint-disable-next-line no-control-regex
+				.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]+/g, ' ')
+				.replace(/\s+/g, ' ')
+				.trim()
+				.slice(0, max)
+				.trim()
+		: '';
+}
+
 /** Trimmed, control and bidi characters dropped, at most `CUSTOM_NAME_MAX` characters. */
 export function cleanPieceName(v: unknown): string {
 	if (typeof v !== 'string') return bad('name is required');
-	const name = v
-		// eslint-disable-next-line no-control-regex
-		.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]+/g, ' ')
-		.replace(/\s+/g, ' ')
-		.trim()
-		.slice(0, CUSTOM_NAME_MAX)
-		.trim();
+	const name = cleanText(v, CUSTOM_NAME_MAX);
 	if (!name) bad('name is required');
 	return name;
 }
 
-/** Name of a plate (and its part) of a piece: the piece's name, plus the plate's own name when it has several. */
+/** Longest own name of one plate inside a label, and longest file name kept. */
+export const PLATE_NAME_MAX = 80;
+export const FILE_NAME_MAX = 255;
+
+/**
+ * Name of a plate (and its part) of a piece: the piece's name, plus the plate's own name when it has several.
+ * The plate's own name comes from a file or a saved part: it is cleaned and capped here (new labels only; a
+ * stored longer one still loads, and is shortened when the piece is renamed).
+ */
 export function customPlateLabel(
 	pieceName: string,
 	plateName: string,
 	multi: boolean,
 	fallbackNumber: number
 ): string {
-	return multi ? `${pieceName} - ${plateName.trim() || `Plate ${fallbackNumber}`}` : pieceName;
+	return multi
+		? `${pieceName} - ${cleanText(plateName, PLATE_NAME_MAX) || `Plate ${fallbackNumber}`}`
+		: pieceName;
 }
 
 /** The plate's own name inside a label made by `customPlateLabel`; null when it does not follow that form. */
@@ -379,7 +396,7 @@ export function addCustomPiece(
 				view,
 				{
 					name,
-					fileName: up.fileName,
+					fileName: cleanText(up.fileName, FILE_NAME_MAX) || null,
 					sliced: summary.sliced,
 					replaces,
 					libraryId: null,
@@ -402,7 +419,7 @@ export function addCustomPiece(
 				payload: {
 					pieceId,
 					name,
-					fileName: up.fileName,
+					fileName: cleanText(up.fileName, FILE_NAME_MAX) || null,
 					// numbers can still change in the automatic re-arrange that follows: not recorded
 					plates: [],
 					sliced: summary.sliced,
@@ -411,7 +428,18 @@ export function addCustomPiece(
 			};
 		});
 	} catch (e) {
-		for (const f of written) rmSync(f, { force: true });
+		// `mutateBuild` also publishes after the commit, and that can throw: when the piece row exists the
+		// commit happened, its thumbnails are the plates' own pictures and stay, and the upload is used up.
+		// Only a failed transaction removes what it copied to disk.
+		const saved =
+			!!result.pieceId &&
+			!!db
+				.select({ id: buildCustomPieces.id })
+				.from(buildCustomPieces)
+				.where(eq(buildCustomPieces.id, result.pieceId))
+				.get();
+		if (saved) rmSync(uploadDir(uploadId), { recursive: true, force: true });
+		else for (const f of written) rmSync(f, { force: true });
 		throw e;
 	}
 	// the stored 3MF's folder goes only once the add has been saved
