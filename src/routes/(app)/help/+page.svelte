@@ -290,9 +290,12 @@
 			<details>
 				<summary>Where do I manage custom parts?</summary>
 				<p>
-					Open <b>Custom parts</b> in the Settings menu at the top. Editors can add a part there, with
-					or without a .3mf, type its print time and grams, give it a name of their own, and remove it.
-					The numbers you type are used for every build you add the part to afterwards.
+					Open <b>Custom parts</b> in the Settings menu at the top. Editors can add a part there,
+					with or without a .3mf, and Edit it later: its name, each plate's name, print time, grams,
+					number of prints and color, and which kit parts it replaces. The numbers you type are used
+					for every build you add the part to afterwards. When you add a saved part to a build you
+					confirm which kit parts it replaces. Turn on <b>Add to every new build automatically</b> to
+					have it added to each new build without asking; off, it is still offered when you set up a build.
 				</p>
 			</details>
 			<details>
