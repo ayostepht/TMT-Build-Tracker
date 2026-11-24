@@ -584,7 +584,8 @@ export function applyUpload(
 				let untracked = 0;
 				for (const [idx, g] of Object.entries(pl.filamentGrams)) {
 					const role = filamentMap[idx];
-					if (role && g > 0) fg[role] = Math.round(((fg[role] ?? 0) + g) * 100) / 100;
+					if (role && g > 0)
+						fg[role] = Math.round(((Object.hasOwn(fg, role) ? fg[role] : 0) + g) * 100) / 100;
 					else if (g > 0) untracked += g;
 				}
 				// the plate's weight without them; with every filament untracked the file's total stands

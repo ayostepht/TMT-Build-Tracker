@@ -100,6 +100,19 @@ export function cleanGrams(v: unknown, field = 'grams'): number {
 	return g > 0 ? g : bad(msg);
 }
 
+/**
+ * Add `g` grams to a role of a grams-by-role map. Role keys such as `constructor` or `toString` are valid
+ * filament keys, so the current value is read only when it is the map's own (never an inherited function).
+ */
+export function addGram(fg: Record<string, number>, role: string, g: number): void {
+	Object.defineProperty(fg, role, {
+		value: round2((Object.hasOwn(fg, role) ? fg[role] : 0) + g),
+		enumerable: true,
+		writable: true,
+		configurable: true
+	});
+}
+
 /** Scale per-role grams so they add up to `total` (proportionally). */
 export function scaleGrams(fg: Record<string, number>, total: number): Record<string, number> {
 	const sum = Object.values(fg).reduce((a, c) => a + c, 0);
@@ -126,14 +139,20 @@ function typedByPlate(
 	return out;
 }
 
-/** A `replaces` list from a request: at most `MAX_REPLACES` distinct slugs of the build's kit parts. */
+/**
+ * A `replaces` list from a request: at most `MAX_REPLACES` distinct slugs of the build's kit parts (anything else
+ * is a 400). Kit parts a color option made inactive and parts already "Not printing" need no skip and are left
+ * out, like the saved list's own filter does; Printing parts stay in (the skip refuses them with 409).
+ */
 export function cleanReplaces(view: BuildView, v: unknown): string[] {
 	if (!Array.isArray(v) || v.length > MAX_REPLACES)
 		return bad(`replaces must be a list of at most ${MAX_REPLACES} parts`);
 	const out = [...new Set(v as unknown[])] as string[];
 	const known = new Set(view.allParts.map((p) => p.slug));
 	for (const s of out) if (typeof s !== 'string' || !known.has(s)) bad('Unknown part in replaces');
-	return out;
+	const active = new Set(view.parts.map((p) => p.slug));
+	const skipped = new Set(view.skipped.map((s) => s.slug));
+	return out.filter((s) => active.has(s) && !skipped.has(s));
 }
 
 /** One plate of a piece about to be inserted (already validated and mapped onto the build's colors). */
@@ -374,7 +393,7 @@ export function addCustomPiece(
 					}
 					const role = Object.hasOwn(filamentMap, idx) ? filamentMap[idx] : undefined;
 					if (!role || !roleKeys.has(role)) return bad(`Choose a colour for filament ${idx}`);
-					fg[role] = Math.round(((fg[role] ?? 0) + g) * 100) / 100;
+					addGram(fg, role, g);
 				}
 				if (summary.sliced && slotsWithGrams > 0 && !Object.keys(fg).length)
 					return bad(
@@ -533,8 +552,8 @@ export function renameCustomPiece(
 
 /**
  * Re-key a part's colors: `mapped` is { current role: new role } (both already validated). Grams of roles that
- * land on the same new role are added; the part's role becomes the one with most grams, or the mapped
- * role when there are no grams.
+ * land on the same new role are added; the part's role becomes the one with most grams (the renamed
+ * current role on a tie), or its mapped role when there are no grams.
  */
 export function rekeyRoles(
 	fg: Record<string, number>,
@@ -542,12 +561,32 @@ export function rekeyRoles(
 	mapped: ReadonlyMap<string, string>
 ): { filamentGrams: Record<string, number>; role: string } {
 	const next: Record<string, number> = {};
-	for (const [r, g] of Object.entries(fg)) {
-		const k = mapped.get(r) ?? r;
-		next[k] = round2((next[k] ?? 0) + g);
+	for (const [r, g] of Object.entries(fg)) addGram(next, mapped.get(r) ?? r, g);
+	// a stored role that is not one of the gram keys is renamed by the map like any other
+	const renamed = mapped.get(role) ?? role;
+	const entries = Object.entries(next);
+	if (!entries.length) return { filamentGrams: next, role: renamed };
+	const max = Math.max(...entries.map(([, g]) => g));
+	const heaviest = entries.filter(([, g]) => g === max).map(([k]) => k);
+	return { filamentGrams: next, role: heaviest.includes(renamed) ? renamed : heaviest[0] };
+}
+
+/**
+ * `PATCH` of a custom piece: `{ name }` renames it, `{ roles }` recolors its parts; both in one body is a 400
+ * (two changes with two activity rows belong in two requests).
+ */
+export function patchCustomPiece(
+	db: Db,
+	buildId: string,
+	userId: string,
+	pieceId: string,
+	body: unknown
+): { name: string } | { changes: RecolorChange[] } {
+	if (isObj(body) && body.roles !== undefined) {
+		if (body.name !== undefined) return bad('Send name or roles, not both');
+		return recolorCustomPiece(db, buildId, userId, pieceId, body);
 	}
-	const top = Object.entries(next).sort((a, c) => c[1] - a[1])[0]?.[0];
-	return { filamentGrams: next, role: top ?? mapped.get(role) ?? role };
+	return renameCustomPiece(db, buildId, userId, pieceId, body);
 }
 
 /** One color change of a custom part: role keys of the build's filaments. */

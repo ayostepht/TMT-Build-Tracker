@@ -16,6 +16,7 @@ import { openDb, runMigrations, type Db } from '../db';
 import {
 	activity,
 	buildCustomPieces,
+	buildFilaments,
 	buildParts,
 	buildPlates,
 	buildUploads,
@@ -41,7 +42,9 @@ import {
 } from './actions';
 import {
 	addCustomPiece,
+	patchCustomPiece,
 	recolorCustomPiece,
+	rekeyRoles,
 	removeCustomPiece,
 	renameCustomPiece
 } from './custom-pieces';
@@ -1191,5 +1194,196 @@ describe('the plate upload with a filament left on Not tracked', () => {
 		// nothing mapped: the file's total stands (nothing to keep)
 		const none = await mapOnce({});
 		expect(none.slicerGrams).toBe(70);
+	});
+});
+
+/** Role keys named like `Object.prototype` members are valid filament keys: sums must stay numbers. */
+describe('filament keys that are Object.prototype names', () => {
+	/** A build whose accent and tire filaments are keyed `constructor` and `toString`. */
+	const mkOdd = () => {
+		const id = mk();
+		for (const [from, to] of [
+			['accent', 'constructor'],
+			['tire', 'toString']
+		])
+			db.update(buildFilaments)
+				.set({ roleKey: to })
+				.where(and(eq(buildFilaments.buildId, id), eq(buildFilaments.roleKey, from)))
+				.run();
+		return id;
+	};
+	const addOdd = async (id: string, map: Record<string, string>) => {
+		const up = await upload(id);
+		const r = add(id, up.uploadId, { name: 'Odd', filamentMap: map });
+		return view(id).customPieces.find((c) => c.id === r.pieceId)!;
+	};
+
+	it('adding sums grams per role and picks the heaviest role', async () => {
+		const id = mkOdd();
+		const p = await addOdd(id, { '1': 'constructor', '2': 'toString' });
+		expect(customPlates(id)[0].filamentGrams).toEqual({ constructor: 30, toString: 40 });
+		expect(customPlates(id)[1].filamentGrams).toEqual({ constructor: 12.5 });
+		expect(view(id).parts.find((x) => x.slug === p.parts[0])!.role).toBe('toString');
+		const id2 = mkOdd();
+		await addOdd(id2, { '1': 'constructor', '2': 'constructor' });
+		expect(customPlates(id2)[0].filamentGrams).toEqual({ constructor: 70 });
+		// a typed total scales them
+		const id3 = mkOdd();
+		const up = await upload(id3);
+		add(id3, up.uploadId, {
+			name: 'Odd',
+			filamentMap: { '1': 'constructor', '2': 'toString' },
+			grams: { '1': 35 }
+		});
+		const g = customPlates(id3)[0].filamentGrams;
+		expect(Object.values(g).every((n) => typeof n === 'number' && Number.isFinite(n))).toBe(true);
+		expect(g).toEqual({ constructor: 15, toString: 20 });
+	});
+
+	it('recoloring to and from such a key keeps numbers', async () => {
+		const id = mkOdd();
+		const p = await addOdd(id, { '1': 'primary', '2': 'soft' });
+		const [s1, s2] = p.parts;
+		recolorCustomPiece(db, id, 'owner', p.id, { roles: { [s2]: { primary: 'constructor' } } });
+		expect(customPlates(id)[1].filamentGrams).toEqual({ constructor: 12.5 });
+		recolorCustomPiece(db, id, 'owner', p.id, {
+			roles: { [s1]: { primary: 'constructor', soft: 'constructor' } }
+		});
+		expect(customPlates(id)[0].filamentGrams).toEqual({ constructor: 70 });
+		recolorCustomPiece(db, id, 'owner', p.id, { roles: { [s1]: { constructor: 'toString' } } });
+		expect(customPlates(id)[0].filamentGrams).toEqual({ toString: 70 });
+		expect(view(id).parts.find((x) => x.slug === s1)!.role).toBe('toString');
+		recolorCustomPiece(db, id, 'owner', p.id, { roles: { [s2]: { constructor: 'primary' } } });
+		expect(customPlates(id)[1].filamentGrams).toEqual({ primary: 12.5 });
+	});
+
+	it('saving, applying and editing a saved part with such keys', async () => {
+		const lib = await import('../custom-library');
+		const id = mkOdd();
+		const p = await addOdd(id, { '1': 'constructor', '2': 'toString' });
+		const saved = lib.saveToLibrary(db, 'owner', id, p.id);
+		// another odd build: the saved colors map onto the same keys
+		const id2 = mkOdd();
+		lib.applyLibraryPiece(db, id2, 'owner', saved.id);
+		expect(customPlates(id2)[0].filamentGrams).toEqual({ constructor: 30, toString: 40 });
+		// a plain build: unknown roles fold onto its first filament and sum
+		const id3 = mk();
+		lib.applyLibraryPiece(db, id3, 'owner', saved.id);
+		const fg = customPlates(id3)[0].filamentGrams;
+		expect(Object.values(fg)).toEqual([70]);
+		// edit (the saved part's roles must be the kit's): odd keys re-key and merge
+		const out = lib.updateLibraryPiece(db, 'owner', orgId, saved.id, {
+			plates: [{ index: 0, roles: { toString: 'accent' } }]
+		});
+		expect(out.plates[0].filamentGrams).toEqual({ constructor: 30, accent: 40 });
+		const out2 = lib.updateLibraryPiece(db, 'owner', orgId, saved.id, {
+			plates: [{ index: 0, roles: { constructor: 'accent' } }]
+		});
+		expect(out2.plates[0].filamentGrams).toEqual({ accent: 70 });
+		const out3 = lib.updateLibraryPiece(db, 'owner', orgId, saved.id, {
+			plates: [{ index: 1, grams: 5 }]
+		});
+		expect(out3.plates[1].filamentGrams).toEqual({ constructor: 5 });
+	});
+
+	it('rekeyRoles itself', () => {
+		const r = rekeyRoles({ a: 1, toString: 2 }, 'a', new Map([['a', 'toString']]));
+		expect(r.filamentGrams).toEqual({ toString: 3 });
+		expect(r.role).toBe('toString');
+		expect(rekeyRoles({}, 'valueOf', new Map([['valueOf', 'constructor']])).role).toBe(
+			'constructor'
+		);
+	});
+});
+
+describe('rekeyRoles keeps the part role consistent', () => {
+	it('a stored role that is not a gram key is renamed by the map', () => {
+		// grams on soft only, role says primary (stale): primary -> accent renames the role; soft stays heaviest
+		const r = rekeyRoles({ soft: 5 }, 'primary', new Map([['primary', 'accent']]));
+		expect(r).toEqual({ filamentGrams: { soft: 5 }, role: 'soft' });
+		// a tie keeps the renamed current role when it is among the heaviest
+		const t = rekeyRoles({ soft: 5, tire: 5 }, 'tire', new Map([['soft', 'accent']]));
+		expect(t.role).toBe('tire');
+		const t2 = rekeyRoles({ soft: 5, tire: 5 }, 'soft', new Map([['soft', 'accent']]));
+		expect(t2.role).toBe('accent');
+		// no grams: the mapped role
+		expect(rekeyRoles({}, 'primary', new Map([['primary', 'accent']])).role).toBe('accent');
+		expect(rekeyRoles({}, 'primary', new Map()).role).toBe('primary');
+	});
+
+	it('after a recolor the part role is the heaviest of the re-keyed grams', async () => {
+		const id = mk();
+		const up = await upload(id);
+		const r = add(id, up.uploadId, { name: 'B', filamentMap: { '1': 'primary', '2': 'soft' } });
+		const p = view(id).customPieces.find((c) => c.id === r.pieceId)!;
+		// plate 1: primary 30, soft 40 (role soft); move soft to tire: role follows the heaviest
+		recolorCustomPiece(db, id, 'owner', p.id, { roles: { [p.parts[0]]: { soft: 'tire' } } });
+		expect(view(id).parts.find((x) => x.slug === p.parts[0])!.role).toBe('tire');
+		// stale stored role (not a gram key): the recolor still leaves role = heaviest gram role
+		const row = db.select().from(buildCustomPieces).where(eq(buildCustomPieces.id, p.id)).get()!;
+		db.update(buildCustomPieces)
+			.set({ parts: row.parts.map((x, i) => (i === 0 ? { ...x, role: 'accent' } : x)) })
+			.where(eq(buildCustomPieces.id, p.id))
+			.run();
+		recolorCustomPiece(db, id, 'owner', p.id, { roles: { [p.parts[0]]: { accent: 'soft' } } });
+		expect(view(id).parts.find((x) => x.slug === p.parts[0])!.role).toBe('tire');
+	});
+});
+
+describe('replaces with kit parts a color option made inactive', () => {
+	it('inactive and already skipped slugs are dropped; unknown stays 400; printing stays 409', async () => {
+		const id = mk();
+		const v = view(id);
+		const active = new Set(v.parts.map((x) => x.slug));
+		const inactive = v.allParts.find((x) => !x.custom && !active.has(x.slug))!;
+		expect(inactive).toBeTruthy();
+		const kit = v.parts.filter((x) => !x.custom);
+		const [a, b] = kit;
+		skipParts(db, id, 'owner', { slugs: [b.slug], skip: true });
+		const up = await upload(id);
+		const r = add(id, up.uploadId, {
+			name: 'Beta',
+			filamentMap: { '1': 'primary', '2': 'soft' },
+			replaces: [a.slug, inactive.slug, b.slug]
+		});
+		expect(r.skipped).toEqual([a.slug]);
+		// unknown slugs are still refused
+		const up2 = await upload(id);
+		expect(
+			status(() =>
+				add(id, up2.uploadId, {
+					name: 'X',
+					filamentMap: { '1': 'primary', '2': 'soft' },
+					replaces: ['nope']
+				})
+			)
+		).toBe(400);
+		// a printing part is still a 409
+		const c = kit.find((x) => x.slug !== a.slug && x.slug !== b.slug)!;
+		setPartStatus(db, id, 'owner', c.slug, { status: 'Printing' });
+		expect(
+			status(() =>
+				add(id, up2.uploadId, {
+					name: 'X',
+					filamentMap: { '1': 'primary', '2': 'soft' },
+					replaces: [c.slug]
+				})
+			)
+		).toBe(409);
+	});
+});
+
+describe('PATCH of a custom piece', () => {
+	it('name and roles together are refused; each alone works', async () => {
+		const id = mk();
+		const up = await upload(id);
+		const r = add(id, up.uploadId, { name: 'Beta', filamentMap: { '1': 'primary', '2': 'soft' } });
+		const p = view(id).customPieces.find((c) => c.id === r.pieceId)!;
+		const roles = { [p.parts[1]]: { primary: 'accent' } };
+		expect(status(() => patchCustomPiece(db, id, 'owner', p.id, { name: 'New', roles }))).toBe(400);
+		expect(view(id).customPieces[0].name).toBe('Beta');
+		expect(customPlates(id)[1].filamentGrams).toEqual({ primary: 12.5 });
+		expect(patchCustomPiece(db, id, 'owner', p.id, { name: 'New' })).toEqual({ name: 'New' });
+		expect(patchCustomPiece(db, id, 'owner', p.id, { roles })).toHaveProperty('changes');
 	});
 });

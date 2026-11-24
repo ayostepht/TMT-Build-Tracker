@@ -18,6 +18,7 @@ import { ApiError, buildAccess, requireEditor, requireMember } from './access';
 import {
 	MAX_RUNS,
 	cleanGrams,
+	addGram,
 	cleanReplaces,
 	cleanPieceName,
 	cleanSeconds,
@@ -520,8 +521,7 @@ export function applyLibraryPieceTx(
 		const fg: Record<string, number> = {};
 		for (const [role, g] of Object.entries(p.filamentGrams ?? {})) {
 			if (!(g > 0)) continue;
-			const key = mapRole(role);
-			fg[key] = round2((fg[key] ?? 0) + g);
+			addGram(fg, mapRole(role), g);
 		}
 		return {
 			label: customPlateLabel(lib.name, p.name, multi, i + 1),

@@ -375,7 +375,7 @@ export function skipPartsTx(
 
 /**
  * Body `{ slugs, skip }`: mark parts "Not printing" (`skip: true`) or bring them back (`false`).
- * Editors and owners; drafts refuse it (no build tracking).
+ * Editors and owners; drafts too (a part skipped in a draft is skipped when the draft is promoted).
  */
 export function skipParts(db: Db, buildId: string, userId: string, body: unknown): void {
 	if (!isObj(body) || typeof body.skip !== 'boolean') bad('skip must be true or false');
