@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-23, 22:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-24, 02:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -17,33 +17,23 @@ _Updated 2026-11-23, 22:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 
 ## State
 
-- **Issue #113 "custom parts": both parts are merged into `edge`** (maintainer,
-  2026-11-23: prototype in this edition; merged on green CI while they were away, so they
-  have not tried either yet and the issue stays open until they have; the `edge` image
-  holds both since the re-run of 8a62302's timed-out e2e job). #114 (fd48d08):
-  migration `0005_custom_pieces`, restorable "Not printing" for parts and plates, "Add a
-  custom part" from a .3mf on the Files tab. #117 (8a62302): migration
-  `0006_custom_library`, "Save for new builds", saved parts added to other builds and to
-  new builds, the wizard's Options step, the Saved parts page. Gates: check, lint, 2405
-  unit tests, build, empty-database start, 22 e2e specs, CI `test` and `e2e` green; two
-  security reviews with no high or medium finding. Decisions, known limits and two
-  questions for the maintainer are in STATUS "Waiting on the maintainer". On the test
-  copy since r68 (2026-11-23): both migrations were rehearsed on a copy of the real database
-  first (all old row counts equal, integrity and foreign keys ok). `docker build` and the real-kit tests did not run in the cloud session (CI's
-  `image` job runs on `edge`). Not ported to the hosted edition.
-- **Custom parts follow-ups** (maintainer's feedback after trying #113 in the local demo,
-  2026-11-23: "works exactly as intended", with tweaks) are on branch
-  `claude/gallant-newton-s64g9v`: the name is the first field and a part can be renamed;
-  print time and grams can be typed per plate when adding (their test file was a project
-  saved from the slicer, which carries neither: the note now says so); saved parts can be
-  edited (name, time, grams) and refreshed from a build ("Update saved part"); the page is
-  now "Custom parts", reachable from the Settings menu, and adds a part from a .3mf (read,
-  not kept: `POST /api/custom-library/inspect`) or by hand; plate grams and time boxes no
-  longer lose a half-typed value on a refresh. No migration. Gate passed on 855801b (check,
-  lint, 2436 unit tests, build, empty-database start, 23 e2e specs); security review with
-  no high or medium finding, its points fixed (the inspect route needed a body-cap rule).
-  Merges on green CI. After the maintainer is happy: port #113 and these follow-ups to the
-  hosted edition.
+- **Issue #113 "custom parts" is done in both editions** (2026-11-24). Here, all merged
+  into `edge`: #114 (fd48d08; migration `0005_custom_pieces`; restorable "Not printing";
+  "Add a custom part" from a .3mf), #117 (8a62302; migration `0006_custom_library`; saved
+  custom parts, new builds, the wizard), #122 (0f432ad; the maintainer's tweaks after
+  trying it: the name first and Rename, typed print time and grams, the Custom parts page
+  in the Settings menu with add from a file or by hand, "Update saved part", and plate
+  grams and time boxes that keep a half-typed value through a refresh) and #124 (8542951;
+  names read from an uploaded file are cleaned and capped, thumbnails survive an error
+  after a saved add; no migration). The maintainer tested #114, #117 and #122 in the local
+  demo ("works exactly as intended", then "demo test looks good"). The test copy has
+  0f432ad (r69); #124 is not on it yet. The issue is still open: close it when the
+  maintainer says so. **Hosted edition:** ported there as its #45 (5f2d54c, one migration
+  `0003_custom_parts`), opened and merged from this session on the maintainer's word (they
+  took a database backup first); its image is published, the deploy is theirs. Decided by
+  the maintainer (2026-11-24): saved parts stay shared within the workspace or team they
+  are saved in, with no copy to another team; the account export keeps listing the saved
+  parts of the user's workspaces.
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).
@@ -115,8 +105,8 @@ _Updated 2026-11-23, 22:50 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
 - The report behind #95 is explained: the
   logged pieces had been unticked by hand, which the lock now prevents.
 - **Hosted edition:** the port of #95 (its #36) is merged there.
-- **Next step:** finish the 0.9.4 images (above). The test copy runs `edge` 0f432ad (r69), so the
-  maintainer can try both parts of #113 and #115 there. Still for the
+- **Next step:** finish the 0.9.4 images (above). The test copy runs `edge` 0f432ad (r69), with #113 (all but #124)
+  and #115 on it. Still for the
   maintainer on the test copy (r69): swatch taps on an iPhone (the touch change is
   unconfirmed on iOS Safari) and Share a picture's share sheet on iPhone and Android. Then
   pick from the follow-ups below or STATUS "Next steps".
