@@ -216,6 +216,12 @@ test('Another build lists the saved part; Add applies its plates, time, grams an
 	await expect(list).toContainText('2 plates');
 	await expect(list).toContainText('replaces 1 kit part');
 	await list.getByTestId('custom-saved-add').click();
+	// A saved part that replaces kit parts asks first, with those parts pre-checked.
+	await expect(dlg.getByTestId('custom-saved-confirm-step')).toBeVisible();
+	await expect(
+		dlg.getByTestId('custom-saved-replaces').locator(`[data-slug="${kit.slug}"]`)
+	).toBeChecked();
+	await dlg.getByTestId('custom-saved-confirm').click();
 	await expect(dlg).toBeHidden();
 	await expect(page.getByRole('status').filter({ hasText: 'Added "Cup holder"' })).toContainText(
 		`replaced ${kit.name}`
@@ -332,6 +338,9 @@ test('A new build gets the default saved part (also with setup skipped); a non-d
 	expect(w.customPieces.map((c) => c.name)).toEqual(['Tray']);
 	// And the default part back again, then finish setup.
 	await cupRow.getByTestId('setup-saved-add').click();
+	// It replaces a kit part, so the wizard asks first (the part is pre-checked).
+	await expect(cupRow.getByTestId('setup-saved-confirm-step')).toBeVisible();
+	await cupRow.getByTestId('setup-saved-confirm').click();
 	await expect(cupRow.getByTestId('setup-saved-remove')).toBeVisible();
 	await page.getByTestId('skip-setup').click();
 	await expect(page).toHaveURL(new RegExp(`/builds/${id}$`));
@@ -377,7 +386,7 @@ test('A viewer sees the Saved parts page without controls and the API answers 40
 		await vp.waitForLoadState('networkidle');
 		const row = vp.getByTestId('saved-part');
 		await expect(row).toContainText('Cup holder');
-		await expect(row).toContainText('Included in new builds');
+		await expect(row).toContainText('Added to every new build automatically');
 		for (const id of [
 			'saved-part-default',
 			'saved-part-rename',

@@ -1,6 +1,6 @@
 # Orchestrator handoff
 
-_Updated 2026-11-24, 02:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
+_Updated 2026-11-24, 08:00 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.md`. Durable facts go to
 `docs/dev/STATUS.md`._
 
 ## Rules in force right now
@@ -34,6 +34,22 @@ _Updated 2026-11-24, 02:45 UTC. Rewrite in place; see "Handoff doc" in `CLAUDE.m
   the maintainer (2026-11-24): saved parts stay shared within the workspace or team they
   are saved in, with no copy to another team; the account export keeps listing the saved
   parts of the user's workspaces.
+- **Custom parts, round 2** (maintainer's requests from the public site, 2026-11-24) on
+  branch `claude/gallant-newton-s64g9v`: "Add a custom part" in the setup wizard; custom
+  parts and "Not printing" in Design studio drafts (kept when the draft becomes a build);
+  a file's filament can be "Not used in this build" (PLA supports); a custom part's color
+  can be changed on the Files tab and in a "Custom parts" group on the Design tab; adding
+  a saved part asks which kit parts to mark "Not printing"; one Edit form per saved part,
+  and the switch now reads "Add to every new build automatically". Also fixed: a "Not
+  tracked" filament of a sliced upload still counted in the plate's grams. No migration.
+  Gate passed on 5415176 (check, lint, 2473 unit tests, build, empty-database start, 29
+  e2e specs); security review with no high or medium finding, its low points fixed.
+  Merges on green CI; the same round is being ported to the hosted edition from this
+  session. Decided for the maintainer while they were away (they may overrule): a new
+  draft starts as the plain kit (automatic parts only apply to builds started with the
+  wizard); an unused filament leaves weight but not print time; a recolor is allowed on a
+  part with print logs; automatic adds use the saved settings and the wizard shows what
+  they replaced with "Bring back".
 - **0.9.3 released** 2026-11-19: tag `v0.9.3` on `main` a64fa26; `latest`, `0.9.3`, `0.9` and
   `sha-a64fa26` share one digest (checked 2026-11-20). Recorded in STATUS item 0. Contents:
   Spoolman filaments (#71, #77, #81 fixes #79), #74, #76, #80, resource limits (#82, #84).

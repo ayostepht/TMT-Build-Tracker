@@ -3,6 +3,8 @@
 	import { roleLabel, sortRoles } from '#lib/domain/labels.ts';
 	import type { BuildView, PartDef } from '#lib/domain/types.ts';
 	import Swatch from '#lib/components/Swatch.svelte';
+	import CustomPartsGroup from './CustomPartsGroup.svelte';
+	import NotPrintingGroup from '#lib/components/NotPrintingGroup.svelte';
 
 	let {
 		view,
@@ -10,7 +12,10 @@
 		noPreview = [] as string[],
 		roleFilter = $bindable<string | null>(null),
 		visible = true,
-		onselect
+		onselect,
+		canAddCustom = false,
+		showNotPrinting = false,
+		announce
 	}: {
 		view: BuildView;
 		selected?: string | null;
@@ -21,6 +26,12 @@
 		/** The list is on screen (its tab is open): the selected row is scrolled into view then. */
 		visible?: boolean;
 		onselect: (slug: string) => void;
+		/** Offer "Add a custom part" (not in the wizard). */
+		canAddCustom?: boolean;
+		/** Mount the "Not printing" fold under the list (drafts, which have no Print tab). */
+		showNotPrinting?: boolean;
+		/** Spoken confirmation for screen readers. */
+		announce?: (msg: string) => void;
 	} = $props();
 
 	let q = $state('');
@@ -31,9 +42,23 @@
 	const matches = (p: PartDef) =>
 		!needle || `${p.name} ${p.section}`.toLowerCase().includes(needle);
 
+	/** Kit parts set to "Not printing": left in their section, dimmed and tagged, so they are not silently dropped. */
+	const skippedKit = $derived(new Set(view.skipped.filter((s) => !s.custom).map((s) => s.slug)));
+	const listed = $derived([
+		...designParts(view),
+		...view.allParts.filter((p) => skippedKit.has(p.slug))
+	]);
+	const customPieces = $derived(
+		view.customPieces.filter(
+			(c) =>
+				(!needle || c.name.toLowerCase().includes(needle)) &&
+				(!roleFilter || c.colors.some((pc) => pc.roles.some((r) => r.role === roleFilter)))
+		)
+	);
+
 	const groups = $derived.by(() => {
 		const by: Record<string, PartDef[]> = {};
-		for (const p of designParts(view)) {
+		for (const p of listed) {
 			if (roleFilter && p.role !== roleFilter) continue;
 			if (!matches(p)) continue;
 			(by[p.section] ??= []).push(p);
@@ -116,6 +141,7 @@
 							class="prow"
 							data-testid="part-row"
 							class:on={selected === p.slug}
+							class:off={skippedKit.has(p.slug)}
 							data-slug={p.slug}
 							aria-pressed={selected === p.slug}
 							onclick={() => onselect(p.slug)}
@@ -138,7 +164,9 @@
 										/>
 									</svg>Locked</span
 								>{/if}
-							{#if noPreview.includes(p.slug)}<span class="tag">no 3D preview</span>{/if}
+							{#if skippedKit.has(p.slug)}<span class="tag" data-testid="part-row-skipped"
+									>Not printing</span
+								>{:else if noPreview.includes(p.slug)}<span class="tag">no 3D preview</span>{/if}
 							<span class="muted slotname">{roleLabel(p.role, f, view.filaments)}</span>
 						</button>
 					</li>
@@ -146,13 +174,21 @@
 			</ul>
 		</div>
 	{:else}
-		<p class="muted">No parts match.</p>
+		{#if !customPieces.length}<p class="muted">No parts match.</p>{/if}
 	{/each}
+	<CustomPartsGroup
+		{view}
+		pieces={customPieces}
+		canAdd={canAddCustom && !needle && !roleFilter}
+		{announce}
+	/>
+	{#if showNotPrinting}<NotPrintingGroup />{/if}
 </section>
 
 <style>
 	.parts {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--sp-3);
 	}
 	.phead {
@@ -228,6 +264,7 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--sp-1);
 	}
 	.prow {
@@ -254,6 +291,13 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
+	.prow.off .name,
+	.prow.off .slotname {
+		color: var(--muted);
+	}
+	.prow.off :global(.mini) {
+		opacity: 0.5;
+	}
 	.prow.on {
 		border-color: var(--accent);
 		background: var(--accent-soft);
@@ -268,6 +312,10 @@
 	}
 	.slotname {
 		margin-left: auto;
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 		font-size: var(--fs-xs);
 		white-space: nowrap;
 	}
@@ -276,6 +324,7 @@
 		gap: var(--sp-2);
 	}
 	.tag {
+		flex: none;
 		font: 500 var(--fs-xs)/1 var(--f-mono);
 		padding: var(--sp-2) var(--sp-3);
 		border-radius: var(--r-sm);

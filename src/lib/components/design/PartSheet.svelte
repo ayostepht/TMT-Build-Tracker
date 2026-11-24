@@ -16,6 +16,8 @@
 		noPreview = false,
 		onmove,
 		onlock,
+		onskip,
+		onrestore,
 		onclose
 	}: {
 		view: BuildView;
@@ -25,6 +27,10 @@
 		onmove: (role: string) => void;
 		/** "Lock part color" toggled: only this part keeps its filament when a palette is applied. */
 		onlock?: (locked: boolean) => void;
+		/** "Not printing this part" (kit parts of builds and drafts; editors). */
+		onskip?: () => void;
+		/** "Bring back" a part that is not printing. */
+		onrestore?: () => void;
 		onclose: () => void;
 	} = $props();
 
@@ -33,6 +39,17 @@
 	const peers = $derived(symmetryPeers(view, part.slug).filter((p) => p.slug !== part.slug));
 	const inactive = $derived(!view.parts.some((p) => p.slug === part.slug));
 	const notPrinting = $derived(view.skipped.some((s) => s.slug === part.slug));
+	const draft = $derived(view.build.kind === 'draft');
+	/** Printing parts (and any on a live printer job) cannot be set aside; the server checks it too. */
+	const printing = $derived(view.state[part.slug]?.status === 'Printing');
+	/** Where a skipped part comes back: the button here, and the list that holds it (drafts have no Print tab). */
+	const notPrintingNote = $derived(
+		!view.canEdit
+			? 'Not printing: left out of the totals.'
+			: draft
+				? 'Not printing: left out of the totals until it is brought back, here or in the Not printing list under the parts.'
+				: 'Not printing: left out of the totals until it is brought back, here or on the Print tab.'
+	);
 	const slotName = $derived(roleLabel(part.role, current, view.filaments));
 	const guide = $derived(part.guideRefs.map((g) => `p. ${g.page}`).join(', '));
 	const mats = $derived(part.allowedMaterials.join(' or '));
@@ -79,9 +96,8 @@
 	{#if noPreview || inactive}
 		<p class="note muted">
 			{#if noPreview}No 3D preview for this part. Its color still counts.{/if}
-			{#if notPrinting}Not printing: left out of the totals until it is brought back on the Print
-				tab.{:else if inactive}Not used by the current options, so it is hidden in 3D and left out
-				of the totals.{/if}
+			{#if notPrinting}{notPrintingNote}{:else if inactive}Not used by the current options, so it is
+				hidden in 3D and left out of the totals.{/if}
 		</p>
 	{/if}
 	{#if view.canEdit}
@@ -104,17 +120,45 @@
 				</button>
 			{/each}
 		</div>
-		<button
-			type="button"
-			class="ps-lockbtn"
-			data-testid="part-lock"
-			aria-pressed={part.locked}
-			aria-describedby="ps-lock-hint"
-			onclick={() => onlock?.(!part.locked)}
-		>
-			{@render lockIcon()}
-			<span>Lock part color</span>
-		</button>
+		<div class="ps-actions">
+			<button
+				type="button"
+				class="ps-lockbtn"
+				data-testid="part-lock"
+				aria-pressed={part.locked}
+				aria-describedby="ps-lock-hint"
+				onclick={() => onlock?.(!part.locked)}
+			>
+				{@render lockIcon()}
+				<span>Lock part color</span>
+			</button>
+			{#if notPrinting && onrestore}
+				<button
+					type="button"
+					class="ps-lockbtn"
+					data-testid="part-bring-back"
+					onclick={() => onrestore()}
+				>
+					<span>Bring back</span>
+				</button>
+			{:else if onskip && !inactive}
+				<button
+					type="button"
+					class="ps-lockbtn"
+					data-testid="part-not-printing"
+					disabled={printing}
+					title={printing ? 'Printing now: stop the print on the Print tab first' : undefined}
+					onclick={() => onskip()}
+				>
+					<span>Not printing this part</span>
+				</button>
+			{/if}
+		</div>
+		{#if printing && onskip}
+			<p class="note muted" data-testid="part-skip-hint">
+				Printing now. Stop the print on the Print tab to set this part aside.
+			</p>
+		{/if}
 		<p class="note muted ps-hint" id="ps-lock-hint">
 			{part.locked
 				? 'Locked: applying a palette leaves this part on its current filament. Only this part is locked.'
@@ -249,6 +293,11 @@
 	.ps-icon {
 		flex: none;
 	}
+	.ps-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-3);
+	}
 	.ps-lockbtn {
 		justify-self: start;
 		display: inline-flex;
@@ -263,7 +312,11 @@
 		font: 600 var(--fs-sm) / 1 var(--f-body);
 		cursor: pointer;
 	}
-	.ps-lockbtn:hover {
+	.ps-lockbtn:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.ps-lockbtn:hover:not(:disabled) {
 		border-color: var(--accent);
 	}
 	.ps-lockbtn[aria-pressed='true'] {

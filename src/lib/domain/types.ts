@@ -423,6 +423,11 @@ export interface CustomPiece {
 	/** Numbers of its plates (`build_plates.source = 'custom:<id>'`). */
 	plates: number[];
 	libraryId: string | null;
+	/**
+	 * Each part's color(s) for a color select: the roles its plate's file weighs (with grams per print), or the
+	 * part's own role (grams null) when the file has none. Role keys are the build's filaments.
+	 */
+	colors: { slug: string; name: string; roles: { role: string; grams: number | null }[] }[];
 	/** No runs on its parts or plates and nothing Printing or live: it can be removed. */
 	removable: boolean;
 }

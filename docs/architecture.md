@@ -406,6 +406,22 @@ create|prelink`, plus `spoolmanSpoolId`/`archived` extras on `filament.stock.add
   `slice_info.config` and no G-code: it parses as unsliced (fixture option
   `headerOnlySliceInfo`). UI: `LibraryPartForm.svelte` on `teams/[slug]/pieces` ("Custom
   parts", also in the Settings menu, `ws-custom-parts`).
+- **Custom parts, round 2 (2026-11-24):** drafts may skip parts and hold custom parts
+  (`DRAFT_KINDS` has `part.skip`, `part.restore` and the `custom.*` kinds; print logs stay
+  build-only; `promoteDraft` only flips `kind`, so everything carries over; `moveBuild`
+  clears `build_custom_pieces.library_id`; default saved parts are never applied to
+  drafts). `addCustomPiece` takes `ignore: string[]` (file slots whose grams are left out
+  of `filament_grams` and `slicer_grams`; at least one kept slot per plate with grams);
+  `applyUpload` leaves "Not tracked" slots out of `slicerGrams` too. `recolorCustomPiece`
+  (`PATCH …/custom-pieces/[pieceId]` with `{ roles }`, activity `custom.recolor`, not in
+  `REARRANGE_KINDS`) re-keys a part's role and its plate's grams; the view exposes
+  `CustomPiece.colors`. `applyLibraryPiece(…, replaces?)` overrides what a saved part
+  replaces for one add (`cleanReplaces`); `updateLibraryPiece` also edits `replaces` and a
+  plate's `name`, `runs`, `role` / `roles`. UI: `CustomReplacesPicker.svelte` (`primary`
+  prop for the compact confirm steps, `kitGroupsOf(view)`), `setup/SetupCustomParts.svelte`
+  (the wizard's card), `design/CustomPartsGroup.svelte` (recolor in the Design tab; custom
+  parts still never enter `designParts`, `partRoles` or the 3D stage), "Not printing" in
+  `PartSheet.svelte`, `NotPrintingGroup` under the part list for drafts.
 - **Export:** `src/lib/server/threemf-export/` (Orca/Elegoo, Bambu, plain), painted
   supports, `bed_exclude_area`.
 

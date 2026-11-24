@@ -160,6 +160,14 @@ function describeMarked(a: ActivityItem, view: Names): string {
 		}
 		case 'custom.rename':
 			return `${who} renamed the custom part "${str(p.from) ?? 'a custom part'}" to "${str(p.name) ?? 'a new name'}"`;
+		// `changes`: [{ part: name, from: role key, to: role key }]
+		case 'custom.recolor': {
+			const bits = (Array.isArray(p.changes) ? p.changes : [])
+				.map((x) => obj(x))
+				.filter((x): x is Obj => !!x)
+				.map((x) => `"${str(x.part) ?? 'a part'}" from ${fil(x.from)} to ${fil(x.to)}`);
+			return `${who} changed the color of ${bits.length ? list(bits) : `the custom piece "${str(p.name) ?? 'a custom piece'}"`}`;
+		}
 		case 'part.grams': {
 			const g = num(p.manualGrams);
 			return g !== null

@@ -8,6 +8,7 @@
 	} from '#lib/client/api.ts';
 	import { CUSTOM_NAME_MAX, MAX_CUSTOM_PLATES } from '#lib/domain/custom.ts';
 	import { MAX_PRINT_SECONDS, parseGrams } from '#lib/domain/index.ts';
+	import CustomReplacesPicker, { type ReplaceGroup } from './CustomReplacesPicker.svelte';
 	import SlicerTimeInput from './SlicerTimeInput.svelte';
 
 	type Template = {
@@ -38,11 +39,15 @@
 		gramsText: string;
 		runs: number;
 		role: string;
+		/** The grams were typed, not filled in from the file's kept filaments. */
+		gramsEdited?: boolean;
 		/** The file plate this came from, with its values as read. */
 		from?: { index: number; seconds: number | null; grams: number | null };
 	};
 
 	const MAX_GRAMS = 20000;
+	/** A file filament set to "Not used": its grams are left out of what is saved. */
+	const NOT_USED = '__unused';
 	let nextKey = 1;
 	const firstRole = () => template.roles[0]?.key ?? '';
 	const blank = (): PlateDraft => ({
@@ -157,6 +162,32 @@
 		return slots.filter((s, i) => slots.indexOf(s) === i);
 	});
 	const multi = $derived(usedSlots.length > 1);
+	const filePlate = (p: PlateDraft) =>
+		file && p.from ? file.plates.find((x) => x.index === p.from!.index) : undefined;
+	/** Grams of a file plate that the kept filaments carry (the file's total when nothing is left out). */
+	function keptGrams(p: PlateDraft): number | null {
+		const fp = filePlate(p);
+		const entries = Object.entries(fp?.filamentGrams ?? {}).filter(([, g]) => g > 0);
+		if (!multi || !entries.length) return p.from?.grams ?? null;
+		const sum = entries.reduce((n, [slot, g]) => n + (slotRole[slot] === NOT_USED ? 0 : g), 0);
+		return sum > 0 ? sum : 0;
+	}
+	/** A slot's choice changed: plates whose grams were not typed follow the kept filaments. */
+	function slotChanged() {
+		for (const p of plates) {
+			if (!p.from || p.gramsEdited) continue;
+			const g = keptGrams(p);
+			p.gramsText = g && g > 0 ? String(Math.round(g * 100) / 100) : '';
+		}
+	}
+	/** Every plate of the file still has a filament that counts (a plate with grams cannot lose them all). */
+	const plateWithoutFilament = $derived(
+		multi &&
+			plates.some((p) => {
+				const entries = Object.entries(filePlate(p)?.filamentGrams ?? {}).filter(([, g]) => g > 0);
+				return entries.length > 0 && entries.every(([slot]) => slotRole[slot] === NOT_USED);
+			})
+	);
 	const slotLabel = (slot: string) => {
 		const f = file?.filaments.find((x) => x.slot === slot);
 		return f ? `#${slot} ${f.material}${f.name ? ` · ${f.name}` : ''}` : `#${slot}`;
@@ -169,7 +200,8 @@
 			plates.every((p) => {
 				if (!p.from) return false;
 				const g = gramsOf(p);
-				const fileG = p.from.grams && p.from.grams > 0 ? p.from.grams : null;
+				const kept = keptGrams(p);
+				const fileG = kept && kept > 0 ? kept : null;
 				return (
 					p.seconds === p.from.seconds &&
 					(g === null ? fileG === null : !Number.isNaN(g) && Math.abs(g - (fileG ?? -1)) < 0.006)
@@ -188,8 +220,8 @@
 						? 'Grams must be more than 0 and at most 20000.'
 						: plates.some((p) => !(multi && p.from) && !p.role)
 							? 'Choose a color for every plate.'
-							: multi && usedSlots.some((s) => !slotRole[s])
-								? 'Choose a color for every filament.'
+							: plateWithoutFilament
+								? 'Each plate needs at least one filament that is used.'
 								: null
 	);
 
@@ -204,13 +236,14 @@
 			plates: plates.map((p) => {
 				const g = gramsOf(p);
 				const grams = g && !Number.isNaN(g) ? g : null;
-				const fp = file && p.from ? file.plates.find((x) => x.index === p.from!.index) : null;
+				const fp = filePlate(p);
 				let filamentGrams: Record<string, number> | undefined;
 				if (multi && fp) {
 					filamentGrams = {};
 					for (const [slot, gr] of Object.entries(fp.filamentGrams ?? {})) {
 						const key = slotRole[slot];
-						if (gr > 0 && key) filamentGrams[key] = (filamentGrams[key] ?? 0) + gr;
+						if (gr > 0 && key && key !== NOT_USED)
+							filamentGrams[key] = (filamentGrams[key] ?? 0) + gr;
 					}
 					if (!Object.keys(filamentGrams).length) filamentGrams = undefined;
 				}
@@ -240,18 +273,16 @@
 		}
 	}
 
-	const sections = $derived.by(() => {
-		const out: [string, { slug: string; name: string }[]][] = [];
+	const groups = $derived.by<ReplaceGroup[]>(() => {
+		const out: ReplaceGroup[] = [];
 		for (const p of template.parts) {
 			const k = p.section || 'Other';
-			const hit = out.find((o) => o[0] === k);
-			if (hit) hit[1].push(p);
-			else out.push([k, [p]]);
+			const hit = out.find((g) => g.key === k);
+			if (hit) hit.parts.push({ slug: p.slug, name: p.name });
+			else out.push({ key: k, title: k, parts: [{ slug: p.slug, name: p.name }] });
 		}
 		return out;
 	});
-	const toggleReplace = (slug: string, on: boolean) =>
-		(replaces = on ? [...replaces, slug] : replaces.filter((s) => s !== slug));
 	const removePlate = (key: number) => {
 		const p = plates.find((x) => x.key === key);
 		if (p?.from) removedFromFile = true;
@@ -379,6 +410,7 @@
 								autocomplete="off"
 								placeholder="g"
 								bind:value={p.gramsText}
+								oninput={() => (p.gramsEdited = true)}
 								aria-invalid={gramsBad(p)}
 								data-testid="library-plate-grams"
 							/>
@@ -424,52 +456,44 @@
 		{#if multi}
 			<fieldset class="lpf-slots" data-testid="library-slots">
 				<legend>Colors of the file's filaments</legend>
+				<p class="meta lpf-slot-hint">
+					Set a filament to "Not used" (for example supports) to leave its grams out.
+				</p>
 				{#each usedSlots as s (s)}
 					{@const f = file?.filaments.find((x) => x.slot === s)}
 					<label class="lpf-slot">
 						<span class="lpf-swatch" style="background:{f?.color ?? 'transparent'}"></span>
 						<span class="lpf-fl">{slotLabel(s)}</span>
-						<select bind:value={slotRole[s]} aria-label="Color for filament {slotLabel(s)}">
+						<select
+							bind:value={slotRole[s]}
+							onchange={slotChanged}
+							aria-label="Color for filament {slotLabel(s)}"
+						>
 							{#each template.roles as r (r.key)}
 								<option value={r.key}>{r.name} ({r.material})</option>
 							{/each}
+							<option value={NOT_USED}>Not used (leave out its grams)</option>
 						</select>
 					</label>
 				{/each}
 			</fieldset>
 		{/if}
 
-		{#if sections.length}
-			<details class="lpf-replaces" data-testid="library-replaces">
-				<summary
-					>Replaces kit parts{replaces.length ? ` (${replaces.length})` : ''}
-					<span class="meta">optional</span></summary
-				>
-				<p class="meta">
-					When you add this part to a build, these kit parts are marked Not printing. Nothing is
-					deleted.
-				</p>
-				{#each sections as [title, parts] (title)}
-					<fieldset class="lpf-group">
-						<legend>{title}</legend>
-						{#each parts as p (p.slug)}
-							<label class="lpf-chk">
-								<input
-									type="checkbox"
-									checked={replaces.includes(p.slug)}
-									onchange={(e) => toggleReplace(p.slug, e.currentTarget.checked)}
-								/>
-								{p.name}
-							</label>
-						{/each}
-					</fieldset>
-				{/each}
-			</details>
+		{#if groups.length}
+			<CustomReplacesPicker
+				bind:selected={replaces}
+				{groups}
+				hint="When you add this part to a build, these kit parts are offered as Not printing. Nothing is deleted."
+				testid="library-replaces"
+			/>
 		{/if}
 
 		<label class="lpf-chk lpf-default">
 			<input type="checkbox" bind:checked={isDefault} data-testid="library-include-default" />
-			Include in new builds
+			<span class="lpf-check-text">
+				<span>Add to every new build automatically</span>
+				<span class="meta">Off: it is still offered when you set up a build.</span>
+			</span>
 		</label>
 
 		{#if file && file.sliced && !unchanged}
@@ -643,32 +667,6 @@
 		border-radius: 50%;
 		border: 1px solid var(--line);
 	}
-	.lpf-replaces {
-		border: 1px solid var(--line);
-		border-radius: var(--r-md);
-		padding: var(--sp-4) var(--sp-5);
-	}
-	.lpf-replaces summary {
-		cursor: pointer;
-		font-weight: 600;
-		min-height: 32px;
-	}
-	.lpf-replaces p {
-		margin: var(--sp-3) 0;
-	}
-	.lpf-group {
-		border: 0;
-		padding: 0;
-		margin: var(--sp-4) 0 0;
-		display: grid;
-		gap: var(--sp-2);
-	}
-	.lpf-group legend {
-		padding: 0;
-		font-size: var(--fs-sm);
-		color: var(--muted);
-		font-weight: 600;
-	}
 	.lpf-chk {
 		display: flex;
 		gap: var(--sp-4);
@@ -677,6 +675,14 @@
 	}
 	.lpf-default {
 		min-height: 44px;
+		align-items: flex-start;
+	}
+	.lpf-check-text {
+		display: grid;
+		gap: 2px;
+	}
+	.lpf-slot-hint {
+		margin: 0;
 	}
 	.lpf-problem {
 		margin: 0;

@@ -100,6 +100,19 @@ export function cleanGrams(v: unknown, field = 'grams'): number {
 	return g > 0 ? g : bad(msg);
 }
 
+/**
+ * Add `g` grams to a role of a grams-by-role map. Role keys such as `constructor` or `toString` are valid
+ * filament keys, so the current value is read only when it is the map's own (never an inherited function).
+ */
+export function addGram(fg: Record<string, number>, role: string, g: number): void {
+	Object.defineProperty(fg, role, {
+		value: round2((Object.hasOwn(fg, role) ? fg[role] : 0) + g),
+		enumerable: true,
+		writable: true,
+		configurable: true
+	});
+}
+
 /** Scale per-role grams so they add up to `total` (proportionally). */
 export function scaleGrams(fg: Record<string, number>, total: number): Record<string, number> {
 	const sum = Object.values(fg).reduce((a, c) => a + c, 0);
@@ -124,6 +137,22 @@ function typedByPlate(
 		out.set(Number(k), check(val, field));
 	}
 	return out;
+}
+
+/**
+ * A `replaces` list from a request: at most `MAX_REPLACES` distinct slugs of the build's kit parts (anything else
+ * is a 400). Kit parts a color option made inactive and parts already "Not printing" need no skip and are left
+ * out, like the saved list's own filter does; Printing parts stay in (the skip refuses them with 409).
+ */
+export function cleanReplaces(view: BuildView, v: unknown): string[] {
+	if (!Array.isArray(v) || v.length > MAX_REPLACES)
+		return bad(`replaces must be a list of at most ${MAX_REPLACES} parts`);
+	const out = [...new Set(v as unknown[])] as string[];
+	const known = new Set(view.allParts.map((p) => p.slug));
+	for (const s of out) if (typeof s !== 'string' || !known.has(s)) bad('Unknown part in replaces');
+	const active = new Set(view.parts.map((p) => p.slug));
+	const skipped = new Set(view.skipped.map((s) => s.slug));
+	return out.filter((s) => active.has(s) && !skipped.has(s));
 }
 
 /** One plate of a piece about to be inserted (already validated and mapped onto the build's colors). */
@@ -248,7 +277,7 @@ export interface AddCustomResult {
 
 /**
  * Body `{ name, plates?, runs?, times?, grams?, filamentMap, role?, replaces? }` on a parsed upload of the build.
- * Editors and owners; drafts refuse it (no build tracking).
+ * Editors and owners; a Studio draft takes custom pieces too.
  */
 export function addCustomPiece(
 	db: Db,
@@ -263,9 +292,6 @@ export function addCustomPiece(
 	const written: string[] = []; // thumbnails copied to disk; removed again when the transaction fails
 	try {
 		mutateBuild(db, buildId, userId, (tx, view) => {
-			// refuse before anything is read from or written to disk
-			if (view.build.kind === 'draft')
-				throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 			const name = cleanPieceName(b.name);
 			const up = getUpload(tx, buildId, uploadId);
 			if (up.status !== 'parsed')
@@ -335,38 +361,58 @@ export function addCustomPiece(
 				if (typeof b.role !== 'string' || !roleKeys.has(b.role)) bad('Unknown filament in role');
 				fallback = b.role as string;
 			}
+			// slots the maker set to "Not used in this build" (a support filament, say): their grams are dropped
+			const ignore = new Set<string>();
+			if (b.ignore !== undefined) {
+				if (!Array.isArray(b.ignore) || b.ignore.length > MAX_SLOTS)
+					return bad('ignore must be a list of filament slots');
+				for (const i of b.ignore as unknown[]) {
+					if (typeof i !== 'string' || !i || i.length > 16) return bad('ignore must list slot ids');
+					ignore.add(i);
+				}
+			}
 			fallback ??= Object.values(filamentMap)[0] ?? view.filaments[0]?.key;
 			if (!fallback || !roleKeys.has(fallback)) bad('This build has no filament colours yet');
 
 			// kit parts the piece replaces
-			let replaces: string[] = [];
-			if (b.replaces !== undefined) {
-				if (!Array.isArray(b.replaces) || b.replaces.length > MAX_REPLACES)
-					return bad(`replaces must be a list of at most ${MAX_REPLACES} parts`);
-				replaces = [...new Set(b.replaces as unknown[])] as string[];
-				for (const s of replaces)
-					if (typeof s !== 'string' || !view.allParts.some((p) => p.slug === s))
-						bad('Unknown part in replaces');
-			}
+			const replaces = b.replaces === undefined ? [] : cleanReplaces(view, b.replaces);
 
 			// plates of the piece: one custom part each
 			const multi = chosen.length > 1;
 			const plateSpecs: NewPiecePlate[] = chosen.map((pl) => {
 				const label = customPlateLabel(name, pl.name, multi, pl.index);
 				const fg: Record<string, number> = {};
+				let dropped = 0;
+				let slotsWithGrams = 0;
 				for (const [idx, g] of Object.entries(pl.filamentGrams ?? {})) {
 					if (!(g > 0)) continue;
+					slotsWithGrams++;
+					if (ignore.has(idx)) {
+						dropped += g;
+						continue;
+					}
 					const role = Object.hasOwn(filamentMap, idx) ? filamentMap[idx] : undefined;
 					if (!role || !roleKeys.has(role)) return bad(`Choose a colour for filament ${idx}`);
-					fg[role] = Math.round(((fg[role] ?? 0) + g) * 100) / 100;
+					addGram(fg, role, g);
 				}
+				if (summary.sliced && slotsWithGrams > 0 && !Object.keys(fg).length)
+					return bad(
+						`Keep at least one filament on plate ${pl.index}: all of its filaments are set to "Not used in this build"`
+					);
 				// the colour carrying most of the plate's grams; the chosen fallback when nothing is known
 				let role = Object.entries(fg).sort((a, c) => c[1] - a[1])[0]?.[0] ?? fallback!;
 				if (!roleKeys.has(role)) role = fallback!;
 				const total = Object.values(fg).reduce((a, c) => a + c, 0);
+				// the plate's weight without the ignored filaments (the file's total less their grams)
+				const keptOfFile =
+					pl.grams && pl.grams > 0 ? (dropped > 0 ? round2(pl.grams - dropped) : pl.grams) : 0;
 				const fileGrams =
 					summary.sliced && pl.grams && pl.grams > 0
-						? pl.grams
+						? keptOfFile > 0
+							? keptOfFile
+							: total > 0
+								? round2(total)
+								: pl.grams
 						: summary.sliced && total > 0
 							? round2(total)
 							: null;
@@ -459,7 +505,7 @@ export function addCustomPiece(
 
 /**
  * Rename a custom piece: its row, its parts and its plates (named as `customPlateLabel` names them at
- * insert). Editors and owners; drafts refuse it. A saved part the piece is linked to is not changed.
+ * insert). Editors and owners. A saved part the piece is linked to is not changed.
  */
 export function renameCustomPiece(
 	db: Db,
@@ -470,9 +516,7 @@ export function renameCustomPiece(
 ): { name: string } {
 	if (!isObj(body)) bad('Invalid body');
 	let name = '';
-	mutateBuild(db, buildId, userId, (tx, view) => {
-		if (view.build.kind === 'draft')
-			throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
+	mutateBuild(db, buildId, userId, (tx) => {
 		name = cleanPieceName((body as Obj).name);
 		const piece = tx
 			.select()
@@ -504,6 +548,126 @@ export function renameCustomPiece(
 		return { kind: 'custom.rename', payload: { pieceId, name, from: piece.name } };
 	});
 	return { name };
+}
+
+/**
+ * Re-key a part's colors: `mapped` is { current role: new role } (both already validated). Grams of roles that
+ * land on the same new role are added; the part's role becomes the one with most grams (the renamed
+ * current role on a tie), or its mapped role when there are no grams.
+ */
+export function rekeyRoles(
+	fg: Record<string, number>,
+	role: string,
+	mapped: ReadonlyMap<string, string>
+): { filamentGrams: Record<string, number>; role: string } {
+	const next: Record<string, number> = {};
+	for (const [r, g] of Object.entries(fg)) addGram(next, mapped.get(r) ?? r, g);
+	// a stored role that is not one of the gram keys is renamed by the map like any other
+	const renamed = mapped.get(role) ?? role;
+	const entries = Object.entries(next);
+	if (!entries.length) return { filamentGrams: next, role: renamed };
+	const max = Math.max(...entries.map(([, g]) => g));
+	const heaviest = entries.filter(([, g]) => g === max).map(([k]) => k);
+	return { filamentGrams: next, role: heaviest.includes(renamed) ? renamed : heaviest[0] };
+}
+
+/**
+ * `PATCH` of a custom piece: `{ name }` renames it, `{ roles }` recolors its parts; both in one body is a 400
+ * (two changes with two activity rows belong in two requests).
+ */
+export function patchCustomPiece(
+	db: Db,
+	buildId: string,
+	userId: string,
+	pieceId: string,
+	body: unknown
+): { name: string } | { changes: RecolorChange[] } {
+	if (isObj(body) && body.roles !== undefined) {
+		if (body.name !== undefined) return bad('Send name or roles, not both');
+		return recolorCustomPiece(db, buildId, userId, pieceId, body);
+	}
+	return renameCustomPiece(db, buildId, userId, pieceId, body);
+}
+
+/** One color change of a custom part: role keys of the build's filaments. */
+export interface RecolorChange {
+	/** The part's name (its label on the Print tab). */
+	part: string;
+	from: string;
+	to: string;
+}
+
+/**
+ * Change the color of a custom piece's parts in this build. Body
+ * `{ roles: { "<part slug of this piece>": { "<current role>": "<new role>" } } }`: a single-color part has one
+ * entry, a multi-color part one per role its plate uses. The part's `role` and its plate's `filament_grams` are
+ * re-keyed (two roles mapping to one merge their grams; the part's role is then the one with most grams).
+ * Roles must be filaments of the build and the `from` roles ones the part has now. Unchanged = no-op, no
+ * activity row. A saved part the piece is linked to is not changed. Editors and owners; drafts too. Not a
+ * re-arrange kind, like `design.recolor`: custom plates are never arranged.
+ */
+export function recolorCustomPiece(
+	db: Db,
+	buildId: string,
+	userId: string,
+	pieceId: string,
+	body: unknown
+): { changes: RecolorChange[] } {
+	if (!isObj(body) || !isObj((body as Obj).roles)) return bad('roles must be an object');
+	const roles = (body as Obj).roles as Obj;
+	const slugEntries = Object.entries(roles);
+	if (!slugEntries.length || slugEntries.length > MAX_CUSTOM_PLATES)
+		return bad('roles must name the parts to recolor');
+	let changes: RecolorChange[] = [];
+	mutateBuild(db, buildId, userId, (tx, view) => {
+		const piece = tx
+			.select()
+			.from(buildCustomPieces)
+			.where(and(eq(buildCustomPieces.id, pieceId), eq(buildCustomPieces.buildId, buildId)))
+			.get();
+		if (!piece) throw new ApiError(404, 'Custom piece not found');
+		const roleKeys = new Set(view.filaments.map((f) => f.key));
+		const done: RecolorChange[] = [];
+		const nextParts = piece.parts.map((p) => ({ ...p }));
+		for (const [slug, map] of slugEntries) {
+			const part = nextParts.find((p) => p.slug === slug);
+			if (!part) return bad('That part is not in this custom piece');
+			if (!isObj(map)) return bad('Each part needs a map of current color to new color');
+			const pairs = Object.entries(map as Obj);
+			if (!pairs.length || pairs.length > MAX_SLOTS) return bad('Name the colors to change');
+			const plate = tx
+				.select()
+				.from(buildPlates)
+				.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.source, `custom:${pieceId}`)))
+				.all()
+				.find((r) => r.parts[0] === slug);
+			const fg = { ...(plate?.filamentGrams ?? {}) };
+			const have = new Set([part.role, ...Object.keys(fg)]);
+			const mapped = new Map<string, string>();
+			for (const [from, to] of pairs) {
+				if (typeof to !== 'string' || !roleKeys.has(to)) return bad('Unknown color in roles');
+				if (!have.has(from)) return bad(`"${part.name}" has no ${from} color to change`);
+				if (from !== to) mapped.set(from, to);
+			}
+			if (!mapped.size) continue;
+			const re = rekeyRoles(fg, part.role, mapped);
+			part.role = re.role;
+			if (plate)
+				tx.update(buildPlates)
+					.set({ filamentGrams: re.filamentGrams })
+					.where(and(eq(buildPlates.buildId, buildId), eq(buildPlates.number, plate.number)))
+					.run();
+			for (const [from, to] of mapped) done.push({ part: part.name, from, to });
+		}
+		if (!done.length) return { kind: 'custom.recolor', payload: {}, skip: true };
+		tx.update(buildCustomPieces)
+			.set({ parts: nextParts })
+			.where(eq(buildCustomPieces.id, pieceId))
+			.run();
+		changes = done;
+		return { kind: 'custom.recolor', payload: { pieceId, name: piece.name, changes: done } };
+	});
+	return { changes };
 }
 
 /**

@@ -12,6 +12,7 @@
 	} from '#lib/client/api.ts';
 	import { fmt, fmtH, MAX_PRINT_SECONDS, parseGrams } from '#lib/domain/index.ts';
 	import SlicerTimeInput from './SlicerTimeInput.svelte';
+	import CustomReplacesPicker, { kitGroupsOf } from './CustomReplacesPicker.svelte';
 	import { CUSTOM_NAME_MAX, MAX_CUSTOM_PIECES, MAX_CUSTOM_PLATES } from '#lib/domain/custom.ts';
 	import type { BuildView } from '#lib/domain/types.ts';
 
@@ -49,10 +50,19 @@
 	let role = $state('');
 	let replaces = $state<string[]>([]);
 	let saveForLater = $state(false);
+	/** "Add to every new build automatically" for the saved part (off: it is still offered in a setup). */
+	let saveDefault = $state(false);
+	/** File filaments set to "Not used in this build" (slot → true): their grams are dropped. */
+	let ignored = $state<Record<string, boolean>>({});
+	/** The option value of that choice in a color select (never a role key). */
+	const IGNORE = '__ignore__';
 
 	// The workspace's saved parts that this build does not hold yet.
 	let library = $state<LibraryPiece[]>([]);
 	let applying = $state<string | null>(null);
+	/** The saved part whose replaced kit parts are being confirmed, and the parts checked for this add. */
+	let confirming = $state<LibraryPiece | null>(null);
+	let confirmReplaces = $state<string[]>([]);
 	const offered = $derived(
 		library.filter((l) => !view.customPieces.some((c) => c.libraryId === l.id))
 	);
@@ -95,7 +105,44 @@
 				: []
 		)
 	);
-	const missingColour = $derived([...usedSlots].some((i) => !colours[i]));
+	const missingColour = $derived([...usedSlots].some((i) => !ignored[i] && !colours[i]));
+	/** Grams of one print of a plate without the ignored filaments (the file's total less their grams). */
+	function keptGrams(
+		p: { grams: number | null; filamentGrams: Record<string, number> },
+		ign: Record<string, boolean>
+	) {
+		const fg = Object.entries(p.filamentGrams ?? {}).filter(([, g]) => g > 0);
+		const dropped = fg.reduce((a, [i, g]) => a + (ign[i] ? g : 0), 0);
+		const kept = fg.reduce((a, [i, g]) => a + (ign[i] ? 0 : g), 0);
+		if (p.grams && p.grams > 0 && dropped > 0) {
+			const left = Math.round((p.grams - dropped) * 100) / 100;
+			return left > 0 ? left : Math.round(kept * 100) / 100;
+		}
+		return p.grams && p.grams > 0 ? p.grams : kept > 0 ? Math.round(kept * 100) / 100 : null;
+	}
+	const showGrams = (g: number | null) => (g && g > 0 ? String(Math.round(g * 100) / 100) : '');
+	/** A chosen plate that has grams but keeps no filament. */
+	const nothingKept = $derived(
+		sliced
+			? chosen.find((p) => {
+					const used = Object.entries(p.filamentGrams ?? {}).filter(([, g]) => g > 0);
+					return used.length > 0 && used.every(([i]) => ignored[i]);
+				})
+			: undefined
+	);
+	/** Choose a color of the build, or "Not used in this build" (drops the slot's grams). */
+	function setSlot(slot: string, value: string) {
+		const was = { ...ignored };
+		if (value === IGNORE) ignored[slot] = true;
+		else {
+			ignored[slot] = false;
+			colours[slot] = value;
+		}
+		// a grams box still showing the file's number follows the kept filaments; a typed number stays
+		for (const p of up?.summary.plates ?? [])
+			if ((gramsText[p.index] ?? '') === showGrams(keptGrams(p, was)))
+				gramsText[p.index] = showGrams(keptGrams(p, ignored));
+	}
 	const overCap = $derived(chosen.length > roomPlates);
 	const badNumbers = $derived(
 		chosen.some((p) => gramsBad(p.index) || (times[p.index] ?? 0) > MAX_PRINT_SECONDS)
@@ -109,38 +156,19 @@
 					? 'Choose at least one plate.'
 					: overCap
 						? `A build can have at most ${MAX_CUSTOM_PLATES} custom plates (${haveCustom} now).`
-						: badNumbers
-							? 'Check the print time (at most 30 days) and the grams (more than 0, at most 20000).'
-							: missingColour
-								? 'Choose a color for every filament the plates use.'
-								: !sliced && !role
-									? 'Choose a color.'
-									: null
+						: nothingKept
+							? `Plate ${nothingKept.index} keeps no filament: leave at least one of its filaments in use.`
+							: badNumbers
+								? 'Check the print time (at most 30 days) and the grams (more than 0, at most 20000).'
+								: missingColour
+									? 'Choose a color for every filament the plates use.'
+									: !sliced && !role
+										? 'Choose a color.'
+										: null
 	);
 
 	// Kit parts grouped by the plate they print on; the ones on no plate come last.
-	const kitGroups = $derived.by(() => {
-		const kit = new Map(view.parts.filter((p) => !p.custom).map((p) => [p.slug, p]));
-		const seen: Record<string, boolean> = {};
-		const out: { key: string; title: string; parts: { slug: string; name: string }[] }[] = [];
-		for (const pl of view.plates) {
-			if (pl.source.startsWith('custom:')) continue;
-			const parts = pl.parts
-				.filter((s) => kit.has(s) && !seen[s])
-				.map((s) => ({ slug: s, name: kit.get(s)!.name }));
-			parts.forEach((p) => (seen[p.slug] = true));
-			if (parts.length)
-				out.push({ key: `p${pl.number}`, title: `Plate ${pl.number} · ${pl.name}`, parts });
-		}
-		const rest = [...kit.values()].filter((p) => !seen[p.slug]);
-		if (rest.length)
-			out.push({
-				key: 'rest',
-				title: 'Not on a plate',
-				parts: rest.map((p) => ({ slug: p.slug, name: p.name }))
-			});
-		return out;
-	});
+	const kitGroups = $derived(kitGroupsOf(view));
 	const nameOfKit = (slug: string) => view.parts.find((p) => p.slug === slug)?.name ?? slug;
 
 	const baseName = (f: string) =>
@@ -185,15 +213,12 @@
 			);
 			role = Object.values(colours).find(Boolean) ?? view.filaments[0]?.key ?? '';
 			replaces = [];
+			ignored = {};
 			phase = 'review';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'The upload failed.';
 			phase = 'pick';
 		}
-	}
-
-	function toggleReplace(slug: string, on: boolean) {
-		replaces = on ? [...replaces, slug] : replaces.filter((s) => s !== slug);
 	}
 
 	async function add() {
@@ -218,7 +243,10 @@
 				),
 				...(sliced
 					? {
-							filamentMap: Object.fromEntries([...usedSlots].map((i) => [i, colours[i]]))
+							filamentMap: Object.fromEntries(
+								[...usedSlots].filter((i) => !ignored[i]).map((i) => [i, colours[i]])
+							),
+							ignore: [...usedSlots].filter((i) => ignored[i])
 						}
 					: { role }),
 				replaces
@@ -228,8 +256,10 @@
 			if (saveForLater) {
 				// a failed save never undoes the add
 				try {
-					await saveCustomPieceToLibrary(view.build.id, r.pieceId);
-					msg += ' Saved for new builds.';
+					await saveCustomPieceToLibrary(view.build.id, r.pieceId, saveDefault);
+					msg += saveDefault
+						? ' Saved, and added to every new build automatically.'
+						: ' Saved for new builds.';
 				} catch (e) {
 					msg += ` It could not be saved for new builds: ${e instanceof Error ? e.message : 'try the Save button on the part.'}`;
 				}
@@ -241,13 +271,27 @@
 		}
 	}
 
-	/** Add a saved part of the workspace to this build, without a file. */
-	async function applySaved(l: LibraryPiece) {
+	/** Kit parts a saved part would replace here: the same kit, and parts that are active in this build. */
+	function savedReplaces(l: LibraryPiece): string[] {
+		if (!l.templateId || l.templateId !== view.build.templateId) return [];
+		const here = new Set(kitGroups.flatMap((g) => g.parts.map((p) => p.slug)));
+		return l.replaces.filter((s) => here.has(s));
+	}
+	/** "Add" on a saved part: with kit parts to replace the maker confirms them first; otherwise it goes in. */
+	function startSaved(l: LibraryPiece) {
+		const pre = savedReplaces(l);
+		if (!pre.length) return void applySaved(l);
+		error = null;
+		confirmReplaces = pre;
+		confirming = l;
+	}
+	/** Add a saved part of the workspace to this build, without a file; `replaces` is the confirmed list. */
+	async function applySaved(l: LibraryPiece, replacesNow?: string[]) {
 		if (applying) return;
 		applying = l.id;
 		error = null;
 		try {
-			const r = await applyLibraryPiece(view.build.id, l.id);
+			const r = await applyLibraryPiece(view.build.id, l.id, replacesNow);
 			if ('already' in r) {
 				ondone(`"${l.name}" is already in this build.`);
 				return;
@@ -263,6 +307,10 @@
 	}
 
 	async function cancel() {
+		if (confirming && !applying) {
+			confirming = null;
+			return;
+		}
 		if (up && phase === 'review') {
 			try {
 				await discardPlateUpload(view.build.id, up.uploadId);
@@ -295,7 +343,49 @@
 			them, with the print time and grams from the file, and join the Print tab after the kit's
 			plates. The file itself is not kept.
 		</p>
-		{#if phase === 'pick' && offered.length}
+		{#if phase === 'pick' && confirming}
+			{@const l = confirming}
+			<div class="cpu-saved cpu-confirm" data-testid="custom-saved-confirm-step">
+				<h3>Add "{l.name}"</h3>
+				<p class="meta">
+					It replaces the kit parts checked below: they are marked Not printing in this build. You
+					can bring them back later; nothing is deleted.
+				</p>
+				<CustomReplacesPicker
+					groups={kitGroups}
+					bind:selected={confirmReplaces}
+					open
+					optional={false}
+					primary={confirmReplaces}
+					testid="custom-saved-replaces"
+					hint="Checked: the parts this saved part replaces. Uncheck one to keep printing it, or check another to skip it."
+				/>
+				{#if confirmReplaces.length}
+					<p class="meta cpu-sel">
+						Marked Not printing: {confirmReplaces.map(nameOfKit).join(', ')}
+					</p>
+				{:else}
+					<p class="meta cpu-sel">No kit part is marked Not printing.</p>
+				{/if}
+				<div class="cpu-actions">
+					<button
+						class="btn"
+						type="button"
+						data-testid="custom-saved-cancel"
+						disabled={!!applying}
+						onclick={() => (confirming = null)}>Cancel</button
+					>
+					<button
+						class="btn primary"
+						type="button"
+						data-testid="custom-saved-confirm"
+						disabled={!!applying}
+						onclick={() => applySaved(l, confirmReplaces)}
+						>{applying ? 'Adding…' : 'Add to build'}</button
+					>
+				</div>
+			</div>
+		{:else if phase === 'pick' && offered.length}
 			<div class="cpu-saved" data-testid="custom-saved-list">
 				<h3>Saved custom parts</h3>
 				<ul>
@@ -318,7 +408,7 @@
 								type="button"
 								data-testid="custom-saved-add"
 								disabled={!!applying || full}
-								onclick={() => applySaved(l)}>{applying === l.id ? 'Adding…' : 'Add'}</button
+								onclick={() => startSaved(l)}>{applying === l.id ? 'Adding…' : 'Add'}</button
 							>
 						</li>
 					{/each}
@@ -326,7 +416,7 @@
 				<h3>Or add a file</h3>
 			</div>
 		{/if}
-		{#if phase === 'pick'}
+		{#if phase === 'pick' && !confirming}
 			<label
 				class="cpu-drop"
 				class:drag
@@ -349,7 +439,7 @@
 				/>
 				<span>Choose a .3mf file, or drop it here</span>
 			</label>
-		{:else}
+		{:else if phase === 'uploading'}
 			<div class="cpu-progress" role="status">
 				<div class="cpu-bar"><span style="width:{Math.round(progress * 100)}%"></span></div>
 				<span class="meta"
@@ -471,19 +561,33 @@
 			<div class="cpu-fil">
 				{#each s.filaments as f (f.index)}
 					{#if usedSlots.has(String(f.index))}
-						<label class="cpu-slot">
+						<label class="cpu-slot" class:off={ignored[String(f.index)]}>
 							<span class="cpu-swatch" style="background:{f.color ?? 'transparent'}"></span>
 							<span class="cpu-fl">#{f.index} {f.type}{f.name ? ` · ${f.name}` : ''}</span>
-							<select bind:value={colours[String(f.index)]} aria-label="Build color for #{f.index}">
+							<select
+								value={ignored[String(f.index)] ? IGNORE : (colours[String(f.index)] ?? '')}
+								onchange={(e) => setSlot(String(f.index), e.currentTarget.value)}
+								data-testid="custom-slot-color"
+								aria-label="Build color for #{f.index}"
+							>
 								<option value="">Choose…</option>
 								{#each view.filaments as r (r.key)}
 									<option value={r.key}>{r.name} ({r.material})</option>
 								{/each}
+								<option value={IGNORE} data-testid="custom-slot-ignore"
+									>Not used in this build</option
+								>
 							</select>
 						</label>
 					{/if}
 				{/each}
 				{#if !usedSlots.size}<p class="meta">The chosen plates use no filament weight.</p>{/if}
+				{#if usedSlots.size}
+					<p class="meta">
+						Set a filament to "Not used in this build" to leave out its grams, for example PLA
+						supports. The plate's time stays as sliced.
+					</p>
+				{/if}
 			</div>
 		{:else}
 			<label class="cpu-slot">
@@ -496,32 +600,7 @@
 			</label>
 		{/if}
 
-		{#if kitGroups.length}
-			<details class="cpu-replaces" data-testid="custom-replaces">
-				<summary>
-					Replaces kit parts{replaces.length ? ` (${replaces.length})` : ''}
-					<span class="meta">optional</span>
-				</summary>
-				<p class="meta">
-					These parts are marked Not printing; you can bring them back. Nothing is deleted.
-				</p>
-				{#each kitGroups as g (g.key)}
-					<fieldset class="cpu-group">
-						<legend>{g.title}</legend>
-						{#each g.parts as p (p.slug)}
-							<label class="cpu-chk">
-								<input
-									type="checkbox"
-									checked={replaces.includes(p.slug)}
-									onchange={(e) => toggleReplace(p.slug, e.currentTarget.checked)}
-								/>
-								{p.name}
-							</label>
-						{/each}
-					</fieldset>
-				{/each}
-			</details>
-		{/if}
+		<CustomReplacesPicker groups={kitGroups} bind:selected={replaces} />
 
 		<label class="cpu-save">
 			<input type="checkbox" bind:checked={saveForLater} data-testid="custom-save-library" />
@@ -532,6 +611,16 @@
 				>
 			</span>
 		</label>
+
+		{#if saveForLater}
+			<label class="cpu-save cpu-save-default">
+				<input type="checkbox" bind:checked={saveDefault} data-testid="custom-save-default" />
+				<span>
+					<b>Add to every new build automatically</b>
+					<span class="meta">Off: it is still offered when you set up a build.</span>
+				</span>
+			</label>
+		{/if}
 
 		{#if replaces.length}
 			<p class="meta cpu-sel">Replacing: {replaces.map(nameOfKit).join(', ')}</p>
@@ -716,37 +805,6 @@
 		border-radius: 50%;
 		border: 1px solid var(--line);
 	}
-	.cpu-replaces {
-		border: 1px solid var(--line);
-		border-radius: var(--r-md);
-		padding: var(--sp-4) var(--sp-5);
-	}
-	.cpu-replaces summary {
-		cursor: pointer;
-		font-weight: 600;
-	}
-	.cpu-replaces p {
-		margin: var(--sp-3) 0;
-	}
-	.cpu-group {
-		border: 0;
-		padding: 0;
-		margin: var(--sp-4) 0 0;
-		display: grid;
-		gap: var(--sp-2);
-	}
-	.cpu-group legend {
-		padding: 0;
-		font-size: var(--fs-sm);
-		color: var(--muted);
-		font-weight: 600;
-	}
-	.cpu-chk {
-		display: flex;
-		gap: var(--sp-4);
-		align-items: center;
-		min-height: 32px;
-	}
 	.cpu-saved {
 		display: grid;
 		gap: var(--sp-4);
@@ -776,6 +834,13 @@
 		gap: var(--sp-4);
 		align-items: flex-start;
 		min-height: 32px;
+	}
+	.cpu-save-default {
+		margin-left: var(--sp-8);
+	}
+	.cpu-slot.off .cpu-fl {
+		color: var(--muted);
+		text-decoration: line-through;
 	}
 	.cpu-save > span {
 		display: grid;
