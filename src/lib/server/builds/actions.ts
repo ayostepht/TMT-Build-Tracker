@@ -36,6 +36,7 @@ import { ApiError, buildAccess, requireEditor, requireOwner } from '../access';
 import type { Db } from '../db';
 import {
 	activity,
+	buildCustomPieces,
 	buildFilaments,
 	buildPlates,
 	builds,
@@ -134,6 +135,7 @@ export function assertPiecePlate(view: BuildView, slug: string, plateNumber: num
 /**
  * Activity kinds a Studio draft may produce. Everything else (runs, part status, printing,
  * assembly, handoff, photos, spools, imports) is build tracking and is refused with a 400.
+ * "Not printing" and custom parts are allowed: they decide what the draft's estimate counts.
  */
 const DRAFT_KINDS = new Set([
 	'build.update',
@@ -143,7 +145,13 @@ const DRAFT_KINDS = new Set([
 	'build.move',
 	'build.promote',
 	'filament.update',
-	'plate.slicer'
+	'plate.slicer',
+	// "Not printing" and custom parts shape what a draft would print (its estimate); no logging.
+	'part.skip',
+	'part.restore',
+	'custom.add',
+	'custom.remove',
+	'custom.rename'
 ]);
 export function draftAllows(kind: string): boolean {
 	return DRAFT_KINDS.has(kind) || kind.startsWith('design.') || kind.startsWith('plates.');
@@ -233,8 +241,9 @@ export function deleteBuild(db: Db, buildId: string, userId: string): void {
 }
 
 /**
- * Studio draft to tracked build: keeps the design, variants, printer, plates and uploaded
- * files. Setup counts as done up to the Export step (everything it asks for exists already), so
+ * Studio draft to tracked build: keeps the design, variants, printer, plates, uploaded
+ * files, "Not printing" parts and custom pieces (rows, plates, thumbnails, saved-part links).
+ * Only `kind` and the setup step change, so nothing is copied. Setup counts as done up to the Export step (everything it asks for exists already), so
  * the wizard opens there with every earlier step one click away.
  * Editors and owners. Writes a `build.promote` activity row.
  */
@@ -1127,6 +1136,11 @@ export function moveBuild(db: Db, buildId: string, userId: string, body: unknown
 		if (access.kind !== 'draft')
 			assertUnder(tx, 'buildsPerWorkspace', () => countBuilds(tx, targetId), { userId });
 		tx.update(builds).set({ organizationId: targetId }).where(eq(builds.id, buildId)).run();
+		// Saved parts belong to a workspace: a piece's link to one does not follow the build.
+		tx.update(buildCustomPieces)
+			.set({ libraryId: null })
+			.where(eq(buildCustomPieces.buildId, buildId))
+			.run();
 		// A kit copy owned by the personal workspace stays behind: the build goes back to the base kit.
 		const tpl = tx
 			.select({ id: builds.templateId })

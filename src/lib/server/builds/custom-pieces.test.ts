@@ -373,7 +373,7 @@ describe('adding a custom piece', () => {
 });
 
 describe('validation and access', () => {
-	it("keeps viewers out, refuses drafts, another build's upload, bad roles and slugs", async () => {
+	it("keeps viewers out, another build's upload, bad roles and slugs", async () => {
 		const id = mk();
 		const other = mk();
 		const up = await upload(id);
@@ -397,10 +397,12 @@ describe('validation and access', () => {
 		expect(status(() => add(id, up.uploadId, { ...ok, runs: { '1': 21 } }))).toBe(400);
 		expect(status(() => add(id, up.uploadId, { ...ok, runs: { '1': 0 } }))).toBe(400);
 		expect(customPlates(id)).toEqual([]);
-		// a draft has no build tracking
+		// a draft takes custom pieces like a build, with the same role checks
 		const draft = mk({ kind: 'draft' });
 		const dup = await upload(draft);
-		expect(status(() => add(draft, dup.uploadId, ok))).toBe(400);
+		expect(status(() => add(draft, dup.uploadId, ok, 'viewer'))).toBe(403);
+		expect(status(() => add(draft, dup.uploadId, ok, 'outsider'))).toBe(404);
+		expect(status(() => add(draft, dup.uploadId, { ...ok, role: 'nope' }))).toBe(400);
 		expect(view(draft).customPieces).toEqual([]);
 		// control characters and length
 		const r = add(id, up.uploadId, {
@@ -657,20 +659,17 @@ describe('safety', () => {
 	});
 
 	it('a failed add leaves the parsed upload in place and usable', async () => {
-		const draft = mk({ kind: 'draft' });
-		const up = await upload(draft);
-		expect(
-			status(() =>
-				add(draft, up.uploadId, { name: 'X', filamentMap: { '1': 'primary', '2': 'soft' } })
-			)
-		).toBe(400);
+		const id = mk();
+		const up = await upload(id);
+		expect(status(() => add(id, up.uploadId, { name: 'X', filamentMap: { '1': 'nope' } }))).toBe(
+			400
+		);
 		expect(existsSync(uploadDir(up.uploadId))).toBe(true);
 		expect(
 			db.select().from(buildUploads).where(eq(buildUploads.id, up.uploadId)).get()!.status
 		).toBe('parsed');
-		promoteDraft(db, draft, 'owner');
-		add(draft, up.uploadId, { name: 'X', filamentMap: { '1': 'primary', '2': 'soft' } });
-		expect(view(draft).customPieces).toHaveLength(1);
+		add(id, up.uploadId, { name: 'X', filamentMap: { '1': 'primary', '2': 'soft' } });
+		expect(view(id).customPieces).toHaveLength(1);
 		expect(existsSync(uploadDir(up.uploadId))).toBe(false);
 	});
 
@@ -934,7 +933,7 @@ describe('renaming a custom piece', () => {
 		expect(REARRANGE_KINDS.has('custom.rename')).toBe(false);
 	});
 
-	it('refuses viewers, drafts, foreign pieces and bad names', async () => {
+	it('refuses viewers, foreign pieces and bad names', async () => {
 		const id = mk();
 		const up = await upload(id);
 		const r = add(id, up.uploadId, { name: 'Beta', filamentMap: { '1': 'primary', '2': 'soft' } });
@@ -947,8 +946,9 @@ describe('renaming a custom piece', () => {
 		expect(status(() => renameCustomPiece(db, id, 'owner', r.pieceId, { name: 5 }))).toBe(400);
 		expect(status(() => renameCustomPiece(db, id, 'owner', r.pieceId, null))).toBe(400);
 		expect(status(() => renameCustomPiece(db, id, 'owner', r.pieceId, {}))).toBe(400);
+		// a draft takes the call, but the piece must be the draft's own
 		const draft = mk({ kind: 'draft' });
-		expect(status(() => renameCustomPiece(db, draft, 'owner', r.pieceId, { name: 'x' }))).toBe(400);
+		expect(status(() => renameCustomPiece(db, draft, 'owner', r.pieceId, { name: 'x' }))).toBe(404);
 		expect(view(id).customPieces[0].name).toBe('Beta');
 	});
 });

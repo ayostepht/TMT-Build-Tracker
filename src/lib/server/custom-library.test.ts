@@ -211,7 +211,7 @@ describe('saving to the library', () => {
 		expect(saveToLibrary(db, 'other', o2, p2.pieceId).name).toBe('Beta handle');
 	});
 
-	it('needs an editor; viewers get 403, outsiders 404, drafts 400, a foreign piece id 404', async () => {
+	it('needs an editor; viewers get 403, outsiders 404, a foreign piece id 404', async () => {
 		const id = mk();
 		const p = await addPiece(id);
 		expect(status(() => saveToLibrary(db, 'viewer', id, p.pieceId))).toBe(403);
@@ -219,8 +219,9 @@ describe('saving to the library', () => {
 		expect(status(() => saveToLibrary(db, 'owner', id, 'nope'))).toBe(404);
 		const other = mk();
 		expect(status(() => saveToLibrary(db, 'owner', other, p.pieceId))).toBe(404);
+		// a draft takes the call; this piece is not the draft's
 		const draft = mk('org1', 'owner', 'draft');
-		expect(status(() => saveToLibrary(db, 'owner', draft, p.pieceId))).toBe(400);
+		expect(status(() => saveToLibrary(db, 'owner', draft, p.pieceId))).toBe(404);
 	});
 });
 
@@ -443,11 +444,8 @@ describe('adding a saved part to a build', () => {
 		expect(status(() => applyLibraryPiece(db, mk(), 'owner', big.id))).toBe(400);
 	});
 
-	it('refuses drafts, viewers and ids of another workspace', () => {
+	it('refuses viewers and ids of another workspace', () => {
 		const saved = row();
-		expect(
-			status(() => applyLibraryPiece(db, mk('org1', 'owner', 'draft'), 'owner', saved.id))
-		).toBe(400);
 		expect(status(() => applyLibraryPiece(db, mk(), 'viewer', saved.id))).toBe(403);
 		expect(status(() => applyLibraryPiece(db, mk(), 'outsider', saved.id))).toBe(404);
 		expect(status(() => applyLibraryPiece(db, mk(), 'owner', 'missing'))).toBe(404);
@@ -641,7 +639,7 @@ describe('refreshing a saved part from a build', () => {
 		expect(db.select().from(workspaceCustomPieces).all()).toHaveLength(1);
 	});
 
-	it('is refused for viewers, outsiders, drafts, unlinked or foreign pieces and other workspaces', async () => {
+	it('is refused for viewers, outsiders, unlinked or foreign pieces and other workspaces', async () => {
 		const id = mk();
 		const p = await addPiece(id);
 		const saved = saveToLibrary(db, 'owner', id, p.pieceId);
@@ -668,13 +666,13 @@ describe('refreshing a saved part from a build', () => {
 		expect(libRow(saved.id).name).toBe('Beta handle');
 	});
 
-	it('refuses a draft build', async () => {
+	it("does not refresh from another build's piece when the build is a draft", async () => {
 		const id = mk();
 		const p = await addPiece(id);
 		const saved = saveToLibrary(db, 'owner', id, p.pieceId);
 		const draft = mk('org1', 'owner', 'draft');
 		expect(status(() => refreshLibraryPiece(db, 'owner', 'org1', saved.id, draft, p.pieceId))).toBe(
-			400
+			404
 		);
 	});
 });

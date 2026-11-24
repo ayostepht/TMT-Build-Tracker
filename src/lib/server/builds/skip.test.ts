@@ -170,9 +170,25 @@ describe('Not printing (skip / restore)', () => {
 		expect(db.select().from(activity).where(eq(activity.kind, 'part.restore')).all()).toHaveLength(
 			0
 		);
+	});
+
+	it('works on a Studio draft and changes its estimate', () => {
 		db.update(builds).set({ kind: 'draft' }).where(eq(builds.id, id)).run();
-		expect(status(() => skip(['handle-left']))).toBe(400);
+		const before = view();
+		const gramsOf = (v: ReturnType<typeof view>) =>
+			filamentStats(v).reduce((a, f) => a + f.total, 0);
+		const plate = before.plates.find((p) => p.parts.length > 0)!;
+		skip(plate.parts);
+		const after = view();
+		expect(after.skipped.map((s) => s.slug).sort()).toEqual([...plate.parts].sort());
+		expect(after.plates.find((p) => p.number === plate.number)).toBeUndefined();
+		expect(gramsOf(after)).toBeLessThan(gramsOf(before));
+		expect(timeStats(after).totalSec).toBeLessThan(timeStats(before).totalSec);
+		expect(db.select().from(activity).where(eq(activity.kind, 'part.skip')).all()).toHaveLength(1);
+		skip(plate.parts, false);
 		expect(view().skipped).toEqual([]);
+		expect(view().plates.map((p) => p.number)).toEqual(before.plates.map((p) => p.number));
+		expect(status(() => skip(['handle-left'], true, 'viewer'))).toBe(403);
 	});
 
 	it('records the plate in the payload when a whole plate is skipped', () => {

@@ -248,7 +248,7 @@ export interface AddCustomResult {
 
 /**
  * Body `{ name, plates?, runs?, times?, grams?, filamentMap, role?, replaces? }` on a parsed upload of the build.
- * Editors and owners; drafts refuse it (no build tracking).
+ * Editors and owners; a Studio draft takes custom pieces too.
  */
 export function addCustomPiece(
 	db: Db,
@@ -263,9 +263,6 @@ export function addCustomPiece(
 	const written: string[] = []; // thumbnails copied to disk; removed again when the transaction fails
 	try {
 		mutateBuild(db, buildId, userId, (tx, view) => {
-			// refuse before anything is read from or written to disk
-			if (view.build.kind === 'draft')
-				throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 			const name = cleanPieceName(b.name);
 			const up = getUpload(tx, buildId, uploadId);
 			if (up.status !== 'parsed')
@@ -459,7 +456,7 @@ export function addCustomPiece(
 
 /**
  * Rename a custom piece: its row, its parts and its plates (named as `customPlateLabel` names them at
- * insert). Editors and owners; drafts refuse it. A saved part the piece is linked to is not changed.
+ * insert). Editors and owners. A saved part the piece is linked to is not changed.
  */
 export function renameCustomPiece(
 	db: Db,
@@ -470,9 +467,7 @@ export function renameCustomPiece(
 ): { name: string } {
 	if (!isObj(body)) bad('Invalid body');
 	let name = '';
-	mutateBuild(db, buildId, userId, (tx, view) => {
-		if (view.build.kind === 'draft')
-			throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
+	mutateBuild(db, buildId, userId, (tx) => {
 		name = cleanPieceName((body as Obj).name);
 		const piece = tx
 			.select()

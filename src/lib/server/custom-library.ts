@@ -171,7 +171,7 @@ function piecePlates(
 /**
  * Save a custom piece of a build to its workspace's library and link the piece to the row. The typed time
  * of a plate wins over the file's. Saving a piece that is already linked to a library row changes nothing
- * and returns that row. Editors and owners; drafts refuse it. At most `MAX_LIBRARY_PIECES` per workspace.
+ * and returns that row. Editors and owners. At most `MAX_LIBRARY_PIECES` per workspace.
  */
 export function saveToLibrary(
 	db: Db,
@@ -183,8 +183,6 @@ export function saveToLibrary(
 	const access = buildAccess(db, buildId, userId);
 	if (!access) throw new ApiError(404, 'Not found');
 	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
-	if (access.kind === 'draft')
-		throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 	if (opts.isDefault !== undefined && typeof opts.isDefault !== 'boolean')
 		throw new ApiError(400, 'isDefault must be true or false');
 	const row = db.transaction((txRaw) => {
@@ -328,8 +326,6 @@ export function refreshLibraryPiece(
 	const access = buildAccess(db, buildId, userId);
 	if (!access || access.organizationId !== orgId) throw new ApiError(404, 'Not found');
 	if (!access.canEdit) throw new ApiError(403, 'Your role cannot edit');
-	if (access.kind === 'draft')
-		throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 	if (typeof pieceId !== 'string') throw new ApiError(404, 'Custom piece not found');
 	const row = db.transaction((txRaw) => {
 		const tx = txRaw as unknown as Db;
@@ -393,7 +389,7 @@ export interface ApplyLibraryResult {
  * from, and only those that are active kit parts and not printing; the rest are left alone.
  *
  * Returns null when the build already holds a piece from this saved part (nothing changes). Throws a 404
- * for a saved part of another workspace, a 400 for a draft, for a build without filament colors and when
+ * for a saved part of another workspace, a 400 for a build without filament colors and when
  * the build's custom piece or plate limits are reached.
  */
 export function applyLibraryPieceTx(
@@ -403,8 +399,6 @@ export function applyLibraryPieceTx(
 	userId: string
 ): ApplyLibraryResult | null {
 	if (lib.organizationId !== view.build.organizationId) throw new ApiError(404, 'Not found');
-	if (view.build.kind === 'draft')
-		throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 	if (view.customPieces.some((c) => c.libraryId === lib.id)) return null;
 	const libPlates = lib.plates ?? [];
 	if (!libPlates.length) throw new ApiError(400, 'This saved part has no plates');
@@ -470,7 +464,7 @@ export function applyLibraryPieceTx(
 }
 
 /**
- * Add a saved part to a build (editors and owners; drafts refuse it). The saved part must belong to the
+ * Add a saved part to a build (editors and owners). The saved part must belong to the
  * build's workspace. Answers null when the build already has a piece from it.
  */
 export function applyLibraryPiece(
@@ -481,8 +475,6 @@ export function applyLibraryPiece(
 ): { pieceId: string; plates: number[]; skipped: string[] } | null {
 	let result: ApplyLibraryResult | null = null;
 	mutateBuild(db, buildId, userId, (tx, view) => {
-		if (view.build.kind === 'draft')
-			throw new ApiError(400, 'Drafts have no build tracking. Make it a build first.');
 		const lib = rowOf(tx, view.build.organizationId, libId);
 		result = applyLibraryPieceTx(tx, view, lib, userId);
 		if (!result) return { kind: 'custom.add', payload: {}, skip: true };
