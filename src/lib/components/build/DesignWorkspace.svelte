@@ -158,6 +158,10 @@
 	const pictureSwatches = $derived(swatchColors(live, colors));
 	const stats = $derived(filamentStats(live));
 	const part = $derived(live.allParts.find((p) => p.slug === selected) ?? null);
+	/** A part set to "Not printing" is not drawn: selecting it must not dim the whole chair. */
+	const stageSelected = $derived(
+		selected !== null && ctx.view.skipped.some((s) => s.slug === selected) ? null : selected
+	);
 
 	// Parts without a visible 3D counterpart, so the list can say so.
 	const noPreview = $derived.by((): string[] => {
@@ -260,6 +264,18 @@
 		const next = { ...pendingLock };
 		if (next[slug] === on) delete next[slug];
 		pendingLock = next;
+	}
+
+	/** "Not printing this part" / "Bring back": not a design change, so it never touches part roles. */
+	async function skipPart() {
+		if (!part) return;
+		announce = `${part.name} set to not printing`;
+		await ctx.skipParts([part.slug], part.name);
+	}
+	async function restorePart() {
+		if (!part) return;
+		announce = `${part.name} brought back`;
+		await ctx.restoreSkipped([part.slug]);
 	}
 
 	/** Bumped whenever the picker opens or closes: a save that finishes later must not speak in a new session. */
@@ -382,8 +398,8 @@
 				model={ctx.view.model}
 				{colors}
 				{hidden}
-				{selected}
-				dimOthers={selected !== null}
+				selected={stageSelected}
+				dimOthers={stageSelected !== null}
 				onpick={(s) => pick(s, 'canvas')}
 				raised={part !== null}
 				onready={(info) => (ready = info)}
@@ -399,6 +415,8 @@
 						noPreview={noPreview.includes(part.slug)}
 						onmove={move}
 						onlock={lock}
+						onskip={skipPart}
+						onrestore={restorePart}
 						onclose={closePart}
 					/>
 				</div>
@@ -589,6 +607,9 @@
 				{noPreview}
 				bind:roleFilter
 				visible={tab === 'parts'}
+				canAddCustom={!embedded}
+				showNotPrinting={ctx.view.build.kind === 'draft'}
+				announce={(m) => (announce = m)}
 				onselect={(slug) => {
 					pick(slug, 'row');
 					if (selected) stage?.focus(slug);
