@@ -199,29 +199,21 @@ plates, no warnings, export guard clean; 457.5 h from the maintainer's sliced fi
 
 ## Waiting on the maintainer
 
-- (2026-11-23, issue #113) **Try "Not printing" and custom parts on the `edge` image**
-  (prototype, migration `0005_custom_pieces`, additive; rehearse it before the test copy
-  takes it). Print tab: status menu → "Not printing this part / plate", folded "Not
-  printing" list to bring parts back. Files tab: "Add a custom part" (a sliced .3mf keeps
-  its plates, time and grams; pick the kit parts it replaces). Decided with the maintainer
-  (2026-11-23): skip is restorable, never a delete; custom parts stay as sliced (not
-  arranged, not exported, not in the 3D chair or a color design); a piece with print logs
-  is marked Not printing, not removed. Known limits: a plate that keeps some parts still
-  shows the whole plate's time and typed grams; a custom piece cannot be
-  re-colored after adding (it can be renamed); the sliced-file upload does not hand over to the custom flow;
-  the
-  export note after a skip on a started arranged build says "The colors changed"; real-kit
-  tests and `docker build` did not run in the cloud session. **Part 2, saved custom parts**
-  (migration `0006_custom_library`, additive): "Save for new builds" on the Files tab keeps
-  a part's plates, time, grams, colors and replaced parts for the workspace (no file, no
-  thumbnail); the "Add a custom part" sheet adds a saved part to another build; the Saved
-  parts page (button on the workspace's Builds page) renames, deletes and sets "Include in
-  new builds"; such parts are added in `createBuild` for builds started with the setup
-  wizard, and the wizard's Options step lists saved parts with Add / Remove. Questions:
-  a "Saved parts" tab in the workspace tab bar as well as the button? The account data
-  export lists the saved parts of every workspace the user belongs to (custom filaments
-  export only the user's own): keep, or limit to workspaces they can edit? Open: the plate
-  cap branch of the defaults loop has no unit test; a saved part has no thumbnail.
+- (2026-11-24, issue #113) **Custom parts are merged and tested by the maintainer in the
+  local demo** (#114, #117, #122, #124; migrations `0005_custom_pieces` and
+  `0006_custom_library`, both additive). Left for the maintainer: say when #113 can be
+  closed. Decided (2026-11-23 and 24): a skip is restorable, never a delete; custom parts
+  stay as sliced (not arranged, not exported, not in the 3D chair or a color design); a
+  piece with print logs is marked Not printing, not removed; saved parts are shared within
+  the workspace they are saved in and are not copied between teams; the account export
+  lists the saved parts of the user's workspaces. Known limits: a plate that keeps some
+  parts still shows the whole plate's time and typed grams; a custom part cannot be
+  re-colored after adding; the sliced-file upload does not hand over to the custom flow;
+  the export note after a skip on a started arranged build says "The colors changed"; a
+  saved part has no thumbnail; the plate cap branch of the new-build defaults loop has no
+  unit test; real-kit tests did not run in the cloud sessions. A project file saved from a
+  slicer (not an exported sliced file) carries no time or grams: the app says so and takes
+  typed values.
 - (2026-11-13, issues #29 / #30) **Review PR #32** (#30 picker Type filter: default reads
   "95A" / "PETG", subtypes with counts; plus hovered selected badges stay readable) on the
   `edge` image after merge. **#29 one-piece push handle** (branch
