@@ -356,6 +356,7 @@
 					bind:selected={confirmReplaces}
 					open
 					optional={false}
+					primary={confirmReplaces}
 					testid="custom-saved-replaces"
 					hint="Checked: the parts this saved part replaces. Uncheck one to keep printing it, or check another to skip it."
 				/>

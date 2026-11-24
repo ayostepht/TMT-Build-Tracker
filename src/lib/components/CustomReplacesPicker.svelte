@@ -37,6 +37,8 @@
 </script>
 
 <script lang="ts">
+	import { untrack } from 'svelte';
+
 	/**
 	 * "Replaces kit parts": a collapsible list of kit parts (grouped by plate) to mark Not printing. Used by the
 	 * add sheet and the confirm step for a saved part; `groups` comes from `kitGroupsOf(view)` or any list of
@@ -48,7 +50,8 @@
 		open = false,
 		hint = 'These parts are marked Not printing; you can bring them back. Nothing is deleted.',
 		optional = true,
-		testid = 'custom-replaces'
+		testid = 'custom-replaces',
+		primary = undefined
 	}: {
 		groups: ReplaceGroup[];
 		selected: string[];
@@ -58,14 +61,65 @@
 		/** Show the "optional" tag in the summary. */
 		optional?: boolean;
 		testid?: string;
+		/**
+		 * Compact mode (confirm steps): these slugs are listed first as a short checkbox list and every other
+		 * part sits behind a collapsed "Choose other parts" disclosure. Left out, the full list shows as before.
+		 */
+		primary?: string[];
 	} = $props();
+
+	// The compact list is fixed when the picker opens, so unchecking a part does not make it vanish.
+	const first = untrack(() => (primary ? [...primary] : null));
+	const nameOf = (slug: string) =>
+		groups.flatMap((g) => g.parts).find((p) => p.slug === slug)?.name ?? slug;
+	const rest = $derived(
+		groups
+			.map((g) => ({ ...g, parts: g.parts.filter((p) => !first?.includes(p.slug)) }))
+			.filter((g) => g.parts.length)
+	);
 
 	function toggle(slug: string, on: boolean) {
 		selected = on ? [...selected, slug] : selected.filter((s) => s !== slug);
 	}
 </script>
 
-{#if groups.length}
+{#snippet box(slug: string, name: string)}
+	<label class="crp-chk">
+		<input
+			type="checkbox"
+			checked={selected.includes(slug)}
+			data-testid="custom-replace-part"
+			data-slug={slug}
+			onchange={(e) => toggle(slug, e.currentTarget.checked)}
+		/>
+		{name}
+	</label>
+{/snippet}
+
+{#if groups.length && first}
+	<div class="crp crp-compact" data-testid={testid} role="group" aria-labelledby="{testid}-h">
+		<b id="{testid}-h">Replaces kit parts{selected.length ? ` (${selected.length})` : ''}</b>
+		{#if first.length}
+			<div class="crp-list">
+				{#each first as slug (slug)}{@render box(slug, nameOf(slug))}{/each}
+			</div>
+		{:else}
+			<p class="meta">No kit part is pre-checked.</p>
+		{/if}
+		{#if rest.length}
+			<details class="crp-more">
+				<summary>Choose other parts</summary>
+				<p class="meta">{hint}</p>
+				{#each rest as g (g.key)}
+					<fieldset class="crp-group">
+						<legend>{g.title}</legend>
+						{#each g.parts as p (p.slug)}{@render box(p.slug, p.name)}{/each}
+					</fieldset>
+				{/each}
+			</details>
+		{/if}
+	</div>
+{:else if groups.length}
 	<details class="crp" data-testid={testid} {open}>
 		<summary>
 			Replaces kit parts{selected.length ? ` (${selected.length})` : ''}
@@ -104,6 +158,23 @@
 	}
 	.crp p {
 		margin: var(--sp-3) 0;
+	}
+	.crp-compact {
+		display: grid;
+		gap: var(--sp-3);
+	}
+	.crp-compact p {
+		margin: 0;
+	}
+	.crp-list {
+		display: grid;
+		gap: var(--sp-1);
+	}
+	.crp-more summary {
+		cursor: pointer;
+		min-height: 32px;
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.crp-group {
 		border: 0;

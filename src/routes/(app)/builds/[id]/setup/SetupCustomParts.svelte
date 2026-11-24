@@ -32,6 +32,10 @@
 		const a = document.activeElement;
 		if (!a || a === document.body) openerEl?.focus();
 	}
+	/** Bring the confirm step fully into view (clear of the sticky footer) when it opens. */
+	function reveal(node: HTMLElement) {
+		node.scrollIntoView({ block: 'center' });
+	}
 	/** Opens the sheet as a modal <dialog>: native focus trap, inert page and Escape. */
 	function modal(node: HTMLDialogElement) {
 		node.showModal();
@@ -79,6 +83,8 @@
 	}
 	let confirmId = $state('');
 	let confirmSel = $state<string[]>([]);
+	/** What the saved part replaces here: listed first, the rest of the kit stays collapsed. */
+	let confirmPre = $state<string[]>([]);
 	const groups = $derived(kitGroupsOf(ctx.view));
 
 	async function remove(id: string) {
@@ -107,6 +113,7 @@
 				// A part that replaces kit parts asks first, with the saved choice pre-checked.
 				confirmId = s.id;
 				confirmSel = pre;
+				confirmPre = [...pre];
 				return;
 			}
 		}
@@ -185,7 +192,7 @@
 						onclick={() => toggle(s)}>{s.pieceId ? 'Remove' : 'Add'}</button
 					>
 					{#if confirmId === s.id}
-						<div class="scp-confirm" data-testid="setup-saved-confirm-step">
+						<div class="scp-confirm" data-testid="setup-saved-confirm-step" use:reveal>
 							<p>
 								<b>Add "{s.name}" to this build</b>
 								<span class="muted">
@@ -196,6 +203,7 @@
 							<CustomReplacesPicker
 								{groups}
 								bind:selected={confirmSel}
+								primary={confirmPre}
 								open
 								optional={false}
 								hint="Nothing is deleted."
