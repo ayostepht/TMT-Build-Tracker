@@ -221,12 +221,19 @@ test('A sliced two-plate file becomes a custom part that replaces a kit part', a
 		.toEqual(['Cup holder - CUP HOLDER BASE', 'Cup holder - CUP HOLDER ARM']);
 	expect((await view(page, buildId)).state[plates[0].parts[0]].status).toBe('Printed');
 
-	// The Design tab lists kit parts only: no custom part there.
+	// The Design tab lists the custom part in its own group, apart from the kit's parts: not a part row,
+	// not drawn on the chair, not in the color design.
 	await page.goto(`/builds/${buildId}/design`);
 	await page.waitForLoadState('networkidle');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await expect(page.locator('main')).not.toContainText('Cup holder');
-	await expect(page.locator('main')).not.toContainText('Custom');
+	await page.getByRole('tab', { name: 'Parts' }).click();
+	const customGroup = page.getByTestId('design-custom-parts');
+	await expect(customGroup).toBeVisible();
+	await expect(customGroup.getByTestId('design-custom-part')).toHaveCount(1);
+	await expect(customGroup.getByTestId('design-custom-part')).toContainText('Cup holder');
+	for (const slug of plates[0].parts.concat(plates[1].parts))
+		await expect(page.locator(`[data-testid="part-row"][data-slug="${slug}"]`)).toHaveCount(0);
+	await expect(page.getByTestId('part-row').filter({ hasText: 'Cup holder' })).toHaveCount(0);
 
 	// Activity has the sentence.
 	await page.getByRole('link', { name: 'Activity', exact: true }).click();
