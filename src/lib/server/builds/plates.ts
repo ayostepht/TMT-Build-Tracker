@@ -538,7 +538,8 @@ export function applyUpload(
 		const summary = up.summary as unknown as StoredSummary;
 		const mapping = parseMapping(b.mapping, view);
 
-		const filamentMap: Record<string, string> = {};
+		// own keys only: slot ids come from the file and may be `constructor` or `__proto__`
+		const filamentMap: Record<string, string> = Object.create(null);
 		if (b.filamentMap !== undefined) {
 			if (!isObj(b.filamentMap)) bad('filamentMap must be an object');
 			for (const [idx, role] of Object.entries(b.filamentMap as Obj)) {
@@ -579,11 +580,20 @@ export function applyUpload(
 					runsHint: pl.runsHint
 				});
 				const fg: Record<string, number> = {};
+				// grams of filaments left on "Not tracked" (a support filament, say): not in this build
+				let untracked = 0;
 				for (const [idx, g] of Object.entries(pl.filamentGrams)) {
 					const role = filamentMap[idx];
 					if (role && g > 0) fg[role] = Math.round(((fg[role] ?? 0) + g) * 100) / 100;
+					else if (g > 0) untracked += g;
 				}
-				return { pl, plan, slugs: plan.parts, fg };
+				// the plate's weight without them; with every filament untracked the file's total stands
+				const total =
+					pl.grams && untracked > 0 && Object.keys(fg).length
+						? Math.max(Math.round((pl.grams - untracked) * 100) / 100, 0) ||
+							Math.round(Object.values(fg).reduce((a, c) => a + c, 0) * 100) / 100
+						: pl.grams;
+				return { pl, plan, slugs: plan.parts, fg, total };
 			})
 			.filter((r) => r.slugs.length > 0);
 		if (!rows.length) bad('Map at least one object to a part first');
@@ -683,7 +693,7 @@ export function applyUpload(
 		clearBuildThumbs(buildId);
 		const twinPlates: ApplyResult['twinPlates'] = [];
 		const warnings: string[] = [];
-		for (const { pl, plan, slugs, fg } of rows) {
+		for (const { pl, plan, slugs, fg, total } of rows) {
 			if (plan.perPartRuns)
 				twinPlates.push({
 					plate: pl.index,
@@ -716,13 +726,13 @@ export function applyUpload(
 					...(carried
 						? {}
 						: {
-								slicerGrams: pl.grams,
+								slicerGrams: total,
 								// twins: each part's grams per run are the plate's; accounting counts them under the part's own role
 								slicerByPart:
-									plan.perPartRuns && pl.grams
-										? Object.fromEntries(slugs.map((s) => [s, pl.grams as number]))
+									plan.perPartRuns && total
+										? Object.fromEntries(slugs.map((s) => [s, total as number]))
 										: {},
-								slicerGramsSource: pl.grams ? ('file' as const) : null
+								slicerGramsSource: total ? ('file' as const) : null
 							}),
 					thumbnailPath: thumb,
 					filamentGrams: plan.perPartRuns ? {} : fg,

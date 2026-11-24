@@ -733,6 +733,19 @@ export function loadBuildView(db: Db, buildId: string, userId: string): BuildVie
 			parts: slugs,
 			plates: plateNums,
 			libraryId: piece.libraryId,
+			colors: (piece.parts ?? []).map((cp) => {
+				const own = rawPlates.find(
+					(pl) => pl.source === `custom:${piece.id}` && pl.parts[0] === cp.slug
+				);
+				const weighed = Object.entries(own?.filamentGrams ?? {})
+					.filter(([, g]) => g > 0)
+					.map(([role, grams]) => ({ role, grams }));
+				return {
+					slug: cp.slug,
+					name: cp.name,
+					roles: weighed.length ? weighed : [{ role: cp.role, grams: null }]
+				};
+			}),
 			removable: !hasRun && !busy
 		};
 	});

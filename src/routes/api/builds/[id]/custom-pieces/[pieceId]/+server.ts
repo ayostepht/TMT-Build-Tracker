@@ -1,6 +1,11 @@
 import { getDb } from '#lib/server/db/index.ts';
-import { removeCustomPiece, renameCustomPiece } from '#lib/server/builds/custom-pieces.ts';
+import {
+	recolorCustomPiece,
+	removeCustomPiece,
+	renameCustomPiece
+} from '#lib/server/builds/custom-pieces.ts';
 import { readJson, requireUserId, respond } from '#lib/server/api.ts';
+import { isObj } from '#lib/domain/guards.ts';
 import type { RequestHandler } from './$types';
 
 /** Remove a custom piece; `?restore=1` also brings back the kit parts it replaced (editor or owner). */
@@ -11,14 +16,15 @@ export const DELETE: RequestHandler = (event) =>
 		})
 	);
 
-/** `{ name }`: rename a custom piece, its parts and its plates (editor or owner; not for drafts). */
+/**
+ * `{ name }`: rename a custom piece, its parts and its plates; or `{ roles: { "<part slug>": { "<current role>":
+ * "<new role>" } } }`: change the color(s) of its parts (answers `{ changes }`). Editor or owner; drafts too.
+ */
 export const PATCH: RequestHandler = (event) =>
-	respond(async () =>
-		renameCustomPiece(
-			getDb(),
-			event.params.id,
-			requireUserId(event),
-			event.params.pieceId,
-			await readJson(event)
-		)
-	);
+	respond(async () => {
+		const userId = requireUserId(event);
+		const body = await readJson(event);
+		return isObj(body) && body.roles !== undefined
+			? recolorCustomPiece(getDb(), event.params.id, userId, event.params.pieceId, body)
+			: renameCustomPiece(getDb(), event.params.id, userId, event.params.pieceId, body);
+	});

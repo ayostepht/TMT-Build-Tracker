@@ -5,7 +5,10 @@ import { deleteLibraryPiece, updateLibraryPiece } from '#lib/server/custom-libra
 import { isObj } from '#lib/domain/guards.ts';
 import type { RequestHandler } from './$types';
 
-/** `{ organizationId, name?, isDefault? }`: rename a saved part or switch "in new builds by default" (editors). */
+/**
+ * `{ organizationId, name?, isDefault?, replaces?, plates? }`: edit a saved part (editors). `replaces`: kit part
+ * slugs (at most 60); `plates`: `[{ index, name?, runs?, estSeconds?, grams?, role?, roles? }]`.
+ */
 export const PATCH: RequestHandler = (event) =>
 	respond(async () => {
 		const userId = requireUserId(event);

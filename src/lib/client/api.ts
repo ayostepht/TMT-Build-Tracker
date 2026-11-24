@@ -460,6 +460,8 @@ export const addCustomPiece = (
 		grams?: Record<string, number>;
 		/** 3MF filament slot (as a string) → build colour key. */
 		filamentMap?: Record<string, string>;
+		/** File slots set to "Not used in this build": their grams are dropped (at least one kept per plate). */
+		ignore?: string[];
 		/** Colour of an unsliced file's part. */
 		role?: string;
 		/** Kit part slugs the piece replaces (they are marked Not printing). */
@@ -482,6 +484,20 @@ export const renameCustomPiece = (buildId: string, pieceId: string, name: string
 	call<{ name: string }>('PATCH', `${b(buildId)}/custom-pieces/${encodeURIComponent(pieceId)}`, {
 		name
 	});
+/**
+ * Change the color(s) of a custom piece's parts: `roles[partSlug][currentRole] = newRole` (build filament keys;
+ * a multi-color part has one entry per role). Answers the changes made (empty when nothing changed).
+ */
+export const recolorCustomPiece = (
+	buildId: string,
+	pieceId: string,
+	roles: Record<string, Record<string, string>>
+) =>
+	call<{ changes: { part: string; from: string; to: string }[] }>(
+		'PATCH',
+		`${b(buildId)}/custom-pieces/${encodeURIComponent(pieceId)}`,
+		{ roles }
+	);
 /** A saved custom part of a workspace (per-plate summaries; never the file). */
 export interface LibraryPiece {
 	id: string;
@@ -498,6 +514,8 @@ export interface LibraryPiece {
 		grams: number | null;
 		role: string;
 		runs: number;
+		/** Grams per print by kit role key (empty when the part has no per-color grams). */
+		filamentGrams: Record<string, number>;
 	}[];
 	isDefault: boolean;
 	/** All prints of all plates. */
@@ -519,15 +537,30 @@ export const listCustomLibrary = (organizationId: string) =>
 /** Save a custom piece of a build for new builds of the workspace (idempotent). */
 export const saveCustomPieceToLibrary = (buildId: string, pieceId: string, isDefault = false) =>
 	call<{ piece: LibraryPiece }>('POST', '/api/custom-library', { buildId, pieceId, isDefault });
-/** Rename a saved part or switch "in new builds by default". */
+/** Edit a saved part: name, "add to every new build automatically", replaced kit parts, plates. */
 export const updateLibraryPiece = (
 	organizationId: string,
 	id: string,
 	body: {
 		name?: string;
 		isDefault?: boolean;
-		/** Correct a plate's time (seconds, 1 to 30 days) and grams per print; `null` clears. */
-		plates?: { index: number; estSeconds?: number | null; grams?: number | null }[];
+		/** Kit part slugs it replaces (of its kit, at most 60); `[]` clears. */
+		replaces?: string[];
+		plates?: {
+			/** 0-based position in the saved part. */
+			index: number;
+			name?: string;
+			/** 1 to 20. */
+			runs?: number;
+			/** Seconds per print (1 to 30 days); `null` clears. */
+			estSeconds?: number | null;
+			/** Grams per print; `null` clears. */
+			grams?: number | null;
+			/** Move a single-color plate to this kit role. */
+			role?: string;
+			/** Re-key colors: { current role: new role } (equal targets merge). Not with `role`. */
+			roles?: Record<string, string>;
+		}[];
 	}
 ) =>
 	call<{ piece: LibraryPiece }>('PATCH', `/api/custom-library/${encodeURIComponent(id)}`, {
@@ -640,12 +673,15 @@ export const deleteLibraryPiece = (organizationId: string, id: string) =>
 		'DELETE',
 		`/api/custom-library/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(organizationId)}`
 	);
-/** Add a saved part to a build. `already: true` when the build has it. */
-export const applyLibraryPiece = (buildId: string, libraryId: string) =>
+/**
+ * Add a saved part to a build. `replaces` (kit part slugs of the build) replaces the saved part's own list for
+ * this add (`[]` skips nothing); leave it out for the saved settings. `already: true` when the build has it.
+ */
+export const applyLibraryPiece = (buildId: string, libraryId: string, replaces?: string[]) =>
 	call<{ pieceId: string; plates: number[]; skipped: string[] } | { already: true }>(
 		'POST',
 		`${b(buildId)}/custom-pieces`,
-		{ libraryId }
+		replaces ? { libraryId, replaces } : { libraryId }
 	);
 export const discardPlateUpload = (buildId: string, uploadId: string) =>
 	call('DELETE', `${b(buildId)}/plates/upload/${encodeURIComponent(uploadId)}`);

@@ -151,7 +151,8 @@ const DRAFT_KINDS = new Set([
 	'part.restore',
 	'custom.add',
 	'custom.remove',
-	'custom.rename'
+	'custom.rename',
+	'custom.recolor'
 ]);
 export function draftAllows(kind: string): boolean {
 	return DRAFT_KINDS.has(kind) || kind.startsWith('design.') || kind.startsWith('plates.');

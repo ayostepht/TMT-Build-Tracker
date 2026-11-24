@@ -12,6 +12,7 @@
 		forgetPrintTemplate,
 		refreshLibraryPiece,
 		removeCustomPiece,
+		recolorCustomPiece,
 		renameCustomPiece,
 		saveCustomPieceToLibrary,
 		getArrangement,
@@ -51,10 +52,10 @@
 	let uploading = $state(false);
 	let notice = $state<string | null>(null);
 	let upload = $state<PlateUpload>();
-	// "Add a custom part": an accessory or beta replacement from its own 3MF (Files tab, editors, not drafts)
+	// "Add a custom part": an accessory or beta replacement from its own 3MF (Files tab, editors; drafts too, the wizard has its own card)
 	let addingCustom = $state(false);
 	let customUpload = $state<CustomPieceUpload>();
-	const canAddCustom = $derived(ctx.canEdit && !wizard && !draft);
+	const canAddCustom = $derived(ctx.canEdit && !wizard);
 	// The control that opened the upload sheet. The "Use my own sliced file" card is replaced while
 	// the sheet is open, so focus goes back to the control with the same test id when it closes.
 	let openerId: string | null = null;
@@ -455,6 +456,21 @@
 			savingId = null;
 		}
 	}
+	/** Change one color of a custom part (a multi-color part has one select per color it uses). */
+	let recoloringId = $state<string | null>(null);
+	async function recolor(c: CustomPiece, slug: string, from: string, to: string) {
+		if (recoloringId || from === to) return;
+		recoloringId = c.id;
+		try {
+			await recolorCustomPiece(ctx.id, c.id, { [slug]: { [from]: to } });
+			await ctx.refresh();
+		} catch (e) {
+			ctx.error = e instanceof Error ? e.message : 'Could not change the color.';
+			await ctx.refresh();
+		} finally {
+			recoloringId = null;
+		}
+	}
 	// rename a custom part inline
 	let renamingId = $state<string | null>(null);
 	let renameText = $state('');
@@ -656,12 +672,44 @@
 							>
 						{/if}
 					</div>
+					<div class="cl-colors" data-testid="custom-colors">
+						{#each c.colors as pc (pc.slug)}
+							{#each pc.roles as r (r.role)}
+								<label class="cl-color">
+									<span class="meta"
+										>{c.colors.length > 1 ? `${pc.name}` : 'Color'}{pc.roles.length > 1
+											? ` · ${filLabel(ctx.filament(r.role), r.role)}`
+											: ''}{r.grams ? ` (${r.grams} g)` : ''}</span
+									>
+									<span class="cl-pick">
+										<span
+											class="cl-dot"
+											style="background:{ctx.filament(r.role)?.hex ?? 'transparent'}"
+										></span>
+										<select
+											value={r.role}
+											data-testid="custom-color"
+											aria-label="Color of {pc.name}{pc.roles.length > 1
+												? `, now ${filLabel(ctx.filament(r.role), r.role)}`
+												: ''}"
+											disabled={!ctx.canEdit || recoloringId === c.id}
+											onchange={(e) => void recolor(c, pc.slug, r.role, e.currentTarget.value)}
+										>
+											{#each ctx.view.filaments as f (f.key)}
+												<option value={f.key}>{f.name} ({f.material})</option>
+											{/each}
+										</select>
+									</span>
+								</label>
+							{/each}
+						{/each}
+					</div>
 					{#if c.libraryId}
 						<span class="cl-saved" data-testid="custom-saved" title="Saved for new builds"
 							>Saved</span
 						>
 					{/if}
-					{#if ctx.canEdit && !draft}
+					{#if ctx.canEdit}
 						{#if renamingId !== c.id}
 							<button
 								class="btn sm"
@@ -1415,6 +1463,45 @@
 	}
 	@media (pointer: coarse) {
 		.cl-rename input {
+			font-size: var(--fs-field);
+			min-height: 40px;
+		}
+	}
+	.cl-colors {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sp-3) var(--sp-5);
+		flex: 1 1 100%;
+	}
+	.cl-color {
+		display: grid;
+		gap: var(--sp-1);
+		min-width: 0;
+	}
+	.cl-pick {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-3);
+	}
+	.cl-dot {
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		border: 1px solid var(--line);
+		flex: none;
+	}
+	.cl-color select {
+		min-width: 0;
+		max-width: 100%;
+		padding: 5px var(--sp-4);
+		border: 1px solid var(--field-line);
+		border-radius: var(--r-md);
+		background: var(--card);
+		color: var(--ink);
+		font-size: var(--fs-md);
+	}
+	@media (pointer: coarse) {
+		.cl-color select {
 			font-size: var(--fs-field);
 			min-height: 40px;
 		}

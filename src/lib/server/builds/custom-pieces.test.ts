@@ -39,7 +39,12 @@ import {
 	skipParts,
 	updatePlate
 } from './actions';
-import { addCustomPiece, removeCustomPiece, renameCustomPiece } from './custom-pieces';
+import {
+	addCustomPiece,
+	recolorCustomPiece,
+	removeCustomPiece,
+	renameCustomPiece
+} from './custom-pieces';
 import { createBuild } from './create';
 import {
 	loadKitSource,
@@ -950,5 +955,241 @@ describe('renaming a custom piece', () => {
 		const draft = mk({ kind: 'draft' });
 		expect(status(() => renameCustomPiece(db, draft, 'owner', r.pieceId, { name: 'x' }))).toBe(404);
 		expect(view(id).customPieces[0].name).toBe('Beta');
+	});
+});
+
+describe('a filament set to "Not used in this build"', () => {
+	// plate 1: slot 1 (30 g) + slot 2 (40 g), 70 g; plate 2: slot 1 only, 12.5 g
+	const base = { filamentMap: { '1': 'primary' } };
+
+	it('drops the ignored slot from the plate grams, the total and the role', async () => {
+		const id = mk();
+		const g0 = filamentStats(view(id)).reduce((a, f) => a + f.total, 0);
+		const up = await upload(id);
+		add(id, up.uploadId, {
+			name: 'Beta',
+			plates: [1],
+			...base,
+			ignore: ['2']
+		});
+		const [pl] = customPlates(id);
+		expect(pl).toMatchObject({ slicerGrams: 30, gramsSource: 'file', estSeconds: 7200 });
+		expect(pl.filamentGrams).toEqual({ primary: 30 });
+		const v = view(id);
+		expect(v.parts.find((p) => p.slug === v.customPieces[0].parts[0])!.role).toBe('primary');
+		expect(v.customPieces[0].colors[0].roles).toEqual([{ role: 'primary', grams: 30 }]);
+		// the build's filament totals count only the kept grams
+		expect(filamentStats(v).reduce((x, f) => x + f.total, 0) - g0).toBeCloseTo(30, 1);
+	});
+
+	it('a typed total is spread over the kept slots only', async () => {
+		const id = mk();
+		const up = await upload(id);
+		add(id, up.uploadId, {
+			name: 'Beta',
+			plates: [1],
+			filamentMap: { '1': 'primary', '2': 'soft' },
+			ignore: ['1'],
+			grams: { '1': 25 }
+		});
+		const [pl] = customPlates(id);
+		expect(pl).toMatchObject({ slicerGrams: 25, gramsSource: 'user' });
+		expect(pl.filamentGrams).toEqual({ soft: 25 });
+	});
+
+	it('refuses a plate with every weighed slot ignored; unweighed plates are fine', async () => {
+		const id = mk();
+		const up = await upload(id);
+		expect(
+			status(() => add(id, up.uploadId, { name: 'Beta', plates: [1], ignore: ['1', '2'] }))
+		).toBe(400);
+		// plate 2 only has slot 1: ignoring slot 2 changes nothing there
+		const r = add(id, up.uploadId, { name: 'Beta', plates: [2], ...base, ignore: ['2'] });
+		expect(r.plates).toHaveLength(1);
+		expect(customPlates(id)[0]).toMatchObject({ slicerGrams: 12.5 });
+		// an unsliced file has no grams: ignore is harmless
+		const un = await upload(id, 'unsliced');
+		expect(
+			status(() => add(id, un.uploadId, { name: 'Cup', role: 'primary', ignore: ['1'] }))
+		).toBe(0);
+	});
+
+	it('refuses wrong shapes and a saved copy keeps only the kept grams', async () => {
+		const id = mk();
+		const up = await upload(id);
+		for (const bad of [
+			'1',
+			[1],
+			['__proto__x'.repeat(3)],
+			Array.from({ length: 33 }, (_, i) => `${i}`)
+		])
+			expect(status(() => add(id, up.uploadId, { name: 'B', ...base, ignore: bad }))).toBe(400);
+		add(id, up.uploadId, { name: 'Beta', plates: [1], ...base, ignore: ['2'] });
+		const { saveToLibrary } = await import('../custom-library');
+		const piece = view(id).customPieces[0];
+		const saved = saveToLibrary(db, 'owner', id, piece.id);
+		expect(saved.plates[0]).toMatchObject({ grams: 30, filamentGrams: { primary: 30 } });
+	});
+});
+
+describe('changing the color of a custom part', () => {
+	const piece = async (id: string, body: Record<string, unknown> = {}) => {
+		const up = await upload(id);
+		const r = add(id, up.uploadId, {
+			name: 'Beta',
+			filamentMap: { '1': 'primary', '2': 'soft' },
+			...body
+		});
+		const p = view(id).customPieces.find((c) => c.id === r.pieceId)!;
+		return p;
+	};
+	const recolor = (id: string, pieceId: string, roles: unknown, user = 'owner') =>
+		recolorCustomPiece(db, id, user, pieceId, { roles });
+	const recolorActs = () =>
+		db.select().from(activity).where(eq(activity.kind, 'custom.recolor')).all();
+
+	it('a single-color part moves its role and its grams', async () => {
+		const id = mk();
+		const p = await piece(id);
+		const [s2] = [p.parts[1]]; // plate 2: primary only
+		const r = recolor(id, p.id, { [s2]: { primary: 'accent' } });
+		expect(r.changes).toEqual([{ part: 'Beta - HANDLE GRIP', from: 'primary', to: 'accent' }]);
+		const v = view(id);
+		expect(v.parts.find((x) => x.slug === s2)!.role).toBe('accent');
+		expect(customPlates(id)[1].filamentGrams).toEqual({ accent: 12.5 });
+		expect(v.customPieces[0].colors[1].roles).toEqual([{ role: 'accent', grams: 12.5 }]);
+		expect(recolorActs()).toHaveLength(1);
+		expect(
+			describeActivity(
+				{
+					id: 'x',
+					userId: 'owner',
+					userName: 'Owen',
+					kind: 'custom.recolor',
+					payload: recolorActs()[0].payload,
+					at: ''
+				},
+				v
+			)
+		).toMatch(/^Owen changed the color of "Beta - HANDLE GRIP" from .* to /);
+	});
+
+	it('a multi-color part: one role at a time, and two roles can merge', async () => {
+		const id = mk();
+		const p = await piece(id);
+		const s1 = p.parts[0];
+		recolor(id, p.id, { [s1]: { soft: 'accent' } });
+		expect(customPlates(id)[0].filamentGrams).toEqual({ primary: 30, accent: 40 });
+		expect(view(id).parts.find((x) => x.slug === s1)!.role).toBe('accent');
+		recolor(id, p.id, { [s1]: { primary: 'accent' } });
+		expect(customPlates(id)[0].filamentGrams).toEqual({ accent: 70 });
+		expect(view(id).parts.find((x) => x.slug === s1)!.role).toBe('accent');
+		expect(recolorActs()).toHaveLength(2);
+	});
+
+	it('an unsliced part has no grams to move: its role changes', async () => {
+		const id = mk();
+		const up = await upload(id, 'unsliced');
+		const r = add(id, up.uploadId, { name: 'Cup', role: 'primary' });
+		const p = view(id).customPieces.find((c) => c.id === r.pieceId)!;
+		expect(p.colors[0].roles).toEqual([{ role: 'primary', grams: null }]);
+		recolor(id, p.id, { [p.parts[0]]: { primary: 'tire' } });
+		expect(view(id).parts.find((x) => x.slug === p.parts[0])!.role).toBe('tire');
+	});
+
+	it('no change leaves no activity row; bad input is refused; viewers and foreigners too', async () => {
+		const id = mk();
+		const p = await piece(id);
+		const s = p.parts[0];
+		const before = recolorActs().length;
+		recolor(id, p.id, { [s]: { primary: 'primary' } });
+		expect(recolorActs()).toHaveLength(before);
+		for (const bad of [
+			{ [s]: { primary: 'nope' } }, // not a color of the build
+			{ [s]: { tire: 'accent' } }, // the part has no tire color
+			{ nothere: { primary: 'accent' } }, // not a part of this piece
+			{ [s]: {} },
+			{ [s]: 'accent' },
+			{},
+			'x'
+		])
+			expect(status(() => recolor(id, p.id, bad))).toBe(400);
+		expect(status(() => recolor(id, 'nope', { [s]: { primary: 'accent' } }))).toBe(404);
+		expect(status(() => recolor(id, p.id, { [s]: { primary: 'accent' } }, 'viewer'))).toBe(403);
+		expect(status(() => recolor(id, p.id, { [s]: { primary: 'accent' } }, 'outsider'))).toBe(404);
+		expect(customPlates(id)[0].filamentGrams).toEqual({ primary: 30, soft: 40 });
+	});
+
+	it('is allowed in a draft, is not a re-arrange kind and leaves a saved part alone', async () => {
+		const { REARRANGE_KINDS } = await import('./arrange-plan');
+		expect(REARRANGE_KINDS.has('custom.recolor')).toBe(false);
+		const d = mk({ kind: 'draft' });
+		const p = await piece(d);
+		recolor(d, p.id, { [p.parts[1]]: { primary: 'accent' } });
+		expect(view(d).parts.find((x) => x.slug === p.parts[1])!.role).toBe('accent');
+		const id = mk();
+		const q = await piece(id);
+		const { saveToLibrary } = await import('../custom-library');
+		const saved = saveToLibrary(db, 'owner', id, q.id);
+		recolor(id, q.id, { [q.parts[1]]: { primary: 'accent' } });
+		const { listLibrary } = await import('../custom-library');
+		expect(listLibrary(db, orgId, 'owner').find((l) => l.id === saved.id)!.plates[1].role).toBe(
+			'primary'
+		);
+		expect(view(id).customPieces[0].libraryId).toBe(saved.id);
+	});
+});
+
+describe('custom parts in a draft', () => {
+	it('add, rename, remove and a saved part all work on a draft', async () => {
+		const d = mk({ kind: 'draft' });
+		const up = await upload(d);
+		const r = add(d, up.uploadId, { name: 'Beta', filamentMap: { '1': 'primary', '2': 'soft' } });
+		renameCustomPiece(db, d, 'owner', r.pieceId, { name: 'Beta 2' });
+		expect(view(d).customPieces[0]).toMatchObject({ name: 'Beta 2', removable: true });
+		removeCustomPiece(db, d, 'owner', r.pieceId);
+		expect(view(d).customPieces).toHaveLength(0);
+	});
+});
+
+describe('the plate upload with a filament left on Not tracked', () => {
+	it('the plate weight leaves out the untracked grams, like its per-color split', async () => {
+		const bytes = makeProjectThreeMf({
+			sliced: true,
+			filamentTypes: ['PETG', 'TPU'],
+			plates: [
+				{
+					name: 'BAR',
+					prediction: 600,
+					weight: 70,
+					filaments: { 1: 30, 2: 40 },
+					objects: [{ name: 'Left handle' }]
+				}
+			]
+		});
+		const mapOnce = async (filamentMap: Record<string, string>) => {
+			const b = mk();
+			const up = createUpload(
+				db,
+				b,
+				'owner',
+				{ name: 'k.3mf', size: bytes.length },
+				await parseThreeMfBytes(bytes),
+				view(b)
+			);
+			const key = `1:${up.summary.plates[0].objects[0].id}`;
+			applyUpload(db, b, 'owner', up.uploadId, { mapping: { [key]: 'handle-left' }, filamentMap });
+			return kitPlates(b)[0];
+		};
+		// slot 2 left out: 40 g of PLA supports are not this build's
+		const kept = await mapOnce({ '1': 'primary' });
+		expect(kept.filamentGrams).toEqual({ primary: 30 });
+		expect(kept.slicerGrams).toBe(30);
+		// both mapped: the file's total
+		const both = await mapOnce({ '1': 'primary', '2': 'soft' });
+		expect(both.slicerGrams).toBe(70);
+		// nothing mapped: the file's total stands (nothing to keep)
+		const none = await mapOnce({});
+		expect(none.slicerGrams).toBe(70);
 	});
 });

@@ -18,11 +18,13 @@ import { ApiError, buildAccess, requireEditor, requireMember } from './access';
 import {
 	MAX_RUNS,
 	cleanGrams,
+	cleanReplaces,
 	cleanPieceName,
 	cleanSeconds,
 	customPlateLabel,
 	insertCustomPieceTx,
 	ownPlateName,
+	rekeyRoles,
 	scaleGrams,
 	type NewPiecePlate
 } from './builds/custom-pieces';
@@ -63,6 +65,8 @@ export interface LibraryPieceView {
 		grams: number | null;
 		role: string;
 		runs: number;
+		/** Grams per print by role key of the kit (empty when the part has no per-color grams). */
+		filamentGrams: Record<string, number>;
 	}[];
 	isDefault: boolean;
 	/** All prints of all plates, seconds (plates without a time count 0). */
@@ -88,7 +92,8 @@ const toView = (r: LibraryRow): LibraryPieceView => {
 			estSeconds: p.estSeconds,
 			grams: p.grams,
 			role: p.role,
-			runs: p.runs
+			runs: p.runs,
+			filamentGrams: { ...(p.filamentGrams ?? {}) }
 		})),
 		isDefault: r.isDefault,
 		totalSeconds: plates.reduce((n, p) => n + (p.estSeconds ?? 0) * p.runs, 0),
@@ -243,12 +248,36 @@ export function saveToLibrary(
 	return toView(row);
 }
 
+/** The kit's filament role keys and part slugs a saved part's edits are checked against (empty without a kit). */
+function kitOf(db: Db, templateId: string | null): { roles: Set<string>; parts: Set<string> } {
+	if (!templateId) return { roles: new Set(), parts: new Set() };
+	return {
+		roles: new Set(
+			db
+				.select({ k: templateFilamentRoles.key })
+				.from(templateFilamentRoles)
+				.where(eq(templateFilamentRoles.templateId, templateId))
+				.all()
+				.map((r) => r.k)
+		),
+		parts: new Set(
+			db
+				.select({ s: templateParts.slug })
+				.from(templateParts)
+				.where(eq(templateParts.templateId, templateId))
+				.all()
+				.map((r) => r.s)
+		)
+	};
+}
+
 /**
- * The saved plates with the typed `plates: [{ index, estSeconds?, grams? }]` applied (`index` is the 0-based
- * position; `null` clears a value). A new grams value rescales the plate's per-color grams, or puts them on
- * the plate's color when there are none.
+ * The saved plates with the typed `plates: [{ index, name?, runs?, estSeconds?, grams?, role?, roles? }]` applied
+ * (`index` is the 0-based position; `null` clears a time or grams value). A new grams value rescales the plate's
+ * per-color grams, or puts them on the plate's color when there are none. `role` moves a single-color plate to
+ * another color of the kit; `roles` (`{ current: new }`) re-keys any plate (equal targets merge their grams).
  */
-function editedPlates(current: LibraryPlate[], v: unknown): LibraryPlate[] {
+function editedPlates(current: LibraryPlate[], v: unknown, roleKeys: Set<string>): LibraryPlate[] {
 	if (!Array.isArray(v) || !v.length || v.length > MAX_CUSTOM_PLATES)
 		throw new ApiError(400, 'plates must be a list of plates to change');
 	const next = current.map((p) => ({ ...p, filamentGrams: { ...(p.filamentGrams ?? {}) } }));
@@ -262,6 +291,47 @@ function editedPlates(current: LibraryPlate[], v: unknown): LibraryPlate[] {
 		if (seen.has(i)) throw new ApiError(400, 'A plate can be listed only once');
 		seen.add(i);
 		const p = next[i];
+		if (ch.name !== undefined) p.name = cleanPlateName(ch.name);
+		if (ch.runs !== undefined) {
+			if (
+				typeof ch.runs !== 'number' ||
+				!Number.isInteger(ch.runs) ||
+				ch.runs < 1 ||
+				ch.runs > MAX_RUNS
+			)
+				throw new ApiError(400, `runs must be a whole number from 1 to ${MAX_RUNS}`);
+			p.runs = ch.runs;
+		}
+		if (ch.role !== undefined || ch.roles !== undefined) {
+			if (ch.role !== undefined && ch.roles !== undefined)
+				throw new ApiError(400, 'Give role or roles for a plate, not both');
+			const mapped = new Map<string, string>();
+			if (ch.role !== undefined) {
+				if (typeof ch.role !== 'string' || !roleKeys.has(ch.role))
+					throw new ApiError(400, 'role must be a filament color of the kit');
+				if (Object.keys(p.filamentGrams).length > 1)
+					throw new ApiError(400, 'This plate has several colors: use roles to change them');
+				for (const k of new Set([p.role, ...Object.keys(p.filamentGrams)]))
+					if (k !== ch.role) mapped.set(k, ch.role);
+			} else {
+				if (!isObj(ch.roles)) throw new ApiError(400, 'roles must be an object');
+				const pairs = Object.entries(ch.roles as Obj);
+				if (!pairs.length || pairs.length > MAX_SLOTS)
+					throw new ApiError(400, 'roles must name the colors to change');
+				const have = new Set([p.role, ...Object.keys(p.filamentGrams)]);
+				for (const [from, to] of pairs) {
+					if (typeof to !== 'string' || !roleKeys.has(to))
+						throw new ApiError(400, 'roles must use filament colors of the kit');
+					if (!have.has(from)) throw new ApiError(400, `The plate has no ${from} color to change`);
+					if (from !== to) mapped.set(from, to);
+				}
+			}
+			if (mapped.size) {
+				const re = rekeyRoles(p.filamentGrams, p.role, mapped);
+				p.filamentGrams = re.filamentGrams;
+				p.role = re.role;
+			}
+		}
 		if (ch.estSeconds !== undefined)
 			p.estSeconds = ch.estSeconds === null ? null : cleanSeconds(ch.estSeconds, 'estSeconds');
 		if (ch.grams !== undefined) {
@@ -282,7 +352,11 @@ function editedPlates(current: LibraryPlate[], v: unknown): LibraryPlate[] {
 	return next;
 }
 
-/** Rename a saved part, switch "in new builds by default" or correct its plates' time and grams (editors and owners). */
+/**
+ * Edit a saved part (editors and owners): rename it, switch "add to every new build automatically", change the
+ * kit parts it replaces (`replaces`: slugs of its kit, at most 60; `[]` clears) or correct its plates (name,
+ * prints, time, grams, color).
+ */
 export function updateLibraryPiece(
 	db: Db,
 	userId: string,
@@ -301,7 +375,16 @@ export function updateLibraryPiece(
 			throw new ApiError(400, 'isDefault must be true or false');
 		set.isDefault = b.isDefault;
 	}
-	if (b.plates !== undefined) set.plates = editedPlates(row.plates ?? [], b.plates);
+	const kit = b.plates !== undefined || b.replaces !== undefined ? kitOf(db, row.templateId) : null;
+	if (b.plates !== undefined) set.plates = editedPlates(row.plates ?? [], b.plates, kit!.roles);
+	if (b.replaces !== undefined) {
+		if (!Array.isArray(b.replaces) || b.replaces.length > MAX_REPLACES)
+			throw new ApiError(400, `replaces must be a list of at most ${MAX_REPLACES} parts`);
+		for (const s of b.replaces)
+			if (typeof s !== 'string' || !kit!.parts.has(s))
+				throw new ApiError(400, 'Unknown part in replaces');
+		set.replaces = [...new Set(b.replaces as string[])];
+	}
 	if (!Object.keys(set).length) throw new ApiError(400, 'Nothing to update');
 	db.update(workspaceCustomPieces).set(set).where(eq(workspaceCustomPieces.id, libId)).run();
 	return toView(rowOf(db, orgId, libId));
@@ -386,7 +469,8 @@ export interface ApplyLibraryResult {
  * row, no event: `applyLibraryPiece` and `createBuild` add those). Plates are numbered after the highest
  * plate. Roles the build lacks fall back to its first filament role (grams of unknown roles fold into it).
  * Replaced kit parts are marked "Not printing" only when the build's kit is the one the part was saved
- * from, and only those that are active kit parts and not printing; the rest are left alone.
+ * from, and only those that are active kit parts and not printing; the rest are left alone. With
+ * `replacesOverride` (already validated by `cleanReplaces`) that list is used instead of the saved one.
  *
  * Returns null when the build already holds a piece from this saved part (nothing changes). Throws a 404
  * for a saved part of another workspace, a 400 for a build without filament colors and when
@@ -396,7 +480,8 @@ export function applyLibraryPieceTx(
 	tx: Db,
 	view: BuildView,
 	lib: LibraryRow,
-	userId: string
+	userId: string,
+	replacesOverride?: string[]
 ): ApplyLibraryResult | null {
 	if (lib.organizationId !== view.build.organizationId) throw new ApiError(404, 'Not found');
 	if (view.customPieces.some((c) => c.libraryId === lib.id)) return null;
@@ -417,7 +502,12 @@ export function applyLibraryPieceTx(
 
 	// kit parts it replaces: same kit, active kit parts, not printing; anything else stays as it is
 	let replaces: string[] = [];
-	if (lib.templateId && lib.templateId === view.build.templateId && (lib.replaces ?? []).length) {
+	if (replacesOverride) replaces = replacesOverride;
+	else if (
+		lib.templateId &&
+		lib.templateId === view.build.templateId &&
+		(lib.replaces ?? []).length
+	) {
 		const live = livePrintingSlugs(tx, view.build.id);
 		const kit = new Map(view.parts.filter((p) => !p.custom).map((p) => [p.slug, p]));
 		replaces = [...new Set(lib.replaces)].filter(
@@ -465,18 +555,22 @@ export function applyLibraryPieceTx(
 
 /**
  * Add a saved part to a build (editors and owners). The saved part must belong to the
- * build's workspace. Answers null when the build already has a piece from it.
+ * build's workspace. Answers null when the build already has a piece from it. `opts.replaces` replaces the
+ * saved part's own list for this add.
  */
 export function applyLibraryPiece(
 	db: Db,
 	buildId: string,
 	userId: string,
-	libId: string
+	libId: string,
+	opts: { replaces?: unknown } = {}
 ): { pieceId: string; plates: number[]; skipped: string[] } | null {
 	let result: ApplyLibraryResult | null = null;
 	mutateBuild(db, buildId, userId, (tx, view) => {
 		const lib = rowOf(tx, view.build.organizationId, libId);
-		result = applyLibraryPieceTx(tx, view, lib, userId);
+		// given: it replaces the saved list for this add (`[]` skips nothing); absent: the saved settings
+		const override = opts.replaces === undefined ? undefined : cleanReplaces(view, opts.replaces);
+		result = applyLibraryPieceTx(tx, view, lib, userId, override);
 		if (!result) return { kind: 'custom.add', payload: {}, skip: true };
 		return {
 			kind: 'custom.add',

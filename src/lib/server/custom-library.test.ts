@@ -14,6 +14,7 @@ import {
 	organization,
 	templates,
 	user,
+	templateParts,
 	workspaceCustomPieces,
 	type LibraryPlate
 } from './db/schema';
@@ -169,8 +170,24 @@ describe('saving to the library', () => {
 			totalGrams: 70 + 2 * 12.5
 		});
 		expect(saved.plates).toEqual([
-			{ index: 0, name: 'HANDLE BAR', estSeconds: 7200, grams: 70, role: 'soft', runs: 1 },
-			{ index: 1, name: 'HANDLE GRIP', estSeconds: 3600, grams: 12.5, role: 'primary', runs: 2 }
+			{
+				index: 0,
+				name: 'HANDLE BAR',
+				estSeconds: 7200,
+				grams: 70,
+				role: 'soft',
+				runs: 1,
+				filamentGrams: { primary: 30, soft: 40 }
+			},
+			{
+				index: 1,
+				name: 'HANDLE GRIP',
+				estSeconds: 3600,
+				grams: 12.5,
+				role: 'primary',
+				runs: 2,
+				filamentGrams: { primary: 12.5 }
+			}
 		]);
 		expect(saved).not.toHaveProperty('createdBy');
 		const r = libRow(saved.id);
@@ -674,5 +691,165 @@ describe('refreshing a saved part from a build', () => {
 		expect(status(() => refreshLibraryPiece(db, 'owner', 'org1', saved.id, draft, p.pieceId))).toBe(
 			404
 		);
+	});
+});
+
+describe('applying a saved part with a replaces override', () => {
+	const kitSlugs = (id: string) =>
+		view(id)
+			.parts.filter((p) => !p.custom)
+			.map((p) => p.slug);
+	const savedRow = (replaces: string[]) =>
+		db
+			.insert(workspaceCustomPieces)
+			.values({
+				organizationId: 'org1',
+				name: 'Saved',
+				sliced: false,
+				templateId,
+				replaces,
+				plates: [
+					{
+						name: '',
+						estSeconds: 600,
+						grams: 5,
+						filamentGrams: {},
+						role: 'primary',
+						runs: 1,
+						thumb: false
+					}
+				],
+				createdBy: 'owner'
+			})
+			.returning()
+			.get();
+	const skippedOf = (id: string) =>
+		view(id)
+			.skipped.map((s) => s.slug)
+			.sort();
+
+	it('absent uses the saved list; a given list replaces it; [] skips nothing', () => {
+		const [a, b, c] = kitSlugs(mk());
+		const saved = savedRow([a, b]);
+		const id1 = mk();
+		expect(applyLibraryPiece(db, id1, 'owner', saved.id)!.skipped.sort()).toEqual([a, b].sort());
+		const id2 = mk();
+		expect(applyLibraryPiece(db, id2, 'owner', saved.id, { replaces: [c] })!.skipped).toEqual([c]);
+		expect(skippedOf(id2)).toEqual([c]);
+		expect(view(id2).customPieces[0].replaces).toEqual([c]);
+		const id3 = mk();
+		expect(applyLibraryPiece(db, id3, 'owner', saved.id, { replaces: [] })!.skipped).toEqual([]);
+		expect(skippedOf(id3)).toEqual([]);
+	});
+
+	it('refuses unknown slugs, wrong shapes and too many; viewers and drafts', () => {
+		const id = mk();
+		const [a] = kitSlugs(id);
+		const saved = savedRow([]);
+		for (const bad of ['x', [1], ['nope'], Array.from({ length: 61 }, () => a), null, {}])
+			expect(status(() => applyLibraryPiece(db, id, 'owner', saved.id, { replaces: bad }))).toBe(
+				400
+			);
+		expect(view(id).customPieces).toHaveLength(0);
+		expect(status(() => applyLibraryPiece(db, id, 'viewer', saved.id, { replaces: [a] }))).toBe(
+			403
+		);
+		// a draft takes it too
+		const d = mk('org1', 'owner', 'draft');
+		expect(applyLibraryPiece(db, d, 'owner', saved.id, { replaces: [a] })!.skipped).toEqual([a]);
+	});
+});
+
+describe('editing a saved part: replaces and plates', () => {
+	const kitSlugs = () =>
+		db
+			.select({ s: templateParts.slug })
+			.from(templateParts)
+			.where(eq(templateParts.templateId, templateId))
+			.all()
+			.map((r) => r.s);
+	const mkRow = (plates: LibraryPlate[], replaces: string[] = []) =>
+		db
+			.insert(workspaceCustomPieces)
+			.values({
+				organizationId: 'org1',
+				name: 'Saved',
+				sliced: true,
+				templateId,
+				replaces,
+				plates,
+				createdBy: 'owner'
+			})
+			.returning()
+			.get();
+	const plate = (over: Partial<LibraryPlate> = {}): LibraryPlate => ({
+		name: 'P',
+		estSeconds: 600,
+		grams: 50,
+		filamentGrams: { primary: 30, soft: 20 },
+		role: 'primary',
+		runs: 1,
+		thumb: false,
+		...over
+	});
+	const upd = (id: string, body: Record<string, unknown>, user = 'owner') =>
+		updateLibraryPiece(db, user, 'org1', id, body);
+
+	it('replaces: set, clear, own kit parts only, capped', () => {
+		const [a, b] = kitSlugs();
+		const r = mkRow([plate()], [a]);
+		expect(upd(r.id, { replaces: [b, b] }).replaces).toEqual([b]);
+		expect(libRow(r.id).replaces).toEqual([b]);
+		expect(upd(r.id, { replaces: [] }).replaces).toEqual([]);
+		for (const bad of [['nope'], 'x', [1], Array.from({ length: 61 }, () => a)])
+			expect(status(() => upd(r.id, { replaces: bad }))).toBe(400);
+		expect(status(() => upd(r.id, { replaces: [a] }, 'viewer'))).toBe(403);
+		// a row without a kit can only clear
+		const loose = db
+			.insert(workspaceCustomPieces)
+			.values({
+				organizationId: 'org1',
+				name: 'L',
+				sliced: false,
+				plates: [plate()],
+				createdBy: 'owner'
+			})
+			.returning()
+			.get();
+		expect(status(() => upd(loose.id, { replaces: [a] }))).toBe(400);
+		expect(upd(loose.id, { replaces: [] }).replaces).toEqual([]);
+	});
+
+	it('plate name, runs and time; bad values are refused', () => {
+		const r = mkRow([plate(), plate({ name: 'Q' })]);
+		const v = upd(r.id, { plates: [{ index: 1, name: '  New  name ', runs: 3, estSeconds: 90 }] });
+		expect(v.plates[1]).toMatchObject({ name: 'New name', runs: 3, estSeconds: 90 });
+		expect(v.plates[0]).toMatchObject({ name: 'P', runs: 1 });
+		for (const bad of [{ runs: 0 }, { runs: 21 }, { runs: 1.5 }, { name: 5 }])
+			expect(status(() => upd(r.id, { plates: [{ index: 0, ...bad }] }))).toBe(400);
+	});
+
+	it('role moves a single-color plate; roles re-key and merge a multi-color one', () => {
+		const single = mkRow([plate({ filamentGrams: { primary: 50 } })]);
+		const v1 = upd(single.id, { plates: [{ index: 0, role: 'accent' }] });
+		expect(v1.plates[0]).toMatchObject({ role: 'accent', filamentGrams: { accent: 50 } });
+		const multi = mkRow([plate()]);
+		expect(status(() => upd(multi.id, { plates: [{ index: 0, role: 'accent' }] }))).toBe(400);
+		const v2 = upd(multi.id, { plates: [{ index: 0, roles: { soft: 'accent' } }] });
+		expect(v2.plates[0].filamentGrams).toEqual({ primary: 30, accent: 20 });
+		expect(v2.plates[0].role).toBe('primary');
+		// both onto one color: grams merge, the part's color is that one
+		const v3 = upd(multi.id, {
+			plates: [{ index: 0, roles: { primary: 'tire', accent: 'tire' } }]
+		});
+		expect(v3.plates[0]).toMatchObject({ role: 'tire', filamentGrams: { tire: 50 } });
+		// unknown colors and colors the plate lacks
+		for (const bad of [
+			{ roles: { tire: 'nope' } },
+			{ roles: { soft: 'tire' } },
+			{ role: 'nope' },
+			{ role: 'tire', roles: {} }
+		])
+			expect(status(() => upd(multi.id, { plates: [{ index: 0, ...bad }] }))).toBe(400);
 	});
 });
