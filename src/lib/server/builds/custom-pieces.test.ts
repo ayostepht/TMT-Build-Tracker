@@ -26,6 +26,7 @@ import {
 	templates,
 	user
 } from '../db/schema';
+import { subscribeBuildEvents } from '../events';
 import { templateSeeds } from '../seed';
 import { seedTemplates } from '../seed/run';
 import { makeProjectThreeMf } from '../threemf/fixtures';
@@ -690,6 +691,89 @@ describe('safety', () => {
 		removeBuildPlateFiles(id);
 		expect(existsSync(dir)).toBe(false);
 		expect(existsSync(join(uploadsDir(), 'plates', other))).toBe(true);
+	});
+});
+
+describe('text taken from the file', () => {
+	it('plate names and the file name are cleaned and capped; longer stored names still load and rename', async () => {
+		const id = mk();
+		const bytes = makeProjectThreeMf({
+			sliced: true,
+			filamentTypes: ['PETG'],
+			plates: [
+				{
+					name: `${'A'.repeat(300)}${String.fromCharCode(7)}\u202eZ`,
+					prediction: 600,
+					weight: 5,
+					filaments: { 1: 5 },
+					objects: [{ name: 'x' }]
+				},
+				{ name: 'B', prediction: 600, weight: 5, filaments: { 1: 5 }, objects: [{ name: 'y' }] }
+			]
+		});
+		const up = createUpload(
+			db,
+			id,
+			'owner',
+			{ name: `${'f'.repeat(400)}${String.fromCharCode(7)}.3mf`, size: bytes.length },
+			await parseThreeMfBytes(bytes),
+			view(id)
+		);
+		const r = add(id, up.uploadId, { name: 'Long', filamentMap: { '1': 'primary' } });
+		const piece = view(id).customPieces[0];
+		expect(piece.fileName!.length).toBeLessThanOrEqual(255);
+		expect([...piece.fileName!].some((c) => c.charCodeAt(0) < 32)).toBe(false);
+		for (const n of customPlates(id).map((p) => p.name)) {
+			expect(n.length).toBeLessThanOrEqual('Long - '.length + 80);
+			expect([...n].some((c) => c.charCodeAt(0) < 32 || c === '\u202e')).toBe(false);
+		}
+		// a stored name over the cap (made before the cap) still loads, and a rename shortens it
+		const num = customPlates(id)[0].number;
+		db.update(buildPlates)
+			.set({ name: `Long - ${'y'.repeat(300)}` })
+			.where(and(eq(buildPlates.buildId, id), eq(buildPlates.number, num)))
+			.run();
+		expect(customPlates(id)[0].name.length).toBeGreaterThan(300);
+		renameCustomPiece(db, id, 'owner', r.pieceId, { name: 'Renamed' });
+		expect(customPlates(id)[0].name).toBe(`Renamed - ${'y'.repeat(80)}`);
+	});
+});
+
+describe('a failure after the commit', () => {
+	it('keeps the committed thumbnails and clears the upload when only the publish fails', async () => {
+		const id = mk();
+		const up = await upload(id);
+		const off = subscribeBuildEvents(id, () => {
+			throw new Error('publish failed');
+		});
+		try {
+			expect(() =>
+				add(id, up.uploadId, { name: 'Beta', filamentMap: { '1': 'primary', '2': 'soft' } })
+			).toThrow('publish failed');
+		} finally {
+			off();
+		}
+		const plates = customPlates(id);
+		expect(plates).toHaveLength(2);
+		for (const p of plates) expect(existsSync(join(uploadsDir(), p.thumbnailPath!))).toBe(true);
+		expect(existsSync(uploadDir(up.uploadId))).toBe(false);
+		expect(view(id).customPieces).toHaveLength(1);
+	});
+
+	it('removes the copied thumbnails when the transaction itself fails', async () => {
+		const id = mk();
+		setPartStatus(db, id, 'owner', 'handle-left', { status: 'Printing' });
+		const up = await upload(id);
+		expect(
+			status(() =>
+				add(id, up.uploadId, {
+					name: 'Beta',
+					filamentMap: { '1': 'primary', '2': 'soft' },
+					replaces: ['handle-left']
+				})
+			)
+		).toBe(409);
+		expect(existsSync(join(uploadsDir(), `plates/${id}`))).toBe(false);
 	});
 });
 
